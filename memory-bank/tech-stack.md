@@ -1,8 +1,4 @@
-## 🤖 Assistant
-
-
-
-# 灵感编导 AI — 推荐技术栈
+# SparkFlow — 推荐技术栈
 
 ## 整体架构一览
 
@@ -30,7 +26,7 @@
 ┌───────┼─────────────────────────────────────────┐
 │    外部 API (唯三个花钱的地方)                    │
 │  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ LLM      │ │ Whisper  │ │ Pinecone /     │  │
+│  │ LLM      │ │ Whisper  │ │ ChromaDB       │  │
 │  │ OpenAI / │ │ /讯飞STT │ │ Qdrant Cloud   │  │
 │  │ Claude   │ │          │ │ (向量库)        │  │
 │  └──────────┘ └──────────┘ └────────────────┘  │
@@ -47,7 +43,8 @@
 | **语言** | TypeScript |
 | **路由** | expo-router（文件系统路由，类 Next.js） |
 | **UI 组件** | React Native Paper 或 Tamagui（带主题，开箱即用） |
-| **本地数据** | expo-sqlite（碎片笔记离线缓存 + 草稿） |
+| **本地数据** | expo-sqlite（碎片笔记离线存储 + 同步队列） |
+| **离线同步** | 录音无网络时本地暂存，恢复后自动上传 |
 
 ### 关键 Expo 模块直接对应PRD功能
 
@@ -83,7 +80,7 @@ expo-sqlite        → 离线碎片缓存
 ```
 1. 调 LLM/Whisper/向量 API 的 SDK 全是 Python 一等公民
    - openai (官方SDK)
-   - pinecone-client
+   - chromadb
    - langchain (可选，prompt 管理)
 
 2. 一个 main.py 就能跑起来，vibe coding 最快上手
@@ -146,6 +143,7 @@ CREATE TABLE fragments (
     summary       TEXT,                 -- AI 一句话摘要
     tags          TEXT,                 -- JSON 数组，AI 自动标签
     source        TEXT DEFAULT 'voice', -- 'voice'|'manual'|'video_parse' ← PRD预留
+    sync_status   TEXT DEFAULT 'pending', -- 'pending'|'syncing'|'synced'|'failed'
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -192,8 +190,9 @@ CREATE TABLE agents (
 |---|---|---|
 | **LLM** | **OpenAI GPT-4o-mini**（性价比）或 **Claude 3.5 Sonnet**（中文质量高） | 双核 Agent 的 Prompt 差异靠 system prompt 区分，不需要换模型 |
 | **语音转写 STT** | **OpenAI Whisper API**（$0.006/分钟）或 **讯飞实时转写** | Whisper 最简单——把音频 POST 上去就返回文字 |
-| **向量数据库** | **Pinecone**（免费 tier 够 MVP）或 **Qdrant Cloud** | 存用户知识库 embedding，按 `user_id` namespace 隔离 = PRD要求的 Creator ID 绑定 |
+| **向量数据库** | **ChromaDB**（本地，零配置）<br>可切换：Pinecone, Qdrant Cloud | 本地优先零运维，保留抽象接口可无缝切换云服务，按 `user_id` namespace 隔离 = PRD要求的 Creator ID 绑定 |
 | **Embedding** | **OpenAI text-embedding-3-small** | 跟 LLM 同一个 SDK，一行代码 |
+| **音频存储** | 后端永久保留（支持未来回放功能） | 原始 `.m4a` 文件长期存储 |
 
 ---
 
@@ -207,7 +206,7 @@ npm install -g expo-cli
 # 后端
 cd backend
 python -m venv .venv && source .venv/bin/activate
-pip install fastapi uvicorn sqlalchemy alembic openai pinecone-client apscheduler python-multipart
+pip install fastapi uvicorn sqlalchemy alembic openai chromadb apscheduler python-multipart
 uvicorn main:app --reload   # → http://localhost:8000
 
 # 前端
