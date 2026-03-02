@@ -264,3 +264,32 @@ APScheduler (每天8:00)
 | 悬浮提词器 | `app.json` 权限配置 | 预留overlay权限申请 |
 | 视频链接解析 | `fragments.source='video_parse'` | 字段预留，API预留 |
 | 存储配额 | `users.storage_quota` | 字段预留，未启用检查 |
+
+---
+
+## 附录 A：开发环境依赖
+
+### A.1 系统级依赖（阶段 0.1）
+
+| 依赖 | 版本 | 用途 | 安装路径 |
+|------|------|------|---------|
+| Python | 3.12.10 | FastAPI 后端运行时 | `/opt/homebrew/bin/python3.12` |
+| Node.js | v24.3.0+ | Expo 前端运行时 | `$(which node)` |
+| Watchman | 2025.05.19.00+ | 文件监听（React Native 热更新） | `$(which watchman)` |
+| Xcode CLT | macOS 自带 | iOS 模拟器和真机编译 | `/Library/Developer/CommandLineTools` |
+
+### A.2 为什么需要这些依赖
+
+- **Python 3.12**: FastAPI 和机器学习 SDK 的运行环境。使用 3.12 而非系统自带 3.9 以获得更好的类型提示和性能优化。
+- **Watchman**: Meta 开发的文件监听服务，React Native 用于检测代码变更并触发热重载。
+- **Xcode Command Line Tools**: 包含编译 iOS 应用所需的编译器、链接器和调试工具。真机测试必需。
+
+### A.3 验证命令
+
+```bash
+# 一键验证所有依赖
+/opt/homebrew/bin/python3.12 --version && \
+node --version && \
+watchman --version && \
+xcode-select -p
+```

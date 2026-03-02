@@ -826,7 +826,7 @@ collection = client.get_or_create_collection(
 
 ---
 
-### 步骤 12.5：Mode B 生成时检索知识库（✅ 增强功能）
+### 步骤 12.5：Mode B 生成时检索知识库
 
 **阶段说明：**
 - **阶段 8（MVP）**：Mode B 仅基于选中的碎片内容生成，不检索知识库
