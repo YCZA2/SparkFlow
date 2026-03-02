@@ -26,9 +26,9 @@
 ┌───────┼─────────────────────────────────────────┐
 │    外部 API (唯三个花钱的地方)                    │
 │  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ LLM      │ │ Whisper  │ │ ChromaDB       │  │
-│  │ OpenAI / │ │ /讯飞STT │ │ Qdrant Cloud   │  │
-│  │ Claude   │ │          │ │ (向量库)        │  │
+│  │ LLM      │ │ STT      │ │ ChromaDB       │  │
+│  │ 阿里/百度 │ │ 阿里/讯飞 │ │ (本地向量库)    │  │
+│  │ /智谱    │ │ /百度    │ │                │  │
 │  └──────────┘ └──────────┘ └────────────────┘  │
 └─────────────────────────────────────────────────┘
 ```
@@ -78,8 +78,9 @@ expo-sqlite        → 离线碎片缓存
 ### 为什么选 FastAPI + Python
 
 ```
-1. 调 LLM/Whisper/向量 API 的 SDK 全是 Python 一等公民
-   - openai (官方SDK)
+1. 调 LLM/STT/向量 API 的 SDK 全是 Python 一等公民
+   - dashscope (阿里通义千问)
+   - alibabacloud-nls (阿里云语音识别)
    - chromadb
    - langchain (可选，prompt 管理)
 
@@ -188,10 +189,10 @@ CREATE TABLE agents (
 
 | 能力 | 推荐方案 | 理由 |
 |---|---|---|
-| **LLM** | **OpenAI GPT-4o-mini**（性价比）或 **Claude 3.5 Sonnet**（中文质量高） | 双核 Agent 的 Prompt 差异靠 system prompt 区分，不需要换模型 |
-| **语音转写 STT** | **OpenAI Whisper API**（$0.006/分钟）或 **讯飞实时转写** | Whisper 最简单——把音频 POST 上去就返回文字 |
-| **向量数据库** | **ChromaDB**（本地，零配置）<br>可切换：Pinecone, Qdrant Cloud | 本地优先零运维，保留抽象接口可无缝切换云服务，按 `user_id` namespace 隔离 = PRD要求的 Creator ID 绑定 |
-| **Embedding** | **OpenAI text-embedding-3-small** | 跟 LLM 同一个 SDK，一行代码 |
+| **LLM** | **阿里通义千问**（`qwen-turbo`/`qwen-max`）<br>可切换：百度文心、智谱 AI、DeepSeek | 国内 API 稳定，中文理解能力强，性价比高 |
+| **语音转写 STT** | **阿里云语音识别 NLS**（中文场景优化）<br>可切换：讯飞、百度 | 国内语音识别对中文口音支持更好 |
+| **向量数据库** | **ChromaDB**（本地，零配置）<br>可切换：Pinecone, Qdrant Cloud | 本地优先零运维，保留抽象接口可无缝切换云服务 |
+| **Embedding** | **阿里通义千问 Embedding**（`text-embedding-v2`）<br>可切换：百度、智谱 | 与 LLM 同平台，统一管理，中文向量化效果好 |
 | **音频存储** | 后端永久保留（支持未来回放功能） | 原始 `.m4a` 文件长期存储 |
 
 ---
@@ -206,7 +207,7 @@ npm install -g expo-cli
 # 后端
 cd backend
 python -m venv .venv && source .venv/bin/activate
-pip install fastapi uvicorn sqlalchemy alembic openai chromadb apscheduler python-multipart
+pip install fastapi uvicorn sqlalchemy alembic dashscope alibabacloud-nls chromadb apscheduler python-multipart
 uvicorn main:app --reload   # → http://localhost:8000
 
 # 前端
@@ -239,4 +240,4 @@ npx expo start --ios        # → 自动启动 iOS 模拟器
 
 ## 7. 一句话总结
 
-> **Expo（React Native）+ FastAPI + SQLite** — 前端一条命令起模拟器，后端一条命令起服务，数据库零安装，三个外部 API 用同一个 `openai` SDK 搞定两个（LLM + STT + Embedding），向量库单独一个 client。整个项目 `git clone` 下来五分钟跑起来。
+> **Expo（React Native）+ FastAPI + SQLite** — 前端一条命令起模拟器，后端一条命令起服务，数据库零安装，三个国内 API（阿里通义千问 LLM + 阿里云 STT + Embedding）统一管理，向量库单独一个 client。整个项目 `git clone` 下来五分钟跑起来。

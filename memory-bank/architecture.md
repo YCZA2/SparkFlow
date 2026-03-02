@@ -24,8 +24,9 @@
 ┌───────┼─────────────────────────────────────────┐
 │    外部 API                                      │
 │  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ LLM      │ │ Whisper  │ │ ChromaDB       │  │
-│  │ OpenAI   │ │ /讯飞STT │ │ (本地向量库)    │  │
+│  │ LLM      │ │ STT      │ │ ChromaDB       │  │
+│  │ 阿里/百度 │ │ 阿里/讯飞 │ │ (本地向量库)    │  │
+│  │ /智谱    │ │ /百度    │ │                │  │
 │  └──────────┘ └──────────┘ └────────────────┘  │
 └─────────────────────────────────────────────────┘
 ```
@@ -44,8 +45,8 @@
 
 | 能力 | 当前实现 | 可切换至 |
 |------|---------|---------|
-| LLM | OpenAI GPT-4o-mini | Claude, 本地模型 |
-| STT | OpenAI Whisper API | 讯飞, 本地 Whisper |
+| LLM | 阿里通义千问 (qwen) | 百度文心、智谱 AI、OpenAI |
+| STT | 阿里云语音识别 (NLS) | 讯飞、百度、OpenAI Whisper |
 | 向量数据库 | ChromaDB (本地) | Pinecone, Qdrant Cloud |
 
 ### 2.3 数据隔离
@@ -146,8 +147,8 @@ backend/
 │   │   ├── base_llm.py
 │   │   ├── base_stt.py
 │   │   └── base_vector_db.py
-│   ├── openai_llm.py      # OpenAI实现
-│   ├── whisper_stt.py     # Whisper实现
+│   ├── qwen_llm.py        # 阿里通义千问实现
+│   ├── aliyun_stt.py      # 阿里云语音识别实现
 │   ├── chroma_vector_db.py # ChromaDB实现
 │   ├── llm_service.py     # LLM高层封装
 │   ├── stt_service.py     # STT高层封装
@@ -224,7 +225,7 @@ mobile/
 ```
 [录音] → [m4a本地暂存] → [检测网络]
     ↓
-    有网络 → [上传后端] → [Whisper转写] → [LLM摘要+标签] → [入库] → [synced]
+    有网络 → [上传后端] → [阿里云STT转写] → [LLM摘要+标签] → [入库] → [synced]
     ↓
     无网络 → [SQLite队列] → [sync_status=pending] → [网络恢复自动上传]
 ```

@@ -106,12 +106,15 @@
 - `base_stt.py` - 语音识别抽象接口，`transcribe(audio_path: str) -> str`
 - `base_vector_db.py` - 向量数据库抽象接口，`upsert(doc_id, text, embedding)`, `query(query_text, top_k) -> list`
 
-当前实现：
-- LLM: OpenAI GPT-4o-mini（通过 `openai` SDK）
-- STT: OpenAI Whisper API
+当前实现（国内可用）：
+- LLM: **阿里通义千问**（`qwen-turbo` 或 `qwen-max`，通过 `dashscope` SDK）
+- STT: **阿里云语音识别**（NLS，通过 `alibabacloud-nls` SDK）
+- Embedding: **阿里通义千问 Embedding**（`text-embedding-v2`）
 - 向量库: **ChromaDB（本地，零配置）**
 
-**验证测试：** 每个基类都有对应的实现类（如 `openai_llm.py`, `whisper_stt.py`, `chroma_vector_db.py`），可通过配置文件切换。
+**可切换实现：** 统一接口层设计，未来可切换为其他国内厂商（百度、讯飞、智谱等）或国际厂商
+
+**验证测试：** 每个基类都有对应的实现类（如 `qwen_llm.py`, `aliyun_stt.py`, `chroma_vector_db.py`），可通过 `.env` 配置文件切换。
 
 ### 步骤 1.2：设计 API 统一响应规范
 
@@ -167,13 +170,20 @@
 SECRET_KEY=your-secret-key-here  # JWT 签名密钥
 ACCESS_TOKEN_EXPIRE_MINUTES=1440  # Token 24小时有效
 
-# 服务提供商配置（方便切换）
-LLM_PROVIDER=openai  # 可选: openai, claude, local
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
+# LLM 配置（国内：阿里通义千问）
+LLM_PROVIDER=qwen  # 可选: qwen, wenxin, zhipu, openai
+DASHSCOPE_API_KEY=sk-...  # 阿里云灵积平台 API Key
+LLM_MODEL=qwen-turbo  # 可选: qwen-turbo, qwen-max, qwen-plus
 
-STT_PROVIDER=whisper  # 可选: whisper, xunfei, local
-OPENAI_API_KEY=sk-...  # Whisper 复用 OpenAI Key
+# STT 配置（国内：阿里云语音识别）
+STT_PROVIDER=aliyun  # 可选: aliyun, xunfei, baidu
+ALIBABA_CLOUD_ACCESS_KEY_ID=...
+ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
+ALIBABA_CLOUD_APP_KEY=...  # 阿里云 NLS 应用 Key
+
+# Embedding 配置（国内：阿里通义千问）
+EMBEDDING_PROVIDER=qwen  # 可选: qwen, baidu, zhipu
+EMBEDDING_MODEL=text-embedding-v2
 
 # 向量数据库（本地 ChromaDB）
 VECTOR_DB_PROVIDER=chromadb
@@ -185,7 +195,7 @@ DATABASE_URL=sqlite:///./data.db
 
 安装 `python-dotenv`，在 `main.py` 启动时加载环境变量。
 
-**验证测试：** 启动时打印 `os.getenv("LLM_PROVIDER")` 确认配置加载成功。
+**验证测试：** 启动时打印 `os.getenv("LLM_PROVIDER")` 和 `os.getenv("STT_PROVIDER")` 确认配置加载成功。
 
 ---
 
@@ -463,15 +473,25 @@ DATABASE_URL=sqlite:///./data.db
 
 ### 步骤 6.1：配置外部 API 密钥管理
 
-在 `backend/` 目录下创建 `.env` 文件（并确认 `.gitignore` 已忽略 `.env`）。添加字段 `OPENAI_API_KEY=sk-...`（或所选 STT 服务的密钥）。安装 `python-dotenv` 包。在 `main.py` 启动时加载 `.env` 中的环境变量。
+在 `backend/` 目录下创建 `.env` 文件（并确认 `.gitignore` 已忽略 `.env`）。添加阿里云相关密钥（参见步骤 2.1 配置示例）。安装 `python-dotenv` 包。在 `main.py` 启动时加载 `.env` 中的环境变量。
 
-**验证测试：** 在 `main.py` 中临时打印 `os.getenv("OPENAI_API_KEY")` 的前 8 个字符。启动 uvicorn，终端输出密钥前缀（如 `sk-xxxxx`）。确认后删除此打印语句。
+**依赖安装：**
+```bash
+pip install alibabacloud-nls  # 阿里云语音识别 SDK
+```
+
+**验证测试：** 在 `main.py` 中临时打印 `os.getenv("DASHSCOPE_API_KEY")` 的前 8 个字符。启动 uvicorn，终端输出密钥前缀。确认后删除此打印语句。
 
 ---
 
 ### 步骤 6.2：实现 STT 服务封装
 
-在 `backend/services/stt_service.py` 中，编写一个函数 `transcribe_audio(file_path: str) -> str`。该函数读取指定路径的音频文件，调用 OpenAI Whisper API（或讯飞 STT API），返回转写后的纯文本字符串。处理可能的异常（文件不存在、API 调用失败），在异常时返回明确的错误信息或抛出自定义异常。
+在 `backend/services/stt_service.py` 中，编写一个函数 `transcribe_audio(file_path: str) -> str`。该函数读取指定路径的音频文件，调用阿里云语音识别 API（NLS），返回转写后的纯文本字符串。处理可能的异常（文件不存在、API 调用失败），在异常时返回明确的错误信息或抛出自定义异常。
+
+**阿里云 NLS 实现要点：**
+- 使用 `alibabacloud-nls` SDK
+- 支持 `.m4a`, `.wav`, `.mp3` 等常见格式
+- 自动处理 Token 获取和过期刷新
 
 **验证测试：** 准备一段 10 秒的中文语音测试文件，放入 `backend/uploads/`。在 Python 交互环境中调用 `transcribe_audio("uploads/test.m4a")`，返回对应的中文文本字符串，内容与语音基本吻合。
 
@@ -481,7 +501,7 @@ DATABASE_URL=sqlite:///./data.db
 
 修改 `POST /api/transcribe` 端点的逻辑：
 1. 音频文件保存到 `uploads/{user_id}/` 目录，保留原始 `.m4a` 格式
-2. 直接调用 `transcribe_audio` 对 `.m4a` 文件转写（Whisper 支持此格式）
+2. 直接调用 `transcribe_audio` 对 `.m4a` 文件转写（阿里云 NLS 支持此格式）
 3. 将转写结果、音频路径、user_id 组装后，插入 `fragments` 表（创建一条新碎片记录）
 4. 返回完整的碎片对象（包含 `id`、`transcript`、`created_at` 等）
 
@@ -510,7 +530,18 @@ DATABASE_URL=sqlite:///./data.db
 
 ### 步骤 7.1：实现 LLM 服务封装
 
-在 `backend/services/llm_service.py` 中，编写函数 `call_llm(system_prompt: str, user_message: str) -> str`。该函数使用 OpenAI SDK（或 Claude SDK），向 LLM 发送消息并返回文本回复。模型使用 `gpt-4o-mini` 或 `claude-3-5-sonnet`（根据 `.env` 中配置选择）。包含基本的错误处理和超时设置。
+在 `backend/services/llm_service.py` 中，编写函数 `call_llm(system_prompt: str, user_message: str) -> str`。该函数使用阿里通义千问 SDK（`dashscope`），向 LLM 发送消息并返回文本回复。模型使用 `qwen-turbo` 或 `qwen-max`（根据 `.env` 中配置选择）。包含基本的错误处理和超时设置。
+
+**依赖安装：**
+```bash
+pip install dashscope  # 阿里云灵积平台 SDK
+```
+
+**实现要点：**
+- 使用 `dashscope.Generation.call()` 方法
+- 支持流式输出（可选，用于优化体验）
+- 超时设置 60 秒
+- 自动处理 API 限流和重试
 
 **验证测试：** 在 Python 交互环境中调用 `call_llm("你是一个助手", "你好")`，返回一段正常的中文回复文本。
 
@@ -740,7 +771,7 @@ client = chromadb.PersistentClient(path=CHROMADB_PATH)
 
 ### 步骤 12.2：创建用户专属向量命名空间
 
-在 `vector_service.py` 中实现函数 `upsert_document(user_id: str, doc_id: str, text: str)`。该函数将 `text` 拆分为段落或固定长度的 chunk，使用 OpenAI `text-embedding-3-small` 模型（或其他 Embedding 模型）生成每个 chunk 的向量。
+在 `vector_service.py` 中实现函数 `upsert_document(user_id: str, doc_id: str, text: str)`。该函数将 `text` 拆分为段落或固定长度的 chunk，使用阿里通义千问 `text-embedding-v2` 模型生成每个 chunk 的向量。
 
 **ChromaDB 数据隔离方案：**
 - 每个用户创建一个独立的 Collection，命名格式：`docs_{user_id}`
@@ -876,8 +907,9 @@ collection = client.get_or_create_collection(
   - `base_stt.py` - 语音识别统一接口
   - `base_vector_db.py` - 向量数据库统一接口
 - 确认当前实现类存在且可正常工作：
-  - `openai_llm.py`（或 `claude_llm.py`）
-  - `whisper_stt.py`
+  - `qwen_llm.py`（阿里通义千问实现）
+  - `aliyun_stt.py`（阿里云语音识别实现）
+  - `qwen_embedding.py`（阿里通义千问 Embedding 实现）
   - `chroma_vector_db.py`
 - 确认通过 `.env` 修改 `LLM_PROVIDER`、`STT_PROVIDER`、`VECTOR_DB_PROVIDER` 可切换实现（即使当前只有一套实现，接口已预留）
 
@@ -925,10 +957,24 @@ collection = client.get_or_create_collection(
 ```bash
 # 环境变量（复制 .env.example 到 .env 并填写）
 SECRET_KEY=                    # JWT 签名密钥
-LLM_PROVIDER=openai           # 可选: openai, claude
-OPENAI_API_KEY=sk-...
-STT_PROVIDER=whisper          # 可选: whisper, xunfei
-VECTOR_DB_PROVIDER=chromadb   # 可选: chromadb, pinecone, qdrant
+
+# LLM 配置（国内：阿里通义千问）
+LLM_PROVIDER=qwen             # 可选: qwen, wenxin, zhipu, openai
+DASHSCOPE_API_KEY=sk-...      # 阿里云灵积平台 API Key
+LLM_MODEL=qwen-turbo          # 可选: qwen-turbo, qwen-max
+
+# STT 配置（国内：阿里云语音识别）
+STT_PROVIDER=aliyun           # 可选: aliyun, xunfei, baidu
+ALIBABA_CLOUD_ACCESS_KEY_ID=...
+ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
+ALIBABA_CLOUD_APP_KEY=...
+
+# Embedding 配置
+EMBEDDING_PROVIDER=qwen
+EMBEDDING_MODEL=text-embedding-v2
+
+# 向量数据库
+VECTOR_DB_PROVIDER=chromadb
 CHROMADB_PATH=./chroma_data
 DATABASE_URL=sqlite:///./data.db
 ```
