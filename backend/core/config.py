@@ -1,7 +1,7 @@
 """
-Application configuration management.
+应用程序配置管理模块
 
-Loads configuration from environment variables with sensible defaults.
+从环境变量加载配置，提供合理的默认值
 """
 
 import os
@@ -14,55 +14,54 @@ from pydantic import Field
 
 class Settings(BaseSettings):
     """
-    Application settings loaded from environment variables.
+    从环境变量加载的应用程序配置
 
-    All sensitive values should be set via environment variables
-    or a .env file (which is gitignored).
+    所有敏感值应通过环境变量或 .env 文件设置（.env 文件已被 gitignore 忽略）
     """
 
-    # Application
-    APP_NAME: str = Field(default="SparkFlow API", description="Application name")
-    APP_VERSION: str = Field(default="0.1.0", description="Application version")
-    DEBUG: bool = Field(default=False, description="Debug mode")
+    # 应用程序配置
+    APP_NAME: str = Field(default="SparkFlow API", description="应用名称")
+    APP_VERSION: str = Field(default="0.1.0", description="应用版本")
+    DEBUG: bool = Field(default=False, description="调试模式")
 
-    # Server
-    HOST: str = Field(default="0.0.0.0", description="Server host")
-    PORT: int = Field(default=8000, description="Server port")
+    # 服务器配置
+    HOST: str = Field(default="0.0.0.0", description="服务器主机")
+    PORT: int = Field(default=8000, description="服务器端口")
 
-    # Security
+    # 安全配置
     SECRET_KEY: str = Field(
         default="change-this-in-production",
-        description="JWT signing key"
+        description="JWT 签名密钥"
     )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
-        default=1440,  # 24 hours
-        description="JWT token expiration in minutes"
+        default=1440,  # 24 小时
+        description="JWT 令牌过期时间（分钟）"
     )
 
-    # Database
+    # 数据库配置
     DATABASE_URL: str = Field(
         default="sqlite:///./data.db",
-        description="SQLAlchemy database URL"
+        description="SQLAlchemy 数据库 URL"
     )
 
-    # LLM Configuration
+    # LLM 配置
     LLM_PROVIDER: str = Field(
         default="qwen",
-        description="LLM provider: qwen, wenxin, zhipu, openai"
+        description="LLM 提供商: qwen, wenxin, zhipu, openai"
     )
     LLM_MODEL: str = Field(
         default="qwen-turbo",
-        description="LLM model name"
+        description="LLM 模型名称"
     )
     DASHSCOPE_API_KEY: Optional[str] = Field(
         default=None,
-        description="Alibaba Cloud DashScope API Key"
+        description="阿里云 DashScope API Key"
     )
 
-    # STT Configuration
+    # STT 配置
     STT_PROVIDER: str = Field(
         default="dashscope",
-        description="STT provider: dashscope, aliyun, xunfei, baidu"
+        description="STT 提供商: dashscope, aliyun, xunfei, baidu"
     )
     # 阿里云百炼/灵积平台 (推荐，仅需一个 API Key)
     # DASHSCOPE_API_KEY 已在上面的 LLM 配置中定义，可复用
@@ -71,55 +70,55 @@ class Settings(BaseSettings):
     # 阿里云 NLS (传统方式，需要三个密钥)
     ALIBABA_CLOUD_ACCESS_KEY_ID: Optional[str] = Field(
         default=None,
-        description="Alibaba Cloud Access Key ID (NLS 传统方式)"
+        description="阿里云 Access Key ID (NLS 传统方式)"
     )
     ALIBABA_CLOUD_ACCESS_KEY_SECRET: Optional[str] = Field(
         default=None,
-        description="Alibaba Cloud Access Key Secret (NLS 传统方式)"
+        description="阿里云 Access Key Secret (NLS 传统方式)"
     )
     ALIBABA_CLOUD_APP_KEY: Optional[str] = Field(
         default=None,
-        description="Alibaba Cloud NLS App Key (传统方式)"
+        description="阿里云 NLS App Key (传统方式)"
     )
 
-    # Embedding Configuration
+    # Embedding 配置
     EMBEDDING_PROVIDER: str = Field(
         default="qwen",
-        description="Embedding provider: qwen, baidu, zhipu"
+        description="Embedding 提供商: qwen, baidu, zhipu"
     )
     EMBEDDING_MODEL: str = Field(
         default="text-embedding-v2",
-        description="Embedding model name"
+        description="Embedding 模型名称"
     )
 
-    # Vector Database Configuration
+    # 向量数据库配置
     VECTOR_DB_PROVIDER: str = Field(
         default="chromadb",
-        description="Vector DB provider: chromadb, pinecone, qdrant"
+        description="向量数据库提供商: chromadb, pinecone, qdrant"
     )
     CHROMADB_PATH: str = Field(
         default="./chroma_data",
-        description="ChromaDB persistent storage path"
+        description="ChromaDB 持久化存储路径"
     )
 
-    # Storage
+    # 存储配置
     UPLOAD_DIR: str = Field(
         default="./uploads",
-        description="Directory for uploaded audio files"
+        description="上传音频文件的存储目录"
     )
     MAX_UPLOAD_SIZE: int = Field(
         default=50 * 1024 * 1024,  # 50MB
-        description="Maximum upload file size in bytes"
+        description="最大上传文件大小（字节）"
     )
 
     class Config:
-        """Pydantic config."""
+        """Pydantic 配置"""
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
 
     def ensure_directories(self):
-        """Ensure required directories exist."""
+        """确保所需目录存在"""
         directories = [
             self.UPLOAD_DIR,
             self.CHROMADB_PATH,
@@ -135,14 +134,14 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     """
-    Get cached settings instance.
+    获取缓存的配置实例
 
-    Uses lru_cache to avoid reloading settings on every call.
+    使用 lru_cache 避免每次调用时重新加载配置
     """
     settings = Settings()
     settings.ensure_directories()
     return settings
 
 
-# Global settings instance
+# 全局配置实例
 settings = get_settings()

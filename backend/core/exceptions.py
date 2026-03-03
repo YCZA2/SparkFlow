@@ -1,8 +1,8 @@
 """
-Custom application exceptions.
+自定义应用程序异常模块
 
-Defines a hierarchy of exceptions for different error scenarios,
-allowing consistent error handling across the application.
+为不同的错误场景定义异常层次结构，
+实现整个应用程序的一致错误处理
 """
 
 from typing import Optional, Dict, Any
@@ -11,9 +11,9 @@ from fastapi import HTTPException, status
 
 class AppException(Exception):
     """
-    Base application exception.
+    应用程序异常基类
 
-    All custom exceptions should inherit from this class.
+    所有自定义异常都应继承自此类
     """
 
     def __init__(
@@ -30,7 +30,7 @@ class AppException(Exception):
         self.details = details or {}
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert exception to dictionary format."""
+        """将异常转换为字典格式"""
         return {
             "success": False,
             "data": None,
@@ -42,7 +42,7 @@ class AppException(Exception):
         }
 
     def to_http_exception(self) -> HTTPException:
-        """Convert to FastAPI HTTPException."""
+        """转换为 FastAPI HTTPException"""
         return HTTPException(
             status_code=self.status_code,
             detail=self.to_dict()["error"]
@@ -50,11 +50,11 @@ class AppException(Exception):
 
 
 class NotFoundError(AppException):
-    """Raised when a requested resource is not found."""
+    """请求的资源不存在时抛出"""
 
     def __init__(
         self,
-        message: str = "Resource not found",
+        message: str = "资源不存在",
         resource_type: Optional[str] = None,
         resource_id: Optional[str] = None
     ):
@@ -73,11 +73,11 @@ class NotFoundError(AppException):
 
 
 class ValidationError(AppException):
-    """Raised when request validation fails."""
+    """请求校验失败时抛出"""
 
     def __init__(
         self,
-        message: str = "Validation failed",
+        message: str = "校验失败",
         field_errors: Optional[Dict[str, str]] = None
     ):
         super().__init__(
@@ -89,11 +89,11 @@ class ValidationError(AppException):
 
 
 class AuthenticationError(AppException):
-    """Raised when authentication fails."""
+    """认证失败时抛出"""
 
     def __init__(
         self,
-        message: str = "Authentication failed"
+        message: str = "认证失败"
     ):
         super().__init__(
             message=message,
@@ -103,11 +103,11 @@ class AuthenticationError(AppException):
 
 
 class PermissionDeniedError(AppException):
-    """Raised when user lacks permission for an action."""
+    """用户权限不足时抛出"""
 
     def __init__(
         self,
-        message: str = "Permission denied"
+        message: str = "权限不足"
     ):
         super().__init__(
             message=message,
@@ -117,11 +117,11 @@ class PermissionDeniedError(AppException):
 
 
 class ConflictError(AppException):
-    """Raised when there's a resource conflict."""
+    """资源冲突时抛出"""
 
     def __init__(
         self,
-        message: str = "Resource conflict"
+        message: str = "资源冲突"
     ):
         super().__init__(
             message=message,
@@ -131,11 +131,11 @@ class ConflictError(AppException):
 
 
 class ServiceUnavailableError(AppException):
-    """Raised when an external service is unavailable."""
+    """外部服务不可用时抛出"""
 
     def __init__(
         self,
-        message: str = "Service temporarily unavailable",
+        message: str = "服务暂时不可用",
         service_name: Optional[str] = None
     ):
         details = {"service": service_name} if service_name else None

@@ -1,8 +1,8 @@
 """
-Aliyun NLS (Neural Language Service) STT Implementation.
+阿里云 NLS (智能语音服务) STT 实现。
 
-Uses Alibaba Cloud's NLS SDK for speech recognition.
-Supports real-time and file-based transcription.
+使用阿里云 NLS SDK 进行语音识别。
+支持实时和基于文件的转写。
 """
 
 import os
@@ -22,13 +22,13 @@ from .base import (
 
 class AliyunSTTService(BaseSTTService):
     """
-    Speech-to-Text service using Alibaba Cloud NLS.
+    使用阿里云 NLS 的语音转文本服务。
 
-    Supports formats: m4a, mp3, wav, pcm
-    Optimized for Chinese speech recognition.
+    支持格式: m4a, mp3, wav, pcm
+    针对中文语音识别进行了优化。
     """
 
-    # Default language
+    # 默认语言
     DEFAULT_LANGUAGE = "zh-CN"
 
     def __init__(
@@ -39,13 +39,13 @@ class AliyunSTTService(BaseSTTService):
         **kwargs
     ):
         """
-        Initialize the Aliyun STT service.
+        初始化阿里云 STT 服务。
 
-        Args:
-            access_key_id: Alibaba Cloud Access Key ID
-            access_key_secret: Alibaba Cloud Access Key Secret
+        参数:
+            access_key_id: 阿里云 Access Key ID
+            access_key_secret: 阿里云 Access Key Secret
             app_key: NLS App Key
-            **kwargs: Additional configuration
+            **kwargs: 额外配置
         """
         super().__init__(**kwargs)
 
@@ -55,20 +55,20 @@ class AliyunSTTService(BaseSTTService):
 
         if not all([self.access_key_id, self.access_key_secret, self.app_key]):
             raise STTError(
-                "Missing required credentials. Please set:\n"
+                "缺少必需的凭证。请设置:\n"
                 "  - ALIBABA_CLOUD_ACCESS_KEY_ID\n"
                 "  - ALIBABA_CLOUD_ACCESS_KEY_SECRET\n"
                 "  - ALIBABA_CLOUD_APP_KEY"
             )
 
-        # Import NLS SDK
+        # 导入 NLS SDK
         try:
             import nls
             self.nls = nls
         except ImportError:
             raise STTError(
-                "alibabacloud-nls package not installed. "
-                "Run: pip install alibabacloud-nls"
+                "未安装 alibabacloud-nls 包。"
+                "请运行: pip install alibabacloud-nls"
             )
 
     async def transcribe(
@@ -79,33 +79,33 @@ class AliyunSTTService(BaseSTTService):
         **kwargs
     ) -> TranscriptionResult:
         """
-        Transcribe audio file to text.
+        将音频文件转写为文本。
 
-        Args:
-            audio_path: Path to the audio file
-            audio_format: Format of the audio (auto-detected if None)
-            language_hint: Expected language (zh-CN or en-US)
-            **kwargs: Additional parameters
+        参数:
+            audio_path: 音频文件路径
+            audio_format: 音频格式 (为 None 时自动检测)
+            language_hint: 预期语言 (zh-CN 或 en-US)
+            **kwargs: 额外参数
 
-        Returns:
-            TranscriptionResult with transcribed text
+        返回:
+            包含转写文本的 TranscriptionResult
         """
-        # Check file exists
+        # 检查文件是否存在
         if not os.path.exists(audio_path):
-            raise STTFileError(f"Audio file not found: {audio_path}")
+            raise STTFileError(f"未找到音频文件: {audio_path}")
 
-        # Detect format if not provided
+        # 如未提供则检测格式
         if audio_format is None:
             audio_format = self._detect_format(audio_path)
 
-        # Read audio file
+        # 读取音频文件
         try:
             with open(audio_path, "rb") as f:
                 audio_data = f.read()
         except Exception as e:
-            raise STTFileError(f"Failed to read audio file: {str(e)}")
+            raise STTFileError(f"读取音频文件失败: {str(e)}")
 
-        # Use transcribe_bytes
+        # 使用 transcribe_bytes
         return await self.transcribe_bytes(
             audio_data=audio_data,
             audio_format=audio_format,
@@ -121,21 +121,21 @@ class AliyunSTTService(BaseSTTService):
         **kwargs
     ) -> TranscriptionResult:
         """
-        Transcribe audio bytes to text.
+        将音频字节转写为文本。
 
-        Args:
-            audio_data: Raw audio data bytes
-            audio_format: Format of the audio
-            language_hint: Expected language
-            **kwargs: Additional parameters
+        参数:
+            audio_data: 原始音频数据字节
+            audio_format: 音频格式
+            language_hint: 预期语言
+            **kwargs: 额外参数
 
-        Returns:
-            TranscriptionResult with transcribed text
+        返回:
+            包含转写文本的 TranscriptionResult
         """
         if not audio_data:
-            raise STTFileError("Audio data is empty")
+            raise STTFileError("音频数据为空")
 
-        # Map format to sample rate and encoding
+        # 将格式映射到采样率和编码
         format_mapping = {
             AudioFormat.M4A: (16000, "m4a"),
             AudioFormat.MP3: (16000, "mp3"),
@@ -146,10 +146,10 @@ class AliyunSTTService(BaseSTTService):
 
         sample_rate, encoding = format_mapping.get(audio_format, (16000, "m4a"))
 
-        # Use asyncio to run the blocking NLS SDK in a thread pool
+        # 使用 asyncio 在线程池中运行阻塞的 NLS SDK
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
-            None,  # Use default executor
+            None,  # 使用默认执行器
             self._sync_transcribe,
             audio_data,
             sample_rate,
@@ -167,9 +167,9 @@ class AliyunSTTService(BaseSTTService):
         kwargs: dict
     ) -> TranscriptionResult:
         """
-        Synchronous transcription using NLS SDK.
+        使用 NLS SDK 进行同步转写。
 
-        This runs in a thread pool to avoid blocking the event loop.
+        在线程池中运行以避免阻塞事件循环。
         """
         result_text = []
         confidence = None
@@ -177,7 +177,7 @@ class AliyunSTTService(BaseSTTService):
         error_occurred = None
 
         def on_result(message, result):
-            """Callback for recognition results."""
+            """识别结果的回调函数。"""
             if result and "payload" in result:
                 payload = result["payload"]
                 if "result" in payload:
@@ -190,27 +190,27 @@ class AliyunSTTService(BaseSTTService):
                     duration_ms = payload["duration"]
 
         def on_error(message):
-            """Callback for errors."""
+            """错误的回调函数。"""
             nonlocal error_occurred
             error_occurred = message
 
         def on_close():
-            """Callback for connection close."""
+            """连接关闭的回调函数。"""
             pass
 
         try:
-            # Create recognition instance
+            # 创建识别实例
             recognition = self.nls.NlsSpeechTranscriber(
                 akid=self.access_key_id,
                 aksecret=self.access_key_secret,
                 appkey=self.app_key,
-                token=None,  # SDK will auto-generate token
+                token=None,  # SDK 将自动生成 token
                 on_result=on_result,
                 on_error=on_error,
                 on_close=on_close,
             )
 
-            # Start recognition
+            # 开始识别
             recognition.start(
                 aformat=encoding,
                 sample_rate=sample_rate,
@@ -219,20 +219,20 @@ class AliyunSTTService(BaseSTTService):
                 enable_intermediate_result=False,
             )
 
-            # Send audio data
+            # 发送音频数据
             recognition.send_audio(audio_data)
 
-            # Stop recognition
+            # 停止识别
             recognition.stop()
 
-            # Check for errors
+            # 检查错误
             if error_occurred:
-                raise STTRecognitionError(f"Recognition error: {error_occurred}")
+                raise STTRecognitionError(f"识别错误: {error_occurred}")
 
-            # Combine results
+            # 合并结果
             final_text = "".join(result_text)
             if not final_text:
-                final_text = ""  # Empty transcription is OK
+                final_text = ""  # 空转写是正常的
 
             return TranscriptionResult(
                 text=final_text,
@@ -244,24 +244,23 @@ class AliyunSTTService(BaseSTTService):
         except (STTError,):
             raise
         except Exception as e:
-            raise STTRecognitionError(f"Transcription failed: {str(e)}")
+            raise STTRecognitionError(f"转写失败: {str(e)}")
 
     async def health_check(self) -> bool:
         """
-        Check if the STT service is healthy.
+        检查 STT 服务是否健康。
 
-        Returns:
-            True if healthy
+        返回:
+            健康返回 True
         """
         try:
-            # Simple health check - verify credentials are valid
-            # by checking token generation
+            # 简单的健康检查 - 通过检查 token 生成验证凭证是否有效
             if hasattr(self.nls, 'NlsToken'):
                 token = self.nls.NlsToken()
                 token.setAccessKeyId(self.access_key_id)
                 token.setAccessKeySecret(self.access_key_secret)
                 token.apply()
                 return True
-            return True  # If we got here, SDK is available
+            return True  # 如果执行到这里，说明 SDK 可用
         except Exception:
             return False

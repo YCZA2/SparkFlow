@@ -1,10 +1,10 @@
 """
-Service Factory - Creates service instances based on configuration.
+服务工厂 - 基于配置创建服务实例。
 
-This module provides factory functions to create LLM, STT, Embedding,
-and Vector DB services based on environment variables.
+本模块提供工厂函数，用于根据环境变量创建 LLM、STT、Embedding
+和向量数据库服务。
 
-Usage:
+使用方法:
     llm_service = create_llm_service()
     stt_service = create_stt_service()
     embedding_service = create_embedding_service()
@@ -23,20 +23,20 @@ def create_llm_service(
     **kwargs
 ) -> BaseLLMService:
     """
-    Create an LLM service instance based on provider.
+    基于提供商创建 LLM 服务实例。
 
-    Args:
-        provider: LLM provider ('qwen', 'wenxin', 'zhipu', 'openai')
-                 Defaults to LLM_PROVIDER env var or 'qwen'
-        model: Model name (e.g., 'qwen-turbo', 'qwen-max')
-               Defaults to LLM_MODEL env var
-        **kwargs: Additional provider-specific options
+    参数:
+        provider: LLM 提供商 ('qwen', 'wenxin', 'zhipu', 'openai')
+                 默认使用 LLM_PROVIDER 环境变量或 'qwen'
+        model: 模型名称 (例如 'qwen-turbo', 'qwen-max')
+               默认使用 LLM_MODEL 环境变量
+        **kwargs: 额外的提供商特定选项
 
-    Returns:
-        An instance of BaseLLMService
+    返回:
+        BaseLLMService 的实例
 
-    Raises:
-        ValueError: If the provider is not supported
+    抛出:
+        ValueError: 如果提供商不受支持
     """
     provider = (provider or os.getenv("LLM_PROVIDER", "qwen")).lower()
     model = model or os.getenv("LLM_MODEL")
@@ -45,27 +45,27 @@ def create_llm_service(
         from .qwen_llm import QwenLLMService
         return QwenLLMService(model=model, **kwargs)
     elif provider in ["wenxin", "baidu"]:
-        # Future: Implement Baidu Wenxin
+        # 未来: 实现百度文心
         raise ValueError(
-            f"Provider '{provider}' not yet implemented. "
-            "Please use 'qwen' or implement the provider."
+            f"提供商 '{provider}' 尚未实现。"
+            "请使用 'qwen' 或实现该提供商。"
         )
     elif provider == "zhipu":
-        # Future: Implement Zhipu AI
+        # 未来: 实现智谱 AI
         raise ValueError(
-            f"Provider '{provider}' not yet implemented. "
-            "Please use 'qwen' or implement the provider."
+            f"提供商 '{provider}' 尚未实现。"
+            "请使用 'qwen' 或实现该提供商。"
         )
     elif provider == "openai":
-        # Future: Implement OpenAI
+        # 未来: 实现 OpenAI
         raise ValueError(
-            f"Provider '{provider}' not yet implemented. "
-            "Please use 'qwen' or implement the provider."
+            f"提供商 '{provider}' 尚未实现。"
+            "请使用 'qwen' 或实现该提供商。"
         )
     else:
         raise ValueError(
-            f"Unknown LLM provider: '{provider}'. "
-            "Supported providers: qwen, wenxin, zhipu, openai"
+            f"未知的 LLM 提供商: '{provider}'。"
+            "支持的提供商: qwen, wenxin, zhipu, openai"
         )
 
 
@@ -74,20 +74,20 @@ def create_stt_service(
     **kwargs
 ) -> BaseSTTService:
     """
-    Create an STT service instance based on provider.
+    基于提供商创建 STT 服务实例。
 
-    Args:
-        provider: STT provider ('dashscope', 'aliyun', 'xunfei', 'baidu')
-                 Defaults to STT_PROVIDER env var or 'dashscope'
+    参数:
+        provider: STT 提供商 ('dashscope', 'aliyun', 'xunfei', 'baidu')
+                 默认使用 STT_PROVIDER 环境变量或 'dashscope'
                  'dashscope': 阿里云百炼/灵积平台 (推荐，仅需一个 API Key)
                  'aliyun': 阿里云 NLS (传统方式，需三个密钥)
-        **kwargs: Additional provider-specific options
+        **kwargs: 额外的提供商特定选项
 
-    Returns:
-        An instance of BaseSTTService
+    返回:
+        BaseSTTService 的实例
 
-    Raises:
-        ValueError: If the provider is not supported
+    抛出:
+        ValueError: 如果提供商不受支持
     """
     provider = (provider or os.getenv("STT_PROVIDER", "dashscope")).lower()
 
@@ -101,21 +101,21 @@ def create_stt_service(
         from .aliyun_stt import AliyunSTTService
         return AliyunSTTService(**kwargs)
     elif provider == "xunfei":
-        # Future: Implement Xunfei STT
+        # 未来: 实现讯飞 STT
         raise ValueError(
-            f"Provider '{provider}' not yet implemented. "
-            "Please use 'dashscope' or 'aliyun' instead."
+            f"提供商 '{provider}' 尚未实现。"
+            "请使用 'dashscope' 或 'aliyun'。"
         )
     elif provider in ["baidu", "wenxin"]:
-        # Future: Implement Baidu STT
+        # 未来: 实现百度 STT
         raise ValueError(
-            f"Provider '{provider}' not yet implemented. "
-            "Please use 'dashscope' or 'aliyun' instead."
+            f"提供商 '{provider}' 尚未实现。"
+            "请使用 'dashscope' 或 'aliyun'。"
         )
     else:
         raise ValueError(
-            f"Unknown STT provider: '{provider}'. "
-            "Supported providers: dashscope, aliyun, xunfei, baidu"
+            f"未知的 STT 提供商: '{provider}'。"
+            "支持的提供商: dashscope, aliyun, xunfei, baidu"
         )
 
 
@@ -125,20 +125,20 @@ def create_embedding_service(
     **kwargs
 ) -> BaseEmbeddingService:
     """
-    Create an Embedding service instance based on provider.
+    基于提供商创建 Embedding 服务实例。
 
-    Args:
-        provider: Embedding provider ('qwen', 'baidu', 'zhipu')
-                 Defaults to EMBEDDING_PROVIDER env var or 'qwen'
-        model: Model name (e.g., 'text-embedding-v2')
-               Defaults to EMBEDDING_MODEL env var
-        **kwargs: Additional provider-specific options
+    参数:
+        provider: Embedding 提供商 ('qwen', 'baidu', 'zhipu')
+                 默认使用 EMBEDDING_PROVIDER 环境变量或 'qwen'
+        model: 模型名称 (例如 'text-embedding-v2')
+               默认使用 EMBEDDING_MODEL 环境变量
+        **kwargs: 额外的提供商特定选项
 
-    Returns:
-        An instance of BaseEmbeddingService
+    返回:
+        BaseEmbeddingService 的实例
 
-    Raises:
-        ValueError: If the provider is not supported
+    抛出:
+        ValueError: 如果提供商不受支持
     """
     provider = (provider or os.getenv("EMBEDDING_PROVIDER", "qwen")).lower()
     model = model or os.getenv("EMBEDDING_MODEL")
@@ -147,21 +147,21 @@ def create_embedding_service(
         from .qwen_embedding import QwenEmbeddingService
         return QwenEmbeddingService(model=model, **kwargs)
     elif provider in ["baidu", "wenxin"]:
-        # Future: Implement Baidu Embedding
+        # 未来: 实现百度 Embedding
         raise ValueError(
-            f"Provider '{provider}' not yet implemented. "
-            "Please use 'qwen' or implement the provider."
+            f"提供商 '{provider}' 尚未实现。"
+            "请使用 'qwen' 或实现该提供商。"
         )
     elif provider == "zhipu":
-        # Future: Implement Zhipu Embedding
+        # 未来: 实现智谱 Embedding
         raise ValueError(
-            f"Provider '{provider}' not yet implemented. "
-            "Please use 'qwen' or implement the provider."
+            f"提供商 '{provider}' 尚未实现。"
+            "请使用 'qwen' 或实现该提供商。"
         )
     else:
         raise ValueError(
-            f"Unknown Embedding provider: '{provider}'. "
-            "Supported providers: qwen, baidu, zhipu"
+            f"未知的 Embedding 提供商: '{provider}'。"
+            "支持的提供商: qwen, baidu, zhipu"
         )
 
 
@@ -170,18 +170,18 @@ def create_vector_db_service(
     **kwargs
 ) -> BaseVectorDBService:
     """
-    Create a Vector Database service instance based on provider.
+    基于提供商创建向量数据库服务实例。
 
-    Args:
-        provider: Vector DB provider ('chromadb', 'pinecone', 'qdrant')
-                 Defaults to VECTOR_DB_PROVIDER env var or 'chromadb'
-        **kwargs: Additional provider-specific options
+    参数:
+        provider: 向量数据库提供商 ('chromadb', 'pinecone', 'qdrant')
+                 默认使用 VECTOR_DB_PROVIDER 环境变量或 'chromadb'
+        **kwargs: 额外的提供商特定选项
 
-    Returns:
-        An instance of BaseVectorDBService
+    返回:
+        BaseVectorDBService 的实例
 
-    Raises:
-        ValueError: If the provider is not supported
+    抛出:
+        ValueError: 如果提供商不受支持
     """
     provider = (provider or os.getenv("VECTOR_DB_PROVIDER", "chromadb")).lower()
 
@@ -189,25 +189,25 @@ def create_vector_db_service(
         from .chroma_vector_db import ChromaVectorDBService
         return ChromaVectorDBService(**kwargs)
     elif provider == "pinecone":
-        # Future: Implement Pinecone
+        # 未来: 实现 Pinecone
         raise ValueError(
-            f"Provider '{provider}' not yet implemented. "
-            "Please use 'chromadb' or implement the provider."
+            f"提供商 '{provider}' 尚未实现。"
+            "请使用 'chromadb' 或实现该提供商。"
         )
     elif provider == "qdrant":
-        # Future: Implement Qdrant
+        # 未来: 实现 Qdrant
         raise ValueError(
-            f"Provider '{provider}' not yet implemented. "
-            "Please use 'chromadb' or implement the provider."
+            f"提供商 '{provider}' 尚未实现。"
+            "请使用 'chromadb' 或实现该提供商。"
         )
     else:
         raise ValueError(
-            f"Unknown Vector DB provider: '{provider}'. "
-            "Supported providers: chromadb, pinecone, qdrant"
+            f"未知的向量数据库提供商: '{provider}'。"
+            "支持的提供商: chromadb, pinecone, qdrant"
         )
 
 
-# Singleton instances for reuse
+# 单例实例，用于复用
 _llm_service: Optional[BaseLLMService] = None
 _stt_service: Optional[BaseSTTService] = None
 _embedding_service: Optional[BaseEmbeddingService] = None
@@ -215,7 +215,7 @@ _vector_db_service: Optional[BaseVectorDBService] = None
 
 
 def get_llm_service() -> BaseLLMService:
-    """Get or create the singleton LLM service instance."""
+    """获取或创建 LLM 服务单例实例。"""
     global _llm_service
     if _llm_service is None:
         _llm_service = create_llm_service()
@@ -223,7 +223,7 @@ def get_llm_service() -> BaseLLMService:
 
 
 def get_stt_service() -> BaseSTTService:
-    """Get or create the singleton STT service instance."""
+    """获取或创建 STT 服务单例实例。"""
     global _stt_service
     if _stt_service is None:
         _stt_service = create_stt_service()
@@ -231,7 +231,7 @@ def get_stt_service() -> BaseSTTService:
 
 
 def get_embedding_service() -> BaseEmbeddingService:
-    """Get or create the singleton Embedding service instance."""
+    """获取或创建 Embedding 服务单例实例。"""
     global _embedding_service
     if _embedding_service is None:
         _embedding_service = create_embedding_service()
@@ -239,7 +239,7 @@ def get_embedding_service() -> BaseEmbeddingService:
 
 
 def get_vector_db_service() -> BaseVectorDBService:
-    """Get or create the singleton Vector DB service instance."""
+    """获取或创建向量数据库服务单例实例。"""
     global _vector_db_service
     if _vector_db_service is None:
         _vector_db_service = create_vector_db_service()
@@ -247,7 +247,7 @@ def get_vector_db_service() -> BaseVectorDBService:
 
 
 def reset_services():
-    """Reset all singleton instances (useful for testing)."""
+    """重置所有单例实例 (测试时有用)。"""
     global _llm_service, _stt_service, _embedding_service, _vector_db_service
     _llm_service = None
     _stt_service = None

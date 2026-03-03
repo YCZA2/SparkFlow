@@ -1,5 +1,5 @@
 """
-DashScope (阿里云百炼/灵积平台) STT Implementation.
+DashScope (阿里云百炼/灵积平台) STT 实现。
 
 使用阿里云 dashscope SDK 进行语音识别，支持 paraformer 系列模型。
 比 NLS 更简洁，仅需一个 API Key 即可使用。
@@ -48,7 +48,7 @@ class DashScopeSTTService(BaseSTTService):
         """
         初始化百炼 STT 服务。
 
-        Args:
+        参数:
             api_key: DashScope API Key (sk-...)
             model: 模型名称，默认 paraformer-v2
             **kwargs: 其他配置
@@ -80,13 +80,13 @@ class DashScopeSTTService(BaseSTTService):
         """
         转写音频文件为文本。
 
-        Args:
+        参数:
             audio_path: 音频文件路径
             audio_format: 音频格式 (None 则自动检测)
             language_hint: 语言提示 (zh-CN, en-US, 等)
             **kwargs: 额外参数
 
-        Returns:
+        返回:
             TranscriptionResult 包含转写结果
         """
         # 检查文件存在
@@ -121,13 +121,13 @@ class DashScopeSTTService(BaseSTTService):
         """
         转写音频数据为文本。
 
-        Args:
+        参数:
             audio_data: 音频二进制数据
             audio_format: 音频格式
             language_hint: 语言提示
             **kwargs: 额外参数
 
-        Returns:
+        返回:
             TranscriptionResult 包含转写结果
         """
         if not audio_data:
@@ -248,7 +248,7 @@ class DashScopeSTTService(BaseSTTService):
         """
         检查服务健康状态。
 
-        Returns:
+        返回:
             True 如果服务可用
         """
         try:

@@ -1,8 +1,8 @@
 """
-Abstract base class for STT (Speech-to-Text) services.
+STT (语音识别) 服务的抽象基类
 
-This module defines the interface for speech recognition services,
-allowing easy switching between different providers (Aliyun, Xunfei, Baidu, etc.)
+本模块定义了语音识别服务的接口，允许在不同提供商之间轻松切换
+(阿里云、讯飞、百度等)
 """
 
 from abc import ABC, abstractmethod
@@ -12,7 +12,7 @@ from enum import Enum
 
 
 class AudioFormat(Enum):
-    """Supported audio formats."""
+    """支持的音频格式"""
     M4A = "m4a"
     MP3 = "mp3"
     WAV = "wav"
@@ -22,7 +22,7 @@ class AudioFormat(Enum):
 
 @dataclass
 class TranscriptionResult:
-    """Result of a transcription operation."""
+    """转写操作的结果"""
 
     text: str
     confidence: Optional[float] = None
@@ -32,18 +32,18 @@ class TranscriptionResult:
 
 class BaseSTTService(ABC):
     """
-    Abstract base class for STT service implementations.
+    STT 服务实现的抽象基类
 
-    All speech-to-text providers should implement this interface
-    to ensure consistent behavior across different backends.
+    所有语音识别提供商都应实现此接口，以确保
+    在不同后端之间保持一致的行为
     """
 
     def __init__(self, **kwargs):
         """
-        Initialize the STT service.
+        初始化 STT 服务
 
         Args:
-            **kwargs: Provider-specific configuration (API keys, endpoints, etc.)
+            **kwargs: 提供商特定的配置 (API 密钥、端点等)
         """
         self.config = kwargs
 
@@ -56,19 +56,19 @@ class BaseSTTService(ABC):
         **kwargs
     ) -> TranscriptionResult:
         """
-        Transcribe audio file to text.
+        将音频文件转写为文本
 
         Args:
-            audio_path: Path to the audio file
-            audio_format: Format of the audio file (auto-detected if None)
-            language_hint: Expected language code (e.g., 'zh-CN', 'en-US')
-            **kwargs: Additional provider-specific parameters
+            audio_path: 音频文件路径
+            audio_format: 音频文件格式 (为 None 时自动检测)
+            language_hint: 预期语言代码 (如 'zh-CN', 'en-US')
+            **kwargs: 额外的提供商特定参数
 
         Returns:
-            TranscriptionResult containing the transcribed text and metadata
+            TranscriptionResult 包含转写文本和元数据
 
         Raises:
-            STTError: If transcription fails
+            STTError: 转写失败时抛出
         """
         pass
 
@@ -81,41 +81,41 @@ class BaseSTTService(ABC):
         **kwargs
     ) -> TranscriptionResult:
         """
-        Transcribe audio bytes to text.
+        将音频字节数据转写为文本
 
         Args:
-            audio_data: Raw audio data bytes
-            audio_format: Format of the audio data
-            language_hint: Expected language code
-            **kwargs: Additional provider-specific parameters
+            audio_data: 原始音频数据字节
+            audio_format: 音频数据格式
+            language_hint: 预期语言代码
+            **kwargs: 额外的提供商特定参数
 
         Returns:
-            TranscriptionResult containing the transcribed text and metadata
+            TranscriptionResult 包含转写文本和元数据
 
         Raises:
-            STTError: If transcription fails
+            STTError: 转写失败时抛出
         """
         pass
 
     @abstractmethod
     async def health_check(self) -> bool:
         """
-        Check if the STT service is healthy and accessible.
+        检查 STT 服务是否健康且可访问
 
         Returns:
-            True if the service is healthy, False otherwise
+            如果服务健康返回 True，否则返回 False
         """
         pass
 
     def _detect_format(self, audio_path: str) -> AudioFormat:
         """
-        Detect audio format from file extension.
+        从文件扩展名检测音频格式
 
         Args:
-            audio_path: Path to the audio file
+            audio_path: 音频文件路径
 
         Returns:
-            Detected AudioFormat
+            检测到的 AudioFormat
         """
         ext = audio_path.lower().split(".")[-1] if "." in audio_path else ""
         format_map = {
@@ -129,7 +129,7 @@ class BaseSTTService(ABC):
 
 
 class STTError(Exception):
-    """Base exception for STT service errors."""
+    """STT 服务错误的基类异常"""
 
     def __init__(self, message: str, code: Optional[str] = None, details: Optional[dict] = None):
         super().__init__(message)
@@ -139,21 +139,21 @@ class STTError(Exception):
 
 
 class STTFileError(STTError):
-    """Raised when audio file is invalid or cannot be read."""
+    """音频文件无效或无法读取时抛出"""
 
-    def __init__(self, message: str = "Invalid audio file"):
+    def __init__(self, message: str = "无效的音频文件"):
         super().__init__(message, code="FILE_ERROR")
 
 
 class STTRecognitionError(STTError):
-    """Raised when speech recognition fails."""
+    """语音识别失败时抛出"""
 
-    def __init__(self, message: str = "Recognition failed"):
+    def __init__(self, message: str = "识别失败"):
         super().__init__(message, code="RECOGNITION_ERROR")
 
 
 class STTRateLimitError(STTError):
-    """Raised when rate limit is exceeded."""
+    """超出速率限制时抛出"""
 
-    def __init__(self, message: str = "Rate limit exceeded"):
+    def __init__(self, message: str = "超出速率限制"):
         super().__init__(message, code="RATE_LIMIT_ERROR")

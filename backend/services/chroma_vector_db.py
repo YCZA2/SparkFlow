@@ -1,8 +1,8 @@
 """
-ChromaDB Vector Database Service Implementation.
+ChromaDB 向量数据库服务实现。
 
-Local vector database with zero external dependencies.
-Supports user-level namespace isolation.
+本地向量数据库，零外部依赖。
+支持用户级命名空间隔离。
 """
 
 import os
@@ -20,28 +20,28 @@ from .base import (
 
 class ChromaVectorDBService(BaseVectorDBService):
     """
-    Vector database service using ChromaDB (local).
+    使用 ChromaDB (本地) 的向量数据库服务。
 
-    Features:
-    - Zero external dependencies
-    - User-level namespace isolation via collections
-    - Persistent storage
-    - Easy migration path to cloud services
+    特性:
+    - 零外部依赖
+    - 通过集合实现用户级命名空间隔离
+    - 持久化存储
+    - 易于迁移到云服务
     """
 
     def __init__(self, db_path: Optional[str] = None, **kwargs):
         """
-        Initialize the ChromaDB service.
+        初始化 ChromaDB 服务。
 
-        Args:
-            db_path: Path to store ChromaDB data (default: ./chroma_data)
-            **kwargs: Additional configuration
+        参数:
+            db_path: 存储 ChromaDB 数据的路径 (默认: ./chroma_data)
+            **kwargs: 额外配置
         """
         super().__init__(**kwargs)
 
         self.db_path = db_path or os.getenv("CHROMADB_PATH", "./chroma_data")
 
-        # Import chromadb
+        # 导入 chromadb
         try:
             import chromadb
             from chromadb.config import Settings
@@ -49,10 +49,10 @@ class ChromaVectorDBService(BaseVectorDBService):
             self.Settings = Settings
         except ImportError:
             raise VectorDBError(
-                "chromadb package not installed. Run: pip install chromadb"
+                "未安装 chromadb 包。请运行: pip install chromadb"
             )
 
-        # Create client with persistent storage
+        # 创建持久化存储的客户端
         try:
             self.client = chromadb.PersistentClient(
                 path=self.db_path,
@@ -62,7 +62,7 @@ class ChromaVectorDBService(BaseVectorDBService):
                 )
             )
         except Exception as e:
-            raise VectorDBConnectionError(f"Failed to initialize ChromaDB: {str(e)}")
+            raise VectorDBConnectionError(f"初始化 ChromaDB 失败: {str(e)}")
 
     async def upsert(
         self,
@@ -71,27 +71,27 @@ class ChromaVectorDBService(BaseVectorDBService):
         **kwargs
     ) -> bool:
         """
-        Insert or update documents in the vector database.
+        在向量数据库中插入或更新文档。
 
-        Args:
-            namespace: Collection name (typically user-based)
-            documents: List of documents to upsert
-            **kwargs: Additional parameters
+        参数:
+            namespace: 集合名称 (通常基于用户)
+            documents: 要插入或更新的文档列表
+            **kwargs: 额外参数
 
-        Returns:
-            True if successful
+        返回:
+            成功返回 True
         """
         if not documents:
             return True
 
         try:
-            # Get or create collection
+            # 获取或创建集合
             collection = self.client.get_or_create_collection(
                 name=namespace,
                 metadata={"hnsw:space": "cosine"}
             )
 
-            # Prepare data for ChromaDB
+            # 为 ChromaDB 准备数据
             ids = []
             texts = []
             embeddings = []
@@ -104,9 +104,9 @@ class ChromaVectorDBService(BaseVectorDBService):
                 if doc.embedding:
                     embeddings.append(doc.embedding)
 
-            # Upsert to ChromaDB
+            # 插入或更新到 ChromaDB
             if embeddings:
-                # If embeddings are provided, use them directly
+                # 如果提供了嵌入向量，直接使用
                 collection.upsert(
                     ids=ids,
                     documents=texts,
@@ -114,7 +114,7 @@ class ChromaVectorDBService(BaseVectorDBService):
                     metadatas=metadatas
                 )
             else:
-                # Otherwise, ChromaDB will generate embeddings
+                # 否则，ChromaDB 将生成嵌入向量
                 collection.upsert(
                     ids=ids,
                     documents=texts,
@@ -124,7 +124,7 @@ class ChromaVectorDBService(BaseVectorDBService):
             return True
 
         except Exception as e:
-            raise VectorDBError(f"Failed to upsert documents: {str(e)}", code="UPSERT_ERROR")
+            raise VectorDBError(f"插入或更新文档失败: {str(e)}", code="UPSERT_ERROR")
 
     async def query(
         self,
@@ -135,26 +135,26 @@ class ChromaVectorDBService(BaseVectorDBService):
         **kwargs
     ) -> List[VectorQueryResult]:
         """
-        Query similar vectors from the database.
+        从数据库查询相似向量。
 
-        Args:
-            namespace: Collection name
-            query_embedding: Query vector
-            top_k: Number of results
-            filter_metadata: Optional metadata filters
-            **kwargs: Additional parameters
+        参数:
+            namespace: 集合名称
+            query_embedding: 查询向量
+            top_k: 返回结果数量
+            filter_metadata: 可选的元数据过滤器
+            **kwargs: 额外参数
 
-        Returns:
-            List of VectorQueryResult objects
+        返回:
+            VectorQueryResult 对象列表
         """
         try:
-            # Check if collection exists
+            # 检查集合是否存在
             if not await self.namespace_exists(namespace):
                 return []
 
             collection = self.client.get_collection(name=namespace)
 
-            # Query
+            # 查询
             results = collection.query(
                 query_embeddings=[query_embedding],
                 n_results=top_k,
@@ -162,14 +162,14 @@ class ChromaVectorDBService(BaseVectorDBService):
                 include=["documents", "metadatas", "distances"]
             )
 
-            # Convert to VectorQueryResult
+            # 转换为 VectorQueryResult
             output = []
             if results and results["ids"]:
                 for i, doc_id in enumerate(results["ids"][0]):
-                    # Convert cosine distance to similarity score
-                    # ChromaDB returns distance, where 0 is identical
+                    # 将余弦距离转换为相似度分数
+                    # ChromaDB 返回距离，其中 0 表示完全相同
                     distance = results["distances"][0][i] if results["distances"] else 0
-                    score = 1 - distance  # Convert to similarity score
+                    score = 1 - distance  # 转换为相似度分数
 
                     output.append(VectorQueryResult(
                         id=doc_id,
@@ -181,7 +181,7 @@ class ChromaVectorDBService(BaseVectorDBService):
             return output
 
         except Exception as e:
-            raise VectorDBError(f"Failed to query: {str(e)}", code="QUERY_ERROR")
+            raise VectorDBError(f"查询失败: {str(e)}", code="QUERY_ERROR")
 
     async def query_by_text(
         self,
@@ -193,23 +193,23 @@ class ChromaVectorDBService(BaseVectorDBService):
         **kwargs
     ) -> List[VectorQueryResult]:
         """
-        Query using text (auto-embeds the query).
+        使用文本查询 (自动嵌入查询)。
 
-        Args:
-            namespace: Collection name
-            query_text: Query text
-            embedding_service: Embedding service to use
-            top_k: Number of results
-            filter_metadata: Optional metadata filters
-            **kwargs: Additional parameters
+        参数:
+            namespace: 集合名称
+            query_text: 查询文本
+            embedding_service: 要使用的嵌入服务
+            top_k: 返回结果数量
+            filter_metadata: 可选的元数据过滤器
+            **kwargs: 额外参数
 
-        Returns:
-            List of VectorQueryResult objects
+        返回:
+            VectorQueryResult 对象列表
         """
-        # Generate embedding for query text
+        # 为查询文本生成嵌入向量
         embedding_result = await embedding_service.embed(query_text)
 
-        # Query using the embedding
+        # 使用嵌入向量进行查询
         return await self.query(
             namespace=namespace,
             query_embedding=embedding_result.embedding,
@@ -225,15 +225,15 @@ class ChromaVectorDBService(BaseVectorDBService):
         **kwargs
     ) -> bool:
         """
-        Delete documents from the vector database.
+        从向量数据库删除文档。
 
-        Args:
-            namespace: Collection name
-            document_ids: List of document IDs to delete
-            **kwargs: Additional parameters
+        参数:
+            namespace: 集合名称
+            document_ids: 要删除的文档 ID 列表
+            **kwargs: 额外参数
 
-        Returns:
-            True if successful
+        返回:
+            成功返回 True
         """
         if not document_ids:
             return True
@@ -248,7 +248,7 @@ class ChromaVectorDBService(BaseVectorDBService):
             return True
 
         except Exception as e:
-            raise VectorDBError(f"Failed to delete documents: {str(e)}", code="DELETE_ERROR")
+            raise VectorDBError(f"删除文档失败: {str(e)}", code="DELETE_ERROR")
 
     async def get_namespace_stats(
         self,
@@ -256,14 +256,14 @@ class ChromaVectorDBService(BaseVectorDBService):
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Get statistics for a namespace.
+        获取命名空间的统计信息。
 
-        Args:
-            namespace: Collection name
-            **kwargs: Additional parameters
+        参数:
+            namespace: 集合名称
+            **kwargs: 额外参数
 
-        Returns:
-            Dictionary with statistics
+        返回:
+            包含统计信息的字典
         """
         try:
             if not await self.namespace_exists(namespace):
@@ -279,17 +279,17 @@ class ChromaVectorDBService(BaseVectorDBService):
             }
 
         except Exception as e:
-            raise VectorDBError(f"Failed to get stats: {str(e)}", code="STATS_ERROR")
+            raise VectorDBError(f"获取统计信息失败: {str(e)}", code="STATS_ERROR")
 
     async def namespace_exists(self, namespace: str) -> bool:
         """
-        Check if a namespace exists.
+        检查命名空间是否存在。
 
-        Args:
-            namespace: Collection name
+        参数:
+            namespace: 集合名称
 
-        Returns:
-            True if the namespace exists
+        返回:
+            命名空间存在返回 True
         """
         try:
             collections = self.client.list_collections()
@@ -304,15 +304,15 @@ class ChromaVectorDBService(BaseVectorDBService):
         **kwargs
     ) -> bool:
         """
-        Create a new namespace/collection.
+        创建新的命名空间/集合。
 
-        Args:
-            namespace: Collection name
-            metadata: Optional metadata
-            **kwargs: Additional parameters
+        参数:
+            namespace: 集合名称
+            metadata: 可选的元数据
+            **kwargs: 额外参数
 
-        Returns:
-            True if successful
+        返回:
+            成功返回 True
         """
         try:
             if await self.namespace_exists(namespace):
@@ -325,18 +325,18 @@ class ChromaVectorDBService(BaseVectorDBService):
             return True
 
         except Exception as e:
-            raise VectorDBError(f"Failed to create namespace: {str(e)}", code="CREATE_ERROR")
+            raise VectorDBError(f"创建命名空间失败: {str(e)}", code="CREATE_ERROR")
 
     async def delete_namespace(self, namespace: str, **kwargs) -> bool:
         """
-        Delete a namespace and all its documents.
+        删除命名空间及其所有文档。
 
-        Args:
-            namespace: Collection name
-            **kwargs: Additional parameters
+        参数:
+            namespace: 集合名称
+            **kwargs: 额外参数
 
-        Returns:
-            True if successful
+        返回:
+            成功返回 True
         """
         try:
             if not await self.namespace_exists(namespace):
@@ -346,22 +346,22 @@ class ChromaVectorDBService(BaseVectorDBService):
             return True
 
         except Exception as e:
-            raise VectorDBError(f"Failed to delete namespace: {str(e)}", code="DELETE_ERROR")
+            raise VectorDBError(f"删除命名空间失败: {str(e)}", code="DELETE_ERROR")
 
     async def health_check(self) -> bool:
         """
-        Check if the vector database is healthy.
+        检查向量数据库是否健康。
 
-        Returns:
-            True if healthy
+        返回:
+            健康返回 True
         """
         try:
-            # Try to list collections as a health check
+            # 尝试列出集合作为健康检查
             self.client.list_collections()
             return True
         except Exception:
             return False
 
 
-# For backward compatibility, keep the old name
+# 为向后兼容，保留旧名称
 VectorService = ChromaVectorDBService

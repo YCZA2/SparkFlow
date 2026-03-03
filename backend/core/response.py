@@ -1,7 +1,7 @@
 """
-API Response standardization.
+API 响应标准化模块
 
-Provides consistent response formatting for all API endpoints.
+为所有 API 端点提供一致的响应格式
 """
 
 from typing import Optional, Dict, Any, TypeVar, Generic
@@ -11,7 +11,7 @@ T = TypeVar("T")
 
 
 class ErrorDetail(BaseModel):
-    """Error detail model."""
+    """错误详情模型"""
     code: str
     message: str
     details: Optional[Dict[str, Any]] = None
@@ -19,14 +19,14 @@ class ErrorDetail(BaseModel):
 
 class ResponseModel(BaseModel, Generic[T]):
     """
-    Standard API response model.
+    标准 API 响应模型
 
-    All API responses follow this structure:
+    所有 API 响应都遵循以下结构：
     {
         "success": true/false,
-        "data": { ... } or null,
-        "message": "..." or null,
-        "error": { ... } or null
+        "data": { ... } 或 null,
+        "message": "..." 或 null,
+        "error": { ... } 或 null
     }
     """
     success: bool
@@ -40,14 +40,14 @@ def success_response(
     message: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Create a success response.
+    创建成功响应
 
     Args:
-        data: Response data payload
-        message: Optional success message
+        data: 响应数据载荷
+        message: 可选的成功消息
 
     Returns:
-        Formatted success response dictionary
+        格式化的成功响应字典
     """
     return {
         "success": True,
@@ -63,15 +63,15 @@ def error_response(
     details: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
-    Create an error response.
+    创建错误响应
 
     Args:
-        code: Error code (e.g., 'FRAGMENT_NOT_FOUND')
-        message: Human-readable error message
-        details: Optional additional error details
+        code: 错误代码（如 'FRAGMENT_NOT_FOUND'）
+        message: 人类可读的错误消息
+        details: 可选的额外错误详情
 
     Returns:
-        Formatted error response dictionary
+        格式化的错误响应字典
     """
     return {
         "success": False,
@@ -87,31 +87,31 @@ def error_response(
 
 def created_response(
     data: Any,
-    message: str = "Resource created successfully"
+    message: str = "资源创建成功"
 ) -> Dict[str, Any]:
     """
-    Create a 'resource created' success response.
+    创建'资源已创建'的成功响应
 
     Args:
-        data: The created resource data
-        message: Success message
+        data: 创建的资源数据
+        message: 成功消息
 
     Returns:
-        Formatted success response dictionary
+        格式化的成功响应字典
     """
     return success_response(data=data, message=message)
 
 
 def deleted_response(
-    message: str = "Resource deleted successfully"
+    message: str = "资源删除成功"
 ) -> Dict[str, Any]:
     """
-    Create a 'resource deleted' success response.
+    创建'资源已删除'的成功响应
 
     Args:
-        message: Success message
+        message: 成功消息
 
     Returns:
-        Formatted success response dictionary
+        格式化的成功响应字典
     """
     return success_response(data=None, message=message)

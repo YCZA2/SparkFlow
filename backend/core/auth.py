@@ -1,7 +1,7 @@
 """
-JWT Authentication utilities.
+JWT 认证工具模块
 
-Provides token creation and validation for API authentication.
+提供 API 认证的令牌创建和验证功能
 """
 
 from datetime import datetime, timedelta, timezone
@@ -14,10 +14,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from .config import settings
 from .exceptions import AuthenticationError
 
-# JWT configuration
+# JWT 配置
 ALGORITHM = "HS256"
 
-# HTTP Bearer security scheme
+# HTTP Bearer 安全方案
 security = HTTPBearer(auto_error=False)
 
 
@@ -27,17 +27,15 @@ def create_access_token(
     expires_delta: Optional[timedelta] = None
 ) -> str:
     """
-    Create a JWT access token.
-
     创建 JWT 访问令牌
 
     Args:
-        user_id: User unique identifier
-        role: User role ('user' or 'creator')
-        expires_delta: Token expiration time, defaults to settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        user_id: 用户唯一标识符
+        role: 用户角色 ('user' 或 'creator')
+        expires_delta: 令牌过期时间，默认为 settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
     Returns:
-        Encoded JWT token string
+        编码后的 JWT 令牌字符串
     """
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -45,10 +43,10 @@ def create_access_token(
     expire = datetime.now(timezone.utc) + expires_delta
 
     payload = {
-        "sub": user_id,  # Subject (user identifier)
+        "sub": user_id,  # 主题（用户标识符）
         "role": role,
         "exp": expire,
-        "iat": datetime.now(timezone.utc),  # Issued at
+        "iat": datetime.now(timezone.utc),  # 签发时间
         "type": "access"
     }
 
@@ -58,29 +56,27 @@ def create_access_token(
 
 def decode_token(token: str) -> Dict[str, Any]:
     """
-    Decode and validate a JWT token.
-
     解码并验证 JWT 令牌
 
     Args:
-        token: JWT token string
+        token: JWT 令牌字符串
 
     Returns:
-        Decoded token payload
+        解码后的令牌载荷
 
     Raises:
-        AuthenticationError: If token is invalid or expired
+        AuthenticationError: 令牌无效或已过期时抛出
     """
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
         raise AuthenticationError(
-            message="Token has expired",
+            message="令牌已过期",
         )
     except jwt.InvalidTokenError as e:
         raise AuthenticationError(
-            message=f"Invalid token: {str(e)}",
+            message=f"无效的令牌: {str(e)}",
         )
 
 
@@ -88,22 +84,20 @@ async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> Dict[str, Any]:
     """
-    Dependency to get the current authenticated user from the token.
-
     从请求头中获取当前认证用户
 
     Args:
-        credentials: HTTP Bearer credentials from Authorization header
+        credentials: 来自 Authorization 请求头的 HTTP Bearer 凭证
 
     Returns:
-        User dictionary with 'user_id' and 'role'
+        包含 'user_id' 和 'role' 的用户字典
 
     Raises:
-        AuthenticationError: If no token provided or token is invalid
+        AuthenticationError: 未提供令牌或令牌无效时抛出
     """
     if credentials is None:
         raise AuthenticationError(
-            message="Authentication required. Please provide a valid token.",
+            message="需要进行认证，请提供有效的令牌。",
         )
 
     token = credentials.credentials
@@ -114,7 +108,7 @@ async def get_current_user(
 
     if user_id is None:
         raise AuthenticationError(
-            message="Invalid token: missing user identifier",
+            message="无效的令牌：缺少用户标识符",
         )
 
     return {
@@ -128,15 +122,13 @@ async def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> Optional[Dict[str, Any]]:
     """
-    Dependency to optionally get the current user.
-
     可选地获取当前用户（用于公开端点但支持认证）
 
     Args:
-        credentials: HTTP Bearer credentials
+        credentials: HTTP Bearer 凭证
 
     Returns:
-        User dictionary or None if not authenticated
+        用户字典，如果未认证则返回 None
     """
     if credentials is None:
         return None
@@ -147,23 +139,21 @@ async def get_optional_user(
         return None
 
 
-# Token response model
+# 令牌响应模型
 class TokenResponse:
-    """Token response structure."""
+    """令牌响应结构"""
 
     @staticmethod
     def create(access_token: str, token_type: str = "bearer") -> Dict[str, Any]:
         """
-        Create a standardized token response.
-
         创建标准化的令牌响应
 
         Args:
-            access_token: The JWT access token
-            token_type: Token type (default: bearer)
+            access_token: JWT 访问令牌
+            token_type: 令牌类型（默认为 bearer）
 
         Returns:
-            Token response dictionary
+            令牌响应字典
         """
         return {
             "access_token": access_token,

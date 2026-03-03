@@ -1,8 +1,7 @@
 """
-Abstract base class for Embedding services.
+Embedding 服务的抽象基类
 
-This module defines the interface for text embedding services,
-allowing easy switching between different providers.
+本模块定义了文本嵌入服务的接口，允许在不同提供商之间轻松切换
 """
 
 from abc import ABC, abstractmethod
@@ -12,7 +11,7 @@ from dataclasses import dataclass
 
 @dataclass
 class EmbeddingResult:
-    """Result of an embedding operation."""
+    """嵌入操作的结果"""
 
     embedding: List[float]
     model: Optional[str] = None
@@ -21,19 +20,19 @@ class EmbeddingResult:
 
 class BaseEmbeddingService(ABC):
     """
-    Abstract base class for Embedding service implementations.
+    Embedding 服务实现的抽象基类
 
-    All embedding providers should implement this interface
-    to ensure consistent behavior across different backends.
+    所有嵌入服务提供商都应实现此接口，以确保
+    在不同后端之间保持一致的行为
     """
 
     def __init__(self, model: Optional[str] = None, **kwargs):
         """
-        Initialize the embedding service.
+        初始化嵌入服务
 
         Args:
-            model: The model identifier to use (e.g., 'text-embedding-v2')
-            **kwargs: Provider-specific configuration
+            model: 要使用的模型标识符 (如 'text-embedding-v2')
+            **kwargs: 提供商特定的配置
         """
         self.model = model
         self.config = kwargs
@@ -45,17 +44,17 @@ class BaseEmbeddingService(ABC):
         **kwargs
     ) -> EmbeddingResult:
         """
-        Generate embedding for a single text.
+        为单个文本生成嵌入向量
 
         Args:
-            text: The text to embed
-            **kwargs: Additional provider-specific parameters
+            text: 要嵌入的文本
+            **kwargs: 额外的提供商特定参数
 
         Returns:
-            EmbeddingResult containing the embedding vector
+            EmbeddingResult 包含嵌入向量
 
         Raises:
-            EmbeddingError: If embedding generation fails
+            EmbeddingError: 嵌入生成失败时抛出
         """
         pass
 
@@ -67,28 +66,28 @@ class BaseEmbeddingService(ABC):
         **kwargs
     ) -> List[EmbeddingResult]:
         """
-        Generate embeddings for multiple texts.
+        为多个文本生成嵌入向量
 
         Args:
-            texts: List of texts to embed
-            batch_size: Number of texts to process in each batch
-            **kwargs: Additional provider-specific parameters
+            texts: 要嵌入的文本列表
+            batch_size: 每批处理的文本数量
+            **kwargs: 额外的提供商特定参数
 
         Returns:
-            List of EmbeddingResult objects
+            EmbeddingResult 对象列表
 
         Raises:
-            EmbeddingError: If embedding generation fails
+            EmbeddingError: 嵌入生成失败时抛出
         """
         pass
 
     @abstractmethod
     async def health_check(self) -> bool:
         """
-        Check if the embedding service is healthy and accessible.
+        检查嵌入服务是否健康且可访问
 
         Returns:
-            True if the service is healthy, False otherwise
+            如果服务健康返回 True，否则返回 False
         """
         pass
 
@@ -96,16 +95,16 @@ class BaseEmbeddingService(ABC):
     @abstractmethod
     def dimensions(self) -> int:
         """
-        Get the dimensionality of the embeddings.
+        获取嵌入向量的维度
 
         Returns:
-            Number of dimensions in the embedding vectors
+            嵌入向量的维度数
         """
         pass
 
 
 class EmbeddingError(Exception):
-    """Base exception for Embedding service errors."""
+    """Embedding 服务错误的基类异常"""
 
     def __init__(self, message: str, code: Optional[str] = None, details: Optional[dict] = None):
         super().__init__(message)
@@ -115,7 +114,7 @@ class EmbeddingError(Exception):
 
 
 class EmbeddingRateLimitError(EmbeddingError):
-    """Raised when rate limit is exceeded."""
+    """超出速率限制时抛出"""
 
-    def __init__(self, message: str = "Rate limit exceeded"):
+    def __init__(self, message: str = "超出速率限制"):
         super().__init__(message, code="RATE_LIMIT_ERROR")

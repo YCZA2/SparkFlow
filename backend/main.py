@@ -1,5 +1,5 @@
 """
-SparkFlow Backend - FastAPI Application
+SparkFlow 后端 - FastAPI 应用程序
 """
 import os
 
@@ -27,20 +27,20 @@ app = FastAPI(
     redoc_url="/redoc" if settings.DEBUG else None,
 )
 
-# CORS middleware
+# CORS 中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],  # 生产环境请适当配置
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# Global exception handlers
+# 全局异常处理器
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException):
-    """Handle custom application exceptions."""
+    """处理自定义应用程序异常。"""
     return JSONResponse(
         status_code=exc.status_code,
         content=exc.to_dict()
@@ -49,7 +49,7 @@ async def app_exception_handler(request: Request, exc: AppException):
 
 @app.exception_handler(AuthenticationError)
 async def auth_exception_handler(request: Request, exc: AuthenticationError):
-    """Handle authentication errors."""
+    """处理认证错误。"""
     return JSONResponse(
         status_code=exc.status_code,
         content=exc.to_dict()
@@ -58,7 +58,7 @@ async def auth_exception_handler(request: Request, exc: AuthenticationError):
 
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
-    """Handle 404 not found errors."""
+    """处理 404 未找到错误。"""
     return JSONResponse(
         status_code=404,
         content={
@@ -67,7 +67,7 @@ async def not_found_handler(request: Request, exc):
             "message": None,
             "error": {
                 "code": "NOT_FOUND",
-                "message": "The requested resource was not found",
+                "message": "请求的资源未找到",
                 "details": {"path": str(request.url)}
             }
         }
@@ -76,8 +76,8 @@ async def not_found_handler(request: Request, exc):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Handle all unhandled exceptions."""
-    # Log the error for debugging
+    """处理所有未捕获的异常。"""
+    # 记录错误以便调试
     import traceback
     print(f"Unhandled exception: {str(exc)}")
     print(traceback.format_exc())
@@ -90,7 +90,7 @@ async def global_exception_handler(request: Request, exc: Exception):
             "message": None,
             "error": {
                 "code": "INTERNAL_ERROR",
-                "message": "An internal server error occurred",
+                "message": "发生内部服务器错误",
                 "details": None if not settings.DEBUG else {"error": str(exc)}
             }
         }
@@ -99,13 +99,13 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.get("/")
 async def root():
-    """Health check endpoint"""
+    """健康检查端点"""
     return success_response(data={"status": "ok", "version": settings.APP_VERSION})
 
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check endpoint."""
+    """详细健康检查端点。"""
     services_status = {
         "database": "unknown",
         "llm": "unknown",
@@ -113,7 +113,7 @@ async def health_check():
         "vector_db": "unknown",
     }
 
-    # Check services if credentials are configured
+    # 如果配置了凭证，则检查服务状态
     if settings.DASHSCOPE_API_KEY:
         try:
             from services.factory import get_llm_service
@@ -145,7 +145,7 @@ async def health_check():
     })
 
 
-# Register routers
+# 注册路由
 app.include_router(auth.router)
 
 
@@ -153,25 +153,25 @@ app.include_router(auth.router)
 @app.get("/test/success")
 async def test_success_response():
     """
-    Test endpoint for successful response format.
+    测试成功响应格式的端点。
 
     测试成功响应格式
     """
     return success_response(
         data={"items": ["fragment1", "fragment2"], "count": 2},
-        message="Data retrieved successfully"
+        message="数据获取成功"
     )
 
 
 @app.get("/test/not-found")
 async def test_not_found():
     """
-    Test endpoint for 404 error response format.
+    测试 404 错误响应格式的端点。
 
     测试 404 错误响应格式
     """
     raise NotFoundError(
-        message="Fragment not found",
+        message="片段未找到",
         resource_type="fragment",
         resource_id="test-123"
     )
@@ -180,13 +180,13 @@ async def test_not_found():
 @app.get("/test/validation-error")
 async def test_validation_error():
     """
-    Test endpoint for validation error response format.
+    测试校验错误响应格式的端点。
 
     测试校验错误响应格式
     """
     raise ValidationError(
-        message="Invalid input data",
-        field_errors={"title": "Title is required", "content": "Content too long"}
+        message="输入数据无效",
+        field_errors={"title": "标题不能为空", "content": "内容过长"}
     )
 
 
@@ -194,29 +194,29 @@ async def test_validation_error():
 @app.get("/test/protected")
 async def test_protected_endpoint(current_user: dict = Depends(get_current_user)):
     """
-    Test protected endpoint requiring authentication.
+    测试需要认证的受保护端点。
 
     测试受保护端点（需要认证）
 
-    This endpoint requires a valid JWT token in the Authorization header.
-    Use format: Authorization: Bearer <token>
+    此端点需要在 Authorization 请求头中提供有效的 JWT 令牌。
+    使用格式：Authorization: Bearer <token>
 
-    Returns:
-        Current user information
+    返回:
+        当前用户信息
     """
     return success_response(
         data={
-            "message": "You have accessed a protected resource",
+            "message": "您已访问受保护资源",
             "user": current_user
         },
-        message="Access granted"
+        message="访问已授权"
     )
 
 
 @app.get("/test/auth-check")
 async def test_auth_check(current_user: dict = Depends(get_current_user)):
     """
-    Verify authentication is working correctly.
+    验证认证是否正常工作。
 
     验证认证是否正常工作
     """
@@ -226,5 +226,5 @@ async def test_auth_check(current_user: dict = Depends(get_current_user)):
             "user_id": current_user["user_id"],
             "role": current_user["role"],
         },
-        message="Authentication verified"
+        message="认证已验证"
     )

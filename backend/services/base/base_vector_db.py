@@ -1,8 +1,8 @@
 """
-Abstract base class for Vector Database services.
+向量数据库服务的抽象基类
 
-This module defines the interface for vector database operations,
-allowing easy switching between different providers (ChromaDB, Pinecone, Qdrant, etc.)
+本模块定义了向量数据库操作的接口，允许在不同提供商之间轻松切换
+(ChromaDB, Pinecone, Qdrant 等)
 """
 
 from abc import ABC, abstractmethod
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 @dataclass
 class VectorQueryResult:
-    """Result of a vector similarity query."""
+    """向量相似度查询的结果"""
 
     id: str
     text: str
@@ -22,7 +22,7 @@ class VectorQueryResult:
 
 @dataclass
 class VectorDocument:
-    """Document to be stored in vector database."""
+    """要存储在向量数据库中的文档"""
 
     id: str
     text: str
@@ -32,21 +32,21 @@ class VectorDocument:
 
 class BaseVectorDBService(ABC):
     """
-    Abstract base class for Vector Database service implementations.
+    向量数据库服务实现的抽象基类
 
-    All vector database providers should implement this interface
-    to ensure consistent behavior across different backends.
+    所有向量数据库提供商都应实现此接口，以确保
+    在不同后端之间保持一致的行为
 
-    The service uses a namespace-based isolation strategy where each user
-    has their own collection/namespace for data privacy.
+    服务使用基于命名空间的隔离策略，每个用户
+    都有自己的集合/命名空间以确保数据隐私
     """
 
     def __init__(self, **kwargs):
         """
-        Initialize the vector database service.
+        初始化向量数据库服务
 
         Args:
-            **kwargs: Provider-specific configuration
+            **kwargs: 提供商特定的配置
         """
         self.config = kwargs
 
@@ -58,18 +58,18 @@ class BaseVectorDBService(ABC):
         **kwargs
     ) -> bool:
         """
-        Insert or update documents in the vector database.
+        在向量数据库中插入或更新文档
 
         Args:
-            namespace: The namespace/collection name (typically user_id based)
-            documents: List of documents to upsert
-            **kwargs: Additional provider-specific parameters
+            namespace: 命名空间/集合名称（通常基于 user_id）
+            documents: 要插入或更新的文档列表
+            **kwargs: 额外的提供商特定参数
 
         Returns:
-            True if operation succeeded
+            如果操作成功返回 True
 
         Raises:
-            VectorDBError: If the operation fails
+            VectorDBError: 操作失败时抛出
         """
         pass
 
@@ -83,20 +83,20 @@ class BaseVectorDBService(ABC):
         **kwargs
     ) -> List[VectorQueryResult]:
         """
-        Query similar vectors from the database.
+        从数据库查询相似向量
 
         Args:
-            namespace: The namespace/collection name
-            query_embedding: The embedding vector to search for
-            top_k: Number of results to return
-            filter_metadata: Optional metadata filters
-            **kwargs: Additional provider-specific parameters
+            namespace: 命名空间/集合名称
+            query_embedding: 要搜索的嵌入向量
+            top_k: 返回结果数量
+            filter_metadata: 可选的元数据过滤器
+            **kwargs: 额外的提供商特定参数
 
         Returns:
-            List of VectorQueryResult objects sorted by relevance (highest first)
+            按相关性排序（从高到低）的 VectorQueryResult 对象列表
 
         Raises:
-            VectorDBError: If the query fails
+            VectorDBError: 查询失败时抛出
         """
         pass
 
@@ -105,27 +105,27 @@ class BaseVectorDBService(ABC):
         self,
         namespace: str,
         query_text: str,
-        embedding_service: Any,  # BaseEmbeddingService instance
+        embedding_service: Any,  # BaseEmbeddingService 实例
         top_k: int = 5,
         filter_metadata: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> List[VectorQueryResult]:
         """
-        Query similar vectors using text (auto-embeds the query text).
+        使用文本查询相似向量（自动嵌入查询文本）
 
         Args:
-            namespace: The namespace/collection name
-            query_text: The text to search for
-            embedding_service: The embedding service to use for query text
-            top_k: Number of results to return
-            filter_metadata: Optional metadata filters
-            **kwargs: Additional provider-specific parameters
+            namespace: 命名空间/集合名称
+            query_text: 要搜索的文本
+            embedding_service: 用于查询文本的嵌入服务
+            top_k: 返回结果数量
+            filter_metadata: 可选的元数据过滤器
+            **kwargs: 额外的提供商特定参数
 
         Returns:
-            List of VectorQueryResult objects sorted by relevance
+            按相关性排序的 VectorQueryResult 对象列表
 
         Raises:
-            VectorDBError: If the query fails
+            VectorDBError: 查询失败时抛出
         """
         pass
 
@@ -137,18 +137,18 @@ class BaseVectorDBService(ABC):
         **kwargs
     ) -> bool:
         """
-        Delete documents from the vector database.
+        从向量数据库删除文档
 
         Args:
-            namespace: The namespace/collection name
-            document_ids: List of document IDs to delete
-            **kwargs: Additional provider-specific parameters
+            namespace: 命名空间/集合名称
+            document_ids: 要删除的文档 ID 列表
+            **kwargs: 额外的提供商特定参数
 
         Returns:
-            True if deletion succeeded
+            如果删除成功返回 True
 
         Raises:
-            VectorDBError: If the operation fails
+            VectorDBError: 操作失败时抛出
         """
         pass
 
@@ -159,30 +159,30 @@ class BaseVectorDBService(ABC):
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Get statistics for a namespace.
+        获取命名空间的统计信息
 
         Args:
-            namespace: The namespace/collection name
-            **kwargs: Additional provider-specific parameters
+            namespace: 命名空间/集合名称
+            **kwargs: 额外的提供商特定参数
 
         Returns:
-            Dictionary containing statistics (document count, etc.)
+            包含统计信息的字典（文档数量等）
 
         Raises:
-            VectorDBError: If the operation fails
+            VectorDBError: 操作失败时抛出
         """
         pass
 
     @abstractmethod
     async def namespace_exists(self, namespace: str) -> bool:
         """
-        Check if a namespace exists.
+        检查命名空间是否存在
 
         Args:
-            namespace: The namespace/collection name
+            namespace: 命名空间/集合名称
 
         Returns:
-            True if the namespace exists
+            如果命名空间存在返回 True
         """
         pass
 
@@ -194,51 +194,51 @@ class BaseVectorDBService(ABC):
         **kwargs
     ) -> bool:
         """
-        Create a new namespace/collection.
+        创建新的命名空间/集合
 
         Args:
-            namespace: The namespace/collection name
-            metadata: Optional metadata for the namespace
-            **kwargs: Additional provider-specific parameters
+            namespace: 命名空间/集合名称
+            metadata: 命名空间的可选元数据
+            **kwargs: 额外的提供商特定参数
 
         Returns:
-            True if creation succeeded
+            如果创建成功返回 True
 
         Raises:
-            VectorDBError: If the operation fails
+            VectorDBError: 操作失败时抛出
         """
         pass
 
     @abstractmethod
     async def delete_namespace(self, namespace: str, **kwargs) -> bool:
         """
-        Delete a namespace and all its documents.
+        删除命名空间及其所有文档
 
         Args:
-            namespace: The namespace/collection name
-            **kwargs: Additional provider-specific parameters
+            namespace: 命名空间/集合名称
+            **kwargs: 额外的提供商特定参数
 
         Returns:
-            True if deletion succeeded
+            如果删除成功返回 True
 
         Raises:
-            VectorDBError: If the operation fails
+            VectorDBError: 操作失败时抛出
         """
         pass
 
     @abstractmethod
     async def health_check(self) -> bool:
         """
-        Check if the vector database service is healthy and accessible.
+        检查向量数据库服务是否健康且可访问
 
         Returns:
-            True if the service is healthy, False otherwise
+            如果服务健康返回 True，否则返回 False
         """
         pass
 
 
 class VectorDBError(Exception):
-    """Base exception for Vector Database service errors."""
+    """向量数据库服务错误的基类异常"""
 
     def __init__(self, message: str, code: Optional[str] = None, details: Optional[dict] = None):
         super().__init__(message)
@@ -248,14 +248,14 @@ class VectorDBError(Exception):
 
 
 class VectorDBNotFoundError(VectorDBError):
-    """Raised when a namespace or document is not found."""
+    """命名空间或文档不存在时抛出"""
 
-    def __init__(self, message: str = "Namespace or document not found"):
+    def __init__(self, message: str = "命名空间或文档不存在"):
         super().__init__(message, code="NOT_FOUND_ERROR")
 
 
 class VectorDBConnectionError(VectorDBError):
-    """Raised when connection to vector database fails."""
+    """连接向量数据库失败时抛出"""
 
-    def __init__(self, message: str = "Failed to connect to vector database"):
+    def __init__(self, message: str = "连接向量数据库失败"):
         super().__init__(message, code="CONNECTION_ERROR")

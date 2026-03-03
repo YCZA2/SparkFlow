@@ -1,7 +1,7 @@
 """
-Authentication routes.
+认证路由模块。
 
-Provides endpoints for user authentication and token management.
+提供用户认证和令牌管理的 API 端点。
 """
 
 from fastapi import APIRouter, Depends
@@ -14,18 +14,18 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 
 class TokenRequest(BaseModel):
-    """Token request model (for future use with actual login)."""
+    """令牌请求模型（预留用于实际登录功能）。"""
     username: str | None = None
     password: str | None = None
 
 
 class TokenResponseModel(BaseModel):
-    """Token response model."""
+    """令牌响应模型。"""
     access_token: str
     token_type: str
 
 
-# Test user configuration
+# 测试用户配置
 TEST_USER_ID = "test-user-001"
 TEST_USER_ROLE = "user"
 
@@ -33,18 +33,18 @@ TEST_USER_ROLE = "user"
 @router.post("/token")
 async def get_token(request: TokenRequest | None = None):
     """
-    Get access token for test user.
+    获取测试用户的访问令牌。
 
     获取测试用户访问令牌
 
-    This endpoint returns a valid JWT token for the hardcoded test user.
-    For development/testing purposes only.
+    此端点为硬编码的测试用户返回有效的 JWT 令牌。
+    仅用于开发/测试目的。
 
-    Args:
-        request: Optional login credentials (currently ignored for test user)
+    参数:
+        request: 可选的登录凭证（当前测试用户会忽略此参数）
 
-    Returns:
-        Token response with access_token and token_type
+    返回:
+        包含 access_token 和 token_type 的令牌响应
     """
     # 创建测试用户的访问令牌
     access_token = create_access_token(
@@ -54,42 +54,42 @@ async def get_token(request: TokenRequest | None = None):
 
     return success_response(
         data=TokenResponse.create(access_token=access_token),
-        message="Token created successfully for test user"
+        message="测试用户令牌创建成功"
     )
 
 
 @router.get("/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
     """
-    Get current authenticated user information.
+    获取当前已认证用户的信息。
 
     获取当前认证用户信息
 
-    This endpoint requires a valid JWT token in the Authorization header.
+    此端点需要在 Authorization 请求头中提供有效的 JWT 令牌。
 
-    Returns:
-        Current user information
+    返回:
+        当前用户信息
     """
     return success_response(
         data={
             "user_id": current_user["user_id"],
             "role": current_user["role"],
         },
-        message="User information retrieved successfully"
+        message="用户信息获取成功"
     )
 
 
 @router.post("/refresh")
 async def refresh_token(current_user: dict = Depends(get_current_user)):
     """
-    Refresh access token.
+    刷新访问令牌。
 
     刷新访问令牌
 
-    Creates a new token with extended expiration time.
+    创建具有延长过期时间的新令牌。
 
-    Returns:
-        New token response
+    返回:
+        新的令牌响应
     """
     new_token = create_access_token(
         user_id=current_user["user_id"],
@@ -98,5 +98,5 @@ async def refresh_token(current_user: dict = Depends(get_current_user)):
 
     return success_response(
         data=TokenResponse.create(access_token=new_token),
-        message="Token refreshed successfully"
+        message="令牌刷新成功"
     )

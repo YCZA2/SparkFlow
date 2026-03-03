@@ -1,8 +1,8 @@
 """
-Abstract base class for LLM (Large Language Model) services.
+LLM (大语言模型) 服务的抽象基类
 
-This module defines the interface for LLM services, allowing easy switching
-between different providers (Qwen, Wenxin, Zhipu, OpenAI, etc.)
+本模块定义了 LLM 服务的接口，允许在不同提供商之间轻松切换
+(通义千问、文心一言、智谱 AI、OpenAI 等)
 """
 
 from abc import ABC, abstractmethod
@@ -11,19 +11,19 @@ from typing import Optional, AsyncGenerator
 
 class BaseLLMService(ABC):
     """
-    Abstract base class for LLM service implementations.
+    LLM 服务实现的抽象基类
 
-    All LLM providers should implement this interface to ensure
-    consistent behavior across different backends.
+    所有 LLM 提供商都应实现此接口，以确保
+    在不同后端之间保持一致的行为
     """
 
     def __init__(self, model: Optional[str] = None, **kwargs):
         """
-        Initialize the LLM service.
+        初始化 LLM 服务
 
         Args:
-            model: The model identifier to use (e.g., 'qwen-turbo', 'gpt-4')
-            **kwargs: Additional provider-specific configuration
+            model: 要使用的模型标识符 (如 'qwen-turbo', 'gpt-4')
+            **kwargs: 额外的提供商特定配置
         """
         self.model = model
         self.config = kwargs
@@ -38,20 +38,20 @@ class BaseLLMService(ABC):
         **kwargs
     ) -> str:
         """
-        Generate text completion from the LLM.
+        从 LLM 生成文本补全
 
         Args:
-            system_prompt: The system prompt defining the AI's role
-            user_message: The user's input message
-            temperature: Sampling temperature (0.0 - 1.0)
-            max_tokens: Maximum tokens to generate
-            **kwargs: Additional generation parameters
+            system_prompt: 定义 AI 角色的系统提示词
+            user_message: 用户的输入消息
+            temperature: 采样温度 (0.0 - 1.0)
+            max_tokens: 要生成的最大令牌数
+            **kwargs: 额外的生成参数
 
         Returns:
-            The generated text response
+            生成的文本响应
 
         Raises:
-            LLMError: If the API call fails
+            LLMError: API 调用失败时抛出
         """
         pass
 
@@ -65,36 +65,36 @@ class BaseLLMService(ABC):
         **kwargs
     ) -> AsyncGenerator[str, None]:
         """
-        Generate text completion with streaming response.
+        以流式响应方式生成文本补全
 
         Args:
-            system_prompt: The system prompt defining the AI's role
-            user_message: The user's input message
-            temperature: Sampling temperature (0.0 - 1.0)
-            max_tokens: Maximum tokens to generate
-            **kwargs: Additional generation parameters
+            system_prompt: 定义 AI 角色的系统提示词
+            user_message: 用户的输入消息
+            temperature: 采样温度 (0.0 - 1.0)
+            max_tokens: 要生成的最大令牌数
+            **kwargs: 额外的生成参数
 
         Yields:
-            Chunks of the generated text response
+            生成的文本响应片段
 
         Raises:
-            LLMError: If the API call fails
+            LLMError: API 调用失败时抛出
         """
         pass
 
     @abstractmethod
     async def health_check(self) -> bool:
         """
-        Check if the LLM service is healthy and accessible.
+        检查 LLM 服务是否健康且可访问
 
         Returns:
-            True if the service is healthy, False otherwise
+            如果服务健康返回 True，否则返回 False
         """
         pass
 
 
 class LLMError(Exception):
-    """Base exception for LLM service errors."""
+    """LLM 服务错误的基类异常"""
 
     def __init__(self, message: str, code: Optional[str] = None, details: Optional[dict] = None):
         super().__init__(message)
@@ -104,22 +104,22 @@ class LLMError(Exception):
 
 
 class LLMRateLimitError(LLMError):
-    """Raised when rate limit is exceeded."""
+    """超出速率限制时抛出"""
 
-    def __init__(self, message: str = "Rate limit exceeded", retry_after: Optional[int] = None):
+    def __init__(self, message: str = "超出速率限制", retry_after: Optional[int] = None):
         super().__init__(message, code="RATE_LIMIT_ERROR")
         self.retry_after = retry_after
 
 
 class LLMAuthenticationError(LLMError):
-    """Raised when authentication fails."""
+    """认证失败时抛出"""
 
-    def __init__(self, message: str = "Authentication failed"):
+    def __init__(self, message: str = "认证失败"):
         super().__init__(message, code="AUTHENTICATION_ERROR")
 
 
 class LLMTimeoutError(LLMError):
-    """Raised when the request times out."""
+    """请求超时时抛出"""
 
-    def __init__(self, message: str = "Request timed out"):
+    def __init__(self, message: str = "请求超时"):
         super().__init__(message, code="TIMEOUT_ERROR")
