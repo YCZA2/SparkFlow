@@ -109,6 +109,13 @@ export async function fetchFragmentDetail(id: string): Promise<Fragment> {
  * @param id 碎片ID
  */
 export async function deleteFragment(id: string): Promise<void> {
-  await del<void>(API_ENDPOINTS.FRAGMENTS.DETAIL(id));
+  console.log('deleteFragment 被调用，ID:', id);
+  try {
+    await del<void>(API_ENDPOINTS.FRAGMENTS.DETAIL(id));
+    console.log('deleteFragment API 调用成功');
+  } catch (err) {
+    console.error('deleteFragment API 调用失败:', err);
+    throw err;
+  }
 }
 

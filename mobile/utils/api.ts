@@ -134,7 +134,9 @@ export async function fetchApi<T = any>(
   }
 
   try {
+    console.log(`[API] ${method} ${url}`);
     const response = await fetch(url, requestConfig);
+    console.log(`[API] 响应状态: ${response.status}`);
 
     // 处理 401 未授权错误 - Token 可能过期，尝试重新获取
     if (response.status === 401) {
@@ -148,6 +150,11 @@ export async function fetchApi<T = any>(
         headers,
       });
 
+      // 重试后如果是 204 No Content，直接返回
+      if (retryResponse.status === 204) {
+        return {} as T;
+      }
+
       const retryData: ApiResponse<T> = await retryResponse.json();
       if (!retryData.success) {
         throw new ApiError(
@@ -160,6 +167,12 @@ export async function fetchApi<T = any>(
         throw new ApiError('NO_DATA', '响应数据为空');
       }
       return retryData.data;
+    }
+
+    // 处理 204 No Content（DELETE 请求成功）
+    if (response.status === 204) {
+      console.log('[API] 收到 204 No Content，返回空对象');
+      return {} as T;
     }
 
     // 解析响应

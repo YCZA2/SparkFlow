@@ -3,7 +3,7 @@
  * 阶段 4.3 实现完整功能
  */
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   StyleSheet,
   FlatList,
@@ -12,7 +12,7 @@ import {
   RefreshControl,
   useColorScheme,
 } from 'react-native';
-// import { useRouter } from 'expo-router';  // 阶段 4.4 实现详情页导航时启用
+import { useRouter, useFocusEffect } from 'expo-router';
 import { FragmentCard } from '@/components/FragmentCard';
 import { useFragments } from '@/hooks/useFragments';
 import type { Fragment } from '@/types/fragment';
@@ -105,6 +105,7 @@ function ErrorState({
 export default function FragmentsScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const router = useRouter();
 
   const {
     fragments,
@@ -116,12 +117,20 @@ export default function FragmentsScreen() {
   } = useFragments();
 
   /**
+   * 页面获得焦点时自动刷新（从详情页返回时）
+   */
+  useFocusEffect(
+    useCallback(() => {
+      console.log('碎片库页面获得焦点，自动刷新');
+      refreshFragments();
+    }, [refreshFragments])
+  );
+
+  /**
    * 处理卡片点击 - 导航到详情页
    */
   const handleFragmentPress = (fragment: Fragment) => {
-    // 阶段 4.4 将实现详情页
-    // router.push(`/fragment/${fragment.id}`);
-    console.log('点击碎片:', fragment.id);
+    router.push(`/fragment/${fragment.id}`);
   };
 
   /**
