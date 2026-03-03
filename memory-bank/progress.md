@@ -6,7 +6,7 @@
 
 | 阶段 | 描述 | 状态 | 完成度 |
 |------|------|------|--------|
-| 阶段 0 | 开发环境搭建 | 🟡 进行中 | 10% |
+| 阶段 0 | 开发环境搭建 | 🟡 进行中 | 25% |
 | 阶段 1 | 核心架构设计 | 🔲 未开始 | 0% |
 | 阶段 2 | 数据库模型与迁移 | 🔲 未开始 | 0% |
 | 阶段 3 | 碎片笔记 CRUD API | 🔲 未开始 | 0% |
@@ -29,7 +29,7 @@
 ### 阶段 0：开发环境搭建
 
 - [x] 0.1 安装系统级依赖 (Python 3.12, Node.js, Watchman, Xcode)
-- [ ] 0.2 创建项目根目录与 Git 仓库
+- [x] 0.2 创建项目根目录与 Git 仓库
 - [ ] 0.3 搭建 FastAPI 后端骨架
 - [ ] 0.4 搭建后端目录结构
 - [ ] 0.5 创建 Expo 前端项目
@@ -171,7 +171,8 @@
 ## 下一步行动
 
 1. ✅ ~~执行阶段 0.1：安装系统级依赖~~ **已完成**
-2. 执行阶段 0.2：创建 Git 仓库并初始化项目结构（等待用户验证）
+2. ✅ ~~执行阶段 0.2：创建项目根目录与 Git 仓库~~ **已完成**
+3. 执行阶段 0.3：搭建 FastAPI 后端骨架
 
 ## 阶段 0.1 验证清单
 
@@ -193,4 +194,18 @@ watchman --version
 # Xcode Command Line Tools
 xcode-select -p
 # 预期输出: /Library/Developer/CommandLineTools
+```
+
+## 阶段 0.2 验证清单
+
+验证项目结构完整：
+
+```bash
+# 项目根目录
+ls /Users/hujiahui/Desktop/VibeCoding/SparkFlow
+# 预期: backend/  mobile/  memory-bank/  .git/  .gitignore  CLAUDE.md
+
+# Git 状态干净
+cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow && git status
+# 预期: On branch main, nothing to commit, working tree clean
 ```
