@@ -6,7 +6,7 @@
 
 | 阶段 | 描述 | 状态 | 完成度 |
 |------|------|------|--------|
-| 阶段 0 | 开发环境搭建 | 🟡 进行中 | 25% |
+| 阶段 0 | 开发环境搭建 | 🟡 进行中 | 40% |
 | 阶段 1 | 核心架构设计 | 🔲 未开始 | 0% |
 | 阶段 2 | 数据库模型与迁移 | 🔲 未开始 | 0% |
 | 阶段 3 | 碎片笔记 CRUD API | 🔲 未开始 | 0% |
@@ -30,7 +30,7 @@
 
 - [x] 0.1 安装系统级依赖 (Python 3.12, Node.js, Watchman, Xcode)
 - [x] 0.2 创建项目根目录与 Git 仓库
-- [ ] 0.3 搭建 FastAPI 后端骨架
+- [x] 0.3 搭建 FastAPI 后端骨架
 - [ ] 0.4 搭建后端目录结构
 - [ ] 0.5 创建 Expo 前端项目
 - [ ] 0.6 验证前后端网络连通性
@@ -172,7 +172,7 @@
 
 1. ✅ ~~执行阶段 0.1：安装系统级依赖~~ **已完成**
 2. ✅ ~~执行阶段 0.2：创建项目根目录与 Git 仓库~~ **已完成**
-3. 执行阶段 0.3：搭建 FastAPI 后端骨架
+3. ✅ ~~执行阶段 0.3：搭建 FastAPI 后端骨架~~ **已完成（等待用户测试）**
 
 ## 阶段 0.1 验证清单
 
@@ -208,4 +208,33 @@ ls /Users/hujiahui/Desktop/VibeCoding/SparkFlow
 # Git 状态干净
 cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow && git status
 # 预期: On branch main, nothing to commit, working tree clean
+```
+
+## 阶段 0.3 验证清单
+
+验证 FastAPI 后端骨架：
+
+```bash
+# 1. 检查虚拟环境存在
+ls /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/.venv
+# 预期: bin/  include/  lib/  pyvenv.cfg
+
+# 2. 检查依赖安装
+ls /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/requirements.txt
+# 预期: 文件存在，包含 fastapi, uvicorn 等
+
+# 3. 检查 main.py 存在
+cat /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py
+# 预期: 包含 FastAPI app 和 GET / 端点
+
+# 4. 启动服务测试（在 backend/ 目录）
+cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend
+source .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 5. 在另一个终端测试端点
+curl http://localhost:8000
+# 预期输出: {"status":"ok"}
+
+curl http://localhost:8000/docs | head -5
+# 预期: 包含 <!DOCTYPE html> 和 swagger-ui
 ```
