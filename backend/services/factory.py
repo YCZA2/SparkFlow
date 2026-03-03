@@ -77,8 +77,10 @@ def create_stt_service(
     Create an STT service instance based on provider.
 
     Args:
-        provider: STT provider ('aliyun', 'xunfei', 'baidu')
-                 Defaults to STT_PROVIDER env var or 'aliyun'
+        provider: STT provider ('dashscope', 'aliyun', 'xunfei', 'baidu')
+                 Defaults to STT_PROVIDER env var or 'dashscope'
+                 'dashscope': 阿里云百炼/灵积平台 (推荐，仅需一个 API Key)
+                 'aliyun': 阿里云 NLS (传统方式，需三个密钥)
         **kwargs: Additional provider-specific options
 
     Returns:
@@ -87,27 +89,33 @@ def create_stt_service(
     Raises:
         ValueError: If the provider is not supported
     """
-    provider = (provider or os.getenv("STT_PROVIDER", "aliyun")).lower()
+    provider = (provider or os.getenv("STT_PROVIDER", "dashscope")).lower()
 
-    if provider == "aliyun":
+    if provider == "dashscope":
+        # 阿里云百炼/灵积平台语音识别 (推荐)
+        # 仅需 DASHSCOPE_API_KEY，使用 paraformer 模型
+        from .dashscope_stt import DashScopeSTTService
+        return DashScopeSTTService(**kwargs)
+    elif provider == "aliyun":
+        # 阿里云 NLS 传统方式 (需要 AccessKey ID/Secret + AppKey)
         from .aliyun_stt import AliyunSTTService
         return AliyunSTTService(**kwargs)
     elif provider == "xunfei":
         # Future: Implement Xunfei STT
         raise ValueError(
             f"Provider '{provider}' not yet implemented. "
-            "Please use 'aliyun' or implement the provider."
+            "Please use 'dashscope' or 'aliyun' instead."
         )
     elif provider in ["baidu", "wenxin"]:
         # Future: Implement Baidu STT
         raise ValueError(
             f"Provider '{provider}' not yet implemented. "
-            "Please use 'aliyun' or implement the provider."
+            "Please use 'dashscope' or 'aliyun' instead."
         )
     else:
         raise ValueError(
             f"Unknown STT provider: '{provider}'. "
-            "Supported providers: aliyun, xunfei, baidu"
+            "Supported providers: dashscope, aliyun, xunfei, baidu"
         )
 
 

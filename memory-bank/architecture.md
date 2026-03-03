@@ -46,7 +46,7 @@
 | 能力 | 当前实现 | 可切换至 |
 |------|---------|---------|
 | LLM | 阿里通义千问 (qwen) | 百度文心、智谱 AI、OpenAI |
-| STT | 阿里云语音识别 (NLS) | 讯飞、百度、OpenAI Whisper |
+| STT | 阿里云百炼/灵积平台 (paraformer) | 讯飞、百度、OpenAI Whisper |
 | 向量数据库 | ChromaDB (本地) | Pinecone, Qdrant Cloud |
 
 ### 2.3 数据隔离
@@ -148,7 +148,8 @@ backend/
 │   │   ├── base_stt.py
 │   │   └── base_vector_db.py
 │   ├── qwen_llm.py        # 阿里通义千问实现
-│   ├── aliyun_stt.py      # 阿里云语音识别实现
+│   ├── dashscope_stt.py   # 阿里云百炼/灵积平台语音识别实现
+│   ├── aliyun_stt.py      # 阿里云 NLS 语音识别实现 (备选)
 │   ├── chroma_vector_db.py # ChromaDB实现
 │   ├── llm_service.py     # LLM高层封装
 │   ├── stt_service.py     # STT高层封装
@@ -225,7 +226,7 @@ mobile/
 ```
 [录音] → [m4a本地暂存] → [检测网络]
     ↓
-    有网络 → [上传后端] → [阿里云STT转写] → [LLM摘要+标签] → [入库] → [synced]
+    有网络 → [上传后端] → [百炼/灵积平台STT转写] → [LLM摘要+标签] → [入库] → [synced]
     ↓
     无网络 → [SQLite队列] → [sync_status=pending] → [网络恢复自动上传]
 ```

@@ -48,3 +48,6 @@ temp/
 # Logs
 *.log
 logs/
+
+# ChromaDB
+chroma_data/

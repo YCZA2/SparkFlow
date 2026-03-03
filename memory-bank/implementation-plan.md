@@ -118,13 +118,13 @@
 
 当前实现（国内可用）：
 - LLM: **阿里通义千问**（`qwen-turbo` 或 `qwen-max`，通过 `dashscope` SDK）
-- STT: **阿里云语音识别**（NLS，通过 `alibabacloud-nls` SDK）
+- STT: **阿里云百炼/灵积平台**（paraformer-v2，通过 `dashscope` SDK，与 LLM 共用同一平台）
 - Embedding: **阿里通义千问 Embedding**（`text-embedding-v2`）
 - 向量库: **ChromaDB（本地，零配置）**
 
 **可切换实现：** 统一接口层设计，未来可切换为其他国内厂商（百度、讯飞、智谱等）或国际厂商
 
-**验证测试：** 每个基类都有对应的实现类（如 `qwen_llm.py`, `aliyun_stt.py`, `chroma_vector_db.py`），可通过 `.env` 配置文件切换。
+**验证测试：** 每个基类都有对应的实现类（如 `qwen_llm.py`, `dashscope_stt.py`, `chroma_vector_db.py`），可通过 `.env` 配置文件切换。
 
 ### 步骤 1.2：设计 API 统一响应规范
 
@@ -186,11 +186,14 @@ LLM_PROVIDER=qwen  # 可选: qwen, wenxin, zhipu, openai
 DASHSCOPE_API_KEY=sk-...  # 阿里云灵积平台 API Key
 LLM_MODEL=qwen-turbo  # 可选: qwen-turbo, qwen-max, qwen-plus
 
-# STT 配置（国内：阿里云语音识别）
-STT_PROVIDER=aliyun  # 可选: aliyun, xunfei, baidu
-ALIBABA_CLOUD_ACCESS_KEY_ID=...
-ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
-ALIBABA_CLOUD_APP_KEY=...  # 阿里云 NLS 应用 Key
+# STT 配置（国内：阿里云百炼/灵积平台 - 推荐）
+STT_PROVIDER=dashscope  # 可选: dashscope, aliyun, xunfei, baidu
+# 仅需 DASHSCOPE_API_KEY（与 LLM 共用），使用 paraformer-v2 模型
+
+# 传统 NLS 方式（如需使用，将 STT_PROVIDER 改为 aliyun 并配置以下三项）
+# ALIBABA_CLOUD_ACCESS_KEY_ID=...
+# ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
+# ALIBABA_CLOUD_APP_KEY=...
 
 # Embedding 配置（国内：阿里通义千问）
 EMBEDDING_PROVIDER=qwen  # 可选: qwen, baidu, zhipu
@@ -312,11 +315,11 @@ DATABASE_URL=sqlite:///./data.db
 
 **决策：** MVP 阶段直接使用 `.m4a` 格式，**不进行转码**。
 
-- **理由：** 阿里云 NLS 已支持 `.m4a` 格式，转码增加复杂度和依赖（需要 pydub + ffmpeg）
+- **理由：** 阿里云百炼 paraformer 已支持 `.m4a` 格式，转码增加复杂度和依赖（需要 pydub + ffmpeg）
 - **存储路径：** `uploads/{user_id}/{uuid}.m4a`
 - **存储配额：** MVP 跳过配额检查逻辑
 
-**验证测试：** 上传一个 `.m4a` 文件，阿里云 NLS 直接转写，准确率和响应时间可接受。
+**验证测试：** 上传一个 `.m4a` 文件，阿里云百炼 paraformer 直接转写，准确率和响应时间可接受。
 
 ---
 
@@ -488,7 +491,7 @@ DATABASE_URL=sqlite:///./data.db
 
 **依赖安装：**
 ```bash
-pip install alibabacloud-nls  # 阿里云语音识别 SDK
+pip install dashscope httpx  # 阿里云百炼/灵积平台 SDK（LLM + 语音识别）
 ```
 
 **验证测试：** 在 `main.py` 中临时打印 `os.getenv("DASHSCOPE_API_KEY")` 的前 8 个字符。启动 uvicorn，终端输出密钥前缀。确认后删除此打印语句。
@@ -497,9 +500,9 @@ pip install alibabacloud-nls  # 阿里云语音识别 SDK
 
 ### 步骤 6.2：实现 STT 服务封装
 
-在 `backend/services/stt_service.py` 中，编写一个函数 `transcribe_audio(file_path: str) -> str`。该函数读取指定路径的音频文件，调用阿里云语音识别 API（NLS），返回转写后的纯文本字符串。处理可能的异常（文件不存在、API 调用失败），在异常时返回明确的错误信息或抛出自定义异常。
+在 `backend/services/stt_service.py` 中，编写一个函数 `transcribe_audio(file_path: str) -> str`。该函数读取指定路径的音频文件，调用阿里云百炼语音识别 API（paraformer），返回转写后的纯文本字符串。处理可能的异常（文件不存在、API 调用失败），在异常时返回明确的错误信息或抛出自定义异常。
 
-**阿里云 NLS 实现要点：**
+**阿里云百炼实现要点：**
 - 使用 `alibabacloud-nls` SDK
 - 支持 `.m4a`, `.wav`, `.mp3` 等常见格式
 - 自动处理 Token 获取和过期刷新
@@ -512,7 +515,7 @@ pip install alibabacloud-nls  # 阿里云语音识别 SDK
 
 修改 `POST /api/transcribe` 端点的逻辑：
 1. 音频文件保存到 `uploads/{user_id}/` 目录，保留原始 `.m4a` 格式
-2. 直接调用 `transcribe_audio` 对 `.m4a` 文件转写（阿里云 NLS 支持此格式）
+2. 直接调用 `transcribe_audio` 对 `.m4a` 文件转写（阿里云百炼 paraformer 支持此格式）
 3. 将转写结果、音频路径、user_id 组装后，插入 `fragments` 表（创建一条新碎片记录）
 4. 返回完整的碎片对象（包含 `id`、`transcript`、`created_at` 等）
 
@@ -929,7 +932,8 @@ collection = client.get_or_create_collection(
   - `base_vector_db.py` - 向量数据库统一接口
 - 确认当前实现类存在且可正常工作：
   - `qwen_llm.py`（阿里通义千问实现）
-  - `aliyun_stt.py`（阿里云语音识别实现）
+  - `dashscope_stt.py`（阿里云百炼/灵积平台语音识别实现）
+  - `aliyun_stt.py`（阿里云 NLS 语音识别实现，备选）
   - `qwen_embedding.py`（阿里通义千问 Embedding 实现）
   - `chroma_vector_db.py`
 - 确认通过 `.env` 修改 `LLM_PROVIDER`、`STT_PROVIDER`、`VECTOR_DB_PROVIDER` 可切换实现（即使当前只有一套实现，接口已预留）
@@ -984,11 +988,10 @@ LLM_PROVIDER=qwen             # 可选: qwen, wenxin, zhipu, openai
 DASHSCOPE_API_KEY=sk-...      # 阿里云灵积平台 API Key
 LLM_MODEL=qwen-turbo          # 可选: qwen-turbo, qwen-max
 
-# STT 配置（国内：阿里云语音识别）
-STT_PROVIDER=aliyun           # 可选: aliyun, xunfei, baidu
-ALIBABA_CLOUD_ACCESS_KEY_ID=...
-ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
-ALIBABA_CLOUD_APP_KEY=...
+# STT 配置（国内：阿里云百炼/灵积平台 - 推荐）
+STT_PROVIDER=dashscope        # 可选: dashscope, aliyun, xunfei, baidu
+# 仅需 DASHSCOPE_API_KEY（与 LLM 共用）
+# 传统 NLS 方式需配置: ALIBABA_CLOUD_ACCESS_KEY_ID/SECRET + APP_KEY
 
 # Embedding 配置
 EMBEDDING_PROVIDER=qwen

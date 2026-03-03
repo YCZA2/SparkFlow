@@ -15,7 +15,7 @@ python -c "from services.base import BaseLLMService, BaseSTTService, BaseEmbeddi
 # 验证具体实现类
 python -c "
 from services.qwen_llm import QwenLLMService
-from services.aliyun_stt import AliyunSTTService
+from services.dashscope_stt import DashScopeSTTService
 from services.qwen_embedding import QwenEmbeddingService
 from services.chroma_vector_db import ChromaVectorDBService
 print('✓ 所有服务实现类加载成功')
@@ -59,7 +59,7 @@ curl http://localhost:8000/health
 
 **具体实现层 (backend/services/)**
 - ✅ `qwen_llm.py` - 阿里通义千问 LLM 实现
-- ✅ `aliyun_stt.py` - 阿里云 NLS 语音识别实现
+- ✅ `dashscope_stt.py` - 阿里云百炼/灵积平台语音识别实现 (paraformer-v2)
 - ✅ `qwen_embedding.py` - 阿里通义千问 Embedding 实现
 - ✅ `chroma_vector_db.py` - ChromaDB 本地向量数据库实现
 
@@ -130,7 +130,7 @@ httpx
 - [x] 1.1 设计统一服务接口层 (base_llm, base_stt, base_vector_db, base_embedding)
   - 抽象基类定义完成
   - 阿里通义千问 LLM 实现完成
-  - 阿里云 NLS STT 实现完成
+  - 阿里云百炼/灵积平台 STT 实现完成 (paraformer-v2)
   - 阿里 Embedding 实现完成
   - ChromaDB 向量数据库实现完成
   - 服务工厂和配置管理完成
@@ -183,7 +183,7 @@ httpx
 ### 阶段 6：语音转写集成 (STT)
 
 - [ ] 6.1 配置外部 API 密钥管理
-- [ ] 6.2 实现 STT 服务封装 (阿里云 NLS)
+- [ ] 6.2 实现 STT 服务封装 (阿里云百炼/灵积平台 paraformer)
 - [ ] 6.3 上传后自动转写并创建碎片
 - [ ] 6.4 前端录音全流程联调
 
@@ -259,7 +259,7 @@ httpx
 | 2026-03-02 | 向量数据库选型 | 本地 ChromaDB，保留抽象接口可切换云服务 |
 | 2026-03-02 | 音频存储路径 | `uploads/{user_id}/{uuid}.m4a` |
 | 2026-03-02 | 测试用户方案 | 单用户简化，硬编码 `test-user-001` |
-| 2026-03-03 | API 提供商（国内可用） | LLM: 阿里通义千问, STT: 阿里云 NLS, Embedding: 阿里 text-embedding-v2 |
+| 2026-03-03 | API 提供商（国内可用） | LLM: 阿里通义千问, STT: 阿里云百炼/灵积平台 (paraformer), Embedding: 阿里 text-embedding-v2 |
 | 2026-03-03 | 开发者账号 | Apple ID 个人免费证书，7天重签周期 |
 | 2026-03-03 | 音频转码 | **不转码**，直接使用 `.m4a` 格式 |
 | 2026-03-03 | 存储配额检查 | MVP **跳过**配额检查 |

@@ -61,20 +61,25 @@ class Settings(BaseSettings):
 
     # STT Configuration
     STT_PROVIDER: str = Field(
-        default="aliyun",
-        description="STT provider: aliyun, xunfei, baidu"
+        default="dashscope",
+        description="STT provider: dashscope, aliyun, xunfei, baidu"
     )
+    # 阿里云百炼/灵积平台 (推荐，仅需一个 API Key)
+    # DASHSCOPE_API_KEY 已在上面的 LLM 配置中定义，可复用
+    # 如需单独配置 STT 的 API Key，可添加: DASHSCOPE_STT_API_KEY
+
+    # 阿里云 NLS (传统方式，需要三个密钥)
     ALIBABA_CLOUD_ACCESS_KEY_ID: Optional[str] = Field(
         default=None,
-        description="Alibaba Cloud Access Key ID"
+        description="Alibaba Cloud Access Key ID (NLS 传统方式)"
     )
     ALIBABA_CLOUD_ACCESS_KEY_SECRET: Optional[str] = Field(
         default=None,
-        description="Alibaba Cloud Access Key Secret"
+        description="Alibaba Cloud Access Key Secret (NLS 传统方式)"
     )
     ALIBABA_CLOUD_APP_KEY: Optional[str] = Field(
         default=None,
-        description="Alibaba Cloud NLS App Key"
+        description="Alibaba Cloud NLS App Key (传统方式)"
     )
 
     # Embedding Configuration
