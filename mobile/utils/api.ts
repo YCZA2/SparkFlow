@@ -3,9 +3,8 @@
  * 统一封装 fetch，自动处理 BASE_URL、Token、错误处理
  */
 
-// 后端地址配置
-// 模拟器使用 localhost，真机使用局域网 IP
-const BASE_URL = 'http://localhost:8000';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL, STORAGE_KEYS, API_ENDPOINTS } from '@/constants/config';
 
 // 统一响应格式
 interface ApiResponse<T = any> {
@@ -25,12 +24,68 @@ interface RequestConfig extends RequestInit {
 }
 
 /**
- * 获取存储的 Token（预留，后续接入 AsyncStorage）
+ * 存储 Token 到 AsyncStorage
+ * @param token JWT Token
  */
-async function getToken(): Promise<string | null> {
-  // TODO: 阶段 4 接入 AsyncStorage
-  // return await AsyncStorage.getItem('token');
-  return null;
+export async function setToken(token: string): Promise<void> {
+  await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
+}
+
+/**
+ * 从 AsyncStorage 获取 Token
+ */
+export async function getToken(): Promise<string | null> {
+  return await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+}
+
+/**
+ * 清除 Token（登出时使用）
+ */
+export async function clearToken(): Promise<void> {
+  await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
+}
+
+/**
+ * 自动获取测试用户 Token
+ * 如果没有本地 Token，自动调用后端 /api/auth/token 获取
+ */
+export async function fetchTestToken(): Promise<string> {
+  try {
+    const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.AUTH.TOKEN}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    const data: ApiResponse<{ access_token: string; token_type: string }> = await response.json();
+
+    if (!data.success || !data.data?.access_token) {
+      throw new ApiError('AUTH_FAILED', '获取测试用户 Token 失败');
+    }
+
+    const token = data.data.access_token;
+    await setToken(token);
+    return token;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError('AUTH_ERROR', '认证请求失败: ' + (error as Error).message);
+  }
+}
+
+/**
+ * 确保有有效的 Token
+ * 如果本地没有，自动获取测试用户 Token
+ */
+async function ensureToken(): Promise<string> {
+  let token = await getToken();
+  if (!token) {
+    token = await fetchTestToken();
+  }
+  return token;
 }
 
 /**
@@ -46,7 +101,7 @@ export async function fetchApi<T = any>(
   body?: any,
   config: RequestConfig = {}
 ): Promise<T> {
-  const url = `${BASE_URL}${endpoint}`;
+  const url = `${API_BASE_URL}${endpoint}`;
 
   // 构建请求头
   const headers: Record<string, string> = {
@@ -54,9 +109,15 @@ export async function fetchApi<T = any>(
     ...config.headers,
   };
 
-  // 自动添加 Token
-  const token = await getToken();
-  if (token) {
+  // 自动添加 Token（如果需要认证）
+  if (config.headers?.Authorization !== undefined) {
+    // 如果调用者显式传入了 Authorization，则使用传入的（包括空字符串表示不需要认证）
+    if (config.headers.Authorization) {
+      headers['Authorization'] = config.headers.Authorization;
+    }
+  } else {
+    // 默认自动获取并添加 Token
+    const token = await ensureToken();
     headers['Authorization'] = `Bearer ${token}`;
   }
 
@@ -74,6 +135,32 @@ export async function fetchApi<T = any>(
 
   try {
     const response = await fetch(url, requestConfig);
+
+    // 处理 401 未授权错误 - Token 可能过期，尝试重新获取
+    if (response.status === 401) {
+      await clearToken();
+      const newToken = await fetchTestToken();
+      headers['Authorization'] = `Bearer ${newToken}`;
+
+      // 重试请求
+      const retryResponse = await fetch(url, {
+        ...requestConfig,
+        headers,
+      });
+
+      const retryData: ApiResponse<T> = await retryResponse.json();
+      if (!retryData.success) {
+        throw new ApiError(
+          retryData.error?.code || 'UNKNOWN_ERROR',
+          retryData.error?.message || '请求失败',
+          retryData.error?.details
+        );
+      }
+      if (retryData.data === null) {
+        throw new ApiError('NO_DATA', '响应数据为空');
+      }
+      return retryData.data;
+    }
 
     // 解析响应
     const data: ApiResponse<T> = await response.json();
@@ -177,7 +264,7 @@ export function del<T = any>(endpoint: string, config?: RequestConfig): Promise<
  */
 export async function testConnection(): Promise<boolean> {
   try {
-    const response = await fetch(`${BASE_URL}/`);
+    const response = await fetch(`${API_BASE_URL}/`);
     const data = await response.json();
     return data.status === 'ok';
   } catch {
