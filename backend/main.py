@@ -17,7 +17,7 @@ from core.exceptions import (
     PermissionDeniedError,
 )
 from core.auth import get_current_user
-from routers import auth
+from routers import auth, fragments
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -147,6 +147,7 @@ async def health_check():
 
 # 注册路由
 app.include_router(auth.router)
+app.include_router(fragments.router)
 
 
 # Phase 1.2: API Response Format Test Endpoints

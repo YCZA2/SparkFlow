@@ -96,7 +96,7 @@ httpx
 | 阶段 0 | 开发环境搭建 | 🟢 已完成 | 100% |
 | 阶段 1 | 核心架构设计 | 🟢 已完成 | 100% |
 | 阶段 2 | 数据库模型与迁移 | 🟢 已完成 | 100% |
-| 阶段 3 | 碎片笔记 CRUD API | 🔲 未开始 | 0% |
+| 阶段 3 | 碎片笔记 CRUD API | 🟢 已完成 | 100% |
 | 阶段 4 | 前端碎片库列表页 | 🔲 未开始 | 0% |
 | 阶段 5 | 录音功能 | 🔲 未开始 | 0% |
 | 阶段 6 | 语音转写集成 (STT) | 🔲 未开始 | 0% |
@@ -160,11 +160,42 @@ httpx
 
 ### 阶段 3：碎片笔记 CRUD API
 
-- [ ] 3.1 创建 Fragments 路由文件并注册
-- [ ] 3.2 实现创建碎片笔记 POST 端点
-- [ ] 3.3 实现获取碎片列表 GET 端点
-- [ ] 3.4 实现获取单条碎片详情 GET 端点
-- [ ] 3.5 实现删除碎片 DELETE 端点
+- [x] 3.1 创建 Fragments 路由文件并注册
+- [x] 3.2 实现创建碎片笔记 POST 端点
+- [x] 3.3 实现获取碎片列表 GET 端点
+- [x] 3.4 实现获取单条碎片详情 GET 端点
+- [x] 3.5 实现删除碎片 DELETE 端点
+
+#### 阶段 3 验证清单
+
+```bash
+# 启动后端服务
+cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend
+source .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 1. 获取测试用户 Token
+TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/token -H "Content-Type: application/json" -d '{}' | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+echo "Token: $TOKEN"
+
+# 2. 创建碎片笔记
+curl -X POST http://localhost:8000/api/fragments/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"transcript": "今天想到了一个关于定位的好点子", "source": "voice"}'
+# 预期: {"success": true, "data": {"id": "...", ...}, "message": "碎片笔记创建成功"}
+
+# 3. 获取碎片列表
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/fragments/
+# 预期: {"success": true, "data": {"items": [...], "total": 1, ...}}
+
+# 4. 获取单条碎片详情（替换 <fragment_id> 为实际 ID）
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/fragments/<fragment_id>
+# 预期: {"success": true, "data": {"id": "...", "transcript": "...", ...}}
+
+# 5. 删除碎片
+curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/fragments/<fragment_id>
+# 预期: HTTP 204 No Content
+```
 
 ### 阶段 4：前端碎片库列表页
 
@@ -622,5 +653,6 @@ sqlite3 data.db ".schema"
 
 1. ✅ ~~执行阶段 0：开发环境搭建~~ **已完成**
 2. ✅ ~~执行阶段 1：核心架构设计~~ **已完成**
-3. ✅ ~~执行阶段 2：数据库模型与迁移~~ **已完成（等待用户验证）**
-4. ⏳ **执行阶段 3：碎片笔记 CRUD API** （用户验证后开始）
+3. ✅ ~~执行阶段 2：数据库模型与迁移~~ **已完成**
+4. ✅ ~~执行阶段 3：碎片笔记 CRUD API~~ **已完成并验证**
+5. ⏳ **执行阶段 4：前端碎片库列表页** （用户验证后开始）
