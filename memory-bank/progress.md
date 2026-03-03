@@ -6,7 +6,7 @@
 
 | 阶段 | 描述 | 状态 | 完成度 |
 |------|------|------|--------|
-| 阶段 0 | 开发环境搭建 | 🟡 进行中 | 40% |
+| 阶段 0 | 开发环境搭建 | 🟡 进行中 | 50% |
 | 阶段 1 | 核心架构设计 | 🔲 未开始 | 0% |
 | 阶段 2 | 数据库模型与迁移 | 🔲 未开始 | 0% |
 | 阶段 3 | 碎片笔记 CRUD API | 🔲 未开始 | 0% |
@@ -31,7 +31,7 @@
 - [x] 0.1 安装系统级依赖 (Python 3.12, Node.js, Watchman, Xcode)
 - [x] 0.2 创建项目根目录与 Git 仓库
 - [x] 0.3 搭建 FastAPI 后端骨架
-- [ ] 0.4 搭建后端目录结构
+- [x] 0.4 搭建后端目录结构
 - [ ] 0.5 创建 Expo 前端项目
 - [ ] 0.6 验证前后端网络连通性
 - [ ] 0.7 安装前端核心 Expo 模块
@@ -172,7 +172,8 @@
 
 1. ✅ ~~执行阶段 0.1：安装系统级依赖~~ **已完成**
 2. ✅ ~~执行阶段 0.2：创建项目根目录与 Git 仓库~~ **已完成**
-3. ✅ ~~执行阶段 0.3：搭建 FastAPI 后端骨架~~ **已完成（等待用户测试）**
+3. ✅ ~~执行阶段 0.3：搭建 FastAPI 后端骨架~~ **已完成**
+4. ✅ ~~执行阶段 0.4：搭建后端目录结构~~ **已完成（等待用户测试）**
 
 ## 阶段 0.1 验证清单
 
@@ -237,4 +238,36 @@ curl http://localhost:8000
 
 curl http://localhost:8000/docs | head -5
 # 预期: 包含 <!DOCTYPE html> 和 swagger-ui
+```
+
+## 阶段 0.4 验证清单
+
+验证后端目录结构：
+
+```bash
+# 检查目录结构
+find /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend -maxdepth 3 -type f ! -path "*/.venv/*" | sort
+
+# 预期输出:
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/models/__init__.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/models/db_models.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/prompts/mode_a_boom.txt
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/prompts/mode_b_brain.txt
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/requirements.txt
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/routers/__init__.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/routers/fragments.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/routers/knowledge.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/routers/scripts.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/routers/transcribe.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/services/__init__.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/services/llm_service.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/services/scheduler.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/services/stt_service.py
+# /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/services/vector_service.py
+
+# 验证无导入错误
+cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend
+source .venv/bin/activate && python -c "from main import app; print('OK')"
+# 预期: OK
 ```
