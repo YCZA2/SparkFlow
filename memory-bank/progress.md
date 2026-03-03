@@ -199,7 +199,7 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/fragm
 
 ### 阶段 4：前端碎片库列表页
 
-- [ ] 4.1 配置前端路由结构 (Tabs)
+- [x] 4.1 配置前端路由结构 (Tabs)
 - [ ] 4.2 创建 API 请求工具模块
 - [ ] 4.3 实现碎片库列表页面
 - [ ] 4.4 实现碎片详情页

@@ -3,15 +3,15 @@ import { StyleSheet } from 'react-native';
 import { Text, View } from '@/components/Themed';
 
 /**
- * 首页 - 灵感捕手
- * 阶段 5 将实现录音功能
+ * 我的页面 - 用户个人中心
+ * 包含：我的方法论入口、设置等
  */
-export default function HomeScreen() {
+export default function ProfileScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>灵感捕手</Text>
+      <Text style={styles.title}>我的</Text>
       <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <Text style={styles.subtitle}>这里将放置硕大的录音按钮</Text>
+      <Text style={styles.subtitle}>用户个人中心将在这里展示</Text>
     </View>
   );
 }
