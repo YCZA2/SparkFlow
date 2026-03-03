@@ -95,7 +95,7 @@ httpx
 |------|------|------|--------|
 | 阶段 0 | 开发环境搭建 | 🟢 已完成 | 100% |
 | 阶段 1 | 核心架构设计 | 🟢 已完成 | 100% |
-| 阶段 2 | 数据库模型与迁移 | 🔲 未开始 | 0% |
+| 阶段 2 | 数据库模型与迁移 | 🟢 已完成 | 100% |
 | 阶段 3 | 碎片笔记 CRUD API | 🔲 未开始 | 0% |
 | 阶段 4 | 前端碎片库列表页 | 🔲 未开始 | 0% |
 | 阶段 5 | 录音功能 | 🔲 未开始 | 0% |
@@ -147,16 +147,16 @@ httpx
 
 ### 阶段 2：数据库模型与迁移
 
-- [ ] 2.1 配置环境变量 (.env)
-- [ ] 2.2 实现全局错误处理机制
-- [ ] 2.3 定义 SQLAlchemy 数据库连接
-- [ ] 2.4 定义 Users 数据模型
-- [ ] 2.5 定义 Fragments 数据模型
-- [ ] 2.6 定义 Scripts 数据模型
-- [ ] 2.7 定义 KnowledgeDocs 数据模型
-- [ ] 2.8 定义 Agents 预留数据模型
-- [ ] 2.9 初始化 Alembic 迁移系统
-- [ ] 2.10 创建默认测试用户种子数据
+- [x] 2.1 配置环境变量 (.env) - `.env.example` 已存在
+- [x] 2.2 实现全局错误处理机制 - `core/exceptions.py` 已完成
+- [x] 2.3 定义 SQLAlchemy 数据库连接 - `models/database.py` 完成
+- [x] 2.4 定义 Users 数据模型 - `models/db_models.py` 完成
+- [x] 2.5 定义 Fragments 数据模型 - `models/db_models.py` 完成
+- [x] 2.6 定义 Scripts 数据模型 - `models/db_models.py` 完成
+- [x] 2.7 定义 KnowledgeDocs 数据模型 - `models/db_models.py` 完成
+- [x] 2.8 定义 Agents 预留数据模型 - `models/db_models.py` 完成
+- [x] 2.9 初始化 Alembic 迁移系统 - 迁移文件已生成并应用
+- [x] 2.10 创建默认测试用户种子数据 - `seed.py` 完成
 
 ### 阶段 3：碎片笔记 CRUD API
 
@@ -516,8 +516,111 @@ curl -X POST -H "Authorization: Bearer <token>" http://localhost:8000/api/auth/r
 
 ---
 
+## 阶段 2 验证清单
+
+### 2.1 验证环境变量配置
+
+```bash
+cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend
+source .venv/bin/activate
+
+# 验证配置加载
+python -c "from core import settings; print(f'DATABASE_URL: {settings.DATABASE_URL}'); print(f'APP_NAME: {settings.APP_NAME}')"
+# 预期: DATABASE_URL: sqlite:///./data.db
+```
+
+### 2.2 验证全局错误处理
+
+```bash
+# 启动后端服务
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 测试成功响应
+curl http://localhost:8000/test/success
+# 预期: {"success": true, "data": {...}}
+
+# 测试错误响应
+curl http://localhost:8000/test/not-found
+# 预期: {"success": false, "error": {"code": "NOT_FOUND_ERROR"}}
+
+# 测试校验错误
+curl http://localhost:8000/test/validation-error
+# 预期: {"success": false, "error": {"code": "VALIDATION_ERROR"}}
+```
+
+### 2.3-2.8 验证数据模型
+
+```bash
+# 验证模型导入
+python -c "
+from models import User, Fragment, Script, KnowledgeDoc, Agent, Base
+print('✓ 所有模型导入成功')
+print(f'✓ 表名: {Base.metadata.tables.keys()}')
+"
+
+# 预期输出包含:
+# ✓ 所有模型导入成功
+# ✓ 表名: dict_keys(['users', 'fragments', 'scripts', 'knowledge_docs', 'agents'])
+```
+
+### 2.9 验证 Alembic 迁移
+
+```bash
+# 检查当前迁移版本
+alembic current
+# 预期: e6b527a83de7 (head)
+
+# 查看迁移历史
+alembic history --verbose
+# 预期: 显示 initial tables 迁移
+
+# 验证迁移文件存在
+ls /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/alembic/versions/
+# 预期: e6b527a83de7_initial_tables.py
+```
+
+### 2.10 验证种子数据
+
+```bash
+# 运行种子脚本（可重复执行，不会重复插入）
+python seed.py
+# 预期:
+# ✓ 测试用户已存在: test-user-001 (测试博主)
+# 或
+# ✓ 测试用户创建成功: test-user-001 (测试博主)
+
+# 验证数据库内容
+python -c "
+import sqlite3
+conn = sqlite3.connect('data.db')
+cursor = conn.cursor()
+cursor.execute('SELECT id, nickname, role FROM users;')
+user = cursor.fetchone()
+print(f'用户: {user}')
+conn.close()
+"
+# 预期: 用户: ('test-user-001', '测试博主', 'user')
+```
+
+### 完整数据库 Schema 验证
+
+```bash
+# 使用 sqlite3 命令行验证
+sqlite3 data.db ".schema"
+
+# 预期看到完整的 5 张表结构:
+# CREATE TABLE users (...)
+# CREATE TABLE fragments (...)
+# CREATE TABLE scripts (...)
+# CREATE TABLE knowledge_docs (...)
+# CREATE TABLE agents (...)
+```
+
+---
+
 ## 下一步行动
 
 1. ✅ ~~执行阶段 0：开发环境搭建~~ **已完成**
-2. ✅ ~~执行阶段 1：核心架构设计~~ **已完成（等待用户验证）**
-3. ⏳ **执行阶段 2：数据库模型与迁移** （用户验证后开始）
+2. ✅ ~~执行阶段 1：核心架构设计~~ **已完成**
+3. ✅ ~~执行阶段 2：数据库模型与迁移~~ **已完成（等待用户验证）**
+4. ⏳ **执行阶段 3：碎片笔记 CRUD API** （用户验证后开始）
