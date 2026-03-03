@@ -6,7 +6,7 @@
 
 | 阶段 | 描述 | 状态 | 完成度 |
 |------|------|------|--------|
-| 阶段 0 | 开发环境搭建 | 🟡 进行中 | 50% |
+| 阶段 0 | 开发环境搭建 | 🟢 已完成 | 100% |
 | 阶段 1 | 核心架构设计 | 🔲 未开始 | 0% |
 | 阶段 2 | 数据库模型与迁移 | 🔲 未开始 | 0% |
 | 阶段 3 | 碎片笔记 CRUD API | 🔲 未开始 | 0% |
@@ -32,10 +32,11 @@
 - [x] 0.2 创建项目根目录与 Git 仓库
 - [x] 0.3 搭建 FastAPI 后端骨架
 - [x] 0.4 搭建后端目录结构
-- [ ] 0.5 创建 Expo 前端项目
-- [ ] 0.6 验证前后端网络连通性
-- [ ] 0.7 安装前端核心 Expo 模块
-- [ ] 0.8 安装前端 UI 组件库
+- [x] 0.5 创建 Expo 前端项目
+- [x] 0.6 验证前后端网络连通性
+  - [x] 配置 `mobile/utils/api.ts` 统一 API 请求工具
+- [x] 0.7 安装前端核心 Expo 模块
+- [x] 0.8 安装前端 UI 组件库
 
 ### 阶段 1：核心架构设计
 
@@ -173,7 +174,62 @@
 1. ✅ ~~执行阶段 0.1：安装系统级依赖~~ **已完成**
 2. ✅ ~~执行阶段 0.2：创建项目根目录与 Git 仓库~~ **已完成**
 3. ✅ ~~执行阶段 0.3：搭建 FastAPI 后端骨架~~ **已完成**
-4. ✅ ~~执行阶段 0.4：搭建后端目录结构~~ **已完成（等待用户测试）**
+4. ✅ ~~执行阶段 0.4：搭建后端目录结构~~ **已完成**
+5. ✅ ~~执行阶段 0.5-0.8：创建 Expo 前端项目并安装依赖~~ **已完成（等待用户测试）**
+
+---
+
+## 阶段 0.5-0.8 验证清单
+
+### 阶段 0.5 验证 - Expo 项目结构
+
+```bash
+# 检查 mobile 目录结构
+ls /Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/
+# 预期: app/  assets/  components/  constants/  node_modules/  package.json  tsconfig.json 等
+
+# 检查 app 目录（expo-router 文件路由）
+ls /Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/
+# 预期: (tabs)/  _layout.tsx  +not-found.tsx  +html.tsx  modal.tsx
+
+# 检查 tabs 路由
+ls /Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/\(tabs\)/
+# 预期: _layout.tsx  index.tsx  two.tsx
+```
+
+### 阶段 0.7 验证 - 核心 Expo 模块
+
+```bash
+# 检查 package.json 中的依赖
+cat /Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/package.json | grep -E "(expo-av|expo-camera|expo-media-library|expo-file-system|expo-notifications|expo-document-picker|expo-sqlite)"
+# 预期: 所有 7 个包都出现在 dependencies 中
+```
+
+### 阶段 0.8 验证 - UI 组件库
+
+```bash
+# 检查 react-native-paper 安装
+cat /Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/package.json | grep "react-native-paper"
+# 预期: 显示 react-native-paper 版本
+
+# 检查 PaperProvider 配置
+grep -A 2 "PaperProvider" /Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/_layout.tsx
+# 预期: 显示 PaperProvider 导入和包裹根组件
+```
+
+### 完整启动测试
+
+```bash
+# 1. 启动后端服务（在 backend/ 目录）
+cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend
+source .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 2. 启动前端（在 mobile/ 目录，新开终端）
+cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile
+npx expo start --ios
+
+# 预期: iOS 模拟器启动，显示 Expo 欢迎界面（Tabs 模板默认界面）
+```
 
 ## 阶段 0.1 验证清单
 
