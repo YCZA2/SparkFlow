@@ -7,6 +7,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi import Depends
+
 from core import settings, AppException, success_response
 from core.exceptions import (
     NotFoundError,
@@ -14,6 +16,8 @@ from core.exceptions import (
     AuthenticationError,
     PermissionDeniedError,
 )
+from core.auth import get_current_user
+from routers import auth
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -37,6 +41,15 @@ app.add_middleware(
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException):
     """Handle custom application exceptions."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=exc.to_dict()
+    )
+
+
+@app.exception_handler(AuthenticationError)
+async def auth_exception_handler(request: Request, exc: AuthenticationError):
+    """Handle authentication errors."""
     return JSONResponse(
         status_code=exc.status_code,
         content=exc.to_dict()
@@ -130,3 +143,88 @@ async def health_check():
         "debug": settings.DEBUG,
         "services": services_status
     })
+
+
+# Register routers
+app.include_router(auth.router)
+
+
+# Phase 1.2: API Response Format Test Endpoints
+@app.get("/test/success")
+async def test_success_response():
+    """
+    Test endpoint for successful response format.
+
+    测试成功响应格式
+    """
+    return success_response(
+        data={"items": ["fragment1", "fragment2"], "count": 2},
+        message="Data retrieved successfully"
+    )
+
+
+@app.get("/test/not-found")
+async def test_not_found():
+    """
+    Test endpoint for 404 error response format.
+
+    测试 404 错误响应格式
+    """
+    raise NotFoundError(
+        message="Fragment not found",
+        resource_type="fragment",
+        resource_id="test-123"
+    )
+
+
+@app.get("/test/validation-error")
+async def test_validation_error():
+    """
+    Test endpoint for validation error response format.
+
+    测试校验错误响应格式
+    """
+    raise ValidationError(
+        message="Invalid input data",
+        field_errors={"title": "Title is required", "content": "Content too long"}
+    )
+
+
+# Phase 1.3: Authentication Test Endpoints
+@app.get("/test/protected")
+async def test_protected_endpoint(current_user: dict = Depends(get_current_user)):
+    """
+    Test protected endpoint requiring authentication.
+
+    测试受保护端点（需要认证）
+
+    This endpoint requires a valid JWT token in the Authorization header.
+    Use format: Authorization: Bearer <token>
+
+    Returns:
+        Current user information
+    """
+    return success_response(
+        data={
+            "message": "You have accessed a protected resource",
+            "user": current_user
+        },
+        message="Access granted"
+    )
+
+
+@app.get("/test/auth-check")
+async def test_auth_check(current_user: dict = Depends(get_current_user)):
+    """
+    Verify authentication is working correctly.
+
+    验证认证是否正常工作
+    """
+    return success_response(
+        data={
+            "authenticated": True,
+            "user_id": current_user["user_id"],
+            "role": current_user["role"],
+        },
+        message="Authentication verified"
+    )

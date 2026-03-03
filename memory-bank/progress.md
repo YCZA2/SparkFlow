@@ -94,7 +94,7 @@ httpx
 | 阶段 | 描述 | 状态 | 完成度 |
 |------|------|------|--------|
 | 阶段 0 | 开发环境搭建 | 🟢 已完成 | 100% |
-| 阶段 1 | 核心架构设计 | 🟡 进行中 | 33% |
+| 阶段 1 | 核心架构设计 | 🟢 已完成 | 100% |
 | 阶段 2 | 数据库模型与迁移 | 🔲 未开始 | 0% |
 | 阶段 3 | 碎片笔记 CRUD API | 🔲 未开始 | 0% |
 | 阶段 4 | 前端碎片库列表页 | 🔲 未开始 | 0% |
@@ -134,8 +134,16 @@ httpx
   - 阿里 Embedding 实现完成
   - ChromaDB 向量数据库实现完成
   - 服务工厂和配置管理完成
-- [ ] 1.2 设计 API 统一响应规范
-- [ ] 1.3 设计 API 鉴权机制 (JWT)
+- [x] 1.2 设计 API 统一响应规范
+  - `core/response.py` 统一响应格式（success_response, error_response）
+  - `core/exceptions.py` 业务异常层次结构
+  - 全局异常处理器已注册
+  - 测试端点验证响应格式正确
+- [x] 1.3 设计 API 鉴权机制 (JWT)
+  - `core/auth.py` JWT 鉴权模块（create_access_token, get_current_user）
+  - `routers/auth.py` 认证路由（/api/auth/token, /api/auth/me）
+  - 测试用户硬编码 `test-user-001`
+  - 受保护端点测试通过
 
 ### 阶段 2：数据库模型与迁移
 
@@ -420,3 +428,96 @@ cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend
 source .venv/bin/activate && python -c "from main import app; print('OK')"
 # 预期: OK
 ```
+
+---
+
+## 阶段 1.2 验证清单
+
+### API 统一响应规范验证
+
+```bash
+# 启动后端服务
+cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend
+source .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 测试成功响应格式
+curl http://localhost:8000/test/success
+# 预期: {"success": true, "data": {...}, "message": "...", "error": null}
+
+# 测试错误响应格式
+curl http://localhost:8000/test/not-found
+# 预期: {"success": false, "data": null, "error": {"code": "NOT_FOUND_ERROR", ...}}
+
+# 测试校验错误格式
+curl http://localhost:8000/test/validation-error
+# 预期: {"success": false, "data": null, "error": {"code": "VALIDATION_ERROR", ...}}
+```
+
+### 阶段 1.2 已完成内容
+
+- ✅ `core/response.py` - 统一响应格式（success_response, error_response, ResponseModel）
+- ✅ `core/exceptions.py` - 业务异常层次结构（AppException, NotFoundError, ValidationError, AuthenticationError）
+- ✅ 全局异常处理器 - 在 main.py 中注册，统一处理所有异常
+- ✅ 测试端点 - `/test/success`, `/test/not-found`, `/test/validation-error`
+
+---
+
+## 阶段 1.3 验证清单
+
+### JWT 鉴权机制验证
+
+```bash
+# 启动后端服务
+cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend
+source .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 1. 获取测试用户 Token
+curl -X POST http://localhost:8000/api/auth/token -H "Content-Type: application/json" -d '{}'
+# 预期: {"success": true, "data": {"access_token": "eyJ...", "token_type": "bearer"}}
+
+# 2. 不带 Token 访问受保护端点（应返回 401）
+curl http://localhost:8000/test/protected
+# 预期: HTTP 401, {"success": false, "error": {"code": "AUTHENTICATION_ERROR", ...}}
+
+# 3. 带 Token 访问受保护端点（应成功）
+curl -H "Authorization: Bearer <token>" http://localhost:8000/test/protected
+# 预期: {"success": true, "data": {"message": "You have accessed a protected resource", ...}}
+
+# 4. 获取当前用户信息
+curl -H "Authorization: Bearer <token>" http://localhost:8000/api/auth/me
+# 预期: {"success": true, "data": {"user_id": "test-user-001", "role": "user"}}
+
+# 5. 刷新 Token
+curl -X POST -H "Authorization: Bearer <token>" http://localhost:8000/api/auth/refresh
+# 预期: {"success": true, "data": {"access_token": "eyJ...", "token_type": "bearer"}}
+```
+
+### 阶段 1.3 已完成内容
+
+**JWT 鉴权模块 (backend/core/auth.py)**
+- ✅ `create_access_token(user_id, role)` - 创建 JWT Token
+- ✅ `decode_token(token)` - 解码并验证 Token
+- ✅ `get_current_user(token)` - 依赖注入获取当前用户
+- ✅ `get_optional_user(token)` - 可选认证（用于公开端点）
+- ✅ `TokenResponse` - Token 响应结构
+
+**认证路由 (backend/routers/auth.py)**
+- ✅ `POST /api/auth/token` - 获取测试用户 Token
+- ✅ `GET /api/auth/me` - 获取当前用户信息（需认证）
+- ✅ `POST /api/auth/refresh` - 刷新 Token（需认证）
+
+**配置更新**
+- ✅ `SECRET_KEY` - JWT 签名密钥
+- ✅ `ACCESS_TOKEN_EXPIRE_MINUTES` - Token 过期时间（默认 24 小时）
+
+**测试端点**
+- ✅ `GET /test/protected` - 受保护端点测试
+- ✅ `GET /test/auth-check` - 认证检查端点
+
+---
+
+## 下一步行动
+
+1. ✅ ~~执行阶段 0：开发环境搭建~~ **已完成**
+2. ✅ ~~执行阶段 1：核心架构设计~~ **已完成（等待用户验证）**
+3. ⏳ **执行阶段 2：数据库模型与迁移** （用户验证后开始）
