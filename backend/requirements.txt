@@ -11,6 +11,7 @@ Mako==1.3.10
 MarkupSafe==3.0.3
 pydantic==2.12.5
 pydantic_core==2.41.5
+pydantic-settings==2.8.1
 python-dotenv==1.2.2
 python-multipart==0.0.22
 PyYAML==6.0.3
@@ -22,3 +23,16 @@ uvicorn==0.41.0
 uvloop==0.22.1
 watchfiles==1.1.1
 websockets==16.0
+
+# AI Services
+dashscope==1.22.1
+alibabacloud-nls==1.0.0
+chromadb==0.6.3
+
+# Authentication
+PyJWT==2.10.1
+
+# Scheduling
+APScheduler==3.11.0
+passlib==1.7.4
+python-jose==3.4.0

@@ -129,3 +129,4 @@ See `memory-bank/PRD.md` section 5 for full预留 requirements.
 # Always read memory-bank/architecture.md before writing any code. Include entire database schema.
 # Always read memory-bank/PRD.md before writing any code.
 # After adding a major feature or completing a milestone, update memory-bank/architecture.md.
+# Always add Chinese comments for each function.

@@ -2,12 +2,99 @@
 
 > 最后更新：2026-03-03
 
+---
+
+## 阶段 1.1 验证清单
+
+### 1.1 统一服务接口层验证
+
+```bash
+# 验证抽象基类
+python -c "from services.base import BaseLLMService, BaseSTTService, BaseEmbeddingService, BaseVectorDBService; print('✓ 所有抽象基类加载成功')"
+
+# 验证具体实现类
+python -c "
+from services.qwen_llm import QwenLLMService
+from services.aliyun_stt import AliyunSTTService
+from services.qwen_embedding import QwenEmbeddingService
+from services.chroma_vector_db import ChromaVectorDBService
+print('✓ 所有服务实现类加载成功')
+"
+
+# 验证服务工厂
+python -c "
+from services import (
+    create_llm_service, create_stt_service,
+    create_embedding_service, create_vector_db_service,
+    get_llm_service, get_stt_service
+)
+print('✓ 服务工厂函数加载成功')
+"
+
+# 验证配置模块
+python -c "
+from core import settings, success_response, error_response, AppException
+print(f'✓ 配置加载成功: APP_NAME={settings.APP_NAME}')
+print(f'✓ 默认LLM Provider: {settings.LLM_PROVIDER}')
+print(f'✓ 默认STT Provider: {settings.STT_PROVIDER}')
+"
+
+# 启动服务器并测试健康检查
+cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend
+source .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 在另一个终端测试
+curl http://localhost:8000/health
+# 预期输出包含: {"success": true, "data": {"version": "0.1.0", "services": {...}}}
+```
+
+### 阶段 1.1 已完成内容
+
+**抽象基类层 (backend/services/base/)**
+- ✅ `base_llm.py` - LLM 统一接口，支持 generate() 和 generate_stream()
+- ✅ `base_stt.py` - 语音识别统一接口，支持 transcribe() 和 transcribe_bytes()
+- ✅ `base_embedding.py` - Embedding 统一接口，支持 embed() 和 embed_batch()
+- ✅ `base_vector_db.py` - 向量数据库统一接口，支持 upsert(), query(), delete()
+- ✅ 完整的异常层次结构 (LLMError, STTError, EmbeddingError, VectorDBError)
+
+**具体实现层 (backend/services/)**
+- ✅ `qwen_llm.py` - 阿里通义千问 LLM 实现
+- ✅ `aliyun_stt.py` - 阿里云 NLS 语音识别实现
+- ✅ `qwen_embedding.py` - 阿里通义千问 Embedding 实现
+- ✅ `chroma_vector_db.py` - ChromaDB 本地向量数据库实现
+
+**服务工厂 (backend/services/factory.py)**
+- ✅ `create_llm_service()` - 根据配置创建 LLM 服务
+- ✅ `create_stt_service()` - 根据配置创建 STT 服务
+- ✅ `create_embedding_service()` - 根据配置创建 Embedding 服务
+- ✅ `create_vector_db_service()` - 根据配置创建 VectorDB 服务
+- ✅ 单例模式 getter 函数 (get_llm_service, get_stt_service, etc.)
+
+**核心基础设施 (backend/core/)**
+- ✅ `config.py` - Pydantic Settings 配置管理
+- ✅ `response.py` - 统一 API 响应格式
+- ✅ `exceptions.py` - 业务异常层次结构
+
+**配置示例**
+- ✅ `.env.example` - 环境变量模板
+
+**新增依赖**
+```
+pydantic-settings==2.8.1
+dashscope==1.22.1
+alibabacloud-nls==1.0.0
+chromadb==0.6.3
+PyJWT==2.10.1
+APScheduler==3.11.0
+httpx
+```
+
 ## 总体进度
 
 | 阶段 | 描述 | 状态 | 完成度 |
 |------|------|------|--------|
 | 阶段 0 | 开发环境搭建 | 🟢 已完成 | 100% |
-| 阶段 1 | 核心架构设计 | 🔲 未开始 | 0% |
+| 阶段 1 | 核心架构设计 | 🟡 进行中 | 33% |
 | 阶段 2 | 数据库模型与迁移 | 🔲 未开始 | 0% |
 | 阶段 3 | 碎片笔记 CRUD API | 🔲 未开始 | 0% |
 | 阶段 4 | 前端碎片库列表页 | 🔲 未开始 | 0% |
@@ -40,7 +127,13 @@
 
 ### 阶段 1：核心架构设计
 
-- [ ] 1.1 设计统一服务接口层 (base_llm, base_stt, base_vector_db)
+- [x] 1.1 设计统一服务接口层 (base_llm, base_stt, base_vector_db, base_embedding)
+  - 抽象基类定义完成
+  - 阿里通义千问 LLM 实现完成
+  - 阿里云 NLS STT 实现完成
+  - 阿里 Embedding 实现完成
+  - ChromaDB 向量数据库实现完成
+  - 服务工厂和配置管理完成
 - [ ] 1.2 设计 API 统一响应规范
 - [ ] 1.3 设计 API 鉴权机制 (JWT)
 
