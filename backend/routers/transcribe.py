@@ -7,6 +7,7 @@
 import os
 import uuid
 import asyncio
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -20,6 +21,9 @@ from core.config import settings
 from core.exceptions import ValidationError
 from models import Fragment
 from models.database import get_db
+
+# 配置日志记录器
+logger = logging.getLogger(__name__)
 
 # 创建路由
 router = APIRouter(
@@ -146,9 +150,16 @@ async def transcribe_with_retry(
     # 创建新的数据库会话（后台任务中不能使用原会话）
     db = SessionLocal()
 
+    logger.info(f"[Transcribe] 开始转写任务: fragment_id={fragment_id}, audio_path={audio_path}")
+
     try:
         # 获取 STT 服务
-        stt_service = get_stt_service()
+        try:
+            stt_service = get_stt_service()
+            logger.info("[Transcribe] STT 服务创建成功")
+        except Exception as e:
+            logger.error(f"[Transcribe] STT 服务创建失败: {str(e)}")
+            raise
 
         # 指数退避重试
         retries = 0
@@ -156,8 +167,11 @@ async def transcribe_with_retry(
 
         while retries <= max_retries:
             try:
+                logger.info(f"[Transcribe] 第 {retries + 1} 次转写尝试...")
                 # 调用 STT 服务转写
                 result = await stt_service.transcribe(audio_path)
+
+                logger.info(f"[Transcribe] 转写成功: {result.text[:50]}...")
 
                 # 转写成功，更新碎片记录
                 fragment = db.query(Fragment).filter(
@@ -169,6 +183,7 @@ async def transcribe_with_retry(
                     fragment.transcript = result.text
                     fragment.sync_status = "synced"
                     db.commit()
+                    logger.info(f"[Transcribe] 碎片记录已更新: {fragment_id}")
 
                     return {
                         "success": True,
@@ -178,14 +193,17 @@ async def transcribe_with_retry(
 
             except Exception as e:
                 last_error = str(e)
+                logger.error(f"[Transcribe] 第 {retries + 1} 次转写失败: {last_error}")
                 retries += 1
 
                 if retries <= max_retries:
                     # 指数退避：1秒、3秒
                     wait_time = 2 ** retries - 1
+                    logger.info(f"[Transcribe] 等待 {wait_time} 秒后重试...")
                     await asyncio.sleep(wait_time)
 
         # 重试全部失败，标记为失败状态
+        logger.error(f"[Transcribe] 所有重试都失败，标记为 failed")
         fragment = db.query(Fragment).filter(
             Fragment.id == fragment_id,
             Fragment.user_id == user_id
@@ -203,6 +221,7 @@ async def transcribe_with_retry(
 
     except Exception as e:
         # 发生意外错误
+        logger.error(f"[Transcribe] 转写过程异常: {str(e)}")
         fragment = db.query(Fragment).filter(
             Fragment.id == fragment_id,
             Fragment.user_id == user_id

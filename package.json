@@ -1,9 +1,15 @@
 {
   "dependencies": {
-    "@expo/vector-icons": "15.1.1"
+    "@expo/vector-icons": "15.1.1",
+    "expo": "~55.0.4",
+    "react": "19.2.0",
+    "react-native": "0.83.2"
   },
   "devDependencies": {
     "@types/react": "~19.2.10",
     "typescript": "~5.9.2"
-  }
+  },
+  "name": "SparkFlow",
+  "version": "1.0.0",
+  "scripts": {}
 }

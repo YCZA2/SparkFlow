@@ -14,6 +14,7 @@
 import os
 from typing import Optional
 
+from core.config import settings
 from .base import BaseLLMService, BaseSTTService, BaseEmbeddingService, BaseVectorDBService
 
 
@@ -38,12 +39,13 @@ def create_llm_service(
     抛出:
         ValueError: 如果提供商不受支持
     """
-    provider = (provider or os.getenv("LLM_PROVIDER", "qwen")).lower()
-    model = model or os.getenv("LLM_MODEL")
+    provider = (provider or settings.LLM_PROVIDER or "qwen").lower()
+    model = model or settings.LLM_MODEL
 
     if provider == "qwen":
         from .qwen_llm import QwenLLMService
-        return QwenLLMService(model=model, **kwargs)
+        api_key = kwargs.pop("api_key", None) or settings.DASHSCOPE_API_KEY
+        return QwenLLMService(model=model, api_key=api_key, **kwargs)
     elif provider in ["wenxin", "baidu"]:
         # 未来: 实现百度文心
         raise ValueError(
@@ -89,13 +91,14 @@ def create_stt_service(
     抛出:
         ValueError: 如果提供商不受支持
     """
-    provider = (provider or os.getenv("STT_PROVIDER", "dashscope")).lower()
+    provider = (provider or settings.STT_PROVIDER or "dashscope").lower()
 
     if provider == "dashscope":
         # 阿里云百炼/灵积平台语音识别 (推荐)
-        # 仅需 DASHSCOPE_API_KEY，使用 paraformer 模型
+        # 从 settings 读取 DASHSCOPE_API_KEY
         from .dashscope_stt import DashScopeSTTService
-        return DashScopeSTTService(**kwargs)
+        api_key = kwargs.pop("api_key", None) or settings.DASHSCOPE_API_KEY
+        return DashScopeSTTService(api_key=api_key, **kwargs)
     elif provider == "aliyun":
         # 阿里云 NLS 传统方式 (需要 AccessKey ID/Secret + AppKey)
         from .aliyun_stt import AliyunSTTService

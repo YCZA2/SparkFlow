@@ -6,11 +6,21 @@ DashScope (阿里云百炼/灵积平台) STT 实现。
 """
 
 import os
+import ssl
+import certifi
 import asyncio
+import logging
 from typing import Optional
 
-import httpx
+# 修复 macOS SSL 证书问题
+os.environ['SSL_CERT_FILE'] = certifi.where()
+os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+# 创建默认 SSL 上下文
+ssl._create_default_https_context = ssl._create_unverified_context
 
+from dashscope.audio.asr import Recognition, RecognitionCallback, RecognitionResult
+
+from core.config import settings
 from .base import (
     BaseSTTService,
     TranscriptionResult,
@@ -20,24 +30,56 @@ from .base import (
     STTRecognitionError,
 )
 
+# 配置日志记录器
+logger = logging.getLogger(__name__)
+
+
+class SimpleRecognitionCallback(RecognitionCallback):
+    """简单的语音识别回调，用于同步获取结果。"""
+
+    def __init__(self):
+        self.sentences = []
+        self.error = None
+        self.completed = False
+
+    def on_open(self) -> None:
+        logger.debug("[DashScope STT] WebSocket 连接已打开")
+
+    def on_complete(self) -> None:
+        logger.debug("[DashScope STT] 识别完成")
+        self.completed = True
+
+    def on_error(self, result: RecognitionResult) -> None:
+        logger.error(f"[DashScope STT] 识别错误: {result}")
+        self.error = result
+
+    def on_close(self) -> None:
+        logger.debug("[DashScope STT] WebSocket 连接已关闭")
+
+    def on_event(self, result: RecognitionResult) -> None:
+        sentence = result.get_sentence()
+        if sentence:
+            if isinstance(sentence, dict) and 'text' in sentence:
+                self.sentences.append(sentence['text'])
+            elif isinstance(sentence, list):
+                for s in sentence:
+                    if isinstance(s, dict) and 'text' in s:
+                        self.sentences.append(s['text'])
+
 
 class DashScopeSTTService(BaseSTTService):
     """
     阿里云百炼/灵积平台语音识别服务。
 
     支持模型:
-    - paraformer-v2: 非流式语音识别，适合完整音频文件
-    - paraformer-realtime-v2: 流式语音识别
-    - paraformer-mtl-v1: 多语言模型
+    - paraformer-realtime-v2: 流式语音识别 (用于文件识别)
+    - paraformer-v2: 非流式语音识别
 
     仅需 DASHSCOPE_API_KEY 即可使用，无需 AccessKey/AppKey 组合。
     """
 
-    # 默认模型
-    DEFAULT_MODEL = "paraformer-v2"
-
-    # DashScope API 端点
-    API_URL = "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription"
+    # 默认模型 - paraformer-realtime-v2 支持更多音频格式
+    DEFAULT_MODEL = "paraformer-realtime-v2"
 
     def __init__(
         self,
@@ -50,12 +92,12 @@ class DashScopeSTTService(BaseSTTService):
 
         参数:
             api_key: DashScope API Key (sk-...)
-            model: 模型名称，默认 paraformer-v2
+            model: 模型名称，默认 paraformer-realtime-v2
             **kwargs: 其他配置
         """
         super().__init__(**kwargs)
 
-        self.api_key = api_key or os.getenv("DASHSCOPE_API_KEY")
+        self.api_key = api_key or settings.DASHSCOPE_API_KEY
         self.model = model or self.DEFAULT_MODEL
 
         if not self.api_key:
@@ -64,11 +106,11 @@ class DashScopeSTTService(BaseSTTService):
                 "  - DASHSCOPE_API_KEY (从 https://dashscope.console.aliyun.com/ 获取)"
             )
 
-        # 初始化 HTTP 客户端
-        self.client = httpx.AsyncClient(
-            base_url="https://dashscope.aliyuncs.com",
-            timeout=60.0,
-        )
+        # 设置 dashscope API key
+        import dashscope
+        dashscope.api_key = self.api_key
+
+        logger.info(f"[DashScope STT] 服务初始化完成，模型: {self.model}")
 
     async def transcribe(
         self,
@@ -93,23 +135,53 @@ class DashScopeSTTService(BaseSTTService):
         if not os.path.exists(audio_path):
             raise STTFileError(f"音频文件不存在: {audio_path}")
 
+        logger.info(f"[DashScope STT] 开始转写: {audio_path}")
+
         # 检测格式
         if audio_format is None:
             audio_format = self._detect_format(audio_path)
 
-        # 读取音频文件
-        try:
-            with open(audio_path, "rb") as f:
-                audio_data = f.read()
-        except Exception as e:
-            raise STTFileError(f"读取音频文件失败: {str(e)}")
+        # 映射格式到 dashscope 格式
+        format_mapping = {
+            AudioFormat.M4A: "m4a",
+            AudioFormat.MP3: "mp3",
+            AudioFormat.WAV: "wav",
+            AudioFormat.PCM: "pcm",
+            AudioFormat.OGG: "ogg",
+        }
+        format_str = format_mapping.get(audio_format, "m4a")
 
-        return await self.transcribe_bytes(
-            audio_data=audio_data,
-            audio_format=audio_format,
-            language_hint=language_hint,
-            **kwargs
-        )
+        # 支持的语言参数映射
+        language_map = {
+            "zh-CN": "zh",
+            "en-US": "en",
+            "ja-JP": "ja",
+            "ko-KR": "ko",
+            "yue": "yue",  # 粤语
+        }
+        language = language_map.get(language_hint, "zh")
+
+        logger.info(f"[DashScope STT] 音频格式: {format_str}, 语言: {language}")
+
+        try:
+            # 使用 run_in_executor 将同步 SDK 调用转为异步
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                self._recognize_file,
+                audio_path,
+                format_str,
+                language
+            )
+
+            logger.info(f"[DashScope STT] 转写成功: {result.text[:50] if result.text else '(空)'}...")
+            return result
+
+        except STTError:
+            raise
+        except Exception as e:
+            logger.error(f"[DashScope STT] 转写失败: {str(e)}")
+            raise STTRecognitionError(f"语音识别失败: {str(e)}")
 
     async def transcribe_bytes(
         self,
@@ -133,7 +205,9 @@ class DashScopeSTTService(BaseSTTService):
         if not audio_data:
             raise STTFileError("音频数据为空")
 
-        # 映射格式到 dashscope 格式
+        # 先保存到临时文件，然后用 Recognition.call
+        import tempfile
+
         format_mapping = {
             AudioFormat.M4A: "m4a",
             AudioFormat.MP3: "mp3",
@@ -143,106 +217,143 @@ class DashScopeSTTService(BaseSTTService):
         }
         format_str = format_mapping.get(audio_format, "m4a")
 
-        # 构建请求
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-        }
+        # 创建临时文件
+        with tempfile.NamedTemporaryFile(suffix=f".{format_str}", delete=False) as f:
+            f.write(audio_data)
+            temp_path = f.name
 
-        # 使用 multipart/form-data 上传
-        # 参考文档: https://help.aliyun.com/zh/dashscope/developer-reference/paraformer-api
-        files = {
-            "file": (f"audio.{format_str}", audio_data, f"audio/{format_str}"),
-        }
-
-        # 构建参数
-        # 支持的语言参数映射
-        language_map = {
-            "zh-CN": "zh",
-            "en-US": "en",
-            "ja-JP": "ja",
-            "ko-KR": "ko",
-            "yue": "yue",  # 粤语
-        }
-        language = language_map.get(language_hint, "zh")
-
-        # 使用 paraformer 模型的 transcription API
-        # 新版本的 dashscope 可以通过 SDK 或 HTTP API 调用
         try:
-            # 使用 transcription API (异步任务方式，适合长音频)
-            # 或者使用同步识别 API
-            result = await self._transcribe_sync(
-                audio_data=audio_data,
-                format_str=format_str,
-                language=language,
-            )
+            result = await self.transcribe(temp_path, audio_format, language_hint, **kwargs)
             return result
+        finally:
+            # 清理临时文件
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
 
-        except STTError:
-            raise
+    def _convert_to_wav(self, audio_path: str) -> str:
+        """
+        将音频文件转换为 WAV 格式。
+
+        参数:
+            audio_path: 原始音频文件路径
+
+        返回:
+            转换后的 WAV 文件路径
+        """
+        import tempfile
+
+        # 如果已经是 WAV 格式，直接返回
+        if audio_path.lower().endswith('.wav'):
+            return audio_path
+
+        # 尝试使用 pydub 转换
+        try:
+            from pydub import AudioSegment
+
+            # 加载音频文件
+            audio = AudioSegment.from_file(audio_path)
+
+            # 转换为单声道 16kHz WAV
+            audio = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
+
+            # 保存为临时 WAV 文件
+            temp_wav = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+            temp_wav_path = temp_wav.name
+            temp_wav.close()
+
+            audio.export(temp_wav_path, format='wav')
+            logger.info(f"[DashScope STT] 已将音频转换为 WAV: {temp_wav_path}")
+            return temp_wav_path
+
+        except ImportError:
+            logger.warning("[DashScope STT] pydub 未安装，尝试直接发送原始文件")
+            return audio_path
         except Exception as e:
-            raise STTRecognitionError(f"语音识别失败: {str(e)}")
+            logger.warning(f"[DashScope STT] 音频转换失败: {e}，尝试直接发送原始文件")
+            return audio_path
 
-    async def _transcribe_sync(
+    def _recognize_file(
         self,
-        audio_data: bytes,
+        audio_path: str,
         format_str: str,
         language: str,
     ) -> TranscriptionResult:
         """
-        同步识别接口调用。
+        使用 Recognition 类进行文件识别。
 
-        使用 dashscope 的语音识别 API，支持直接上传音频数据。
+        使用 dashscope SDK 的 Recognition.call 方法。
         """
-        # 使用 recognition API (同步识别，适合短音频 < 60秒)
-        url = "/api/v1/services/audio/asr/recognition"
+        logger.info(f"[DashScope STT] 调用 SDK: model={self.model}, format={format_str}")
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/octet-stream",
-            "X-DashScope-Model": self.model,
-            "X-DashScope-DataFormat": format_str,
-            "X-DashScope-Language": language,
-        }
+        # 转换为 WAV 格式（如果不是的话）
+        temp_wav_path = None
+        try:
+            audio_path_to_use = self._convert_to_wav(audio_path)
+            if audio_path_to_use != audio_path:
+                temp_wav_path = audio_path_to_use
+                format_str = "wav"
+        except Exception as e:
+            logger.warning(f"[DashScope STT] 音频转换失败，使用原始文件: {e}")
 
         try:
-            response = await self.client.post(
-                url,
-                headers=headers,
-                content=audio_data,
+            # 创建回调
+            callback = SimpleRecognitionCallback()
+
+            # 创建 Recognition 实例
+            # 注意：Recognition 需要 callback 来接收结果
+            recognition = Recognition(
+                model=self.model,
+                callback=callback,
+                format=format_str,
+                sample_rate=16000,
             )
-            response.raise_for_status()
 
-            data = response.json()
+            # 调用识别 - 这会阻塞直到完成
+            result = recognition.call(audio_path)
 
-            # 解析响应
-            # 响应格式参考:
-            # {
-            #   "output": {
-            #     "text": "识别结果文本"
-            #   },
-            #   "usage": { ... }
-            # }
-            if "output" in data and "text" in data["output"]:
-                text = data["output"]["text"]
+            logger.info(f"[DashScope STT] SDK 返回状态: {result.status_code}")
+
+            if result.status_code == 200:
+                # 从结果中提取文本
+                sentences = result.get_sentence()
+                texts = []
+
+                if sentences:
+                    if isinstance(sentences, list):
+                        for s in sentences:
+                            if isinstance(s, dict) and 'text' in s:
+                                texts.append(s['text'])
+                    elif isinstance(sentences, dict) and 'text' in sentences:
+                        texts.append(sentences['text'])
+
+                full_text = " ".join(texts) if texts else ""
+
                 return TranscriptionResult(
-                    text=text,
-                    confidence=None,  # paraformer 可能不返回置信度
+                    text=full_text,
+                    confidence=None,
                     duration_ms=None,
                     language=language,
                 )
             else:
-                # 检查是否有错误
-                if "error" in data:
-                    error_msg = data["error"].get("message", "未知错误")
-                    raise STTRecognitionError(f"API 返回错误: {error_msg}")
-                raise STTRecognitionError(f"无法解析 API 响应: {data}")
+                error_msg = result.message if hasattr(result, 'message') else "未知错误"
+                logger.error(f"[DashScope STT] 识别失败: {error_msg}")
+                raise STTRecognitionError(f"识别失败: {error_msg}")
 
-        except httpx.HTTPStatusError as e:
-            raise STTRecognitionError(f"API 请求失败: {e.response.status_code} - {e.response.text}")
+        except STTError:
+            raise
         except Exception as e:
-            if isinstance(e, STTError):
-                raise
-            raise STTRecognitionError(f"请求异常: {str(e)}")
+            logger.error(f"[DashScope STT] SDK 异常: {type(e).__name__}: {str(e)}")
+            raise STTRecognitionError(f"识别异常: {str(e)}")
+        finally:
+            # 清理临时 WAV 文件
+            if temp_wav_path and os.path.exists(temp_wav_path):
+                try:
+                    os.unlink(temp_wav_path)
+                    logger.debug(f"[DashScope STT] 已清理临时文件: {temp_wav_path}")
+                except Exception as e:
+                    logger.warning(f"[DashScope STT] 清理临时文件失败: {e}")
 
     async def health_check(self) -> bool:
         """
@@ -252,19 +363,13 @@ class DashScopeSTTService(BaseSTTService):
             True 如果服务可用
         """
         try:
-            # 发送一个空请求或简单的模型查询来验证 API Key 有效性
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-            }
-            response = await self.client.get(
-                "/api/v1/models",
-                headers=headers,
-                timeout=5.0,
-            )
-            return response.status_code == 200
+            if not self.api_key:
+                return False
+            # 简单检查 API key 是否设置，不进行实际调用
+            return True
         except Exception:
             return False
 
     async def close(self):
-        """关闭 HTTP 客户端连接。"""
-        await self.client.aclose()
+        """关闭服务（SDK 无需显式关闭）。"""
+        pass

@@ -299,6 +299,68 @@ cmd_install() {
     log_ok "所有依赖安装完成"
 }
 
+# 安装到真机设备
+cmd_device() {
+    log_info "安装到 iPhone 真机..."
+
+    # 检查是否连接了设备
+    DEVICE_COUNT=$(xcrun xctrace list devices 2>/dev/null | grep -c "iPhone\|iPad" | grep -v "Simulator" || echo "0")
+
+    if [ "$DEVICE_COUNT" -eq "0" ]; then
+        log_error "未检测到连接的 iOS 设备"
+        echo ""
+        echo "请按以下步骤操作："
+        echo "  1. 用 USB 线连接 iPhone 到 Mac"
+        echo "  2. 在 iPhone 上点击「信任此电脑」"
+        echo "  3. 输入 iPhone 解锁密码"
+        echo ""
+        echo "已连接的设备："
+        xcrun xctrace list devices 2>/dev/null | grep "iPhone\|iPad" || echo "  (无)"
+        exit 1
+    fi
+
+    log_ok "检测到 $DEVICE_COUNT 个 iOS 设备"
+
+    # 检查 Xcode 签名配置
+    log_info "检查 Xcode 签名配置..."
+    if [ ! -d "$MOBILE_DIR/ios" ]; then
+        log_warn "未找到 iOS 项目，正在生成..."
+        cd "$MOBILE_DIR"
+        npx expo prebuild --platform ios
+    fi
+
+    # 确保依赖已安装
+    cd "$MOBILE_DIR"
+    if [ ! -d "node_modules" ]; then
+        log_warn "安装前端依赖..."
+        npm install
+    fi
+
+    echo ""
+    log_warn "首次构建需要配置 Xcode 签名："
+    log_info "1. 打开 Xcode: open ios/SparkFlowmobile.xcworkspace"
+    log_info "2. 选择项目 → Signing & Capabilities"
+    log_info "3. 选择你的 Personal Team（免费）"
+    log_info "4. 返回终端继续"
+    echo ""
+    read -p "按 Enter 继续构建，或 Ctrl+C 取消..."
+    echo ""
+
+    log_info "开始构建（首次需要几分钟，请耐心等待）..."
+    log_cmd "npx expo run:ios --device"
+    echo ""
+
+    npx expo run:ios --device
+
+    echo ""
+    log_ok "✅ 应用已安装到 iPhone！"
+    echo ""
+    log_warn "首次使用需要在手机上信任开发者证书："
+    echo "   设置 → 通用 → VPN 与设备管理 → 信任你的 Apple ID"
+    echo ""
+    log_info "开发服务器已启动，可以开始开发！"
+}
+
 # 显示帮助
 cmd_help() {
     echo ""
@@ -312,6 +374,7 @@ cmd_help() {
     echo "  ios         仅启动 iOS 模拟器"
     echo ""
     echo -e "${CYAN}构建命令:${NC}"
+    echo "  device      安装到 iPhone 真机（USB连接）"
     echo "  build       构建 iOS 真机版本"
     echo "  build-sim   构建 iOS 模拟器版本"
     echo ""
@@ -345,6 +408,9 @@ case "${1:-help}" in
         ;;
     build-sim|build:simulator)
         cmd_build simulator
+        ;;
+    device|iphone|real-device)
+        cmd_device
         ;;
     doctor|diag|network)
         cmd_doctor
