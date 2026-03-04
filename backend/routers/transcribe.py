@@ -6,10 +6,11 @@
 
 import os
 import uuid
+import asyncio
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -121,26 +122,128 @@ def validate_audio_file(content_type: Optional[str], filename: str) -> bool:
     return False
 
 
+async def transcribe_with_retry(
+    audio_path: str,
+    fragment_id: str,
+    user_id: str,
+    max_retries: int = 2
+) -> dict:
+    """
+    带重试机制的音频转写
+
+    Args:
+        audio_path: 音频文件绝对路径
+        fragment_id: 碎片记录 ID
+        user_id: 用户 ID
+        max_retries: 最大重试次数
+
+    Returns:
+        转写结果字典
+    """
+    from services.factory import get_stt_service
+    from models.database import SessionLocal
+
+    # 创建新的数据库会话（后台任务中不能使用原会话）
+    db = SessionLocal()
+
+    try:
+        # 获取 STT 服务
+        stt_service = get_stt_service()
+
+        # 指数退避重试
+        retries = 0
+        last_error = None
+
+        while retries <= max_retries:
+            try:
+                # 调用 STT 服务转写
+                result = await stt_service.transcribe(audio_path)
+
+                # 转写成功，更新碎片记录
+                fragment = db.query(Fragment).filter(
+                    Fragment.id == fragment_id,
+                    Fragment.user_id == user_id
+                ).first()
+
+                if fragment:
+                    fragment.transcript = result.text
+                    fragment.sync_status = "synced"
+                    db.commit()
+
+                    return {
+                        "success": True,
+                        "transcript": result.text,
+                        "fragment_id": fragment_id,
+                    }
+
+            except Exception as e:
+                last_error = str(e)
+                retries += 1
+
+                if retries <= max_retries:
+                    # 指数退避：1秒、3秒
+                    wait_time = 2 ** retries - 1
+                    await asyncio.sleep(wait_time)
+
+        # 重试全部失败，标记为失败状态
+        fragment = db.query(Fragment).filter(
+            Fragment.id == fragment_id,
+            Fragment.user_id == user_id
+        ).first()
+
+        if fragment:
+            fragment.sync_status = "failed"
+            db.commit()
+
+        return {
+            "success": False,
+            "error": f"转写失败（重试{max_retries}次）: {last_error}",
+            "fragment_id": fragment_id,
+        }
+
+    except Exception as e:
+        # 发生意外错误
+        fragment = db.query(Fragment).filter(
+            Fragment.id == fragment_id,
+            Fragment.user_id == user_id
+        ).first()
+
+        if fragment:
+            fragment.sync_status = "failed"
+            db.commit()
+
+        return {
+            "success": False,
+            "error": f"转写过程异常: {str(e)}",
+            "fragment_id": fragment_id,
+        }
+
+    finally:
+        db.close()
+
+
 # ========== API 端点 ==========
 
 
 @router.post("/", status_code=status.HTTP_200_OK)
 async def upload_audio(
     audio: UploadFile = File(..., description="音频文件 (.m4a, .wav, .mp3 等)"),
+    background_tasks: BackgroundTasks = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    上传音频文件
+    上传音频文件并触发自动转写
 
-    接收音频文件上传，保存到服务器，并创建碎片记录。
-    此步骤仅上传文件，后续会触发自动转写流程。
+    接收音频文件上传，保存到服务器，创建碎片记录，
+    并在后台自动触发语音转写流程。
 
     Args:
         audio: 音频文件（支持 .m4a, .wav, .mp3 等格式）
 
     Returns:
-        包含音频文件路径的响应
+        包含音频文件路径和碎片 ID 的响应
+        转写结果可通过 GET /api/transcribe/status/{fragment_id} 查询
 
     Raises:
         ValidationError: 文件类型无效或文件过大
@@ -188,24 +291,33 @@ async def upload_audio(
             field_errors={"audio": f"文件写入错误: {str(e)}"},
         )
 
-    # 创建碎片记录（仅包含音频路径，等待转写）
     # 计算相对于上传根目录的路径: uploads/{user_id}/{filename}
     upload_root = Path(settings.UPLOAD_DIR)
-    # 如果上传目录是绝对路径，使用它；否则基于当前工作目录
     if not upload_root.is_absolute():
         upload_root = Path.cwd() / upload_root
     relative_path = file_path.relative_to(upload_root.parent)
 
+    # 创建碎片记录（初始状态为 syncing）
     fragment = Fragment(
         user_id=user_id,
         audio_path=str(relative_path),
         source="voice",
-        sync_status="pending",  # 待转写状态
+        sync_status="syncing",  # 转写中状态
     )
 
     db.add(fragment)
     db.commit()
     db.refresh(fragment)
+
+    # 在后台任务中执行转写（不阻塞响应）
+    # 使用 asyncio.create_task 实现真正的异步处理
+    asyncio.create_task(
+        transcribe_with_retry(
+            audio_path=str(file_path),
+            fragment_id=fragment.id,
+            user_id=user_id,
+        )
+    )
 
     return success_response(
         data={
@@ -214,8 +326,9 @@ async def upload_audio(
             "fragment_id": fragment.id,
             "file_size": len(content),
             "duration": None,  # TODO: 从音频元数据中提取时长
+            "sync_status": "syncing",
         },
-        message="音频上传成功，等待转写",
+        message="音频上传成功，正在转写中",
     )
 
 

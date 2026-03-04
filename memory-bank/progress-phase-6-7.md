@@ -10,10 +10,10 @@
 
 | 步骤 | 任务 | 状态 |
 |------|------|------|
-| 6.1 | 配置外部 API 密钥管理 | ⏳ 待实施 |
-| 6.2 | 实现 STT 服务封装 (阿里云百炼/灵积平台 paraformer) | ⏳ 待实施 |
-| 6.3 | 上传后自动转写并创建碎片 | ⏳ 待实施 |
-| 6.4 | 前端录音全流程联调 | ⏳ 待实施 |
+| 6.1 | 配置外部 API 密钥管理 | ✅ 已完成 |
+| 6.2 | 实现 STT 服务封装 (阿里云百炼/灵积平台 paraformer) | ✅ 已完成 |
+| 6.3 | 上传后自动转写并创建碎片 | ✅ 已完成 |
+| 6.4 | 前端录音全流程联调 | ⏳ 待验证 |
 
 ### 6.1 外部 API 密钥管理
 
@@ -33,6 +33,11 @@ ALIBABA_CLOUD_APP_KEY=...
 ```bash
 pip install dashscope httpx
 ```
+
+**实现状态**: ✅ 已完成
+- `core/config.py` 使用 pydantic-settings 从 `.env` 加载配置
+- `services/dashscope_stt.py` 已实现，使用阿里云百炼 paraformer-v2 模型
+- `requirements.txt` 已补充 `httpx==0.28.1`
 
 ### 6.2 STT 服务封装
 
@@ -68,7 +73,12 @@ async def transcribe_bytes(audio_bytes: bytes, format: str = "m4a") -> str:
 **错误重试机制**:
 - 转写失败时自动重试 2 次（指数退避：1秒、3秒）
 - 重试全部失败后，记录状态为 `sync_status='failed'`
-- 返回错误但保留音频文件
+- 返回错误但保留音频文件，可稍后重试
+
+**新增后台任务**: `transcribe_with_retry()`
+- 使用 `asyncio.create_task()` 实现真正的异步处理
+- 后台任务中创建独立的数据库会话
+- 转写完成后自动更新碎片记录
 
 ### 6.4 前端全流程联调
 
@@ -87,7 +97,7 @@ async def transcribe_bytes(audio_bytes: bytes, format: str = "m4a") -> str:
 
 | 步骤 | 任务 | 状态 |
 |------|------|------|
-| 7.1 | 实现 LLM 服务封装 | ⏳ 待实施 |
+| 7.1 | 实现 LLM 服务封装 | ✅ 已完成 |
 | 7.2 | 实现自动摘要生成函数 | ⏳ 待实施 |
 | 7.3 | 实现自动标签生成函数 | ⏳ 待实施 |
 | 7.4 | 在转写流程中串联摘要和标签 | ⏳ 待实施 |
@@ -117,6 +127,11 @@ async def health_check() -> bool:
     """检查服务健康状态"""
     pass
 ```
+
+**实现状态**: ✅ 已完成
+- 使用 `dashscope.Generation.call()` 方法
+- 支持流式输出（可选，用于优化体验）
+- 自动处理 API 限流和错误
 
 ### 7.2 自动摘要生成
 
@@ -206,6 +221,19 @@ stt = get_stt_service()
 result = asyncio.run(stt.transcribe('uploads/test.m4a'))
 print(f'转写结果: {result}')
 "
+
+# 3. API 端点测试（先获取 Token）
+TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/token \
+  -H "Content-Type: application/json" -d '{}' | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+
+# 4. 上传音频并自动转写
+curl -X POST http://localhost:8000/api/transcribe/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "audio=@test.m4a"
+
+# 5. 查询转写状态（替换 {fragment_id} 为实际返回的 ID）
+# curl http://localhost:8000/api/transcribe/status/{fragment_id} \
+#   -H "Authorization: Bearer $TOKEN"
 ```
 
 ### 阶段 7 验证

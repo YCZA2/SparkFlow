@@ -27,6 +27,7 @@ websockets==16.0
 # AI Services
 dashscope==1.22.1
 chromadb==0.6.3
+httpx==0.28.1
 
 # Authentication
 PyJWT==2.10.1

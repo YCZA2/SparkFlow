@@ -21,7 +21,9 @@ import {
   createFragment,
   deleteFragment,
   // 转写服务
+  uploadAudio,
   getTranscribeStatus,
+  type UploadAudioResponse,
 } from '@/services';
 
 // 测试状态类型
@@ -42,6 +44,8 @@ export default function ApiTestScreen() {
     { name: '5. 获取碎片详情', status: 'pending' },
     { name: '6. 删除测试碎片', status: 'pending' },
     { name: '7. 转写状态查询', status: 'pending' },
+    { name: '8. 音频上传测试', status: 'pending' },
+    { name: '9. 检查转写结果', status: 'pending' },
   ]);
   const [isRunningAll, setIsRunningAll] = useState(false);
 
@@ -117,6 +121,8 @@ export default function ApiTestScreen() {
         source: 'manual',
       });
       updateTest(3, 'success', `创建成功: ${data.id.substring(0, 8)}...`, data);
+      // 保存创建的碎片ID供后续测试使用
+      setLastCreatedFragmentId(data.id);
       return data;
     } catch (error) {
       if (error instanceof ApiError) {
@@ -187,6 +193,129 @@ export default function ApiTestScreen() {
     }
   };
 
+  // 测试 8: 音频上传并转写
+  const [lastUploadedFragmentId, setLastUploadedFragmentId] = useState<string | null>(null);
+
+  const testUploadAudio = async () => {
+    updateTest(7, 'running');
+    try {
+      // 注意：这里需要一个实际的音频文件路径
+      // 在模拟器中可以使用本地文件，在真机上需要先用录音功能录制
+      // 这里我们只是测试 API 是否正常工作
+
+      // 由于没有实际的音频文件，我们显示提示信息
+      updateTest(7, 'error', '请在真机上测试：先使用录音功能录制音频，然后调用 uploadAudio(uri)');
+
+      // 实际测试代码（需要音频文件）：
+      // const testAudioUri = 'file:///path/to/test.m4a';
+      // const result = await uploadAudio(testAudioUri);
+      // setLastUploadedFragmentId(result.fragment_id);
+      // updateTest(7, 'success', `上传成功，fragment_id: ${result.fragment_id.substring(0, 8)}...`, result);
+
+      return false;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        updateTest(7, 'error', `${error.code}: ${error.message}`);
+      } else {
+        updateTest(7, 'error', (error as Error).message);
+      }
+      return false;
+    }
+  };
+
+  // 辅助：获取一个可用于测试的碎片ID（优先使用最近创建的）
+  const [lastCreatedFragmentId, setLastCreatedFragmentId] = useState<string | null>(null);
+
+  const getTestFragmentId = async (): Promise<string | null> => {
+    // 优先使用最近创建的碎片
+    if (lastCreatedFragmentId) {
+      return lastCreatedFragmentId;
+    }
+    // 否则获取列表中的第一个
+    const fragments = await fetchFragments();
+    if (fragments.items && fragments.items.length > 0) {
+      return fragments.items[0].id;
+    }
+    return null;
+  };
+
+  // 测试 5: 获取碎片详情（使用已有的碎片）
+  const testFragmentDetailStandalone = async () => {
+    updateTest(4, 'running');
+    try {
+      const fragmentId = await getTestFragmentId();
+      if (!fragmentId) {
+        updateTest(4, 'error', '没有可用的碎片，请先创建碎片');
+        return false;
+      }
+      const result = await testFragmentDetail(fragmentId);
+      return result;
+    } catch (error) {
+      updateTest(4, 'error', (error as Error).message);
+      return false;
+    }
+  };
+
+  // 测试 6: 删除碎片（创建后再删除）
+  const testDeleteFragmentStandalone = async () => {
+    updateTest(5, 'running');
+    try {
+      // 先创建一个测试碎片
+      const created = await testCreateFragment();
+      if (created?.id) {
+        // 使用刚创建的碎片测试删除
+        await testDeleteFragment(created.id);
+      }
+      return true;
+    } catch (error) {
+      updateTest(5, 'error', (error as Error).message);
+      return false;
+    }
+  };
+
+  // 测试 9: 查询最近上传的音频转写状态
+  const testCheckUploadedTranscribe = async () => {
+    updateTest(8, 'running');
+    try {
+      if (!lastUploadedFragmentId) {
+        // 如果没有最近上传的 ID，查询列表中的第一个
+        const fragments = await fetchFragments();
+        if (!fragments.items || fragments.items.length === 0) {
+          updateTest(8, 'error', '没有可查询的碎片');
+          return false;
+        }
+
+        // 找到最近创建的语音碎片
+        const voiceFragment = fragments.items.find((f: any) => f.source === 'voice');
+        if (!voiceFragment) {
+          updateTest(8, 'error', '没有找到语音碎片');
+          return false;
+        }
+
+        const data = await getTranscribeStatus(voiceFragment.id);
+        updateTest(8, 'success',
+          `状态: ${data.sync_status}${data.transcript ? ', 转写完成' : ''}`,
+          { transcript: data.transcript?.substring(0, 50), sync_status: data.sync_status }
+        );
+        return true;
+      }
+
+      const data = await getTranscribeStatus(lastUploadedFragmentId);
+      updateTest(8, 'success',
+        `状态: ${data.sync_status}${data.transcript ? ', 转写完成' : ''}`,
+        { transcript: data.transcript?.substring(0, 50), sync_status: data.sync_status }
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        updateTest(8, 'error', `${error.code}: ${error.message}`);
+      } else {
+        updateTest(8, 'error', (error as Error).message);
+      }
+      return false;
+    }
+  };
+
   // 运行所有测试
   const runAllTests = async () => {
     setIsRunningAll(true);
@@ -224,6 +353,12 @@ export default function ApiTestScreen() {
 
     // 7. 测试转写状态
     await testTranscribeStatus();
+
+    // 8. 测试音频上传（跳过，需要实际音频文件）
+    await testUploadAudio();
+
+    // 9. 检查转写结果
+    await testCheckUploadedTranscribe();
 
     setIsRunningAll(false);
   };
@@ -310,16 +445,31 @@ export default function ApiTestScreen() {
       <Text style={styles.sectionTitle}>单项测试</Text>
       <View style={styles.singleTestButtons}>
         <TouchableOpacity style={styles.singleTestBtn} onPress={testConnection_api}>
-          <Text style={styles.singleTestBtnText}>测试连接</Text>
+          <Text style={styles.singleTestBtnText}>1. 测试连接</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.singleTestBtn} onPress={testAuth}>
-          <Text style={styles.singleTestBtnText}>测试认证</Text>
+          <Text style={styles.singleTestBtnText}>2. 测试认证</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.singleTestBtn} onPress={() => testFetchFragments()}>
-          <Text style={styles.singleTestBtnText}>获取碎片</Text>
+          <Text style={styles.singleTestBtnText}>3. 获取碎片</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.singleTestBtn} onPress={testCreateFragment}>
-          <Text style={styles.singleTestBtnText}>创建碎片</Text>
+          <Text style={styles.singleTestBtnText}>4. 创建碎片</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.singleTestBtn} onPress={testFragmentDetailStandalone}>
+          <Text style={styles.singleTestBtnText}>5. 碎片详情</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.singleTestBtn} onPress={testDeleteFragmentStandalone}>
+          <Text style={styles.singleTestBtnText}>6. 删除碎片</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.singleTestBtn} onPress={testTranscribeStatus}>
+          <Text style={styles.singleTestBtnText}>7. 转写状态</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.singleTestBtn} onPress={testUploadAudio}>
+          <Text style={styles.singleTestBtnText}>8. 音频上传</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.singleTestBtn} onPress={testCheckUploadedTranscribe}>
+          <Text style={styles.singleTestBtnText}>9. 检查转写</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
