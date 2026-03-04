@@ -5,7 +5,7 @@
 
 // 后端地址配置
 // 模拟器使用 localhost，真机使用局域网 IP
-export const API_BASE_URL = 'http://localhost:8000';
+export const API_BASE_URL = 'http://192.168.31.157:8000';
 
 // 应用信息
 export const APP_NAME = '灵感编导';
