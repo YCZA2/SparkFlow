@@ -11,6 +11,7 @@ import {
   Text,
   RefreshControl,
   useColorScheme,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { FragmentCard } from '@/components/FragmentCard';
@@ -58,11 +59,16 @@ function ErrorState({
   message,
   isDark,
   onRetry,
+  onNetworkSettings,
 }: {
   message: string;
   isDark: boolean;
   onRetry: () => void;
+  onNetworkSettings: () => void;
 }) {
+  // 判断是否是网络错误
+  const isNetworkError = message.includes('网络') || message.includes('连接') || message.includes('后端');
+
   return (
     <View style={styles.errorContainer}>
       <Text
@@ -89,12 +95,24 @@ function ErrorState({
       >
         {message}
       </Text>
-      <Text
-        style={[styles.retryButton, { color: '#007AFF' }]}
+
+      {/* 重试按钮 */}
+      <TouchableOpacity
+        style={[styles.actionButton, { backgroundColor: '#007AFF' }]}
         onPress={onRetry}
       >
-        点击重试
-      </Text>
+        <Text style={styles.actionButtonText}>🔄 点击重试</Text>
+      </TouchableOpacity>
+
+      {/* 网络设置按钮（仅网络错误显示） */}
+      {isNetworkError && (
+        <TouchableOpacity
+          style={[styles.actionButton, { backgroundColor: '#5856D6', marginTop: 12 }]}
+          onPress={onNetworkSettings}
+        >
+          <Text style={styles.actionButtonText}>🌐 网络设置</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -131,6 +149,13 @@ export default function FragmentsScreen() {
    */
   const handleFragmentPress = (fragment: Fragment) => {
     router.push(`/fragment/${fragment.id}`);
+  };
+
+  /**
+   * 跳转到网络设置页面
+   */
+  const handleNetworkSettings = () => {
+    router.push('/network-settings');
   };
 
   /**
@@ -177,6 +202,7 @@ export default function FragmentsScreen() {
           message={error}
           isDark={isDark}
           onRetry={fetchFragments}
+          onNetworkSettings={handleNetworkSettings}
         />
       </View>
     );
@@ -274,10 +300,19 @@ const styles = StyleSheet.create({
   errorMessage: {
     fontSize: 14,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
+    lineHeight: 20,
   },
-  retryButton: {
+  actionButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    minWidth: 160,
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '500',
+    fontWeight: '600',
   },
 });

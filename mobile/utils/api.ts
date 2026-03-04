@@ -4,7 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, STORAGE_KEYS, API_ENDPOINTS } from '@/constants/config';
+import { API_BASE_URL, STORAGE_KEYS, API_ENDPOINTS, getBackendUrl, updateApiBaseUrl } from '@/constants/config';
 
 // 统一响应格式
 interface ApiResponse<T = any> {
@@ -21,6 +21,18 @@ interface ApiResponse<T = any> {
 // 请求配置
 interface RequestConfig extends RequestInit {
   headers?: Record<string, string>;
+}
+
+/**
+ * 获取当前有效的 API_BASE_URL
+ * 每次请求前调用以确保使用最新的配置
+ */
+async function getCurrentBaseUrl(): Promise<string> {
+  // 从动态配置获取
+  const configuredUrl = await getBackendUrl();
+  // 更新全局变量以保持兼容性
+  updateApiBaseUrl(configuredUrl);
+  return configuredUrl;
 }
 
 /**
@@ -51,7 +63,8 @@ export async function clearToken(): Promise<void> {
  */
 export async function fetchTestToken(): Promise<string> {
   try {
-    const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.AUTH.TOKEN}`, {
+    const baseUrl = await getCurrentBaseUrl();
+    const response = await fetch(`${baseUrl}${API_ENDPOINTS.AUTH.TOKEN}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -71,6 +84,13 @@ export async function fetchTestToken(): Promise<string> {
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
+    }
+    // 检查是否是网络连接错误
+    if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Network'))) {
+      throw new ApiError(
+        'NETWORK_ERROR',
+        '无法连接到后端服务。\n\n请检查：\n1. 后端服务是否已启动（uvicorn main:app --reload）\n2. 手机和电脑是否在同一 WiFi 网络\n3. 后端地址配置是否正确\n\n当前地址: ' + (await getCurrentBaseUrl())
+      );
     }
     throw new ApiError('AUTH_ERROR', '认证请求失败: ' + (error as Error).message);
   }
@@ -101,7 +121,8 @@ export async function fetchApi<T = any>(
   body?: any,
   config: RequestConfig = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const baseUrl = await getCurrentBaseUrl();
+  const url = `${baseUrl}${endpoint}`;
 
   // 构建请求头
   const headers: Record<string, string> = {
@@ -140,6 +161,7 @@ export async function fetchApi<T = any>(
 
     // 处理 401 未授权错误 - Token 可能过期，尝试重新获取
     if (response.status === 401) {
+      console.log('[API] 收到 401，尝试重新获取 Token');
       await clearToken();
       const newToken = await fetchTestToken();
       headers['Authorization'] = `Bearer ${newToken}`;
@@ -199,10 +221,10 @@ export async function fetchApi<T = any>(
       throw error;
     }
 
-    if (error instanceof TypeError && error.message.includes('fetch')) {
+    if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Network'))) {
       throw new ApiError(
         'NETWORK_ERROR',
-        '网络连接失败，请检查后端服务是否启动'
+        '网络连接失败。\n\n请检查：\n1. 后端服务是否已启动\n2. 手机和电脑是否在同一 WiFi 网络\n3. 后端地址配置是否正确\n\n当前地址: ' + baseUrl
       );
     }
 
@@ -277,10 +299,18 @@ export function del<T = any>(endpoint: string, config?: RequestConfig): Promise<
  */
 export async function testConnection(): Promise<boolean> {
   try {
-    const response = await fetch(`${API_BASE_URL}/`);
+    const baseUrl = await getCurrentBaseUrl();
+    const response = await fetch(`${baseUrl}/`);
     const data = await response.json();
     return data.status === 'ok';
   } catch {
     return false;
   }
+}
+
+/**
+ * 获取当前配置的后端地址（用于显示）
+ */
+export async function getCurrentBackendUrl(): Promise<string> {
+  return await getCurrentBaseUrl();
 }
