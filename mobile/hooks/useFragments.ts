@@ -58,6 +58,9 @@ export function useFragments() {
         total: data.total || 0,
       });
     } catch (error) {
+      // 使用 setTimeout 避免新架构事件冲突
+      await new Promise(resolve => setTimeout(resolve, 0));
+
       const message =
         error instanceof ApiError
           ? error.message
@@ -85,7 +88,11 @@ export function useFragments() {
    * 组件挂载时自动获取数据
    */
   useEffect(() => {
-    fetchFragments();
+    // 添加小延迟避免与 useAuth 初始化冲突
+    const timer = setTimeout(() => {
+      fetchFragments();
+    }, 200);
+    return () => clearTimeout(timer);
   }, [fetchFragments]);
 
   return {

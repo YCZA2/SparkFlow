@@ -99,7 +99,11 @@ function ErrorState({
       {/* 重试按钮 */}
       <TouchableOpacity
         style={[styles.actionButton, { backgroundColor: '#007AFF' }]}
-        onPress={onRetry}
+        onPress={() => {
+          // 使用 setTimeout 避免新架构事件冲突
+          setTimeout(() => onRetry(), 0);
+        }}
+        activeOpacity={0.8}
       >
         <Text style={styles.actionButtonText}>🔄 点击重试</Text>
       </TouchableOpacity>
@@ -108,7 +112,11 @@ function ErrorState({
       {isNetworkError && (
         <TouchableOpacity
           style={[styles.actionButton, { backgroundColor: '#5856D6', marginTop: 12 }]}
-          onPress={onNetworkSettings}
+          onPress={() => {
+            // 使用 setTimeout 避免新架构事件冲突
+            setTimeout(() => onNetworkSettings(), 0);
+          }}
+          activeOpacity={0.8}
         >
           <Text style={styles.actionButtonText}>🌐 网络设置</Text>
         </TouchableOpacity>
@@ -140,7 +148,11 @@ export default function FragmentsScreen() {
   useFocusEffect(
     useCallback(() => {
       console.log('碎片库页面获得焦点，自动刷新');
-      refreshFragments();
+      // 使用 setTimeout 避免新架构事件冲突
+      const timer = setTimeout(() => {
+        refreshFragments();
+      }, 0);
+      return () => clearTimeout(timer);
     }, [refreshFragments])
   );
 

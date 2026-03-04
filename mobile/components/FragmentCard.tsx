@@ -47,7 +47,8 @@ export function FragmentCard({ fragment, onPress }: FragmentCardProps) {
 
   const displayText = getDisplayText(fragment);
   const timeText = formatDate(fragment.created_at);
-  const tags = fragment.tags || [];
+  // 将逗号分隔的标签字符串转为数组
+  const tags = fragment.tags ? fragment.tags.split(',').filter(Boolean) : [];
 
   return (
     <TouchableOpacity

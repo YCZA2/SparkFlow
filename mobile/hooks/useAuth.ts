@@ -49,6 +49,9 @@ export function useAuth() {
     try {
       setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
+      // 添加小延迟避免新架构事件冲突
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       const token = await getToken();
       const userJson = await AsyncStorage.getItem(STORAGE_KEYS.USER);
 
@@ -81,6 +84,9 @@ export function useAuth() {
   const loginWithTestUser = useCallback(async () => {
     try {
       setState((prev) => ({ ...prev, isLoading: true, error: null }));
+
+      // 添加小延迟避免新架构事件冲突
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       const token = await fetchTestToken();
 

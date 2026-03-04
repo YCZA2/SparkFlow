@@ -38,7 +38,7 @@ function ApiTestContent() {
     setLoadingFragments(true);
     setTestResult('');
     try {
-      const data = await get<{ items: Fragment[]; total: number }>('/api/fragments');
+      const data = await get<{ items: Fragment[]; total: number }>('/api/fragments/');
       setFragments(data.items);
       setTestResult(`✅ 获取成功！共 ${data.total} 条碎片`);
     } catch (error) {
@@ -56,7 +56,7 @@ function ApiTestContent() {
   const createTestFragment = async () => {
     setTestResult('');
     try {
-      const data = await post<Fragment>('/api/fragments', {
+      const data = await post<Fragment>('/api/fragments/', {
         transcript: `测试碎片 - ${new Date().toLocaleString()}`,
         source: 'manual',
       });

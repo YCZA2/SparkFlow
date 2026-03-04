@@ -218,6 +218,8 @@ export default function FragmentDetailScreen() {
   }
 
   const syncStatus = getSyncStatusLabel(fragment.sync_status);
+  // 将逗号分隔的标签字符串转为数组
+  const tags = fragment.tags ? fragment.tags.split(',').filter(Boolean) : [];
 
   return (
     <>
@@ -373,7 +375,7 @@ export default function FragmentDetailScreen() {
         </View>
 
         {/* 标签卡片 */}
-        {fragment.tags && fragment.tags.length > 0 && (
+        {tags.length > 0 && (
           <View
             style={[
               styles.card,
@@ -389,7 +391,7 @@ export default function FragmentDetailScreen() {
               标签
             </Text>
             <View style={styles.tagsContainer}>
-              {fragment.tags.map((tag, index) => (
+              {tags.map((tag, index) => (
                 <View
                   key={index}
                   style={[

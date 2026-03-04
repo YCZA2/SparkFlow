@@ -27,6 +27,8 @@ export const STORAGE_KEYS = {
 } as const;
 
 // API 端点
+// 注意：FastAPI 会自动重定向无斜杠 URL，但 307 重定向不保留 Authorization 头
+// 所以所有端点必须与后端路由完全匹配（带斜杠）
 export const API_ENDPOINTS = {
   AUTH: {
     TOKEN: '/api/auth/token',
@@ -34,12 +36,12 @@ export const API_ENDPOINTS = {
     REFRESH: '/api/auth/refresh',
   },
   FRAGMENTS: {
-    LIST: '/api/fragments',
+    LIST: '/api/fragments/',  // 必须与后端路由匹配，带斜杠
     DETAIL: (id: string) => `/api/fragments/${id}`,
   },
   TRANSCRIBE: '/api/transcribe',
   SCRIPTS: {
-    LIST: '/api/scripts',
+    LIST: '/api/scripts/',
     GENERATE: '/api/scripts/generate',
     DETAIL: (id: string) => `/api/scripts/${id}`,
   },

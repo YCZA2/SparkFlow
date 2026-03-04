@@ -164,12 +164,28 @@ export async function fetchApi<T = any>(
       console.log('[API] 收到 401，尝试重新获取 Token');
       await clearToken();
       const newToken = await fetchTestToken();
-      headers['Authorization'] = `Bearer ${newToken}`;
+
+      // 构建新的请求头，确保使用新 Token
+      const newHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${newToken}`,
+      };
+
+      // 复制原始请求中的其他 header（除了 Authorization）
+      if (config.headers) {
+        for (const [key, value] of Object.entries(config.headers)) {
+          if (key !== 'Authorization' && value) {
+            newHeaders[key] = value;
+          }
+        }
+      }
+
+      console.log('[API] 使用新 Token 重试请求');
 
       // 重试请求
       const retryResponse = await fetch(url, {
         ...requestConfig,
-        headers,
+        headers: newHeaders,
       });
 
       // 重试后如果是 204 No Content，直接返回
@@ -302,7 +318,8 @@ export async function testConnection(): Promise<boolean> {
     const baseUrl = await getCurrentBaseUrl();
     const response = await fetch(`${baseUrl}/`);
     const data = await response.json();
-    return data.status === 'ok';
+    // 后端返回统一格式: {success: true, data: {status: 'ok'}}
+    return data.success === true && data.data?.status === 'ok';
   } catch {
     return false;
   }
