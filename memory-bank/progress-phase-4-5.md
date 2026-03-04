@@ -80,7 +80,7 @@ npx expo start --ios
 | 5.1 | 创建首页录音按钮 UI | ✅ 已完成 |
 | 5.2 | 实现 expo-av 录音功能 | ✅ 已完成 |
 | 5.3 | 创建音频上传 API 端点 | ✅ 已完成 |
-| 5.4 | 前端录音结束后自动上传音频 | ⏳ 待实施 |
+| 5.4 | 前端录音结束后自动上传音频 | ✅ 已完成 |
 
 ### 5.1 录音按钮 UI
 
@@ -102,6 +102,52 @@ npx expo start --ios
 - 权限描述："需要访问麦克风来录制语音灵感"
 
 **⚠️ 重要：录音功能必须在真机上测试，iOS 模拟器不支持录音**
+
+### 5.4 前端录音结束后自动上传音频
+
+**文件**: `mobile/app/(tabs)/index.tsx`, `mobile/utils/api.ts`
+
+**功能**:
+- 录音停止后自动调用 `handleUploadAudio` 上传音频文件
+- 上传使用 `multipart/form-data` 格式
+- 显示上传进度和状态（上传中、成功、失败）
+- 网络错误处理：提示用户检查网络
+- 重复提交防护：`isUploading` 状态防止同一条录音重复上传
+- 允许开始新的录音（并行录制不受限制）
+
+**实现细节**:
+```typescript
+// 上传状态管理
+const [isUploading, setIsUploading] = useState(false);
+const [uploadResult, setUploadResult] = useState(...);
+const [uploadError, setUploadError] = useState(...);
+
+// 录音停止后自动上传
+const stopRecording = async () => {
+  // ... 停止录音逻辑
+  if (uri) {
+    setRecordedUri(uri);
+    await handleUploadAudio(uri);  // 自动上传
+  }
+};
+
+// 上传函数
+const handleUploadAudio = async (uri: string) => {
+  setIsUploading(true);
+  try {
+    const result = await uploadAudio(uri);
+    // 显示成功状态
+  } catch (error) {
+    // 处理网络错误和上传失败
+  }
+};
+```
+
+**UI 状态显示**:
+- 上传中：显示加载指示器和"正在上传音频..."提示
+- 上传成功：显示绿色勾选图标和播放按钮
+- 上传失败：显示红色错误图标和"重新上传"按钮
+- 录音按钮在上传过程中禁用并显示加载指示器
 
 ### 5.3 音频上传 API 端点
 
@@ -171,6 +217,52 @@ ls -la uploads/test-user-001/
 # 6. 验证数据库记录
 sqlite3 data.db "SELECT id, audio_path, sync_status FROM fragments WHERE source='voice' ORDER BY created_at DESC LIMIT 1;"
 ```
+
+#### 5.4 前端录音上传验证（需真机 + 后端）
+
+```bash
+# 1. 启动后端
+source .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 2. 连接 iPhone 启动前端
+npx expo run:ios --device
+
+# 3. 验证步骤：
+# 步骤 A: 正常上传流程
+# - 点击"开始录音"，对着手机说话 5-10 秒
+# - 点击"停止录音"
+# - 界面显示"正在上传音频..."加载状态
+# - 上传成功后显示绿色勾选图标和"上传成功"提示
+# - 弹出"音频已上传，正在后台转写中..."提示框
+
+# 步骤 B: 验证后端文件存储
+ls -la backend/uploads/test-user-001/
+# 应该看到新上传的 .m4a 文件
+
+# 步骤 C: 验证数据库记录
+sqlite3 backend/data.db "SELECT id, audio_path, sync_status, source FROM fragments ORDER BY created_at DESC LIMIT 1;"
+# 应该看到 source='voice', sync_status='pending' 的记录
+
+# 步骤 D: 网络错误处理
+# - 关闭后端服务或断开手机 WiFi
+# - 再次录音并停止
+# - 应该显示"网络不可用，请检查网络连接后重试"提示
+
+# 步骤 E: 重复提交防护
+# - 开始录音 → 停止 → 立即再次点击录音
+# - 由于正在上传，录音按钮显示加载指示器（灰色禁用状态）
+# - 等待上传完成后才能开始新的录音
+```
+
+**预期结果**：
+- [ ] 录音停止后自动触发上传，无需手动操作
+- [ ] 上传过程中显示加载状态
+- [ ] 上传成功显示绿色勾选图标
+- [ ] 上传失败显示红色错误图标和"重新上传"按钮
+- [ ] 后端 `uploads/test-user-001/` 目录出现新文件
+- [ ] 数据库 `fragments` 表新增 source='voice' 的记录
+- [ ] 网络错误时显示友好的错误提示
+- [ ] 上传过程中录音按钮被禁用
 
 ---
 

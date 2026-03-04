@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Audio } from 'expo-av';
 
 import { Text, View } from '@/components/Themed';
+import { uploadAudio, ApiError } from '@/utils/api';
 
 /**
  * 首页 - 灵感捕手
@@ -15,8 +16,17 @@ export default function HomeScreen() {
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
 
+  // 上传状态
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{
+    fragment_id: string;
+    audio_path: string;
+    message: string;
+  } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   // 用于计时器的 ref
-  const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 组件挂载时配置音频模式
   useEffect(() => {
@@ -62,6 +72,16 @@ export default function HomeScreen() {
    * 开始录音
    */
   const startRecording = async () => {
+    // 如果正在上传，禁止开始新的录音（但允许开始新的录音与上传并行）
+    // 根据阶段 5.4 要求：同一条录音在上传/转写过程中禁止再次提交
+    // 但允许开始新的录音（并行录制不受限制）
+
+    // 清除之前的状态
+    setUploadResult(null);
+    setUploadError(null);
+    setRecordedUri(null);
+    setRecordingDuration(0);
+
     // 请求权限
     const hasPermission = await requestPermissions();
     if (!hasPermission) {
@@ -142,11 +162,70 @@ export default function HomeScreen() {
         setRecordedUri(uri);
         console.log('✅ 录音完成，文件路径:', uri);
         console.log('⏱️ 录音时长:', formatDuration(recordingDuration));
-        // TODO: 阶段 5.4 将在这里上传音频文件
+
+        // 阶段 5.4：自动上传音频
+        await handleUploadAudio(uri);
       }
     } catch (err) {
       console.error('停止录音失败:', err);
       Alert.alert('停止失败', '无法停止录音');
+    }
+  };
+
+  /**
+   * 上传音频文件
+   * 阶段 5.4：录音结束后自动上传
+   */
+  const handleUploadAudio = async (uri: string) => {
+    // 防止重复提交
+    if (isUploading) {
+      console.log('⚠️ 上传进行中，忽略重复请求');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError(null);
+    setUploadResult(null);
+
+    try {
+      console.log('📤 开始上传音频...');
+      const result = await uploadAudio<{
+        fragment_id: string;
+        audio_path: string;
+        relative_path: string;
+        file_size: number;
+        message: string;
+      }>(uri);
+
+      console.log('✅ 上传成功:', result);
+      setUploadResult({
+        fragment_id: result.fragment_id,
+        audio_path: result.audio_path,
+        message: result.message,
+      });
+
+      // 显示成功提示
+      Alert.alert(
+        '上传成功',
+        '音频已上传，正在后台转写中...',
+        [{ text: '确定', style: 'default' }]
+      );
+    } catch (error) {
+      console.error('❌ 上传失败:', error);
+
+      let errorMessage = '上传失败，请重试';
+      if (error instanceof ApiError) {
+        errorMessage = error.message;
+        // 网络错误特殊提示
+        if (error.code === 'NETWORK_ERROR') {
+          errorMessage = '网络不可用，请检查网络连接后重试';
+        }
+      }
+
+      setUploadError(errorMessage);
+      Alert.alert('上传失败', errorMessage, [{ text: '确定', style: 'default' }]);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -222,15 +301,23 @@ export default function HomeScreen() {
         <Text style={styles.subtitle}>随时记录你的灵感碎片</Text>
       </View>
 
-      {/* 中间区域 - 显示录音状态或最近录音 */}
+      {/* 中间区域 - 显示录音状态、上传状态或最近录音 */}
       <View style={styles.middleArea}>
-        {recordedUri && (
-          <View style={styles.recordedInfo}>
-            <Text style={styles.recordedLabel}>录音文件路径:</Text>
-            <Text style={styles.recordedPath} numberOfLines={2}>
-              {recordedUri}
-            </Text>
-            {/* 播放按钮 */}
+        {/* 上传中状态 */}
+        {isUploading && (
+          <View style={styles.statusCard}>
+            <ActivityIndicator size="large" color="#FF6B6B" />
+            <Text style={styles.statusText}>正在上传音频...</Text>
+            <Text style={styles.statusSubtext}>请稍候</Text>
+          </View>
+        )}
+
+        {/* 上传成功状态 */}
+        {!isUploading && uploadResult && (
+          <View style={[styles.statusCard, styles.successCard]}>
+            <Text style={styles.successIcon}>✓</Text>
+            <Text style={styles.successText}>上传成功</Text>
+            <Text style={styles.statusSubtext}>{uploadResult.message}</Text>
             <TouchableOpacity
               style={styles.playButton}
               onPress={playRecording}
@@ -238,6 +325,32 @@ export default function HomeScreen() {
             >
               <Text style={styles.playButtonText}>▶ 播放录音</Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* 上传失败状态 */}
+        {!isUploading && uploadError && (
+          <View style={[styles.statusCard, styles.errorCard]}>
+            <Text style={styles.errorIcon}>✗</Text>
+            <Text style={styles.errorText}>上传失败</Text>
+            <Text style={styles.statusSubtext}>{uploadError}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => recordedUri && handleUploadAudio(recordedUri)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.retryButtonText}>重新上传</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* 录音完成但未上传（初始状态） */}
+        {recordedUri && !isUploading && !uploadResult && !uploadError && (
+          <View style={styles.recordedInfo}>
+            <Text style={styles.recordedLabel}>录音完成，准备上传...</Text>
+            <Text style={styles.recordedPath} numberOfLines={2}>
+              {recordedUri}
+            </Text>
           </View>
         )}
       </View>
@@ -254,19 +367,26 @@ export default function HomeScreen() {
           style={[
             styles.recordButton,
             isRecording && styles.recordButtonActive,
+            isUploading && styles.recordButtonDisabled,
           ]}
           onPress={toggleRecording}
           activeOpacity={0.8}
-          disabled={false}
+          disabled={isUploading}
         >
-          <Text style={styles.recordButtonText}>
-            {getButtonText()}
-          </Text>
+          {isUploading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.recordButtonText}>
+              {getButtonText()}
+            </Text>
+          )}
         </TouchableOpacity>
 
         {/* 底部提示 */}
         <Text style={styles.hintText}>
-          {isRecording
+          {isUploading
+            ? '正在上传音频，请稍候...'
+            : isRecording
             ? '再次点击结束录音'
             : recordedUri
             ? '录音已保存，等待上传'
@@ -382,5 +502,69 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  // 上传状态卡片样式
+  statusCard: {
+    backgroundColor: '#fff',
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    width: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  successCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#4ECDC4',
+  },
+  errorCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF4757',
+  },
+  successIcon: {
+    fontSize: 48,
+    color: '#4ECDC4',
+    marginBottom: 8,
+  },
+  errorIcon: {
+    fontSize: 48,
+    color: '#FF4757',
+    marginBottom: 8,
+  },
+  successText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#4ECDC4',
+    marginBottom: 4,
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF4757',
+    marginBottom: 4,
+  },
+  statusSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  retryButton: {
+    backgroundColor: '#FF6B6B',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  recordButtonDisabled: {
+    backgroundColor: '#ccc',
   },
 });
