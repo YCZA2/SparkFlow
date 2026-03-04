@@ -21,6 +21,29 @@ import { formatDate } from '@/utils/date';
 import type { Fragment } from '@/types/fragment';
 
 /**
+ * 解析标签字符串
+ * 支持 JSON 数组字符串 '["标签1","标签2"]' 或逗号分隔字符串 '标签1,标签2'
+ */
+function parseTags(tagsStr: string | null): string[] {
+  if (!tagsStr) return [];
+  const trimmed = tagsStr.trim();
+  if (!trimmed) return [];
+  // 尝试解析为 JSON 数组
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((t): t is string => typeof t === 'string');
+      }
+    } catch {
+      // JSON 解析失败，回退到逗号分隔
+    }
+  }
+  // 逗号分隔格式
+  return trimmed.split(',').map(t => t.trim()).filter(Boolean);
+}
+
+/**
  * 获取来源标签显示文本
  */
 function getSourceLabel(source: string): string {
@@ -218,8 +241,8 @@ export default function FragmentDetailScreen() {
   }
 
   const syncStatus = getSyncStatusLabel(fragment.sync_status);
-  // 将逗号分隔的标签字符串转为数组
-  const tags = fragment.tags ? fragment.tags.split(',').filter(Boolean) : [];
+  // 后端返回的是 JSON 字符串，需要解析
+  const tags: string[] = parseTags(fragment.tags);
 
   return (
     <>

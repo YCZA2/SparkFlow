@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { testConnection, get, post, del, ApiError } from '@/utils/api';
+import { formatDateTime } from '@/utils/date';
 import { useAuth } from '@/hooks/useAuth';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -57,7 +58,7 @@ function ApiTestContent() {
     setTestResult('');
     try {
       const data = await post<Fragment>('/api/fragments/', {
-        transcript: `测试碎片 - ${new Date().toLocaleString()}`,
+        transcript: `测试碎片 - ${formatDateTime(new Date().toISOString())}`,
         source: 'manual',
       });
       setTestResult(`✅ 创建成功！ID: ${data.id.substring(0, 8)}...`);
@@ -178,7 +179,7 @@ function ApiTestContent() {
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.cardMeta}>
-                    {new Date(item.created_at).toLocaleString()}
+                    {formatDateTime(item.created_at)}
                   </Text>
                 </View>
               ))
