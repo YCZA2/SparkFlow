@@ -14,8 +14,13 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.sparkflow.mobile",
+      "buildNumber": "1.0.0",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "需要访问麦克风来录制语音灵感"
+        "NSMicrophoneUsageDescription": "需要访问麦克风来录制语音灵感",
+        "NSCameraUsageDescription": "需要访问相机来拍摄口播视频",
+        "NSPhotoLibraryUsageDescription": "需要访问相册来保存录制的视频",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -38,6 +43,15 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "1ae2447f-7a68-4bcc-a77e-d89658496f56"
+      }
+    },
+    "owner": "ycza"
   }
 }
