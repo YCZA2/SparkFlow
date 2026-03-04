@@ -13,7 +13,7 @@ import {
   useColorScheme,
   TouchableOpacity,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { FragmentCard } from '@/components/FragmentCard';
 import { useFragments } from '@/hooks/useFragments';
 import type { Fragment } from '@/types/fragment';
@@ -132,6 +132,7 @@ export default function FragmentsScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
+  const params = useLocalSearchParams<{ refresh?: string }>();
 
   const {
     fragments,
@@ -143,17 +144,22 @@ export default function FragmentsScreen() {
   } = useFragments();
 
   /**
-   * 页面获得焦点时自动刷新（从详情页返回时）
+   * 页面获得焦点时，根据参数决定是否刷新
+   * - 从详情页删除碎片后返回，会带上 refresh=true 参数
    */
   useFocusEffect(
     useCallback(() => {
-      console.log('碎片库页面获得焦点，自动刷新');
-      // 使用 setTimeout 避免新架构事件冲突
-      const timer = setTimeout(() => {
-        refreshFragments();
-      }, 0);
-      return () => clearTimeout(timer);
-    }, [refreshFragments])
+      // 只有需要刷新时才重新获取数据
+      if (params.refresh === 'true') {
+        console.log('检测到刷新标记，更新列表');
+        const timer = setTimeout(() => {
+          refreshFragments();
+          // 清除参数，避免重复刷新
+          router.setParams({ refresh: undefined });
+        }, 0);
+        return () => clearTimeout(timer);
+      }
+    }, [params.refresh, refreshFragments, router])
   );
 
   /**

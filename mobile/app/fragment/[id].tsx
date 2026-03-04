@@ -180,8 +180,12 @@ export default function FragmentDetailScreen() {
       console.log('调用 deleteFragment API');
       await deleteFragment(id);
       console.log('删除 API 调用成功');
-      // 删除成功，返回列表页
+      // 删除成功，返回列表页并标记需要刷新
       router.back();
+      // 延迟设置参数，确保列表页已挂载
+      setTimeout(() => {
+        router.setParams({ refresh: 'true' });
+      }, 100);
     } catch (err) {
       console.error('删除失败:', err);
       const message = err instanceof Error ? err.message : '删除失败';

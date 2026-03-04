@@ -189,9 +189,16 @@ async def upload_audio(
         )
 
     # 创建碎片记录（仅包含音频路径，等待转写）
+    # 计算相对于上传根目录的路径: uploads/{user_id}/{filename}
+    upload_root = Path(settings.UPLOAD_DIR)
+    # 如果上传目录是绝对路径，使用它；否则基于当前工作目录
+    if not upload_root.is_absolute():
+        upload_root = Path.cwd() / upload_root
+    relative_path = file_path.relative_to(upload_root.parent)
+
     fragment = Fragment(
         user_id=user_id,
-        audio_path=str(file_path.relative_to(Path(settings.UPLOAD_DIR).parent)),
+        audio_path=str(relative_path),
         source="voice",
         sync_status="pending",  # 待转写状态
     )
@@ -203,7 +210,7 @@ async def upload_audio(
     return success_response(
         data={
             "audio_path": str(file_path),
-            "relative_path": str(file_path.relative_to(Path(settings.UPLOAD_DIR).parent)),
+            "relative_path": str(relative_path),
             "fragment_id": fragment.id,
             "file_size": len(content),
             "duration": None,  # TODO: 从音频元数据中提取时长
