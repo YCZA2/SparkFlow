@@ -195,6 +195,7 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/fragm
 
 | 日期 | 问题 | 决策 |
 |------|------|------|
+| 2026-03-05 | 服务层架构 | 提取业务逻辑到独立的 service 模块（fragment_service.py），路由层保持轻量 |
 | 2026-03-02 | sync_status 默认值 | `'pending'`（离线优先，上传成功后变为 `'synced'`） |
 | 2026-03-02 | 音频存储路径 | `uploads/{user_id}/{uuid}.m4a` |
 | 2026-03-02 | 测试用户方案 | 单用户简化，硬编码 `test-user-001` |

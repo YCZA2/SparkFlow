@@ -159,6 +159,10 @@ backend/
 │   │   ├── base_embedding.py    # Embedding抽象接口
 │   │   └── base_vector_db.py    # 向量数据库抽象接口
 │   ├── factory.py                # 服务工厂
+│   ├── fragment_service.py       # 碎片笔记业务逻辑
+│   ├── script_service.py         # 口播稿业务逻辑
+│   ├── transcription_service.py  # 转写业务逻辑
+│   ├── llm_service.py            # LLM通用服务
 │   ├── qwen_llm.py              # 阿里通义千问LLM实现
 │   ├── dashscope_stt.py         # 阿里云百炼/灵积STT实现 (推荐)
 │   ├── aliyun_stt.py            # 阿里云NLS STT实现 (备选)
