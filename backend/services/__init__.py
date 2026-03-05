@@ -5,6 +5,7 @@ This module provides:
 - Base abstract interfaces for LLM, STT, Embedding, and Vector DB services
 - Concrete implementations for Aliyun services
 - Factory functions for creating service instances
+- High-level business functions (summary, tags generation)
 
 Usage:
     # Using factory functions (recommended)
@@ -16,6 +17,12 @@ Usage:
     # Or create directly with custom config
     from services import create_llm_service
     llm = create_llm_service(provider="qwen", model="qwen-max")
+
+    # Using business functions
+    from services import generate_summary, generate_tags
+
+    summary = await generate_summary(transcript)
+    tags = await generate_tags(transcript)
 """
 
 from .factory import (
@@ -30,7 +37,14 @@ from .factory import (
     reset_services,
 )
 
+from .llm_service import (
+    generate_summary,
+    generate_tags,
+    generate_summary_and_tags,
+)
+
 __all__ = [
+    # Factory functions
     "create_llm_service",
     "create_stt_service",
     "create_embedding_service",
@@ -40,4 +54,8 @@ __all__ = [
     "get_embedding_service",
     "get_vector_db_service",
     "reset_services",
+    # Business functions
+    "generate_summary",
+    "generate_tags",
+    "generate_summary_and_tags",
 ]

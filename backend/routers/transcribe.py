@@ -133,7 +133,7 @@ async def transcribe_with_retry(
     max_retries: int = 2
 ) -> dict:
     """
-    带重试机制的音频转写
+    带重试机制的音频转写，转写成功后自动生成摘要和标签。
 
     Args:
         audio_path: 音频文件绝对路径
@@ -145,7 +145,9 @@ async def transcribe_with_retry(
         转写结果字典
     """
     from services.factory import get_stt_service
+    from services.llm_service import generate_summary_and_tags
     from models.database import SessionLocal
+    import json
 
     # 创建新的数据库会话（后台任务中不能使用原会话）
     db = SessionLocal()
@@ -173,21 +175,40 @@ async def transcribe_with_retry(
 
                 logger.info(f"[Transcribe] 转写成功: {result.text[:50]}...")
 
-                # 转写成功，更新碎片记录
+                # 转写成功，生成摘要和标签
+                transcript = result.text
+                summary = None
+                tags = None
+
+                try:
+                    logger.info("[Transcribe] 开始生成摘要和标签...")
+                    summary, tags_list = await generate_summary_and_tags(transcript)
+                    # 将标签列表转为 JSON 字符串存储
+                    tags = json.dumps(tags_list, ensure_ascii=False)
+                    logger.info(f"[Transcribe] 摘要: {summary}, 标签: {tags}")
+                except Exception as e:
+                    logger.warning(f"[Transcribe] 摘要/标签生成失败（不影响转写）: {str(e)}")
+                    # 摘要/标签生成失败不影响转写结果
+
+                # 更新碎片记录
                 fragment = db.query(Fragment).filter(
                     Fragment.id == fragment_id,
                     Fragment.user_id == user_id
                 ).first()
 
                 if fragment:
-                    fragment.transcript = result.text
+                    fragment.transcript = transcript
+                    fragment.summary = summary
+                    fragment.tags = tags
                     fragment.sync_status = "synced"
                     db.commit()
-                    logger.info(f"[Transcribe] 碎片记录已更新: {fragment_id}")
+                    logger.info(f"[Transcribe] 碎片记录已更新（含摘要和标签）: {fragment_id}")
 
                     return {
                         "success": True,
-                        "transcript": result.text,
+                        "transcript": transcript,
+                        "summary": summary,
+                        "tags": tags_list if tags else [],
                         "fragment_id": fragment_id,
                     }
 
