@@ -4,10 +4,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
   useColorScheme,
 } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { fetchScriptDetail } from '@/services/scripts';
 import { formatDate } from '@/utils/date';
@@ -19,6 +20,7 @@ function modeLabel(mode: string): string {
 
 export default function ScriptDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
@@ -62,28 +64,48 @@ export default function ScriptDetailScreen() {
           <Text style={[styles.errorText, { color: '#FF3B30' }]}>{error || '口播稿不存在'}</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={[styles.metaCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
-            <Text style={[styles.metaRow, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-              模式：{modeLabel(script.mode)}
-            </Text>
-            <Text style={[styles.metaRow, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-              状态：{script.status}
-            </Text>
-            <Text style={[styles.metaRow, { color: '#8E8E93' }]}>
-              创建时间：{script.created_at ? formatDate(script.created_at) : '-'}
-            </Text>
-          </View>
+        <>
+          <ScrollView contentContainerStyle={styles.content}>
+            <View style={[styles.metaCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
+              <Text style={[styles.metaRow, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+                模式：{modeLabel(script.mode)}
+              </Text>
+              <Text style={[styles.metaRow, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+                状态：{script.status}
+              </Text>
+              <Text style={[styles.metaRow, { color: '#8E8E93' }]}>
+                创建时间：{script.created_at ? formatDate(script.created_at) : '-'}
+              </Text>
+            </View>
 
-          <View style={[styles.contentCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
-            <Text style={[styles.contentTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-              文案内容
-            </Text>
-            <Text style={[styles.scriptContent, { color: isDark ? '#E5E5EA' : '#111111' }]}>
-              {script.content || '无内容'}
-            </Text>
+            <View style={[styles.contentCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
+              <Text style={[styles.contentTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+                文案内容
+              </Text>
+              <Text style={[styles.scriptContent, { color: isDark ? '#E5E5EA' : '#111111' }]}>
+                {script.content || '无内容'}
+              </Text>
+            </View>
+          </ScrollView>
+
+          <View style={[styles.bottomBar, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
+            <TouchableOpacity
+              style={styles.shootButton}
+              activeOpacity={0.85}
+              onPress={() =>
+                router.push({
+                  pathname: '/shoot',
+                  params: {
+                    script_id: script.id,
+                    content: script.content ?? '',
+                  },
+                })
+              }
+            >
+              <Text style={styles.shootButtonText}>一键去拍摄</Text>
+            </TouchableOpacity>
           </View>
-        </ScrollView>
+        </>
       )}
     </View>
   );
@@ -107,6 +129,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+    paddingBottom: 96,
   },
   metaCard: {
     borderRadius: 12,
@@ -129,5 +152,27 @@ const styles = StyleSheet.create({
   scriptContent: {
     fontSize: 15,
     lineHeight: 24,
+  },
+  bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#D1D1D6',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  shootButton: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shootButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
