@@ -42,6 +42,10 @@ export {
   deleteFragment,
   createFragment,
   updateFragment,
+  // 口播稿服务
+  generateScript,
+  fetchScripts,
+  fetchScriptDetail,
   // 认证服务
   loginWithTestUser,
   logout,

@@ -53,6 +53,13 @@ export {
   type UpdateFragmentRequest,
 } from './fragments';
 
+// 口播稿服务
+export {
+  generateScript,
+  fetchScripts,
+  fetchScriptDetail,
+} from './scripts';
+
 // 认证服务
 export {
   loginWithTestUser,

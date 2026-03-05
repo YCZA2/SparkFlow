@@ -20,6 +20,10 @@ interface FragmentCardProps {
   fragment: Fragment;
   /** 点击回调 */
   onPress?: (fragment: Fragment) => void;
+  /** 是否显示多选框 */
+  selectable?: boolean;
+  /** 当前是否已选中 */
+  selected?: boolean;
 }
 
 /**
@@ -41,7 +45,12 @@ function getDisplayText(fragment: Fragment): string {
 /**
  * 碎片卡片组件
  */
-export function FragmentCard({ fragment, onPress }: FragmentCardProps) {
+export function FragmentCard({
+  fragment,
+  onPress,
+  selectable = false,
+  selected = false,
+}: FragmentCardProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
@@ -59,17 +68,33 @@ export function FragmentCard({ fragment, onPress }: FragmentCardProps) {
       onPress={() => onPress?.(fragment)}
       activeOpacity={0.7}
     >
-      {/* 主内容区域 */}
-      <View style={styles.content}>
-        <Text
-          style={[
-            styles.text,
-            { color: isDark ? '#FFFFFF' : '#000000' },
-          ]}
-          numberOfLines={2}
-        >
-          {displayText}
-        </Text>
+      <View style={styles.mainRow}>
+        {selectable && (
+          <View
+            style={[
+              styles.checkbox,
+              {
+                borderColor: selected ? '#007AFF' : isDark ? '#3A3A3C' : '#C7C7CC',
+                backgroundColor: selected ? '#007AFF' : 'transparent',
+              },
+            ]}
+          >
+            {selected && <Text style={styles.checkmark}>✓</Text>}
+          </View>
+        )}
+
+        {/* 主内容区域 */}
+        <View style={styles.content}>
+          <Text
+            style={[
+              styles.text,
+              { color: isDark ? '#FFFFFF' : '#000000' },
+            ]}
+            numberOfLines={2}
+          >
+            {displayText}
+          </Text>
+        </View>
       </View>
 
       {/* 标签区域 */}
@@ -176,8 +201,28 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  content: {
+  mainRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     marginBottom: 8,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  content: {
+    flex: 1,
   },
   text: {
     fontSize: 15,

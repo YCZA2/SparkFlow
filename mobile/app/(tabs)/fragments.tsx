@@ -3,7 +3,7 @@
  * 阶段 4.3 实现完整功能
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   StyleSheet,
   FlatList,
@@ -12,8 +12,9 @@ import {
   RefreshControl,
   useColorScheme,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
-import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams, Stack } from 'expo-router';
 import { FragmentCard } from '@/components/FragmentCard';
 import { useFragments } from '@/hooks/useFragments';
 import type { Fragment } from '@/types/fragment';
@@ -142,6 +143,11 @@ export default function FragmentsScreen() {
     refreshFragments,
     fetchFragments,
   } = useFragments();
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const maxSelection = 20;
+  const selectedCount = selectedIds.length;
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   /**
    * 页面获得焦点时，根据参数决定是否刷新
@@ -166,7 +172,46 @@ export default function FragmentsScreen() {
    * 处理卡片点击 - 导航到详情页
    */
   const handleFragmentPress = (fragment: Fragment) => {
+    if (isSelectionMode) {
+      toggleSelect(fragment.id);
+      return;
+    }
     router.push(`/fragment/${fragment.id}`);
+  };
+
+  const toggleSelectionMode = () => {
+    setIsSelectionMode((prev) => {
+      const next = !prev;
+      if (!next) {
+        setSelectedIds([]);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelect = (fragmentId: string) => {
+    setSelectedIds((prev) => {
+      if (prev.includes(fragmentId)) {
+        return prev.filter((id) => id !== fragmentId);
+      }
+      if (prev.length >= maxSelection) {
+        Alert.alert('已达上限', `最多选择 ${maxSelection} 条碎片`);
+        return prev;
+      }
+      return [...prev, fragmentId];
+    });
+  };
+
+  const handleGoGenerate = () => {
+    if (selectedCount === 0) {
+      Alert.alert('请选择碎片', '请至少选择 1 条碎片');
+      return;
+    }
+
+    router.push({
+      pathname: '/generate',
+      params: { fragmentIds: selectedIds.join(',') },
+    });
   };
 
   /**
@@ -180,7 +225,12 @@ export default function FragmentsScreen() {
    * 渲染列表项
    */
   const renderItem = ({ item }: { item: Fragment }) => (
-    <FragmentCard fragment={item} onPress={handleFragmentPress} />
+    <FragmentCard
+      fragment={item}
+      onPress={handleFragmentPress}
+      selectable={isSelectionMode}
+      selected={selectedSet.has(item.id)}
+    />
   );
 
   /**
@@ -233,6 +283,17 @@ export default function FragmentsScreen() {
         { backgroundColor: isDark ? '#000000' : '#F2F2F7' },
       ]}
     >
+      <Stack.Screen
+        options={{
+          title: '碎片库',
+          headerRight: () => (
+            <TouchableOpacity onPress={toggleSelectionMode} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.selectAction}>{isSelectionMode ? '取消' : '选择'}</Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
+
       <FlatList
         data={fragments}
         keyExtractor={(item) => item.id}
@@ -254,6 +315,28 @@ export default function FragmentsScreen() {
         }
         showsVerticalScrollIndicator={false}
       />
+
+      {isSelectionMode && (
+        <View
+          style={[
+            styles.floatingBar,
+            { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' },
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.generateButton,
+              { backgroundColor: selectedCount > 0 ? '#007AFF' : '#8E8E93' },
+            ]}
+            onPress={handleGoGenerate}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.generateButtonText}>
+              交给 AI 编导（已选 {selectedCount}/{maxSelection} 条）
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -332,5 +415,34 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',
+  },
+  selectAction: {
+    color: '#007AFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  floatingBar: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 16,
+    padding: 10,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  generateButton: {
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  generateButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
