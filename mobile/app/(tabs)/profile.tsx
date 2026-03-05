@@ -89,7 +89,7 @@ export default function ProfileScreen() {
           icon="📝"
           title="我的口播稿"
           subtitle="查看生成的口播稿"
-          onPress={() => {}}
+          onPress={() => router.push('/scripts')}
           isDark={isDark}
         />
       </View>

@@ -57,8 +57,14 @@
 
 ### 最近完成
 
+- **口播稿列表页面** ✅（2026-03-05）
+  - 新增 `mobile/app/scripts.tsx` 口播稿列表页面
+  - 新增 `mobile/components/ScriptCard.tsx` 口播稿卡片组件
+  - 更新 `profile.tsx` 添加”我的口播稿”路由跳转
+  - 解决口播稿生成后找不到的问题
+
 - **阶段 8.6-8.7**: 前端生成流程实现 ✅（待验证）
-  - `/(tabs)/fragments` 支持多选模式、20 条上限、底部“交给 AI 编导”按钮
+  - `/(tabs)/fragments` 支持多选模式、20 条上限、底部”交给 AI 编导”按钮
   - 新增 `/generate` 页面：已选碎片预览、模式切换、调用生成 API
   - 新增 `/script/[id]` 页面：展示生成后的口播稿内容
   - 新增前端口播稿服务层：`services/scripts.ts`, `types/script.ts`

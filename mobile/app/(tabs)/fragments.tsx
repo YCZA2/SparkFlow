@@ -420,6 +420,7 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontSize: 16,
     fontWeight: '600',
+    marginRight: 16,
   },
   floatingBar: {
     position: 'absolute',
