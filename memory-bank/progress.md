@@ -12,7 +12,7 @@
 | 阶段 2-3 | 数据库模型与碎片笔记 CRUD API | 已完成 | 100% | [查看详情](progress-phase-2-3.md) |
 | 阶段 4-5 | 前端基础与录音功能 | 已完成 | 100% | [查看详情](progress-phase-4-5.md) |
 | 阶段 6 | 语音转写集成 (STT) | 已完成 | 100% | [查看详情](progress-phase-6-7.md) |
-| 阶段 7 | AI 自动摘要与标签 | 进行中 | 80% | [查看详情](progress-phase-6-7.md) |
+| 阶段 7 | AI 自动摘要与标签 | 已完成 | 100% | [查看详情](progress-phase-6-7.md) |
 | 阶段 8-10 | 口播稿生成、提词器与拍摄 | 待开始 | 0% | [查看详情](progress-phase-8-10.md) |
 | 阶段 11-14 | 知识库、向量数据库、每日推盘与收尾 | 待开始 | 0% | [查看详情](progress-phase-11-14.md) |
 
@@ -44,10 +44,14 @@
 
 ### 正在进行
 
-- **阶段 7.5**: 前端碎片卡片显示摘要和标签
+- **阶段 8**: 口播稿生成功能（待开始）
 
 ### 最近完成
 
+- **阶段 7.5**: 前端碎片卡片显示摘要和标签 ✅
+  - `FragmentCard.tsx` 优先显示 summary，无摘要时显示 transcript 前50字符
+  - 标签以 Chip 样式展示，最多显示3个
+  - 详情页完整展示 AI 摘要、标签、转写文本
 - **阶段 7.4**: 转写流程串联摘要和标签生成 ✅
   - 修改 `transcribe_with_retry()` 在转写成功后调用 `generate_summary_and_tags()`
   - 并行生成摘要和标签，优化延迟
@@ -56,24 +60,17 @@
   - 实现 `generate_summary()` - 生成20字以内摘要
   - 实现 `generate_tags()` - 生成2-4个中文标签
   - 实现 `generate_summary_and_tags()` - 并行生成优化
-- **阶段 6.3**: 前端录音全流程联调 ✅
+- **阶段 6**: 语音转写集成 ✅
   - 修复 DashScope STT 语音识别功能
   - 实现音频上传后自动转写
   - 验证转写结果正确写入数据库
-- **阶段 6.2**: 上传后自动转写并创建碎片 ✅
-  - 实现 `transcribe_with_retry()` 后台任务
-  - 使用 `asyncio.create_task()` 实现异步转写
-  - 添加指数退避重试机制（1秒、3秒）
-- **阶段 6.1**: 配置外部 API 密钥管理 ✅
 
 ### 下一步（待开始）
 
-1. **实现阶段 7.2-7.3: AI 摘要与标签**
-   - 在 `services/llm_service.py` 中实现 `generate_summary()`
-   - 在 `services/llm_service.py` 中实现 `generate_tags()`
-   - 更新 `transcribe.py` 在转写完成后调用摘要和标签生成
-2. **阶段 7.5: 前端显示摘要和标签**
-   - 更新 `FragmentCard` 组件显示摘要和标签
+1. **阶段 8: 口播稿生成**
+   - 实现 Mode A（导师爆款模式）和 Mode B（专属二脑模式）
+   - 创建 `routers/scripts.py` API 端点
+   - 实现碎片多选和口播稿生成流程
 
 ---
 
