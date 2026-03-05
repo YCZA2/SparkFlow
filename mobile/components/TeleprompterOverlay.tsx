@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Easing,
   PanResponder,
   StyleSheet,
   Text,
@@ -36,9 +37,15 @@ export function TeleprompterOverlay({
 
   const translateY = useRef(new Animated.Value(0)).current;
   const currentYRef = useRef(0);
-  const panStartYRef = useRef(0);
-  const movedRef = useRef(false);
   const animationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const isPausedRef = useRef(false);
+  const panStartYRef = useRef(0);
+  const hasMovedRef = useRef(false);
+
+  // 同步 isPaused 状态到 ref
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
 
   const maxY = containerHeight;
   const minY = -contentHeight;
@@ -48,20 +55,28 @@ export function TeleprompterOverlay({
     [containerHeight, contentHeight]
   );
 
-  const clampY = (value: number) => Math.max(minY, Math.min(maxY, value));
+  const clampY = useCallback(
+    (value: number) => Math.max(minY, Math.min(maxY, value)),
+    [minY, maxY]
+  );
 
-  const stopRunningAnimation = () => {
-    animationRef.current?.stop();
-    animationRef.current = null;
-  };
+  const stopRunningAnimation = useCallback(() => {
+    if (animationRef.current) {
+      animationRef.current.stop();
+      animationRef.current = null;
+    }
+  }, []);
 
-  const moveTo = (y: number) => {
-    const nextY = clampY(y);
-    currentYRef.current = nextY;
-    translateY.setValue(nextY);
-  };
+  const moveTo = useCallback(
+    (y: number) => {
+      const nextY = clampY(y);
+      currentYRef.current = nextY;
+      translateY.setValue(nextY);
+    },
+    [clampY, translateY]
+  );
 
-  const startScrollFromCurrent = () => {
+  const startScrollFromCurrent = useCallback(() => {
     if (!hasValidLayout) return;
 
     stopRunningAnimation();
@@ -74,6 +89,7 @@ export function TeleprompterOverlay({
     animationRef.current = Animated.timing(translateY, {
       toValue: minY,
       duration,
+      easing: Easing.linear,
       useNativeDriver: true,
     });
 
@@ -84,14 +100,14 @@ export function TeleprompterOverlay({
         setIsPaused(true);
       }
     });
-  };
+  }, [hasValidLayout, stopRunningAnimation, clampY, minY, scrollSpeed, translateY]);
 
-  const resetAndStart = () => {
+  const resetAndStart = useCallback(() => {
     if (!hasValidLayout) return;
     moveTo(maxY);
     setIsPaused(false);
     startScrollFromCurrent();
-  };
+  }, [hasValidLayout, moveTo, maxY, startScrollFromCurrent]);
 
   useEffect(() => {
     const id = translateY.addListener(({ value }) => {
@@ -101,7 +117,7 @@ export function TeleprompterOverlay({
       translateY.removeListener(id);
       stopRunningAnimation();
     };
-  }, [translateY]);
+  }, [translateY, stopRunningAnimation]);
 
   useEffect(() => {
     if (!hasValidLayout) return;
@@ -118,43 +134,58 @@ export function TeleprompterOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contentHeight, containerHeight]);
 
-  const togglePause = () => {
+  // 点击切换暂停/继续
+  const handleTap = useCallback(() => {
     if (!hasValidLayout) return;
 
-    if (isPaused) {
+    if (isPausedRef.current) {
+      // 从暂停恢复
       setIsPaused(false);
       onResume?.();
-      startScrollFromCurrent();
+      setTimeout(() => {
+        startScrollFromCurrent();
+      }, 50);
     } else {
+      // 暂停
       stopRunningAnimation();
       setIsPaused(true);
       onPause?.();
     }
-  };
+  }, [hasValidLayout, stopRunningAnimation, onPause, onResume, startScrollFromCurrent]);
 
+  // 拖动手势 - 只在暂停状态下启用
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
+        // 只在暂停状态下响应手势
+        onStartShouldSetPanResponder: () => isPausedRef.current,
         onMoveShouldSetPanResponder: (_, gestureState) =>
-          isPaused && Math.abs(gestureState.dy) > 2,
+          isPausedRef.current && Math.abs(gestureState.dy) > 5,
+
         onPanResponderGrant: () => {
           panStartYRef.current = currentYRef.current;
-          movedRef.current = false;
+          hasMovedRef.current = false;
         },
+
         onPanResponderMove: (_, gestureState) => {
-          if (!isPaused) return;
-          movedRef.current = true;
-          moveTo(panStartYRef.current + gestureState.dy);
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          const isTap = !movedRef.current || Math.abs(gestureState.dy) < 2;
-          if (isTap) {
-            togglePause();
+          if (Math.abs(gestureState.dy) > 5) {
+            hasMovedRef.current = true;
+            moveTo(panStartYRef.current + gestureState.dy);
           }
         },
+
+        onPanResponderRelease: (_, gestureState) => {
+          // 如果没有移动，则视为点击，切换暂停状态
+          if (!hasMovedRef.current && Math.abs(gestureState.dy) < 5) {
+            handleTap();
+          }
+        },
+
+        onPanResponderTerminate: () => {
+          // 手势被终止
+        },
       }),
-    [isPaused]
+    [moveTo, handleTap]
   );
 
   const adjustFontSize = (delta: number) => {
@@ -172,24 +203,63 @@ export function TeleprompterOverlay({
         </TouchableOpacity>
       </View>
 
-      <View
-        style={styles.viewport}
-        onLayout={(e) => setContainerHeight(e.nativeEvent.layout.height)}
-        {...panResponder.panHandlers}
-      >
-        <Animated.View style={[styles.animatedContent, { transform: [{ translateY }] }]}>
-          <View onLayout={(e) => setContentHeight(e.nativeEvent.layout.height)}>
-            <Text
-              style={[
-                styles.teleprompterText,
-                { fontSize: currentFontSize, lineHeight: Math.round(currentFontSize * 1.6) },
-              ]}
-            >
-              {text}
-            </Text>
+      {/* 滚动状态下用 TouchableOpacity 处理点击暂停 */}
+      {!isPaused && (
+        <TouchableOpacity
+          style={styles.viewport}
+          activeOpacity={1}
+          onPress={handleTap}
+        >
+          <View
+            style={styles.viewportInner}
+            onLayout={(e) => setContainerHeight(e.nativeEvent.layout.height)}
+          >
+            <Animated.View style={[styles.animatedContent, { transform: [{ translateY }] }]}>
+              <View onLayout={(e) => setContentHeight(e.nativeEvent.layout.height)}>
+                <Text
+                  style={[
+                    styles.teleprompterText,
+                    { fontSize: currentFontSize, lineHeight: Math.round(currentFontSize * 1.6) },
+                  ]}
+                >
+                  {text}
+                </Text>
+              </View>
+            </Animated.View>
           </View>
-        </Animated.View>
-      </View>
+        </TouchableOpacity>
+      )}
+
+      {/* 暂停状态下用 PanResponder 处理拖动和点击 */}
+      {isPaused && (
+        <View
+          style={styles.viewport}
+          onLayout={(e) => setContainerHeight(e.nativeEvent.layout.height)}
+          {...panResponder.panHandlers}
+        >
+          <View style={styles.viewportInner}>
+            <Animated.View style={[styles.animatedContent, { transform: [{ translateY }] }]}>
+              <View onLayout={(e) => setContentHeight(e.nativeEvent.layout.height)}>
+                <Text
+                  style={[
+                    styles.teleprompterText,
+                    { fontSize: currentFontSize, lineHeight: Math.round(currentFontSize * 1.6) },
+                  ]}
+                >
+                  {text}
+                </Text>
+              </View>
+            </Animated.View>
+          </View>
+        </View>
+      )}
+
+      {/* 暂停状态指示器 */}
+      {isPaused && (
+        <View style={styles.pauseIndicator}>
+          <Text style={styles.pauseText}>已暂停 · 拖动调整进度 · 点击继续</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -224,6 +294,9 @@ const styles = StyleSheet.create({
   },
   viewport: {
     flex: 1,
+  },
+  viewportInner: {
+    flex: 1,
     paddingHorizontal: 12,
   },
   animatedContent: {
@@ -234,5 +307,19 @@ const styles = StyleSheet.create({
   teleprompterText: {
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  pauseIndicator: {
+    position: 'absolute',
+    left: 10,
+    bottom: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  pauseText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
