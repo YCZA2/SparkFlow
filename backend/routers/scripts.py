@@ -112,20 +112,30 @@ async def get_script(
     return success_response(data=script_service.serialize_script(script))
 
 
+class ScriptUpdateRequest(BaseModel):
+    """口播稿更新请求模型"""
+
+    status: Optional[str] = Field(None, description="更新状态: draft, ready, filmed")
+    title: Optional[str] = Field(None, description="更新标题")
+
+    class Config:
+        json_schema_extra = {"example": {"status": "filmed", "title": "我的定位方法论"}}
+
+
 @router.patch("/{script_id}")
 async def update_script(
     script_id: str,
-    script_status: Optional[str] = Query(None, alias="status", description="更新状态: draft, ready, filmed"),
-    title: Optional[str] = Query(None, description="更新标题"),
+    data: ScriptUpdateRequest,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """更新口播稿状态或标题"""
     script = script_service.update_script(
         db=db,
         user_id=current_user["user_id"],
         script_id=script_id,
-        status_value=script_status,
-        title=title,
+        status_value=data.status,
+        title=data.title,
     )
 
     return success_response(

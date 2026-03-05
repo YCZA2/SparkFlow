@@ -295,16 +295,37 @@ await MediaLibrary.createAssetAsync(videoUri);
 - 同步更新口播稿状态为 `filmed`（调用 `PATCH /api/scripts/{id}`）
 - 新增 `mobile/services/scripts.ts` 中的 `updateScriptStatus()` 函数
 
-### 10.5 口播稿状态更新 API
+### 10.5 口播稿状态更新 API ✅
 
 **端点**: `PATCH /api/scripts/{script_id}`
 
 **请求体**:
 ```json
 {
-  "status": "filmed" // 'draft' | 'ready' | 'filmed'
+  "status": "filmed",  // 'draft' | 'ready' | 'filmed'
+  "title": "可选：更新标题"
 }
 ```
+
+**实现状态**: ✅ 已完成（2026-03-05）
+
+**已落地能力**:
+- 后端 API 接受 JSON body（更符合 RESTful 规范）
+- 新增 `ScriptUpdateRequest` Pydantic 模型校验请求参数
+- 前端 `updateScriptStatus()` 函数调用 API 更新口播稿状态
+- 支持同时更新状态和标题
+- 录制保存成功后自动调用，将口播稿标记为 `filmed`
+
+**实现细节**:
+- 文件：`backend/routers/scripts.py` 第 115-144 行
+- 使用 Pydantic 模型验证请求体，确保类型安全
+- 前端调用：`mobile/services/scripts.ts` 第 26-31 行
+- 拍摄页面集成：`mobile/app/shoot.tsx` 第 117-124 行
+
+**修复记录**（2026-03-05）:
+- 修复前后端 API 不匹配问题：原后端使用 Query 参数，前端发送 JSON body
+- 统一为 JSON body 方式，符合 RESTful API 最佳实践
+- 添加详细的请求模型文档和示例
 
 ---
 
