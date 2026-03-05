@@ -11,7 +11,6 @@
     vector_db_service = create_vector_db_service()
 """
 
-import os
 from typing import Optional
 
 from core.config import settings
@@ -143,8 +142,8 @@ def create_embedding_service(
     抛出:
         ValueError: 如果提供商不受支持
     """
-    provider = (provider or os.getenv("EMBEDDING_PROVIDER", "qwen")).lower()
-    model = model or os.getenv("EMBEDDING_MODEL")
+    provider = (provider or settings.EMBEDDING_PROVIDER or "qwen").lower()
+    model = model or settings.EMBEDDING_MODEL
 
     if provider == "qwen":
         from .qwen_embedding import QwenEmbeddingService
@@ -186,7 +185,7 @@ def create_vector_db_service(
     抛出:
         ValueError: 如果提供商不受支持
     """
-    provider = (provider or os.getenv("VECTOR_DB_PROVIDER", "chromadb")).lower()
+    provider = (provider or settings.VECTOR_DB_PROVIDER or "chromadb").lower()
 
     if provider == "chromadb":
         from .chroma_vector_db import ChromaVectorDBService

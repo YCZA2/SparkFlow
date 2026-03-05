@@ -1,7 +1,7 @@
 """
 SparkFlow 后端 - FastAPI 应用程序
 """
-import os
+from typing import Awaitable, Callable
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -14,7 +14,6 @@ from core.exceptions import (
     NotFoundError,
     ValidationError,
     AuthenticationError,
-    PermissionDeniedError,
 )
 from core.auth import get_current_user
 from routers import auth, fragments, transcribe, scripts
@@ -113,29 +112,35 @@ async def health_check():
         "vector_db": "unknown",
     }
 
-    # 如果配置了凭证，则检查服务状态
-    if settings.DASHSCOPE_API_KEY:
+    async def _check_service_status(
+        name: str,
+        enabled: bool,
+        health_check_factory: Callable[[], Awaitable[bool]],
+    ) -> None:
+        if not enabled:
+            return
         try:
-            from services.factory import get_llm_service
-            llm = get_llm_service()
-            services_status["llm"] = "available" if await llm.health_check() else "unavailable"
+            services_status[name] = "available" if await health_check_factory() else "unavailable"
         except Exception as e:
-            services_status["llm"] = f"error: {str(e)}"
+            services_status[name] = f"error: {str(e)}"
 
-    if settings.ALIBABA_CLOUD_ACCESS_KEY_ID:
-        try:
-            from services.factory import get_stt_service
-            stt = get_stt_service()
-            services_status["stt"] = "available" if await stt.health_check() else "unavailable"
-        except Exception as e:
-            services_status["stt"] = f"error: {str(e)}"
+    from services.factory import get_llm_service, get_stt_service, get_vector_db_service
 
-    try:
-        from services.factory import get_vector_db_service
-        vector_db = get_vector_db_service()
-        services_status["vector_db"] = "available" if await vector_db.health_check() else "unavailable"
-    except Exception as e:
-        services_status["vector_db"] = f"error: {str(e)}"
+    await _check_service_status(
+        name="llm",
+        enabled=bool(settings.DASHSCOPE_API_KEY),
+        health_check_factory=lambda: get_llm_service().health_check(),
+    )
+    await _check_service_status(
+        name="stt",
+        enabled=bool(settings.ALIBABA_CLOUD_ACCESS_KEY_ID),
+        health_check_factory=lambda: get_stt_service().health_check(),
+    )
+    await _check_service_status(
+        name="vector_db",
+        enabled=True,
+        health_check_factory=lambda: get_vector_db_service().health_check(),
+    )
 
     return success_response(data={
         "status": "ok",

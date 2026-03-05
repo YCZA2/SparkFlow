@@ -10,11 +10,10 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from core import success_response
+from core import success_response, paginated_data
 from core.auth import get_current_user
-from core.exceptions import NotFoundError, ValidationError
-from models import Fragment
 from models.database import get_db
+from services import fragment_service
 
 
 # ========== Pydantic 请求/响应模型 ==========
@@ -76,33 +75,22 @@ async def list_fragments(
 
     返回按创建时间降序排列的碎片列表
     """
-    fragments = (
-        db.query(Fragment)
-        .filter(Fragment.user_id == current_user["user_id"])
-        .order_by(Fragment.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
+    fragments = fragment_service.list_fragments(
+        db=db,
+        user_id=current_user["user_id"],
+        limit=limit,
+        offset=offset,
     )
+    total = fragment_service.count_fragments(db=db, user_id=current_user["user_id"])
 
     return success_response(
-        data={
-            "items": [
-                {
-                    "id": f.id,
-                    "transcript": f.transcript,
-                    "summary": f.summary,
-                    "tags": f.tags,
-                    "source": f.source,
-                    "sync_status": f.sync_status,
-                    "created_at": f.created_at.isoformat() if f.created_at else None,
-                }
-                for f in fragments
-            ],
-            "total": len(fragments),
-            "limit": limit,
-            "offset": offset,
-        }
+        data=paginated_data(
+            items=fragments,
+            total=total,
+            limit=limit,
+            offset=offset,
+            serializer=fragment_service.serialize_fragment,
+        )
     )
 
 
@@ -115,33 +103,14 @@ async def get_fragment(
     """
     获取单条碎片笔记详情
     """
-    fragment = (
-        db.query(Fragment)
-        .filter(
-            Fragment.id == fragment_id,
-            Fragment.user_id == current_user["user_id"],
-        )
-        .first()
+    fragment = fragment_service.get_fragment_or_raise(
+        db=db,
+        user_id=current_user["user_id"],
+        fragment_id=fragment_id,
     )
 
-    if not fragment:
-        raise NotFoundError(
-            message="碎片笔记不存在或无权访问",
-            resource_type="fragment",
-            resource_id=fragment_id,
-        )
-
     return success_response(
-        data={
-            "id": fragment.id,
-            "transcript": fragment.transcript,
-            "summary": fragment.summary,
-            "tags": fragment.tags,
-            "source": fragment.source,
-            "audio_path": fragment.audio_path,
-            "sync_status": fragment.sync_status,
-            "created_at": fragment.created_at.isoformat() if fragment.created_at else None,
-        }
+        data=fragment_service.serialize_fragment(fragment, include_audio_path=True)
     )
 
 
@@ -156,36 +125,16 @@ async def create_fragment(
 
     接收 JSON 请求体创建碎片笔记
     """
-    # 校验 source 参数
-    valid_sources = ["voice", "manual", "video_parse"]
-    if data.source not in valid_sources:
-        raise ValidationError(
-            message=f"无效的 source 值，必须是以下之一: {', '.join(valid_sources)}",
-            field_errors={"source": f"必须是以下之一: {', '.join(valid_sources)}"},
-        )
-
-    fragment = Fragment(
+    fragment = fragment_service.create_fragment(
+        db=db,
         user_id=current_user["user_id"],
         transcript=data.transcript,
-        audio_path=data.audio_path,
         source=data.source,
-        sync_status="synced" if data.transcript else "pending",
+        audio_path=data.audio_path,
     )
 
-    db.add(fragment)
-    db.commit()
-    db.refresh(fragment)
-
     return success_response(
-        data={
-            "id": fragment.id,
-            "transcript": fragment.transcript,
-            "summary": fragment.summary,
-            "tags": fragment.tags,
-            "source": fragment.source,
-            "sync_status": fragment.sync_status,
-            "created_at": fragment.created_at.isoformat() if fragment.created_at else None,
-        },
+        data=fragment_service.serialize_fragment(fragment),
         message="碎片笔记创建成功",
     )
 
@@ -201,23 +150,10 @@ async def delete_fragment(
 
     删除成功返回 204 No Content
     """
-    fragment = (
-        db.query(Fragment)
-        .filter(
-            Fragment.id == fragment_id,
-            Fragment.user_id == current_user["user_id"],
-        )
-        .first()
+    fragment_service.delete_fragment(
+        db=db,
+        user_id=current_user["user_id"],
+        fragment_id=fragment_id,
     )
-
-    if not fragment:
-        raise NotFoundError(
-            message="碎片笔记不存在或无权访问",
-            resource_type="fragment",
-            resource_id=fragment_id,
-        )
-
-    db.delete(fragment)
-    db.commit()
 
     return None

@@ -1,10 +1,6 @@
-"""
-API 响应标准化模块
+"""API response helpers."""
 
-为所有 API 端点提供一致的响应格式
-"""
-
-from typing import Optional, Dict, Any, TypeVar, Generic
+from typing import Optional, Dict, Any, TypeVar, Generic, Callable, Iterable
 from pydantic import BaseModel
 
 T = TypeVar("T")
@@ -115,3 +111,20 @@ def deleted_response(
         格式化的成功响应字典
     """
     return success_response(data=None, message=message)
+
+
+def paginated_data(
+    items: Iterable[Any],
+    total: int,
+    limit: int,
+    offset: int,
+    serializer: Optional[Callable[[Any], Any]] = None,
+) -> Dict[str, Any]:
+    """Build a standard pagination payload."""
+    serialized_items = [serializer(item) if serializer else item for item in items]
+    return {
+        "items": serialized_items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from core import success_response
+from core import success_response, paginated_data
 from core.auth import get_current_user
 from models.database import get_db
 from services import script_service
@@ -84,14 +84,16 @@ async def list_scripts(
         limit=limit,
         offset=offset,
     )
+    total = script_service.count_scripts(db=db, user_id=current_user["user_id"])
 
     return success_response(
-        data={
-            "items": [script_service.serialize_script(s) for s in scripts],
-            "total": len(scripts),
-            "limit": limit,
-            "offset": offset,
-        }
+        data=paginated_data(
+            items=scripts,
+            total=total,
+            limit=limit,
+            offset=offset,
+            serializer=script_service.serialize_script,
+        )
     )
 
 

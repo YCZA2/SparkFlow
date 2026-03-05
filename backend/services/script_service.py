@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 from typing import Any, Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ValidationError
@@ -154,6 +155,16 @@ def list_scripts(db: Session, user_id: str, limit: int, offset: int) -> list[Scr
         .offset(offset)
         .limit(limit)
         .all()
+    )
+
+
+def count_scripts(db: Session, user_id: str) -> int:
+    """Count all scripts for a user."""
+    return (
+        db.query(func.count(Script.id))
+        .filter(Script.user_id == user_id)
+        .scalar()
+        or 0
     )
 
 

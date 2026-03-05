@@ -7,7 +7,7 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from core import success_response, error_response, create_access_token, TokenResponse
+from core import success_response, create_access_token, TokenResponse
 from core.auth import get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -17,12 +17,6 @@ class TokenRequest(BaseModel):
     """令牌请求模型（预留用于实际登录功能）。"""
     username: str | None = None
     password: str | None = None
-
-
-class TokenResponseModel(BaseModel):
-    """令牌响应模型。"""
-    access_token: str
-    token_type: str
 
 
 # 测试用户配置

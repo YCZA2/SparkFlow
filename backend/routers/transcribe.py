@@ -7,10 +7,8 @@ from sqlalchemy.orm import Session
 
 from core import success_response
 from core.auth import get_current_user
-from core.exceptions import NotFoundError
-from models import Fragment
 from models.database import get_db
-from services import transcription_service
+from services import fragment_service, transcription_service
 
 router = APIRouter(
     prefix="/api/transcribe",
@@ -63,28 +61,13 @@ async def get_transcribe_status(
     db: Session = Depends(get_db),
 ):
     """查询指定碎片的转写状态。"""
-    fragment = (
-        db.query(Fragment)
-        .filter(Fragment.id == fragment_id, Fragment.user_id == current_user["user_id"])
-        .first()
+    fragment = fragment_service.get_fragment_or_raise(
+        db=db,
+        user_id=current_user["user_id"],
+        fragment_id=fragment_id,
     )
 
-    if not fragment:
-        raise NotFoundError(
-            message="碎片笔记不存在或无权访问",
-            resource_type="fragment",
-            resource_id=fragment_id,
-        )
-
     return success_response(
-        data={
-            "fragment_id": fragment.id,
-            "sync_status": fragment.sync_status,
-            "transcript": fragment.transcript,
-            "summary": fragment.summary,
-            "tags": fragment.tags,
-            "audio_path": fragment.audio_path,
-            "created_at": fragment.created_at.isoformat() if fragment.created_at else None,
-        },
+        data=fragment_service.serialize_transcribe_status(fragment),
         message="转写状态获取成功",
     )
