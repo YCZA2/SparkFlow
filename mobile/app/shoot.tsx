@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -8,7 +9,9 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import * as MediaLibrary from 'expo-media-library';
 import { TeleprompterOverlay } from '@/components/TeleprompterOverlay';
+import { updateScriptStatus } from '@/services/scripts';
 
 // 默认提词器文本（用于测试）
 const FALLBACK_TEXT =
@@ -20,12 +23,14 @@ const FALLBACK_TEXT =
   '把这三个问题想清楚，再回头做内容，你会发现选题、表达和转化都更顺。';
 
 /**
- * 拍摄页面 - 阶段 10.3 视频录制功能
+ * 拍摄页面 - 阶段 10.1-10.4 相机拍摄与保存
  * 功能：
- * - 使用 expo-camera 实现相机预览
+ * - 使用 expo-camera 实现相机预览 (10.1)
  * - 默认前置摄像头，可切换
- * - 叠加提词器组件
- * - 开始/停止录制按钮
+ * - 叠加提词器组件 (10.2)
+ * - 开始/停止录制按钮 (10.3)
+ * - 保存视频到系统相册 (10.4)
+ * - 更新口播稿状态为已拍摄
  */
 export default function ShootScreen() {
   const router = useRouter();
@@ -58,6 +63,36 @@ export default function ShootScreen() {
   }, [router, isRecording]);
 
   /**
+   * 保存视频到系统相册
+   * @param videoUri 视频文件 URI
+   */
+  const saveVideoToLibrary = useCallback(async (videoUri: string): Promise<boolean> => {
+    try {
+      // 请求相册写入权限
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert(
+          '权限不足',
+          '需要相册访问权限才能保存视频，请在设置中开启。',
+          [{ text: '确定' }]
+        );
+        return false;
+      }
+
+      // 保存视频到相册
+      const asset = await MediaLibrary.createAssetAsync(videoUri);
+      console.log('[Shoot] 视频已保存到相册:', asset.uri);
+
+      return true;
+    } catch (error) {
+      console.error('[Shoot] 保存视频失败:', error);
+      Alert.alert('保存失败', '视频保存到相册时出错，请重试。');
+      return false;
+    }
+  }, []);
+
+  /**
    * 开始录制视频
    */
   const startRecording = useCallback(async () => {
@@ -73,17 +108,47 @@ export default function ShootScreen() {
       // 录制完成，video.uri 是视频文件路径
       if (video?.uri) {
         console.log('[Shoot] 录制完成:', video.uri);
-        // 阶段 10.4 会在这里保存到相册
-        // TODO: 保存视频到相册
-        // TODO: 更新口播稿状态
+
+        // 阶段 10.4: 保存视频到相册
+        const saved = await saveVideoToLibrary(video.uri);
+
+        if (saved) {
+          // 更新口播稿状态为已拍摄
+          if (script_id) {
+            try {
+              await updateScriptStatus(script_id, 'filmed');
+              console.log('[Shoot] 口播稿状态已更新为 filmed');
+            } catch (error) {
+              console.error('[Shoot] 更新口播稿状态失败:', error);
+              // 状态更新失败不影响视频保存成功的提示
+            }
+          }
+
+          Alert.alert(
+            '保存成功',
+            '视频已保存到系统相册',
+            [
+              {
+                text: '继续拍摄',
+                style: 'default',
+              },
+              {
+                text: '返回',
+                style: 'cancel',
+                onPress: () => router.back(),
+              },
+            ]
+          );
+        }
       }
 
       setIsRecording(false);
     } catch (error) {
       console.error('[Shoot] 录制失败:', error);
       setIsRecording(false);
+      Alert.alert('录制失败', '视频录制过程中出错，请重试。');
     }
-  }, []);
+  }, [script_id, saveVideoToLibrary, router]);
 
   /**
    * 停止录制视频

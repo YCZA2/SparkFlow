@@ -198,7 +198,7 @@ interface TeleprompterOverlayProps {
 | 10.1 | 实现基础相机预览 | ✅ 已完成 |
 | 10.2 | 在相机预览上叠加提词器 | ✅ 已完成 |
 | 10.3 | 实现视频录制功能 | ✅ 已完成 |
-| 10.4 | 保存视频到系统相册 | ⏳ 待实施 |
+| 10.4 | 保存视频到系统相册 | ✅ 已完成（待验证） |
 | 10.5 | 实现口播稿状态更新 API | ✅ 已完成 |
 
 ### 10.1 基础相机预览 ✅
@@ -275,15 +275,25 @@ const recordVideo = async () => {
 
 **流程**:
 ```
-录制完成 → 请求相册写入权限 → 保存视频 → 提示"已保存到相册"
+录制完成 → 请求相册写入权限 → 保存视频 → 提示"已保存到相册" → 更新口播稿状态为 filmed
 ```
 
 **API**:
 ```typescript
 import * as MediaLibrary from 'expo-media-library';
 
-await MediaLibrary.saveToLibraryAsync(videoUri);
+await MediaLibrary.createAssetAsync(videoUri);
 ```
+
+**实现状态**: ✅ 已完成（2026-03-05，待验证）
+
+**已落地能力**:
+- 录制完成后自动请求相册写入权限
+- 使用 `MediaLibrary.createAssetAsync()` 保存视频到系统相册
+- 权限被拒绝时显示提示引导用户
+- 保存成功后显示 Alert 提示，可选择"继续拍摄"或"返回"
+- 同步更新口播稿状态为 `filmed`（调用 `PATCH /api/scripts/{id}`）
+- 新增 `mobile/services/scripts.ts` 中的 `updateScriptStatus()` 函数
 
 ### 10.5 口播稿状态更新 API
 
