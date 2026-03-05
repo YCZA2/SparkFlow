@@ -19,7 +19,10 @@ interface TeleprompterOverlayProps {
 
 const MIN_FONT_SIZE = 20;
 const MAX_FONT_SIZE = 40;
-const BASE_SPEED_PX_PER_SEC = 35;
+const MIN_SPEED = 0.5;
+const MAX_SPEED = 3.0;
+const SPEED_STEP = 0.2;
+const BASE_SPEED_PX_PER_SEC = 20;
 
 export function TeleprompterOverlay({
   text,
@@ -33,6 +36,10 @@ export function TeleprompterOverlay({
   const [isPaused, setIsPaused] = useState(false);
   const [currentFontSize, setCurrentFontSize] = useState(
     Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, fontSize))
+  );
+  // 使用 state 管理速度，以便实时调整
+  const [currentSpeed, setCurrentSpeed] = useState(
+    Math.max(MIN_SPEED, Math.min(MAX_SPEED, scrollSpeed))
   );
 
   const translateY = useRef(new Animated.Value(0)).current;
@@ -83,7 +90,7 @@ export function TeleprompterOverlay({
 
     const startY = clampY(currentYRef.current);
     const totalDistance = Math.abs(startY - minY);
-    const speed = Math.max(0.2, scrollSpeed) * BASE_SPEED_PX_PER_SEC;
+    const speed = Math.max(0.2, currentSpeed) * BASE_SPEED_PX_PER_SEC;
     const duration = Math.max(300, Math.floor((totalDistance / speed) * 1000));
 
     animationRef.current = Animated.timing(translateY, {
@@ -100,7 +107,15 @@ export function TeleprompterOverlay({
         setIsPaused(true);
       }
     });
-  }, [hasValidLayout, stopRunningAnimation, clampY, minY, scrollSpeed, translateY]);
+  }, [hasValidLayout, stopRunningAnimation, clampY, minY, currentSpeed, translateY]);
+
+  // 速度变化时，如果在滚动中则重新启动动画
+  useEffect(() => {
+    if (!hasValidLayout || isPaused) return;
+    // 保持当前位置，用新速度继续滚动
+    startScrollFromCurrent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSpeed]);
 
   const resetAndStart = useCallback(() => {
     if (!hasValidLayout) return;
@@ -192,15 +207,39 @@ export function TeleprompterOverlay({
     setCurrentFontSize((prev) => Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, prev + delta)));
   };
 
+  const adjustSpeed = (delta: number) => {
+    setCurrentSpeed((prev) => {
+      const newSpeed = Math.max(MIN_SPEED, Math.min(MAX_SPEED, prev + delta));
+      // 保留一位小数
+      return Math.round(newSpeed * 10) / 10;
+    });
+  };
+
   return (
     <View style={styles.wrapper}>
-      <View style={styles.fontControls}>
-        <TouchableOpacity style={styles.controlBtn} onPress={() => adjustFontSize(-2)} activeOpacity={0.8}>
-          <Text style={styles.controlText}>A-</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.controlBtn} onPress={() => adjustFontSize(2)} activeOpacity={0.8}>
-          <Text style={styles.controlText}>A+</Text>
-        </TouchableOpacity>
+      {/* 右上角控制按钮 */}
+      <View style={styles.controlsContainer}>
+        {/* 字号控制 */}
+        <View style={styles.controlGroup}>
+          <TouchableOpacity style={styles.controlBtn} onPress={() => adjustFontSize(-2)} activeOpacity={0.8}>
+            <Text style={styles.controlText}>A-</Text>
+          </TouchableOpacity>
+          <Text style={styles.valueLabel}>{currentFontSize}</Text>
+          <TouchableOpacity style={styles.controlBtn} onPress={() => adjustFontSize(2)} activeOpacity={0.8}>
+            <Text style={styles.controlText}>A+</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 速度控制 */}
+        <View style={styles.controlGroup}>
+          <TouchableOpacity style={styles.controlBtn} onPress={() => adjustSpeed(-SPEED_STEP)} activeOpacity={0.8}>
+            <Text style={styles.controlText}>S-</Text>
+          </TouchableOpacity>
+          <Text style={styles.valueLabel}>{currentSpeed.toFixed(1)}x</Text>
+          <TouchableOpacity style={styles.controlBtn} onPress={() => adjustSpeed(SPEED_STEP)} activeOpacity={0.8}>
+            <Text style={styles.controlText}>S+</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* 滚动状态下用 TouchableOpacity 处理点击暂停 */}
@@ -271,13 +310,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
   },
-  fontControls: {
+  controlsContainer: {
     position: 'absolute',
     right: 10,
     top: 10,
     zIndex: 2,
+    gap: 8,
+  },
+  controlGroup: {
     flexDirection: 'row',
     gap: 8,
+    alignItems: 'center',
   },
   controlBtn: {
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
@@ -291,6 +334,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  valueLabel: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    minWidth: 36,
+    textAlign: 'center',
   },
   viewport: {
     flex: 1,
