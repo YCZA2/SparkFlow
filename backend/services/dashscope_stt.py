@@ -13,10 +13,14 @@ import logging
 from typing import Optional
 
 # 修复 macOS SSL 证书问题
+# 必须在导入 aiohttp/dashscope 之前设置
 os.environ['SSL_CERT_FILE'] = certifi.where()
 os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
-# 创建默认 SSL 上下文
-ssl._create_default_https_context = ssl._create_unverified_context
+
+# 使用 certifi 证书创建默认 SSL 上下文
+# 注意：_create_unverified_context 在某些情况下会导致连接失败
+_original_create_default_https_context = ssl._create_default_https_context
+ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=certifi.where())
 
 from dashscope.audio.asr import Recognition, RecognitionCallback, RecognitionResult
 
@@ -38,7 +42,7 @@ class SimpleRecognitionCallback(RecognitionCallback):
     """简单的语音识别回调，用于同步获取结果。"""
 
     def __init__(self):
-        self.sentences = []
+        self.sentences = []  # 存储完整的句子（sentence_end=True）
         self.error = None
         self.completed = False
 
@@ -50,20 +54,24 @@ class SimpleRecognitionCallback(RecognitionCallback):
         self.completed = True
 
     def on_error(self, result: RecognitionResult) -> None:
-        logger.error(f"[DashScope STT] 识别错误: {result}")
+        logger.error(f"[DashScope STT] 识别错误: code={result.status_code}, message={result.message}")
         self.error = result
 
     def on_close(self) -> None:
         logger.debug("[DashScope STT] WebSocket 连接已关闭")
 
     def on_event(self, result: RecognitionResult) -> None:
+        """处理识别事件，提取完整句子"""
         sentence = result.get_sentence()
         if sentence:
-            if isinstance(sentence, dict) and 'text' in sentence:
-                self.sentences.append(sentence['text'])
+            # 检查是否为完整句子（sentence_end=True）
+            if isinstance(sentence, dict):
+                # 只在句子结束时收集，避免重复
+                if sentence.get('sentence_end', False) and sentence.get('text'):
+                    self.sentences.append(sentence['text'])
             elif isinstance(sentence, list):
                 for s in sentence:
-                    if isinstance(s, dict) and 'text' in s:
+                    if isinstance(s, dict) and s.get('sentence_end', False) and s.get('text'):
                         self.sentences.append(s['text'])
 
 
@@ -281,13 +289,14 @@ class DashScopeSTTService(BaseSTTService):
         language: str,
     ) -> TranscriptionResult:
         """
-        使用 Recognition 类进行文件识别。
+        使用 Recognition 类进行流式文件识别。
 
-        使用 dashscope SDK 的 Recognition.call 方法。
+        使用 dashscope SDK 的 Recognition.start() + send_audio_frame() + stop() 方法。
+        注意：Recognition.call() 方法对某些格式支持不佳，使用流式方式更可靠。
         """
         logger.info(f"[DashScope STT] 调用 SDK: model={self.model}, format={format_str}")
 
-        # 转换为 WAV 格式（如果不是的话）
+        # 转换为 WAV 格式（16kHz 单声道）
         temp_wav_path = None
         try:
             audio_path_to_use = self._convert_to_wav(audio_path)
@@ -302,7 +311,6 @@ class DashScopeSTTService(BaseSTTService):
             callback = SimpleRecognitionCallback()
 
             # 创建 Recognition 实例
-            # 注意：Recognition 需要 callback 来接收结果
             recognition = Recognition(
                 model=self.model,
                 callback=callback,
@@ -310,36 +318,73 @@ class DashScopeSTTService(BaseSTTService):
                 sample_rate=16000,
             )
 
-            # 调用识别 - 这会阻塞直到完成
-            result = recognition.call(audio_path)
+            # 使用流式方式：start -> send_audio_frame -> stop
+            # 这比 Recognition.call() 更可靠
+            logger.info("[DashScope STT] 启动流式识别...")
 
-            logger.info(f"[DashScope STT] SDK 返回状态: {result.status_code}")
+            # 启动识别
+            recognition.start()
 
-            if result.status_code == 200:
-                # 从结果中提取文本
-                sentences = result.get_sentence()
-                texts = []
+            # 读取音频文件并发送
+            # 注意：WAV 文件需要跳过 44 字节的文件头
+            with open(audio_path_to_use, 'rb') as f:
+                # 检查是否为 WAV 文件
+                header = f.read(44)
+                if len(header) < 44:
+                    raise STTFileError(f"音频文件太小: {audio_path_to_use}")
 
-                if sentences:
-                    if isinstance(sentences, list):
-                        for s in sentences:
-                            if isinstance(s, dict) and 'text' in s:
-                                texts.append(s['text'])
-                    elif isinstance(sentences, dict) and 'text' in sentences:
-                        texts.append(sentences['text'])
+                # 验证 WAV 文件头
+                if format_str == 'wav' and header[:4] != b'RIFF':
+                    logger.warning("[DashScope STT] 非 WAV 文件格式，跳过文件头处理")
+                    f.seek(0)
+                # 读取剩余音频数据
+                audio_data = f.read()
 
-                full_text = " ".join(texts) if texts else ""
+            logger.info(f"[DashScope STT] 音频数据大小: {len(audio_data)} bytes")
 
-                return TranscriptionResult(
-                    text=full_text,
-                    confidence=None,
-                    duration_ms=None,
-                    language=language,
-                )
-            else:
-                error_msg = result.message if hasattr(result, 'message') else "未知错误"
+            # 分块发送音频数据（每块约 0.2 秒）
+            chunk_size = 3200  # 16000 * 0.2 = 3200 bytes
+            for i in range(0, len(audio_data), chunk_size):
+                chunk = audio_data[i:i+chunk_size]
+                recognition.send_audio_frame(chunk)
+
+            logger.info("[DashScope STT] 音频发送完成，等待识别结果...")
+
+            # 停止识别
+            recognition.stop()
+
+            # 等待识别完成
+            # 根据音频时长动态计算超时时间：音频时长 + 5秒缓冲
+            # 16kHz 单声道 16bit 音频：每秒 32000 bytes
+            audio_duration = len(audio_data) / 32000  # 音频时长（秒）
+            max_wait = max(10, audio_duration + 5)  # 至少10秒，或音频时长+5秒
+
+            import time
+            wait_time = 0
+            while not callback.completed and not callback.error and wait_time < max_wait:
+                time.sleep(0.1)
+                wait_time += 0.1
+
+            # 检查是否超时
+            if not callback.completed and not callback.error:
+                logger.warning(f"[DashScope STT] 识别超时（等待 {wait_time:.1f} 秒）")
+
+            # 检查错误
+            if callback.error:
+                error_msg = callback.error.message if hasattr(callback.error, 'message') else "未知错误"
                 logger.error(f"[DashScope STT] 识别失败: {error_msg}")
                 raise STTRecognitionError(f"识别失败: {error_msg}")
+
+            # 合并所有完整句子
+            full_text = "".join(callback.sentences)
+            logger.info(f"[DashScope STT] 识别成功: {full_text[:50] if full_text else '(空)'}...")
+
+            return TranscriptionResult(
+                text=full_text,
+                confidence=None,
+                duration_ms=None,
+                language=language,
+            )
 
         except STTError:
             raise

@@ -271,25 +271,43 @@ export default function HomeScreen() {
 
   /**
    * 播放录音
+   * 注意：iOS 上录音后需要重新配置音频模式，否则声音会从听筒输出
    */
   const playRecording = async () => {
     if (!recordedUri) return;
 
     try {
+      // 重新配置音频模式：强制使用扬声器播放
+      // 录音模式下 iOS 会使用听筒，需要切换回播放模式
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,  // 播放时禁用录音
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,  // Android 强制扬声器
+      });
+
       const { sound } = await Audio.Sound.createAsync({ uri: recordedUri });
+
+      // 设置音量确保可听
+      await sound.setVolumeAsync(1.0);
+
       await sound.playAsync();
       console.log('▶️ 开始播放录音');
 
-      // 播放结束后卸载
-      sound.setOnPlaybackStatusUpdate((status) => {
+      // 播放结束后卸载并恢复录音模式
+      sound.setOnPlaybackStatusUpdate(async (status) => {
         if (status.isLoaded && status.didJustFinish) {
-          sound.unloadAsync();
+          await sound.unloadAsync();
           console.log('⏹️ 播放结束');
+          // 恢复录音模式配置
+          await configureAudioMode();
         }
       });
     } catch (err) {
       console.error('播放失败:', err);
       Alert.alert('播放失败', '无法播放录音');
+      // 出错时也要恢复录音模式
+      await configureAudioMode();
     }
   };
 
