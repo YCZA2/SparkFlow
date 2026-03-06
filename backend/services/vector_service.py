@@ -57,6 +57,20 @@ async def upsert_fragment(
     return await vector_db_service.upsert(namespace=namespace, documents=[document])
 
 
+async def list_fragment_documents(
+    *,
+    user_id: str,
+    include_embeddings: bool = True,
+) -> list[VectorDocument]:
+    """List all vectorized fragment documents stored for a user."""
+    namespace = build_fragment_namespace(user_id)
+    vector_db_service = get_vector_db_service()
+    return await vector_db_service.list_documents(
+        namespace=namespace,
+        include_embeddings=include_embeddings,
+    )
+
+
 async def query_similar_fragments(
     *,
     user_id: str,

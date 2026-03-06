@@ -44,6 +44,19 @@ def get_by_ids(db: Session, user_id: str, fragment_ids: list[str]) -> list[Fragm
     )
 
 
+def list_vectorizable_by_user(db: Session, user_id: str) -> list[Fragment]:
+    return (
+        db.query(Fragment)
+        .filter(
+            Fragment.user_id == user_id,
+            Fragment.sync_status == "synced",
+            Fragment.transcript.isnot(None),
+        )
+        .order_by(Fragment.created_at.asc())
+        .all()
+    )
+
+
 def create(
     db: Session,
     user_id: str,

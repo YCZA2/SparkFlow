@@ -54,3 +54,51 @@ export interface CreateFragmentRequest {
   /** 来源 */
   source?: FragmentSource;
 }
+
+export interface FragmentVisualizationPoint {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  transcript: string | null;
+  summary: string | null;
+  tags: string[] | null;
+  source: FragmentSource;
+  sync_status: FragmentSyncStatus;
+  created_at: string | null;
+  cluster_id: number | null;
+  is_noise: boolean;
+}
+
+export interface FragmentVisualizationCentroid {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface FragmentVisualizationCluster {
+  id: number;
+  label: string;
+  keywords: string[];
+  fragment_count: number;
+  centroid: FragmentVisualizationCentroid;
+}
+
+export interface FragmentVisualizationStats {
+  total_fragments: number;
+  clustered_fragments: number;
+  uncategorized_fragments: number;
+}
+
+export interface FragmentVisualizationMeta {
+  projection: string;
+  clustering: string;
+  used_vector_source: string;
+}
+
+export interface FragmentVisualizationResponse {
+  points: FragmentVisualizationPoint[];
+  clusters: FragmentVisualizationCluster[];
+  stats: FragmentVisualizationStats;
+  meta: FragmentVisualizationMeta;
+}

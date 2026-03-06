@@ -63,6 +63,10 @@ export default function FragmentsScreen() {
     });
   };
 
+  const handleOpenCloud = () => {
+    router.push('/fragment-cloud' as never);
+  };
+
   if (isLoading && fragments.length === 0) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -116,13 +120,24 @@ export default function FragmentsScreen() {
           />
         )}
         ListHeaderComponent={
-          fragments.length > 0 ? (
-            <View style={styles.header}>
+          <View style={styles.header}>
+            <View>
               <Text style={[styles.headerText, { color: theme.colors.textSubtle }]}>
                 共 {fragments.length} 条灵感
               </Text>
+              <Text style={[styles.headerTitle, { color: theme.colors.text }]}>试试灵感云图</Text>
+              <Text style={[styles.headerDesc, { color: theme.colors.textSubtle }]}>
+                把碎片按主题聚在一起看，再从一个主题继续生成口播稿。
+              </Text>
             </View>
-          ) : null
+            <TouchableOpacity
+              style={[styles.cloudButton, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}
+              onPress={handleOpenCloud}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.cloudButtonText, { color: theme.colors.primary }]}>打开云图</Text>
+            </TouchableOpacity>
+          </View>
         }
         ListEmptyComponent={
           <ScreenState icon="📝" title="还没有灵感碎片" message="去首页录一条吧" />
@@ -175,9 +190,31 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingVertical: 12,
+    gap: 12,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  headerDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6,
   },
   headerText: {
     fontSize: 13,
+  },
+  cloudButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  cloudButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   selectAction: {
     fontSize: 16,

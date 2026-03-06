@@ -51,10 +51,20 @@
   - ✅ 12.1 碎片自动向量化（转写成功后写入向量库）
   - ✅ 12.2 碎片语义相似度查询
   - ⏳ 12.3 Mode B 检索历史碎片作为风格参考
-  - ⏳ 12.4 **碎片向量可视化**（灵感云图，MVP 轻量版）
+  - ✅ 12.4 **碎片向量可视化**（灵感云图，MVP 轻量版）
   - ⏳ 12.5 知识库文档向量化（可选，时间允许时再做）
 
 ### 最近完成
+
+- **阶段 12.4**: 碎片向量可视化（灵感云图，MVP 轻量版）✅（2026-03-06）
+  - 新增 `GET /api/fragments/visualization`，返回 `points / clusters / stats / meta`
+  - 向量层新增批量读取能力，后端可从 ChromaDB 回收当前用户全部碎片向量
+  - 实现轻量 PCA 投影、K-Means 聚类与基于 `tags/summary` 的类别命名
+  - 旧碎片进入云图时会自动尝试补齐向量；若 embedding 回填失败，则降级为基于文本特征的本地云图
+  - 修复 Embedding 工厂未透传 `DASHSCOPE_API_KEY` 的问题，并处理 fragments domain 循环依赖
+  - App 新增 `/fragment-cloud` 页面，支持点位查看、主题筛选、加入待生成列表
+  - 云图可直接带着已选碎片跳转 `/generate`
+  - 完成后端语法编译与移动端 TypeScript 校验
 
 - **阶段 12.2**: 碎片语义相似度查询 ✅（2026-03-06）
   - 新增 `POST /api/fragments/similar` 语义检索接口

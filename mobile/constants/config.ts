@@ -38,6 +38,7 @@ export const API_ENDPOINTS = {
   FRAGMENTS: {
     LIST: '/api/fragments/',  // 必须与后端路由匹配，带斜杠
     DETAIL: (id: string) => `/api/fragments/${id}`,
+    VISUALIZATION: '/api/fragments/visualization',
   },
   TRANSCRIBE: '/api/transcribe',
   SCRIPTS: {

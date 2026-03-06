@@ -75,6 +75,7 @@ function RootLayoutNav() {
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="fragment-cloud" options={{ title: '灵感云图' }} />
           <Stack.Screen name="generate" options={{ title: 'AI 编导' }} />
           <Stack.Screen name="script/[id]" options={{ title: '口播稿详情' }} />
           <Stack.Screen name="shoot" options={{ title: '拍摄' }} />

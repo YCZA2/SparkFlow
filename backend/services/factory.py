@@ -147,7 +147,8 @@ def create_embedding_service(
 
     if provider == "qwen":
         from .qwen_embedding import QwenEmbeddingService
-        return QwenEmbeddingService(model=model, **kwargs)
+        api_key = kwargs.pop("api_key", None) or settings.DASHSCOPE_API_KEY
+        return QwenEmbeddingService(model=model, api_key=api_key, **kwargs)
     elif provider in ["baidu", "wenxin"]:
         # 未来: 实现百度 Embedding
         raise ValueError(

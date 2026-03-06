@@ -60,3 +60,63 @@ class SimilarFragmentItem(FragmentItem):
 
     score: float
     metadata: dict = Field(default_factory=dict)
+
+
+class FragmentVisualizationPoint(BaseModel):
+    """碎片云图中的单个点位。"""
+
+    id: str
+    x: float
+    y: float
+    z: float
+    transcript: Optional[str]
+    summary: Optional[str]
+    tags: Optional[list[str]]
+    source: str
+    sync_status: str
+    created_at: Optional[str]
+    cluster_id: Optional[int] = None
+    is_noise: bool = False
+
+
+class FragmentVisualizationCentroid(BaseModel):
+    """聚类中心点坐标。"""
+
+    x: float
+    y: float
+    z: float
+
+
+class FragmentVisualizationCluster(BaseModel):
+    """聚类信息。"""
+
+    id: int
+    label: str
+    keywords: list[str] = Field(default_factory=list)
+    fragment_count: int
+    centroid: FragmentVisualizationCentroid
+
+
+class FragmentVisualizationStats(BaseModel):
+    """云图统计信息。"""
+
+    total_fragments: int
+    clustered_fragments: int
+    uncategorized_fragments: int
+
+
+class FragmentVisualizationMeta(BaseModel):
+    """云图生成元数据。"""
+
+    projection: str
+    clustering: str
+    used_vector_source: str
+
+
+class FragmentVisualizationResponse(BaseModel):
+    """碎片向量可视化响应。"""
+
+    points: list[FragmentVisualizationPoint] = Field(default_factory=list)
+    clusters: list[FragmentVisualizationCluster] = Field(default_factory=list)
+    stats: FragmentVisualizationStats
+    meta: FragmentVisualizationMeta

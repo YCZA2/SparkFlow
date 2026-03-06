@@ -22,6 +22,8 @@ from domains.fragments import service as fragment_service
 from models import Base, Fragment
 from models.database import get_db
 from routers.auth import TEST_USER_ID
+from services.base import VectorDocument
+from services import vector_visualization_service
 
 
 class BackendFlowTestCase(unittest.TestCase):
@@ -373,3 +375,213 @@ class BackendFlowTestCase(unittest.TestCase):
         self.assertEqual(result[0]["id"], fragment.id)
         self.assertEqual(result[0]["score"], 0.88)
         self.assertEqual(result[0]["metadata"], {"source": "voice"})
+
+    def test_build_fragment_visualization_filters_missing_rows_for_small_dataset(self) -> None:
+        with self.SessionLocal() as db:
+            fragments = []
+            for index in range(3):
+                fragment = Fragment(
+                    user_id=TEST_USER_ID,
+                    transcript=f"碎片 {index}",
+                    summary=f"主题 {index}",
+                    tags=json.dumps([f"标签{index}"], ensure_ascii=False),
+                    source="voice",
+                    sync_status="synced",
+                )
+                db.add(fragment)
+                fragments.append(fragment)
+            db.commit()
+            for fragment in fragments:
+                db.refresh(fragment)
+
+            vector_docs = [
+                VectorDocument(
+                    id=fragment.id,
+                    text=fragment.transcript or "",
+                    embedding=[float(index + 1), float(index + 2), float(index + 3)],
+                    metadata={"type": "fragment"},
+                )
+                for index, fragment in enumerate(fragments)
+            ]
+            vector_docs.append(
+                VectorDocument(
+                    id="deleted-fragment",
+                    text="已被删除的碎片",
+                    embedding=[9.0, 9.0, 9.0],
+                    metadata={"type": "fragment"},
+                )
+            )
+
+            with patch.object(
+                vector_visualization_service,
+                "list_fragment_documents",
+                AsyncMock(return_value=vector_docs),
+            ):
+                payload = asyncio.run(
+                    vector_visualization_service.build_fragment_visualization(
+                        db=db,
+                        user_id=TEST_USER_ID,
+                    )
+                )
+
+        self.assertEqual(payload["stats"]["total_fragments"], 3)
+        self.assertEqual(payload["stats"]["clustered_fragments"], 0)
+        self.assertEqual(payload["stats"]["uncategorized_fragments"], 3)
+        self.assertEqual(payload["clusters"], [])
+        self.assertEqual({point["id"] for point in payload["points"]}, {fragment.id for fragment in fragments})
+
+    def test_build_fragment_visualization_backfills_existing_fragments_without_vectors(self) -> None:
+        with self.SessionLocal() as db:
+            fragment = Fragment(
+                user_id=TEST_USER_ID,
+                transcript="已经存在的旧碎片",
+                summary="旧碎片摘要",
+                tags=json.dumps(["旧碎片", "回填"], ensure_ascii=False),
+                source="manual",
+                sync_status="synced",
+            )
+            db.add(fragment)
+            db.commit()
+            db.refresh(fragment)
+
+            vector_docs = [
+                VectorDocument(
+                    id=fragment.id,
+                    text=fragment.transcript or "",
+                    embedding=[0.3, 0.6, 0.9],
+                    metadata={"type": "fragment"},
+                )
+            ]
+
+            with (
+                patch.object(
+                    vector_visualization_service,
+                    "list_fragment_documents",
+                    AsyncMock(side_effect=[[], vector_docs]),
+                ),
+                patch.object(
+                    vector_visualization_service,
+                    "upsert_fragment",
+                    AsyncMock(return_value=True),
+                ) as mock_upsert_fragment,
+            ):
+                payload = asyncio.run(
+                    vector_visualization_service.build_fragment_visualization(
+                        db=db,
+                        user_id=TEST_USER_ID,
+                    )
+                )
+
+        mock_upsert_fragment.assert_awaited_once_with(
+            user_id=TEST_USER_ID,
+            fragment_id=fragment.id,
+            text="已经存在的旧碎片",
+            source="manual",
+            summary="旧碎片摘要",
+            tags=["旧碎片", "回填"],
+        )
+        self.assertEqual(payload["stats"]["total_fragments"], 1)
+        self.assertEqual(payload["points"][0]["id"], fragment.id)
+
+    def test_build_fragment_visualization_falls_back_to_text_features_when_backfill_fails(self) -> None:
+        with self.SessionLocal() as db:
+            fragments = []
+            for index in range(2):
+                fragment = Fragment(
+                    user_id=TEST_USER_ID,
+                    transcript=f"定位表达样本 {index}",
+                    summary="定位表达",
+                    tags=json.dumps(["定位", "表达"], ensure_ascii=False),
+                    source="manual",
+                    sync_status="synced",
+                )
+                db.add(fragment)
+                fragments.append(fragment)
+            db.commit()
+
+            with (
+                patch.object(
+                    vector_visualization_service,
+                    "list_fragment_documents",
+                    AsyncMock(side_effect=[[], []]),
+                ),
+                patch.object(
+                    vector_visualization_service,
+                    "upsert_fragment",
+                    AsyncMock(side_effect=RuntimeError("embedding unavailable")),
+                ),
+            ):
+                payload = asyncio.run(
+                    vector_visualization_service.build_fragment_visualization(
+                        db=db,
+                        user_id=TEST_USER_ID,
+                    )
+                )
+
+        self.assertEqual(payload["meta"]["used_vector_source"], "fallback_text_features")
+        self.assertEqual(payload["stats"]["total_fragments"], 2)
+        self.assertEqual(len(payload["points"]), 2)
+        self.assertEqual({point["id"] for point in payload["points"]}, {fragment.id for fragment in fragments})
+
+    def test_get_fragment_visualization_endpoint_returns_clustered_payload(self) -> None:
+        with self.SessionLocal() as db:
+            fragments = []
+            for index in range(8):
+                is_positioning = index < 4
+                fragment = Fragment(
+                    user_id=TEST_USER_ID,
+                    transcript=f"碎片 {index}",
+                    summary="定位表达" if is_positioning else "口播开头",
+                    tags=json.dumps(
+                        ["定位", "表达"] if is_positioning else ["口播", "开头"],
+                        ensure_ascii=False,
+                    ),
+                    source="voice",
+                    sync_status="synced",
+                )
+                db.add(fragment)
+                fragments.append(fragment)
+            db.commit()
+            for fragment in fragments:
+                db.refresh(fragment)
+
+        vector_docs: list[VectorDocument] = []
+        for index, fragment in enumerate(fragments):
+            if index < 4:
+                embedding = [1.0 + index * 0.05, 0.9 + index * 0.04, 1.1 + index * 0.03]
+            else:
+                offset = index - 4
+                embedding = [-1.1 - offset * 0.04, -0.9 - offset * 0.03, -1.0 - offset * 0.05]
+            vector_docs.append(
+                VectorDocument(
+                    id=fragment.id,
+                    text=fragment.transcript or "",
+                    embedding=embedding,
+                    metadata={"type": "fragment"},
+                )
+            )
+
+        with patch.object(
+            vector_visualization_service,
+            "list_fragment_documents",
+            AsyncMock(return_value=vector_docs),
+        ):
+            response = self.client.get(
+                "/api/fragments/visualization",
+                headers=self.auth_headers(),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+        self.assertEqual(payload["stats"]["total_fragments"], 8)
+        self.assertEqual(len(payload["points"]), 8)
+        self.assertEqual(len(payload["clusters"]), 2)
+        self.assertEqual(payload["stats"]["clustered_fragments"], 8)
+        self.assertEqual(payload["meta"]["projection"], "pca")
+        self.assertEqual(payload["meta"]["clustering"], "kmeans")
+        cluster_labels = {cluster["label"] for cluster in payload["clusters"]}
+        self.assertTrue(cluster_labels.issubset({"定位", "表达", "口播", "开头"}))
+
+    def test_get_fragment_visualization_requires_auth(self) -> None:
+        response = self.client.get("/api/fragments/visualization")
+        self.assertEqual(response.status_code, 401)

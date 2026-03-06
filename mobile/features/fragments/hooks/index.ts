@@ -1,6 +1,7 @@
 export {
   deleteFragment,
   fetchFragmentDetail,
+  useFragmentVisualization,
   useFragments,
   useSelectedFragments,
 } from './useFragments';

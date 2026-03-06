@@ -153,6 +153,29 @@ class BaseVectorDBService(ABC):
         pass
 
     @abstractmethod
+    async def list_documents(
+        self,
+        namespace: str,
+        include_embeddings: bool = True,
+        **kwargs
+    ) -> List[VectorDocument]:
+        """
+        读取命名空间中的全部文档。
+
+        Args:
+            namespace: 命名空间/集合名称
+            include_embeddings: 是否返回 embedding
+            **kwargs: 额外的提供商特定参数
+
+        Returns:
+            文档列表；命名空间不存在时返回空列表
+
+        Raises:
+            VectorDBError: 读取失败时抛出
+        """
+        pass
+
+    @abstractmethod
     async def get_namespace_stats(
         self,
         namespace: str,

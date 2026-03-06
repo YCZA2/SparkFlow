@@ -250,6 +250,54 @@ class ChromaVectorDBService(BaseVectorDBService):
         except Exception as e:
             raise VectorDBError(f"删除文档失败: {str(e)}", code="DELETE_ERROR")
 
+    async def list_documents(
+        self,
+        namespace: str,
+        include_embeddings: bool = True,
+        **kwargs
+    ) -> List[VectorDocument]:
+        """
+        读取命名空间中的全部文档。
+
+        参数:
+            namespace: 集合名称
+            include_embeddings: 是否包含 embedding
+            **kwargs: 额外参数
+
+        返回:
+            VectorDocument 对象列表
+        """
+        try:
+            if not await self.namespace_exists(namespace):
+                return []
+
+            collection = self.client.get_collection(name=namespace)
+            include = ["documents", "metadatas"]
+            if include_embeddings:
+                include.append("embeddings")
+
+            results = collection.get(include=include)
+            ids = results.get("ids") or []
+            documents = results.get("documents") or []
+            metadatas = results.get("metadatas") or []
+            embeddings = results.get("embeddings") or []
+
+            output: List[VectorDocument] = []
+            for index, doc_id in enumerate(ids):
+                output.append(
+                    VectorDocument(
+                        id=doc_id,
+                        text=documents[index] if index < len(documents) else "",
+                        embedding=embeddings[index] if include_embeddings and index < len(embeddings) else None,
+                        metadata=metadatas[index] if index < len(metadatas) else None,
+                    )
+                )
+
+            return output
+
+        except Exception as e:
+            raise VectorDBError(f"读取文档失败: {str(e)}", code="LIST_DOCUMENTS_ERROR")
+
     async def get_namespace_stats(
         self,
         namespace: str,

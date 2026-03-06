@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { deleteFragment, fetchFragmentDetail, fetchFragments } from '@/features/fragments/api';
+import {
+  deleteFragment,
+  fetchFragmentDetail,
+  fetchFragmentVisualization,
+  fetchFragments,
+} from '@/features/fragments/api';
 import { useAsyncList } from '@/hooks/useAsyncList';
-import type { Fragment } from '@/types/fragment';
+import type { Fragment, FragmentVisualizationResponse } from '@/types/fragment';
 
 export function useFragments() {
   const loadFragments = useCallback(async (): Promise<Fragment[]> => {
@@ -83,6 +88,36 @@ export function useSelectedFragments(fragmentIds?: string | string[]) {
     fragments,
     isLoading,
     error,
+  };
+}
+
+export function useFragmentVisualization() {
+  const [visualization, setVisualization] = useState<FragmentVisualizationResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadVisualization = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await fetchFragmentVisualization();
+      setVisualization(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '读取灵感云图失败');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadVisualization();
+  }, [loadVisualization]);
+
+  return {
+    visualization,
+    isLoading,
+    error,
+    reloadVisualization: loadVisualization,
   };
 }
 

@@ -129,7 +129,7 @@ pip install python-docx==1.1.2
 | 12.1 | 碎片自动向量化 | ✅ 已完成 | P0 |
 | 12.2 | 碎片语义相似度查询 | ✅ 已完成 | P0 |
 | 12.3 | Mode B 检索历史碎片 | ⏳ 待实施 | P0 |
-| 12.4 | **碎片向量可视化（MVP 轻量版）** | ⏳ 待实施 | P1 |
+| 12.4 | **碎片向量可视化（MVP 轻量版）** | ✅ 已完成 | P1 |
 | 12.5 | 知识库文档向量化（可选） | ⏳ 待实施 | P2 |
 
 ### 12.1 碎片自动向量化
@@ -322,6 +322,17 @@ Response: {
     }
 }
 ```
+
+**已完成实现（2026-03-06）**:
+- ✅ 向量数据库抽象层新增 `list_documents()`，Chroma 实现支持批量读取已有 embedding
+- ✅ 新增 `backend/services/vector_visualization_service.py`，完成向量回读、SQLite 回表、PCA 投影、聚类和类别命名
+- ✅ 新增 `GET /api/fragments/visualization` 接口
+- ✅ 补充后端测试场景：未认证、脏向量过滤、8 条碎片时的聚类响应
+- ✅ App 新增 `/fragment-cloud` 页面和碎片库入口
+- ✅ 支持点位点击、主题筛选、加入待生成列表并跳转 `/generate`
+- ✅ 旧碎片打开云图时会自动尝试回填向量，避免只有新碎片可见
+- ✅ 若 DashScope embedding 不可用，则降级为基于 `tags/summary/transcript` 的本地文本特征云图
+- ✅ 修复 Embedding 工厂 `DASHSCOPE_API_KEY` 透传缺失与 fragments domain 循环依赖问题
 
 **类别命名策略（首版）**:
 1. 优先统计每个簇中碎片 `tags` 的高频词
