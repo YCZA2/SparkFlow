@@ -6,7 +6,7 @@
 import { StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Text, View } from '@/components/Themed';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/features/auth/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 /**

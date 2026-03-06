@@ -11,8 +11,8 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Text } from '@/components/Themed';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
-import { useGenerateScript } from '@/hooks/useGenerateScript';
-import { useSelectedFragments } from '@/hooks/useSelectedFragments';
+import { useSelectedFragments } from '@/features/fragments/hooks';
+import { useGenerateScript } from '@/features/scripts/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
 import type { ScriptMode } from '@/types/script';

@@ -11,7 +11,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 
 import { Text } from '@/components/Themed';
-import { useNetworkSettings } from '@/hooks/useNetworkSettings';
+import { useNetworkSettings } from '@/features/network/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 const DEFAULT_URL = 'http://192.168.31.157:8000';

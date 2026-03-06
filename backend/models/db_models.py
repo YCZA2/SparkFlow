@@ -5,8 +5,7 @@ SQLAlchemy 数据模型定义
 """
 
 import uuid
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Integer, Boolean
 from sqlalchemy.orm import relationship
@@ -17,6 +16,11 @@ from models.database import Base
 def generate_uuid() -> str:
     """生成 UUID 字符串"""
     return str(uuid.uuid4())
+
+
+def utc_now() -> datetime:
+    """使用 timezone-aware UTC 时间，避免 utcnow 弃用告警。"""
+    return datetime.now(timezone.utc)
 
 
 class User(Base):
@@ -31,7 +35,7 @@ class User(Base):
     role = Column(String, default="user", nullable=False)  # 'user' | 'creator'
     nickname = Column(String, nullable=True)
     storage_quota = Column(Integer, default=1073741824)  # 预留：存储配额(字节)，默认1GB
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     # 关联关系
     fragments = relationship("Fragment", back_populates="user", cascade="all, delete-orphan")
@@ -59,7 +63,7 @@ class Fragment(Base):
     tags = Column(String, nullable=True)  # JSON数组字符串，AI自动标签
     source = Column(String, default="voice", nullable=False)  # 'voice'|'manual'|'video_parse'
     sync_status = Column(String, default="pending", nullable=False)  # 'pending'|'syncing'|'synced'|'failed'
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     # 关联关系
     user = relationship("User", back_populates="fragments")
@@ -84,7 +88,7 @@ class Script(Base):
     source_fragment_ids = Column(String, nullable=True)  # JSON数组字符串，关联碎片ID
     status = Column(String, default="draft", nullable=False)  # 'draft'|'ready'|'filmed'
     is_daily_push = Column(Boolean, default=False, nullable=False)  # 是否每日自动生成
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     # 关联关系
     user = relationship("User", back_populates="scripts")
@@ -107,7 +111,7 @@ class KnowledgeDoc(Base):
     content = Column(Text, nullable=False)
     doc_type = Column(String, nullable=False)  # 'high_likes'|'language_habit'
     vector_ref_id = Column(String, nullable=True)  # 向量库中的引用ID，格式：docs_{user_id}:{doc_id}
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     # 关联关系
     user = relationship("User", back_populates="knowledge_docs")
@@ -129,7 +133,7 @@ class Agent(Base):
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     status = Column(String, default="private", nullable=False)  # 'private'|'pending'|'published'
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     # 关联关系
     creator = relationship("User", back_populates="agents")

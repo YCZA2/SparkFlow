@@ -1,14 +1,44 @@
-import { useEffect, useMemo, useState } from 'react';
-import { fetchFragmentDetail } from '@/features/fragments/api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { deleteFragment, fetchFragmentDetail, fetchFragments } from '@/features/fragments/api';
+import { useAsyncList } from '@/hooks/useAsyncList';
 import type { Fragment } from '@/types/fragment';
+
+export function useFragments() {
+  const loadFragments = useCallback(async (): Promise<Fragment[]> => {
+    const response = await fetchFragments();
+    return response.items || [];
+  }, []);
+
+  const list = useAsyncList(loadFragments);
+
+  return {
+    fragments: list.items,
+    items: list.items,
+    isLoading: list.isLoading,
+    isRefreshing: list.isRefreshing,
+    error: list.error,
+    total: list.items.length,
+    fetchFragments: list.reload,
+    refreshFragments: list.refresh,
+    reload: list.reload,
+    refresh: list.refresh,
+  };
+}
 
 export function useSelectedFragments(fragmentIds?: string | string[]) {
   const ids = useMemo(() => {
     if (!fragmentIds) return [];
     if (Array.isArray(fragmentIds)) {
-      return fragmentIds.flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean);
+      return fragmentIds
+        .flatMap((value) => value.split(','))
+        .map((value) => value.trim())
+        .filter(Boolean);
     }
-    return fragmentIds.split(',').map((value) => value.trim()).filter(Boolean);
+    return fragmentIds
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
   }, [fragmentIds]);
 
   const [fragments, setFragments] = useState<Fragment[]>([]);
@@ -58,3 +88,5 @@ export function useSelectedFragments(fragmentIds?: string | string[]) {
     error,
   };
 }
+
+export { deleteFragment, fetchFragmentDetail };

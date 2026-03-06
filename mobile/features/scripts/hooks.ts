@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { generateScript } from '@/features/scripts/api';
-import type { ScriptMode } from '@/types/script';
+import { useCallback, useState } from 'react';
+
+import { fetchScripts, generateScript } from '@/features/scripts/api';
+import { useAsyncList } from '@/hooks/useAsyncList';
+import type { Script, ScriptMode } from '@/types/script';
 
 export function useGenerateScript() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -28,4 +30,13 @@ export function useGenerateScript() {
     error,
     run,
   };
+}
+
+export function useScripts() {
+  const loadScripts = useCallback(async (): Promise<Script[]> => {
+    const response = await fetchScripts();
+    return response.items || [];
+  }, []);
+
+  return useAsyncList(loadScripts);
 }

@@ -5,7 +5,7 @@ import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { Text } from '@/components/Themed';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { ScriptCard } from '@/components/ScriptCard';
-import { useScripts } from '@/hooks/useScripts';
+import { useScripts } from '@/features/scripts/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 export default function ScriptsScreen() {

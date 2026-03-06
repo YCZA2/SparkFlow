@@ -9,8 +9,8 @@ from core import success_response
 from core.exceptions import ServiceUnavailableError
 from core.auth import get_current_user
 from domains.fragments import service as fragment_service
+from domains.transcription import service as transcription_service
 from models.database import get_db
-from services import transcription_service
 from services.factory import get_stt_service
 
 router = APIRouter(

@@ -15,10 +15,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from main import app
+from domains.transcription import upload as transcription_upload
+from domains.transcription import workflow as transcription_workflow
 from models import Base, Fragment
 from models.database import get_db
 from routers.auth import TEST_USER_ID
-from services import transcription_service
 
 
 class BackendFlowTestCase(unittest.TestCase):
@@ -127,7 +128,7 @@ class BackendFlowTestCase(unittest.TestCase):
         with (
             patch("routers.transcribe.get_stt_service", return_value=object()),
             patch("routers.transcribe.asyncio.create_task", side_effect=discard_task),
-            patch.object(transcription_service.settings, "UPLOAD_DIR", self.temp_dir.name),
+            patch.object(transcription_upload.settings, "UPLOAD_DIR", self.temp_dir.name),
         ):
             response = self.client.post(
                 "/api/transcribe/",
@@ -160,12 +161,12 @@ class BackendFlowTestCase(unittest.TestCase):
 
         fake_stt = SimpleNamespace(transcribe=AsyncMock(return_value=SimpleNamespace(text="转写完成")))
         with (
-            patch.object(transcription_service, "SessionLocal", self.SessionLocal),
-            patch.object(transcription_service, "get_stt_service", return_value=fake_stt),
-            patch.object(transcription_service, "generate_summary_and_tags", AsyncMock(return_value=("摘要", ["标签"]))),
+            patch.object(transcription_workflow, "SessionLocal", self.SessionLocal),
+            patch.object(transcription_workflow, "get_stt_service", return_value=fake_stt),
+            patch.object(transcription_workflow, "generate_summary_and_tags", AsyncMock(return_value=("摘要", ["标签"]))),
         ):
             result = asyncio.run(
-                transcription_service.transcribe_with_retry(
+                transcription_workflow.transcribe_with_retry(
                     audio_path="/tmp/test.m4a",
                     fragment_id=fragment_id,
                     user_id=TEST_USER_ID,
@@ -194,13 +195,13 @@ class BackendFlowTestCase(unittest.TestCase):
 
         fake_failed_stt = SimpleNamespace(transcribe=AsyncMock(side_effect=RuntimeError("stt fail")))
         with (
-            patch.object(transcription_service, "SessionLocal", self.SessionLocal),
-            patch.object(transcription_service, "get_stt_service", return_value=fake_failed_stt),
-            patch.object(transcription_service, "generate_summary_and_tags", AsyncMock(return_value=("摘要", ["标签"]))),
-            patch("services.transcription_service.asyncio.sleep", new=AsyncMock(return_value=None)),
+            patch.object(transcription_workflow, "SessionLocal", self.SessionLocal),
+            patch.object(transcription_workflow, "get_stt_service", return_value=fake_failed_stt),
+            patch.object(transcription_workflow, "generate_summary_and_tags", AsyncMock(return_value=("摘要", ["标签"]))),
+            patch("domains.transcription.workflow.asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
             result = asyncio.run(
-                transcription_service.transcribe_with_retry(
+                transcription_workflow.transcribe_with_retry(
                     audio_path="/tmp/test-failed.m4a",
                     fragment_id=failed_fragment_id,
                     user_id=TEST_USER_ID,

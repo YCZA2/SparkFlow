@@ -8,8 +8,11 @@ import os
 from functools import lru_cache
 from typing import Optional
 
-from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+FALSEY_DEBUG_VALUES = {"0", "false", "off", "no", "release", "prod", "production"}
+TRUTHY_DEBUG_VALUES = {"1", "true", "on", "yes", "debug", "dev", "development"}
 
 
 class Settings(BaseSettings):
@@ -111,11 +114,23 @@ class Settings(BaseSettings):
         description="最大上传文件大小（字节）"
     )
 
-    class Config:
-        """Pydantic 配置"""
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug_value(cls, value):
+        """允许历史上的 release/debug 字符串配置。"""
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in FALSEY_DEBUG_VALUES:
+                return False
+            if normalized in TRUTHY_DEBUG_VALUES:
+                return True
+        return value
 
     def ensure_directories(self):
         """确保所需目录存在"""

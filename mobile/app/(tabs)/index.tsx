@@ -1,8 +1,7 @@
 import React from 'react';
 import { Alert, ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from '@/components/Themed';
-import { useAudioRecorder } from '@/hooks/useAudioRecorder';
-import { useAudioUpload } from '@/hooks/useAudioUpload';
+import { useAudioRecorder, useAudioUpload } from '@/features/recording/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 function getStatusText(status: 'idle' | 'recording' | 'recorded', durationLabel: string) {
