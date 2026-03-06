@@ -1,8 +1,6 @@
 """语音转写路由模块。"""
 
-import asyncio
-
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
 from sqlalchemy.orm import Session
 
 from core import success_response
@@ -22,6 +20,7 @@ router = APIRouter(
 
 @router.post("/", status_code=status.HTTP_200_OK)
 async def upload_audio(
+    background_tasks: BackgroundTasks,
     audio: UploadFile = File(..., description="音频文件 (.m4a, .wav, .mp3 等)"),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -45,12 +44,11 @@ async def upload_audio(
         relative_path=saved["relative_path"],
     )
 
-    asyncio.create_task(
-        transcription_service.transcribe_with_retry(
-            audio_path=saved["file_path"],
-            fragment_id=fragment.id,
-            user_id=user_id,
-        )
+    transcription_service.enqueue_transcription_job(
+        background_tasks,
+        audio_path=saved["file_path"],
+        fragment_id=fragment.id,
+        user_id=user_id,
     )
 
     return success_response(

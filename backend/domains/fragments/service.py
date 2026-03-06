@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
@@ -14,18 +15,35 @@ from . import repository
 VALID_FRAGMENT_SOURCES = {"voice", "manual", "video_parse"}
 
 
-def serialize_fragment(fragment: Fragment, include_audio_path: bool = False) -> dict[str, Any]:
+def _parse_tags(tags_raw: Optional[str]) -> Optional[list[str]]:
+    if not tags_raw:
+        return None
+
+    try:
+        parsed = json.loads(tags_raw)
+    except json.JSONDecodeError:
+        parsed = None
+
+    if isinstance(parsed, list):
+        return [str(tag) for tag in parsed if tag]
+
+    fallback_tags = [tag.strip() for tag in tags_raw.split(",") if tag.strip()]
+    return fallback_tags or None
+
+
+def serialize_fragment(fragment: Fragment, include_audio_path: bool = True) -> dict[str, Any]:
     data = {
         "id": fragment.id,
         "transcript": fragment.transcript,
         "summary": fragment.summary,
-        "tags": fragment.tags,
+        "tags": _parse_tags(fragment.tags),
         "source": fragment.source,
         "sync_status": fragment.sync_status,
         "created_at": fragment.created_at.isoformat() if fragment.created_at else None,
+        "audio_path": fragment.audio_path,
     }
-    if include_audio_path:
-        data["audio_path"] = fragment.audio_path
+    if not include_audio_path:
+        data.pop("audio_path", None)
     return data
 
 

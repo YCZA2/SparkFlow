@@ -12,26 +12,10 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/Themed';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { deleteFragment, fetchFragmentDetail } from '@/features/fragments/api';
+import { normalizeFragmentTags } from '@/features/fragments/utils';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
 import { formatDate } from '@/utils/date';
-
-function parseTags(tagsStr: string | null): string[] {
-  if (!tagsStr) return [];
-  const trimmed = tagsStr.trim();
-  if (!trimmed) return [];
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((tag): tag is string => typeof tag === 'string');
-      }
-    } catch {
-      // Fallback handled below.
-    }
-  }
-  return trimmed.split(',').map((tag) => tag.trim()).filter(Boolean);
-}
 
 function getSourceLabel(source: string): string {
   const labels: Record<string, string> = {
@@ -145,7 +129,7 @@ export default function FragmentDetailScreen() {
   }
 
   const syncStatus = getSyncStatusLabel(theme, fragment.sync_status);
-  const tags = parseTags(fragment.tags);
+  const tags = normalizeFragmentTags(fragment.tags);
 
   return (
     <>

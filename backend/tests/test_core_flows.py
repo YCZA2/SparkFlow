@@ -93,6 +93,7 @@ class BackendFlowTestCase(unittest.TestCase):
         script_data = response.json()["data"]
         self.assertEqual(script_data["content"], "生成后的口播稿")
         self.assertEqual(script_data["mode"], "mode_a")
+        self.assertEqual(script_data["source_fragment_ids"], [fragment_id])
 
         missing_fragment_response = self.client.post(
             "/api/scripts/generate",
@@ -121,13 +122,9 @@ class BackendFlowTestCase(unittest.TestCase):
         self.assertEqual(failed_response.json()["error"]["code"], "VALIDATION_ERROR")
 
     def test_upload_audio_creates_syncing_fragment(self) -> None:
-        def discard_task(coro):
-            coro.close()
-            return None
-
         with (
             patch("routers.transcribe.get_stt_service", return_value=object()),
-            patch("routers.transcribe.asyncio.create_task", side_effect=discard_task),
+            patch("domains.transcription.tasks.run_transcription_job", new=AsyncMock(return_value={"success": True})),
             patch.object(transcription_upload.settings, "UPLOAD_DIR", self.temp_dir.name),
         ):
             response = self.client.post(
@@ -180,6 +177,7 @@ class BackendFlowTestCase(unittest.TestCase):
             self.assertEqual(updated.sync_status, "synced")
             self.assertEqual(updated.transcript, "转写完成")
             self.assertEqual(updated.summary, "摘要")
+            self.assertEqual(updated.tags, '["标签"]')
 
         with self.SessionLocal() as db:
             failed_fragment = Fragment(

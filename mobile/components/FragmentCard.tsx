@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { formatDate } from '@/utils/date';
 import type { Fragment } from '@/types/fragment';
+import { normalizeFragmentTags } from '@/features/fragments/utils';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 // 卡片组件属性
@@ -55,8 +56,7 @@ export function FragmentCard({
 
   const displayText = getDisplayText(fragment);
   const timeText = formatDate(fragment.created_at);
-  // 解析标签：支持 JSON 数组字符串或逗号分隔字符串
-  const tags: string[] = parseTags(fragment.tags);
+  const tags = normalizeFragmentTags(fragment.tags);
 
   return (
     <TouchableOpacity
@@ -151,29 +151,6 @@ export function FragmentCard({
       </View>
     </TouchableOpacity>
   );
-}
-
-/**
- * 解析标签字符串
- * 支持 JSON 数组字符串 '["标签1","标签2"]' 或逗号分隔字符串 '标签1,标签2'
- */
-function parseTags(tagsStr: string | null): string[] {
-  if (!tagsStr) return [];
-  const trimmed = tagsStr.trim();
-  if (!trimmed) return [];
-  // 尝试解析为 JSON 数组
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((t): t is string => typeof t === 'string');
-      }
-    } catch {
-      // JSON 解析失败，回退到逗号分隔
-    }
-  }
-  // 逗号分隔格式
-  return trimmed.split(',').map(t => t.trim()).filter(Boolean);
 }
 
 /**

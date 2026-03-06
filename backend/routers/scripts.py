@@ -42,7 +42,7 @@ class ScriptDetail(ScriptItem):
     """口播稿详情响应模型"""
 
     content: Optional[str]
-    source_fragment_ids: Optional[str]
+    source_fragment_ids: Optional[List[str]]
 
 
 router = APIRouter(

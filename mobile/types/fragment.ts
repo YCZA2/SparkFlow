@@ -8,16 +8,14 @@
 export interface Fragment {
   /** 碎片ID */
   id: string;
-  /** 用户ID */
-  user_id: string;
   /** 音频文件路径 */
   audio_path: string | null;
   /** 转写文本 */
   transcript: string | null;
   /** AI一句话摘要 */
   summary: string | null;
-  /** AI自动标签 JSON 字符串 */
-  tags: string | null;
+  /** AI自动标签 */
+  tags: string[] | null;
   /** 来源: voice | manual | video_parse */
   source: string;
   /** 同步状态: pending | syncing | synced | failed */

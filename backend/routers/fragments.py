@@ -38,10 +38,11 @@ class FragmentItem(BaseModel):
     id: str
     transcript: Optional[str]
     summary: Optional[str]
-    tags: Optional[str]
+    tags: Optional[List[str]]
     source: str
     sync_status: str
     created_at: str
+    audio_path: Optional[str] = None
 
 
 class FragmentDetail(FragmentItem):

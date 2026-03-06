@@ -1,4 +1,4 @@
-"""Async transcription workflow."""
+"""Async transcription job execution workflow."""
 
 from __future__ import annotations
 
@@ -107,3 +107,12 @@ async def transcribe_with_retry(
             "fragment_id": fragment_id,
             "error": f"转写过程异常: {str(exc)}",
         }
+
+
+async def run_transcription_job(audio_path: str, fragment_id: str, user_id: str) -> dict[str, Any]:
+    """Entry point used by background task runners."""
+    return await transcribe_with_retry(
+        audio_path=audio_path,
+        fragment_id=fragment_id,
+        user_id=user_id,
+    )
