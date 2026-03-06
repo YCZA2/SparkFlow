@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 
 from core import success_response, paginated_data
 from core.auth import get_current_user
+from domains.fragments import service as fragment_service
 from models.database import get_db
-from services import fragment_service
 
 
 # ========== Pydantic 请求/响应模型 ==========

@@ -11,7 +11,7 @@ import {
   getUserInfo,
   loginWithTestUser,
   testConnection,
-} from '@/services';
+} from '@/features/test-support/api';
 
 export interface TestResult {
   name: string;
