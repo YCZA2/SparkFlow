@@ -16,7 +16,7 @@ from core.exceptions import (
     AuthenticationError,
 )
 from core.auth import get_current_user
-from routers import auth, fragments, transcribe, scripts
+from routers import auth, fragments, transcribe, scripts, knowledge
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -155,6 +155,7 @@ app.include_router(auth.router)
 app.include_router(fragments.router)
 app.include_router(transcribe.router)
 app.include_router(scripts.router)
+app.include_router(knowledge.router)
 
 
 # Phase 1.2: API Response Format Test Endpoints

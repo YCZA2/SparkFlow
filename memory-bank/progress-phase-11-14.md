@@ -1,6 +1,6 @@
 # SparkFlow — 阶段 11-14: 知识库、向量数据库、每日推盘与全流程验证
 
-> 最后更新：2026-03-04
+> 最后更新：2026-03-05
 
 ---
 
@@ -10,21 +10,32 @@
 
 | 步骤 | 任务 | 状态 |
 |------|------|------|
-| 11.1 | 实现知识库文档上传 API | ⏳ 待实施 |
-| 11.2 | 实现知识库文档列表 API | ⏳ 待实施 |
-| 11.3 | 实现文件上传解析 (TXT/Word) | ⏳ 待实施 |
+| 11.1 | 实现知识库文档上传 API | ✅ 已完成 |
+| 11.2 | 实现知识库文档列表 API | ✅ 已完成 |
+| 11.3 | 实现文件上传解析 (TXT/Word) | ✅ 已完成 |
 | 11.4 | 前端知识库管理入口 | ⏳ 待实施 |
+
+### 架构设计
+
+**路由层与服务层分离**:
+- **路由层** (`routers/knowledge.py`): 负责 HTTP 请求处理、参数验证、调用服务层
+- **服务层** (`services/knowledge_service.py`): 封装业务逻辑、数据库操作、文件解析
+
+这种分离模式与 `fragment_service` 和 `script_service` 保持一致，符合项目架构规范。
 
 ### 11.1 知识库文档上传 API
 
-**文件**: `backend/routers/knowledge.py`
+**文件**:
+- `backend/routers/knowledge.py` - 路由层
+- `backend/services/knowledge_service.py` - 服务层
 
-**端点**: `POST /api/knowledge`
+**端点**:
+- `POST /api/knowledge` - JSON 方式上传
+- `POST /api/knowledge/upload` - 文件上传方式（支持 .txt 和 .docx）
 
-**请求体**:
+**请求体 (JSON 方式)**:
 ```json
 {
-  "user_id": "test-user-001",
   "title": "我的高赞文案合集",
   "content": "这是一段很长的文案内容...",
   "doc_type": "high_likes"
@@ -35,22 +46,47 @@
 - `'high_likes'` - 高赞文案
 - `'language_habit'` - 语言习惯记录
 
+**功能**:
+- ✅ 创建知识库文档记录到 SQLite
+- ✅ 自动关联当前用户
+- ✅ 验证文档类型有效性
+- ✅ 返回统一格式的成功响应
+
+**验证测试**:
+- [ ] 使用 Swagger UI 测试 JSON 方式上传
+- [ ] 测试文件上传方式（.txt 和 .docx）
+- [ ] 验证数据库记录正确创建
+
 ### 11.2 知识库文档列表 API
 
 **端点**: `GET /api/knowledge`
 
-**功能**: 返回当前用户的所有知识库文档列表
+**功能**:
+- ✅ 返回当前用户的所有知识库文档列表
+- ✅ 支持按 doc_type 过滤
+- ✅ 支持分页（limit/offset）
+- ✅ 按创建时间降序排列
+
+**额外端点**:
+- `GET /api/knowledge/{doc_id}` - 获取单个文档详情
+- `DELETE /api/knowledge/{doc_id}` - 删除文档
 
 ### 11.3 文件上传解析
 
 **支持格式**:
-- `.txt` - 直接读取文本内容
+- `.txt` - 直接读取 UTF-8 编码文本
 - `.docx` - 使用 `python-docx` 库提取文本
 
 **依赖**:
 ```bash
-pip install python-docx
+pip install python-docx==1.1.2
 ```
+
+**实现细节**:
+- ✅ 自动检测文件扩展名
+- ✅ 使用临时文件处理 .docx 文件
+- ✅ 验证文件内容非空
+- ✅ 错误处理：编码错误、解析失败、缺少依赖
 
 ### 11.4 前端知识库管理入口
 
