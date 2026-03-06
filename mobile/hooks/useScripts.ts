@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { fetchScripts } from '@/services/scripts';
+import { fetchScripts } from '@/features/scripts/api';
 import type { Script } from '@/types/script';
 import { useAsyncList } from './useAsyncList';
 

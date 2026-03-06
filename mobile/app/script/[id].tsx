@@ -4,7 +4,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Text } from '@/components/Themed';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
-import { fetchScriptDetail } from '@/services/scripts';
+import { fetchScriptDetail } from '@/features/scripts/api';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Script } from '@/types/script';
 import { formatDate } from '@/utils/date';

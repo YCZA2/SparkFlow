@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { uploadAudio } from '@/services/transcribe';
-import { ApiError } from '@/services/client';
+import { uploadAudio } from '@/features/recording/api';
+import { ApiError } from '@/features/core/api/client';
 
 interface UploadResult {
   fragment_id: string;

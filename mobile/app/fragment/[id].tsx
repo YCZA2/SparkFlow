@@ -11,7 +11,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Text } from '@/components/Themed';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
-import { deleteFragment, fetchFragmentDetail } from '@/services/fragments';
+import { deleteFragment, fetchFragmentDetail } from '@/features/fragments/api';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
 import { formatDate } from '@/utils/date';

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchFragmentDetail } from '@/services/fragments';
+import { fetchFragmentDetail } from '@/features/fragments/api';
 import type { Fragment } from '@/types/fragment';
 
 export function useSelectedFragments(fragmentIds?: string | string[]) {

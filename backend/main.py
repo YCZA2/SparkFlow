@@ -162,11 +162,13 @@ async def health_check():
     })
 
 
-# 注册路由
+# 注册核心主链路路由
 app.include_router(auth.router)
 app.include_router(fragments.router)
 app.include_router(transcribe.router)
 app.include_router(scripts.router)
+
+# 预留扩展能力：知识库接口仍然可用，但尚未接入主创作链路。
 app.include_router(knowledge.router)
 
 

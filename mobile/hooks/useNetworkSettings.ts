@@ -6,7 +6,7 @@ import {
   inferBackendUrl,
   setBackendUrl,
   testBackendUrl,
-} from '@/utils/networkConfig';
+} from '@/features/network/api';
 
 interface NetworkDiagnostics {
   deviceIp: string | null;

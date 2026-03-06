@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { generateScript } from '@/services/scripts';
+import { generateScript } from '@/features/scripts/api';
 import type { ScriptMode } from '@/types/script';
 
 export function useGenerateScript() {

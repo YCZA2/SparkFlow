@@ -1,5 +1,5 @@
 import { useAppSession } from '@/providers/AppSessionProvider';
-export type { UserInfo } from '@/services/auth';
+export type { UserInfo } from '@/features/auth/api';
 
 export function useAuth() {
   const session = useAppSession();

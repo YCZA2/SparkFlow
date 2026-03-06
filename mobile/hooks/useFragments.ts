@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { deleteFragment, fetchFragmentDetail, fetchFragments } from '@/services/fragments';
+import { deleteFragment, fetchFragmentDetail, fetchFragments } from '@/features/fragments/api';
 import type { Fragment } from '@/types/fragment';
 import { useAsyncList } from './useAsyncList';
 

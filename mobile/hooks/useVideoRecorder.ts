@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { CameraType, CameraView } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
-import { updateScriptStatus } from '@/services/scripts';
+import { updateScriptStatus } from '@/features/scripts/api';
 
 export function useVideoRecorder(scriptId?: string) {
   const cameraRef = useRef<CameraView>(null);

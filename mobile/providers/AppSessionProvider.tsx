@@ -8,7 +8,7 @@ import {
   parseUserFromToken,
   saveUserInfo,
   type UserInfo,
-} from '@/services/auth';
+} from '@/features/auth/api';
 
 interface AppSessionContextValue {
   isReady: boolean;

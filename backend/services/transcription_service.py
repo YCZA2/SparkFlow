@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.exceptions import ValidationError
-from models import Fragment
+from domains.fragments import repository as fragment_repository
 from models.database import SessionLocal
 from services.factory import get_stt_service
 from services.llm_service import generate_summary_and_tags
@@ -111,9 +111,7 @@ async def save_uploaded_audio(audio: UploadFile, user_id: str) -> dict[str, Any]
             field_errors={"audio": f"文件写入错误: {str(exc)}"},
         ) from exc
 
-    upload_root = Path(settings.UPLOAD_DIR)
-    if not upload_root.is_absolute():
-        upload_root = Path.cwd() / upload_root
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
     relative_path = file_path.relative_to(upload_root.parent)
 
     return {
@@ -125,27 +123,18 @@ async def save_uploaded_audio(audio: UploadFile, user_id: str) -> dict[str, Any]
 
 def create_fragment_for_transcription(db: Session, user_id: str, relative_path: str) -> Fragment:
     """Create a fragment row in syncing state before async transcription."""
-    fragment = Fragment(
+    return fragment_repository.create(
+        db=db,
         user_id=user_id,
-        audio_path=relative_path,
+        transcript=None,
         source="voice",
+        audio_path=relative_path,
         sync_status="syncing",
     )
-    db.add(fragment)
-    db.commit()
-    db.refresh(fragment)
-    return fragment
 
 
 def _mark_fragment_failed(db: Session, fragment_id: str, user_id: str) -> None:
-    fragment = (
-        db.query(Fragment)
-        .filter(Fragment.id == fragment_id, Fragment.user_id == user_id)
-        .first()
-    )
-    if fragment:
-        fragment.sync_status = "failed"
-        db.commit()
+    fragment_repository.mark_failed(db=db, fragment_id=fragment_id, user_id=user_id)
 
 
 def _mark_fragment_synced(
@@ -156,20 +145,14 @@ def _mark_fragment_synced(
     summary: Optional[str],
     tags_json: Optional[str],
 ) -> bool:
-    fragment = (
-        db.query(Fragment)
-        .filter(Fragment.id == fragment_id, Fragment.user_id == user_id)
-        .first()
+    return fragment_repository.mark_synced(
+        db=db,
+        fragment_id=fragment_id,
+        user_id=user_id,
+        transcript=transcript,
+        summary=summary,
+        tags_json=tags_json,
     )
-    if not fragment:
-        return False
-
-    fragment.transcript = transcript
-    fragment.summary = summary
-    fragment.tags = tags_json
-    fragment.sync_status = "synced"
-    db.commit()
-    return True
 
 
 async def transcribe_with_retry(
