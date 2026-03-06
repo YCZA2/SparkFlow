@@ -24,7 +24,6 @@ import {
   inferBackendUrl,
   getNetworkDiagnostics,
 } from '@/utils/networkConfig';
-import { testConnection } from '@/utils/api';
 
 /**
  * 网络设置页面

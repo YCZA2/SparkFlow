@@ -7,6 +7,7 @@ import { StyleSheet, TouchableOpacity, useColorScheme, ScrollView } from 'react-
 import { useRouter } from 'expo-router';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/hooks/useAuth';
+import { useAppTheme } from '@/theme/useAppTheme';
 
 /**
  * 菜单项组件
@@ -56,28 +57,29 @@ export default function ProfileScreen() {
   const isDark = colorScheme === 'dark';
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
+  const theme = useAppTheme();
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: isDark ? '#000000' : '#F2F2F7' }]}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       {/* 用户信息卡片 */}
-      <View style={[styles.userCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
+      <View style={[styles.userCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>👤</Text>
         </View>
         <View style={styles.userInfo}>
-          <Text style={[styles.userName, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+          <Text style={[styles.userName, { color: theme.colors.text }]}>
             {isAuthenticated ? user?.nickname || '测试博主' : '未登录'}
           </Text>
-          <Text style={[styles.userId, { color: isDark ? '#8E8E93' : '#666666' }]}>
+          <Text style={[styles.userId, { color: theme.colors.textSubtle }]}>
             {isAuthenticated ? `ID: ${user?.user_id}` : '点击登录'}
           </Text>
         </View>
       </View>
 
       {/* 功能菜单 */}
-      <View style={[styles.menuSection, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
+      <View style={[styles.menuSection, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
         <MenuItem
           icon="📚"
           title="我的方法论"
@@ -95,7 +97,7 @@ export default function ProfileScreen() {
       </View>
 
       {/* 设置菜单 */}
-      <View style={[styles.menuSection, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
+      <View style={[styles.menuSection, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
         <MenuItem
           icon="🌐"
           title="网络设置"
@@ -113,7 +115,7 @@ export default function ProfileScreen() {
       </View>
 
       {/* 关于 */}
-      <View style={[styles.menuSection, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
+      <View style={[styles.menuSection, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
         <MenuItem
           icon="ℹ️"
           title="关于"

@@ -2,12 +2,13 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { PaperProvider } from 'react-native-paper';
 
+import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { useColorScheme } from '@/components/useColorScheme';
-import { initApiBaseUrl } from '@/constants/config';
+import { AppSessionProvider, useAppSession } from '@/providers/AppSessionProvider';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -26,22 +27,6 @@ export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
-  const [apiInitialized, setApiInitialized] = useState(false);
-
-  // 初始化 API 基础地址
-  useEffect(() => {
-    async function init() {
-      try {
-        await initApiBaseUrl();
-        console.log('[App] API 基础地址已初始化');
-      } catch (error) {
-        console.error('[App] API 基础地址初始化失败:', error);
-      } finally {
-        setApiInitialized(true);
-      }
-    }
-    init();
-  }, []);
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
@@ -49,20 +34,41 @@ export default function RootLayout() {
   }, [error]);
 
   useEffect(() => {
-    if (loaded && apiInitialized) {
+    if (loaded) {
       SplashScreen.hideAsync();
     }
-  }, [loaded, apiInitialized]);
+  }, [loaded]);
 
-  if (!loaded || !apiInitialized) {
+  if (!loaded) {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <AppSessionProvider>
+      <RootLayoutNav />
+    </AppSessionProvider>
+  );
 }
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const session = useAppSession();
+
+  if (!session.isReady) {
+    return <LoadingState message="正在准备应用..." />;
+  }
+
+  if (session.error) {
+    return (
+      <ScreenState
+        icon="⚠️"
+        title="应用初始化失败"
+        message={session.error}
+        actionLabel="重新登录"
+        onAction={session.loginWithTestUser}
+      />
+    );
+  }
 
   return (
     <PaperProvider>

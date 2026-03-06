@@ -1,6 +1,7 @@
 import React from 'react';
 import { SymbolView } from 'expo-symbols';
 import { Tabs } from 'expo-router';
+import { Platform } from 'react-native';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -8,6 +9,9 @@ import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const micIcon = Platform.select({ ios: 'mic.circle.fill', default: 'mic' }) as any;
+  const fragmentsIcon = Platform.select({ ios: 'square.stack.3d.up.fill', default: 'square.stack.3d.up.fill' }) as any;
+  const profileIcon = Platform.select({ ios: 'person.circle.fill', default: 'person.circle.fill' }) as any;
 
   return (
     <Tabs
@@ -23,11 +27,7 @@ export default function TabLayout() {
           title: '灵感捕手',
           tabBarIcon: ({ color }) => (
             <SymbolView
-              name={{
-                ios: 'mic.circle.fill',
-                android: 'mic',
-                web: 'mic',
-              }}
+              name={micIcon}
               tintColor={color}
               size={28}
             />
@@ -40,11 +40,7 @@ export default function TabLayout() {
           title: '碎片库',
           tabBarIcon: ({ color }) => (
             <SymbolView
-              name={{
-                ios: 'square.stack.3d.up.fill',
-                android: 'layers',
-                web: 'layers',
-              }}
+              name={fragmentsIcon}
               tintColor={color}
               size={28}
             />
@@ -57,11 +53,7 @@ export default function TabLayout() {
           title: '我的',
           tabBarIcon: ({ color }) => (
             <SymbolView
-              name={{
-                ios: 'person.circle.fill',
-                android: 'person',
-                web: 'person',
-              }}
+              name={profileIcon}
               tintColor={color}
               size={28}
             />

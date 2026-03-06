@@ -1,18 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
-import { fetchFragmentDetail } from '@/services/fragments';
-import { generateScript } from '@/services/scripts';
+import { Text } from '@/components/Themed';
+import { LoadingState, ScreenState } from '@/components/ScreenState';
+import { useGenerateScript } from '@/hooks/useGenerateScript';
+import { useSelectedFragments } from '@/hooks/useSelectedFragments';
+import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
 import type { ScriptMode } from '@/types/script';
 
@@ -24,40 +25,11 @@ function displayFragmentText(fragment: Fragment): string {
 
 export default function GenerateScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const { fragmentIds } = useLocalSearchParams<{ fragmentIds?: string }>();
-
-  const ids = useMemo(
-    () => (fragmentIds ? fragmentIds.split(',').map((id) => id.trim()).filter(Boolean) : []),
-    [fragmentIds]
-  );
-
-  const [fragments, setFragments] = useState<Fragment[]>([]);
-  const [isLoadingFragments, setIsLoadingFragments] = useState(true);
+  const theme = useAppTheme();
+  const { fragmentIds } = useLocalSearchParams<{ fragmentIds?: string | string[] }>();
+  const { ids, fragments, isLoading, error } = useSelectedFragments(fragmentIds);
   const [mode, setMode] = useState<ScriptMode>('mode_a');
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  useEffect(() => {
-    const load = async () => {
-      if (ids.length === 0) {
-        setIsLoadingFragments(false);
-        return;
-      }
-
-      try {
-        const detailList = await Promise.all(ids.map((id) => fetchFragmentDetail(id)));
-        setFragments(detailList);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : '读取碎片失败';
-        Alert.alert('加载失败', message);
-      } finally {
-        setIsLoadingFragments(false);
-      }
-    };
-
-    load();
-  }, [ids]);
+  const generator = useGenerateScript();
 
   const handleGenerate = async () => {
     if (ids.length === 0) {
@@ -66,96 +38,87 @@ export default function GenerateScreen() {
     }
 
     try {
-      setIsGenerating(true);
-      const script = await generateScript({
-        fragment_ids: ids,
-        mode,
-      });
+      const script = await generator.run(ids, mode);
       router.replace(`/script/${script.id}`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '生成失败';
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '生成失败';
       Alert.alert('生成失败', message);
-    } finally {
-      setIsGenerating(false);
     }
   };
 
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Stack.Screen options={{ title: 'AI 编导' }} />
+        <LoadingState message="正在读取碎片..." />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Stack.Screen options={{ title: 'AI 编导' }} />
+        <ScreenState icon="⚠️" title="加载失败" message={error} actionLabel="返回碎片库" onAction={() => router.back()} />
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#F2F2F7' }]}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ title: 'AI 编导' }} />
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-          已选碎片（{ids.length}）
-        </Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>已选碎片（{ids.length}）</Text>
 
-        {isLoadingFragments ? (
-          <View style={styles.centerBlock}>
-            <ActivityIndicator size="small" color="#007AFF" />
-            <Text style={[styles.helperText, { color: isDark ? '#8E8E93' : '#8E8E93' }]}>
-              正在读取碎片...
-            </Text>
-          </View>
+        {fragments.length === 0 ? (
+          <ScreenState title="未选择碎片" message="请返回碎片库至少选择 1 条碎片。" />
         ) : (
           fragments.map((fragment) => (
             <View
               key={fragment.id}
-              style={[styles.fragmentCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}
+              style={[styles.fragmentCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}
             >
-              <Text style={[styles.fragmentText, { color: isDark ? '#FFFFFF' : '#111111' }]}>
+              <Text style={[styles.fragmentText, { color: theme.colors.text }]}>
                 {displayFragmentText(fragment)}
               </Text>
             </View>
           ))
         )}
 
-        <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-          生成模式
-        </Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>生成模式</Text>
 
-        <TouchableOpacity
-          style={[
-            styles.modeCard,
-            { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' },
-            mode === 'mode_a' && styles.modeCardActive,
-          ]}
-          onPress={() => setMode('mode_a')}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.modeTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-            导师爆款模式
-          </Text>
-          <Text style={[styles.modeDesc, { color: isDark ? '#8E8E93' : '#666666' }]}>
-            黄金结构，节奏强，适合直接拍摄
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.modeCard,
-            { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' },
-            mode === 'mode_b' && styles.modeCardActive,
-          ]}
-          onPress={() => setMode('mode_b')}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.modeTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-            我的专属二脑
-          </Text>
-          <Text style={[styles.modeDesc, { color: isDark ? '#8E8E93' : '#666666' }]}>
-            更自然，贴近个人表达习惯
-          </Text>
-        </TouchableOpacity>
+        {[
+          ['mode_a', '导师爆款模式', '黄金结构，节奏强，适合直接拍摄'],
+          ['mode_b', '我的专属二脑', '更自然，贴近个人表达习惯'],
+        ].map(([value, title, description]) => (
+          <TouchableOpacity
+            key={value}
+            style={[
+              styles.modeCard,
+              theme.shadow.card,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: mode === value ? theme.colors.primary : 'transparent',
+              },
+            ]}
+            onPress={() => setMode(value as ScriptMode)}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.modeTitle, { color: theme.colors.text }]}>{title}</Text>
+            <Text style={[styles.modeDesc, { color: theme.colors.textSubtle }]}>{description}</Text>
+          </TouchableOpacity>
+        ))}
       </ScrollView>
 
-      <View style={[styles.bottomBar, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
+      <View style={[styles.bottomBar, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
         <TouchableOpacity
-          style={[styles.generateButton, isGenerating && styles.generateButtonDisabled]}
+          style={[styles.generateButton, { backgroundColor: theme.colors.primary }]}
           onPress={handleGenerate}
-          disabled={isGenerating}
+          disabled={generator.status === 'loading' || ids.length === 0}
           activeOpacity={0.85}
         >
-          {isGenerating ? (
+          {generator.status === 'loading' ? (
             <View style={styles.generatingRow}>
               <ActivityIndicator color="#FFFFFF" />
               <Text style={styles.generateButtonText}>AI 正在编写…</Text>
@@ -164,6 +127,9 @@ export default function GenerateScreen() {
             <Text style={styles.generateButtonText}>生成口播稿</Text>
           )}
         </TouchableOpacity>
+        {generator.error ? (
+          <Text style={[styles.errorText, { color: theme.colors.danger }]}>{generator.error}</Text>
+        ) : null}
       </View>
     </View>
   );
@@ -175,21 +141,13 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 120,
+    paddingBottom: 140,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 12,
     marginTop: 6,
-  },
-  centerBlock: {
-    alignItems: 'center',
-    paddingVertical: 18,
-  },
-  helperText: {
-    marginTop: 8,
-    fontSize: 13,
   },
   fragmentCard: {
     borderRadius: 10,
@@ -205,10 +163,6 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 10,
     borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  modeCardActive: {
-    borderColor: '#007AFF',
   },
   modeTitle: {
     fontSize: 16,
@@ -225,19 +179,14 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#D1D1D6',
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
   generateButton: {
-    backgroundColor: '#007AFF',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
-  },
-  generateButtonDisabled: {
-    opacity: 0.75,
   },
   generatingRow: {
     flexDirection: 'row',
@@ -248,5 +197,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  errorText: {
+    marginTop: 8,
+    fontSize: 13,
+    textAlign: 'center',
   },
 });

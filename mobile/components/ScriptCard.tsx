@@ -4,9 +4,10 @@
  */
 
 import React from 'react';
-import { StyleSheet, TouchableOpacity, useColorScheme, View, Text } from 'react-native';
+import { StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import type { Script, ScriptMode, ScriptStatus } from '@/types/script';
 import { formatDate } from '@/utils/date';
+import { useAppTheme } from '@/theme/useAppTheme';
 
 /**
  * 获取模式标签
@@ -60,8 +61,7 @@ interface ScriptCardProps {
 }
 
 export function ScriptCard({ script, onPress }: ScriptCardProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const theme = useAppTheme();
 
   // 显示标题或内容前50字
   const displayTitle = script.title || script.content?.slice(0, 50) || '无标题口播稿';
@@ -74,14 +74,14 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
     <TouchableOpacity
       style={[
         styles.card,
-        { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' },
+        [theme.shadow.card, { backgroundColor: theme.colors.surface }],
       ]}
       onPress={() => onPress(script)}
       activeOpacity={0.7}
     >
       {/* 标题 */}
       <Text
-        style={[styles.title, { color: isDark ? '#FFFFFF' : '#000000' }]}
+        style={[styles.title, { color: theme.colors.text }]}
         numberOfLines={2}
       >
         {displayTitle}
@@ -109,9 +109,9 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
 
       {/* 时间 */}
       {script.created_at && (
-        <Text style={[styles.time, { color: isDark ? '#8E8E93' : '#666666' }]}>
-          {formatDate(script.created_at)}
-        </Text>
+          <Text style={[styles.time, { color: theme.colors.textSubtle }]}>
+            {formatDate(script.created_at)}
+          </Text>
       )}
     </TouchableOpacity>
   );
@@ -123,11 +123,6 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     padding: 16,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
   title: {
     fontSize: 16,

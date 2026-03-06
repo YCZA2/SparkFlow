@@ -9,10 +9,10 @@ import {
   TouchableOpacity,
   View,
   Text,
-  useColorScheme,
 } from 'react-native';
 import { formatDate } from '@/utils/date';
 import type { Fragment } from '@/types/fragment';
+import { useAppTheme } from '@/theme/useAppTheme';
 
 // 卡片组件属性
 interface FragmentCardProps {
@@ -51,8 +51,7 @@ export function FragmentCard({
   selectable = false,
   selected = false,
 }: FragmentCardProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const theme = useAppTheme();
 
   const displayText = getDisplayText(fragment);
   const timeText = formatDate(fragment.created_at);
@@ -63,7 +62,7 @@ export function FragmentCard({
     <TouchableOpacity
       style={[
         styles.container,
-        { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' },
+        [theme.shadow.card, { backgroundColor: theme.colors.surface }],
       ]}
       onPress={() => onPress?.(fragment)}
       activeOpacity={0.7}
@@ -74,8 +73,8 @@ export function FragmentCard({
             style={[
               styles.checkbox,
               {
-                borderColor: selected ? '#007AFF' : isDark ? '#3A3A3C' : '#C7C7CC',
-                backgroundColor: selected ? '#007AFF' : 'transparent',
+                borderColor: selected ? theme.colors.primary : theme.colors.border,
+                backgroundColor: selected ? theme.colors.primary : 'transparent',
               },
             ]}
           >
@@ -88,7 +87,7 @@ export function FragmentCard({
           <Text
             style={[
               styles.text,
-              { color: isDark ? '#FFFFFF' : '#000000' },
+              { color: theme.colors.text },
             ]}
             numberOfLines={2}
           >
@@ -105,13 +104,13 @@ export function FragmentCard({
               key={index}
               style={[
                 styles.tag,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' },
+                { backgroundColor: theme.colors.surfaceMuted },
               ]}
             >
               <Text
                 style={[
                   styles.tagText,
-                  { color: isDark ? '#8E8E93' : '#636366' },
+                  { color: theme.colors.textSubtle },
                 ]}
               >
                 {tag}
@@ -122,7 +121,7 @@ export function FragmentCard({
             <Text
               style={[
                 styles.moreTags,
-                { color: isDark ? '#8E8E93' : '#636366' },
+                { color: theme.colors.textSubtle },
               ]}
             >
               +{tags.length - 3}
@@ -136,7 +135,7 @@ export function FragmentCard({
         <Text
           style={[
             styles.time,
-            { color: isDark ? '#8E8E93' : '#8E8E93' },
+            { color: theme.colors.textSubtle },
           ]}
         >
           {timeText}
@@ -144,7 +143,7 @@ export function FragmentCard({
         <Text
           style={[
             styles.source,
-            { color: isDark ? '#8E8E93' : '#8E8E93' },
+            { color: theme.colors.textSubtle },
           ]}
         >
           {getSourceLabel(fragment.source)}
@@ -195,11 +194,6 @@ const styles = StyleSheet.create({
     padding: 16,
     marginHorizontal: 16,
     marginVertical: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   mainRow: {
     flexDirection: 'row',

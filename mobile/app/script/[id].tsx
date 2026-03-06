@@ -1,18 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  useColorScheme,
-} from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
+import { Text } from '@/components/Themed';
+import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { fetchScriptDetail } from '@/services/scripts';
-import { formatDate } from '@/utils/date';
+import { useAppTheme } from '@/theme/useAppTheme';
 import type { Script } from '@/types/script';
+import { formatDate } from '@/utils/date';
 
 function modeLabel(mode: string): string {
   return mode === 'mode_a' ? '导师爆款模式' : '我的专属二脑';
@@ -21,9 +16,7 @@ function modeLabel(mode: string): string {
 export default function ScriptDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-
+  const theme = useAppTheme();
   const [script, setScript] = useState<Script | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,10 +31,11 @@ export default function ScriptDetailScreen() {
 
       try {
         setError(null);
+        setIsLoading(true);
         const detail = await fetchScriptDetail(id);
         setScript(detail);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : '加载失败');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '加载失败');
       } finally {
         setIsLoading(false);
       }
@@ -50,63 +44,60 @@ export default function ScriptDetailScreen() {
     load();
   }, [id]);
 
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Stack.Screen options={{ title: '口播稿详情' }} />
+        <LoadingState message="加载中..." />
+      </View>
+    );
+  }
+
+  if (error || !script) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Stack.Screen options={{ title: '口播稿详情' }} />
+        <ScreenState icon="⚠️" title="加载失败" message={error || '口播稿不存在'} />
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#F2F2F7' }]}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ title: '口播稿详情' }} />
 
-      {isLoading ? (
-        <View style={styles.centerWrap}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={[styles.helperText, { color: '#8E8E93' }]}>加载中...</Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={[styles.metaCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.metaRow, { color: theme.colors.text }]}>模式：{modeLabel(script.mode)}</Text>
+          <Text style={[styles.metaRow, { color: theme.colors.text }]}>状态：{script.status}</Text>
+          <Text style={[styles.metaRow, { color: theme.colors.textSubtle }]}>
+            创建时间：{script.created_at ? formatDate(script.created_at) : '-'}
+          </Text>
         </View>
-      ) : error || !script ? (
-        <View style={styles.centerWrap}>
-          <Text style={[styles.errorText, { color: '#FF3B30' }]}>{error || '口播稿不存在'}</Text>
+
+        <View style={[styles.contentCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.contentTitle, { color: theme.colors.text }]}>文案内容</Text>
+          <Text style={[styles.scriptContent, { color: theme.colors.text }]}>{script.content || '无内容'}</Text>
         </View>
-      ) : (
-        <>
-          <ScrollView contentContainerStyle={styles.content}>
-            <View style={[styles.metaCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
-              <Text style={[styles.metaRow, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-                模式：{modeLabel(script.mode)}
-              </Text>
-              <Text style={[styles.metaRow, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-                状态：{script.status}
-              </Text>
-              <Text style={[styles.metaRow, { color: '#8E8E93' }]}>
-                创建时间：{script.created_at ? formatDate(script.created_at) : '-'}
-              </Text>
-            </View>
+      </ScrollView>
 
-            <View style={[styles.contentCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
-              <Text style={[styles.contentTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-                文案内容
-              </Text>
-              <Text style={[styles.scriptContent, { color: isDark ? '#E5E5EA' : '#111111' }]}>
-                {script.content || '无内容'}
-              </Text>
-            </View>
-          </ScrollView>
-
-          <View style={[styles.bottomBar, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
-            <TouchableOpacity
-              style={styles.shootButton}
-              activeOpacity={0.85}
-              onPress={() =>
-                router.push({
-                  pathname: '/shoot',
-                  params: {
-                    script_id: script.id,
-                    content: script.content ?? '',
-                  },
-                })
-              }
-            >
-              <Text style={styles.shootButtonText}>一键去拍摄</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
+      <View style={[styles.bottomBar, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
+        <TouchableOpacity
+          style={[styles.shootButton, { backgroundColor: theme.colors.danger }]}
+          activeOpacity={0.85}
+          onPress={() =>
+            router.push({
+              pathname: '/shoot',
+              params: {
+                script_id: script.id,
+                content: script.content ?? '',
+              },
+            })
+          }
+        >
+          <Text style={styles.shootButtonText}>一键去拍摄</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -114,18 +105,6 @@ export default function ScriptDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  centerWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  helperText: {
-    marginTop: 8,
-    fontSize: 14,
-  },
-  errorText: {
-    fontSize: 14,
   },
   content: {
     padding: 16,
@@ -159,12 +138,10 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#D1D1D6',
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
   shootButton: {
-    backgroundColor: '#FF3B30',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

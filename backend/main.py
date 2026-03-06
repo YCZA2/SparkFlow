@@ -118,6 +118,7 @@ async def health_check():
         health_check_factory: Callable[[], Awaitable[bool]],
     ) -> None:
         if not enabled:
+            services_status[name] = "disabled"
             return
         try:
             services_status[name] = "available" if await health_check_factory() else "unavailable"
@@ -125,6 +126,17 @@ async def health_check():
             services_status[name] = f"error: {str(e)}"
 
     from services.factory import get_llm_service, get_stt_service, get_vector_db_service
+    stt_enabled = False
+    if settings.STT_PROVIDER.lower() == "dashscope":
+        stt_enabled = bool(settings.DASHSCOPE_API_KEY)
+    elif settings.STT_PROVIDER.lower() == "aliyun":
+        stt_enabled = all(
+            [
+                settings.ALIBABA_CLOUD_ACCESS_KEY_ID,
+                settings.ALIBABA_CLOUD_ACCESS_KEY_SECRET,
+                settings.ALIBABA_CLOUD_APP_KEY,
+            ]
+        )
 
     await _check_service_status(
         name="llm",
@@ -133,7 +145,7 @@ async def health_check():
     )
     await _check_service_status(
         name="stt",
-        enabled=bool(settings.ALIBABA_CLOUD_ACCESS_KEY_ID),
+        enabled=stt_enabled,
         health_check_factory=lambda: get_stt_service().health_check(),
     )
     await _check_service_status(

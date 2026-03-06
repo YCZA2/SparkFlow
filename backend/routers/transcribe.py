@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, File, UploadFile, status
 from sqlalchemy.orm import Session
 
 from core import success_response
+from core.exceptions import ServiceUnavailableError
 from core.auth import get_current_user
 from models.database import get_db
 from services import fragment_service, transcription_service
+from services.factory import get_stt_service
 
 router = APIRouter(
     prefix="/api/transcribe",
@@ -25,6 +27,15 @@ async def upload_audio(
 ):
     """上传音频并异步触发转写流程。"""
     user_id = current_user["user_id"]
+
+    try:
+        # 预检 STT 服务，避免在明显不可用时仍然创建一条必然失败的碎片记录。
+        get_stt_service()
+    except Exception as exc:
+        raise ServiceUnavailableError(
+            message=f"语音转写服务暂时不可用: {str(exc)}",
+            service_name="stt",
+        ) from exc
 
     saved = await transcription_service.save_uploaded_audio(audio=audio, user_id=user_id)
     fragment = transcription_service.create_fragment_for_transcription(

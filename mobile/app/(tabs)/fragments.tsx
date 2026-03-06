@@ -1,140 +1,26 @@
-/**
- * 碎片库页面 - 展示所有灵感碎片列表
- * 阶段 4.3 实现完整功能
- */
-
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
-  StyleSheet,
-  FlatList,
-  View,
-  Text,
-  RefreshControl,
-  useColorScheme,
-  TouchableOpacity,
   Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useRouter, useFocusEffect, useLocalSearchParams, Stack } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+
+import { Text } from '@/components/Themed';
 import { FragmentCard } from '@/components/FragmentCard';
+import { LoadingState, ScreenState } from '@/components/ScreenState';
+import { useFragmentSelection } from '@/hooks/useFragmentSelection';
 import { useFragments } from '@/hooks/useFragments';
+import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
 
-/**
- * 空状态组件
- */
-function EmptyState({ isDark }: { isDark: boolean }) {
-  return (
-    <View style={styles.emptyContainer}>
-      <Text
-        style={[
-          styles.emptyIcon,
-          { color: isDark ? '#3A3A3C' : '#C7C7CC' },
-        ]}
-      >
-        📝
-      </Text>
-      <Text
-        style={[
-          styles.emptyTitle,
-          { color: isDark ? '#FFFFFF' : '#000000' },
-        ]}
-      >
-        还没有灵感碎片
-      </Text>
-      <Text
-        style={[
-          styles.emptySubtitle,
-          { color: isDark ? '#8E8E93' : '#8E8E93' },
-        ]}
-      >
-        去首页录一条吧
-      </Text>
-    </View>
-  );
-}
-
-/**
- * 错误状态组件
- */
-function ErrorState({
-  message,
-  isDark,
-  onRetry,
-  onNetworkSettings,
-}: {
-  message: string;
-  isDark: boolean;
-  onRetry: () => void;
-  onNetworkSettings: () => void;
-}) {
-  // 判断是否是网络错误
-  const isNetworkError = message.includes('网络') || message.includes('连接') || message.includes('后端');
-
-  return (
-    <View style={styles.errorContainer}>
-      <Text
-        style={[
-          styles.errorIcon,
-          { color: isDark ? '#3A3A3C' : '#C7C7CC' },
-        ]}
-      >
-        ⚠️
-      </Text>
-      <Text
-        style={[
-          styles.errorTitle,
-          { color: isDark ? '#FFFFFF' : '#000000' },
-        ]}
-      >
-        加载失败
-      </Text>
-      <Text
-        style={[
-          styles.errorMessage,
-          { color: isDark ? '#8E8E93' : '#8E8E93' },
-        ]}
-      >
-        {message}
-      </Text>
-
-      {/* 重试按钮 */}
-      <TouchableOpacity
-        style={[styles.actionButton, { backgroundColor: '#007AFF' }]}
-        onPress={() => {
-          // 使用 setTimeout 避免新架构事件冲突
-          setTimeout(() => onRetry(), 0);
-        }}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.actionButtonText}>🔄 点击重试</Text>
-      </TouchableOpacity>
-
-      {/* 网络设置按钮（仅网络错误显示） */}
-      {isNetworkError && (
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: '#5856D6', marginTop: 12 }]}
-          onPress={() => {
-            // 使用 setTimeout 避免新架构事件冲突
-            setTimeout(() => onNetworkSettings(), 0);
-          }}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.actionButtonText}>🌐 网络设置</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-}
-
-/**
- * 碎片库列表页面
- */
 export default function FragmentsScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   const router = useRouter();
   const params = useLocalSearchParams<{ refresh?: string }>();
-
+  const theme = useAppTheme();
   const {
     fragments,
     isLoading,
@@ -143,152 +29,77 @@ export default function FragmentsScreen() {
     refreshFragments,
     fetchFragments,
   } = useFragments();
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const maxSelection = 20;
-  const selectedCount = selectedIds.length;
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selection = useFragmentSelection(20);
 
-  /**
-   * 页面获得焦点时，根据参数决定是否刷新
-   * - 从详情页删除碎片后返回，会带上 refresh=true 参数
-   */
   useFocusEffect(
     useCallback(() => {
-      // 只有需要刷新时才重新获取数据
       if (params.refresh === 'true') {
-        console.log('检测到刷新标记，更新列表');
-        const timer = setTimeout(() => {
-          refreshFragments();
-          // 清除参数，避免重复刷新
-          router.setParams({ refresh: undefined });
-        }, 0);
-        return () => clearTimeout(timer);
+        fetchFragments();
+        router.setParams({ refresh: undefined });
       }
-    }, [params.refresh, refreshFragments, router])
+    }, [fetchFragments, params.refresh, router])
   );
 
-  /**
-   * 处理卡片点击 - 导航到详情页
-   */
   const handleFragmentPress = (fragment: Fragment) => {
-    if (isSelectionMode) {
-      toggleSelect(fragment.id);
+    if (selection.isSelectionMode) {
+      const accepted = selection.toggleSelect(fragment.id);
+      if (!accepted) {
+        Alert.alert('已达上限', `最多选择 ${selection.maxSelection} 条碎片`);
+      }
       return;
     }
+
     router.push(`/fragment/${fragment.id}`);
   };
 
-  const toggleSelectionMode = () => {
-    setIsSelectionMode((prev) => {
-      const next = !prev;
-      if (!next) {
-        setSelectedIds([]);
-      }
-      return next;
-    });
-  };
-
-  const toggleSelect = (fragmentId: string) => {
-    setSelectedIds((prev) => {
-      if (prev.includes(fragmentId)) {
-        return prev.filter((id) => id !== fragmentId);
-      }
-      if (prev.length >= maxSelection) {
-        Alert.alert('已达上限', `最多选择 ${maxSelection} 条碎片`);
-        return prev;
-      }
-      return [...prev, fragmentId];
-    });
-  };
-
   const handleGoGenerate = () => {
-    if (selectedCount === 0) {
+    if (selection.selectedCount === 0) {
       Alert.alert('请选择碎片', '请至少选择 1 条碎片');
       return;
     }
 
     router.push({
       pathname: '/generate',
-      params: { fragmentIds: selectedIds.join(',') },
+      params: { fragmentIds: selection.selectedIds.join(',') },
     });
   };
 
-  /**
-   * 跳转到网络设置页面
-   */
-  const handleNetworkSettings = () => {
-    router.push('/network-settings');
-  };
-
-  /**
-   * 渲染列表项
-   */
-  const renderItem = ({ item }: { item: Fragment }) => (
-    <FragmentCard
-      fragment={item}
-      onPress={handleFragmentPress}
-      selectable={isSelectionMode}
-      selected={selectedSet.has(item.id)}
-    />
-  );
-
-  /**
-   * 渲染列表分隔线
-   */
-  const renderSeparator = () => <View style={styles.separator} />;
-
-  /**
-   * 渲染列表头部（显示总数）
-   */
-  const renderHeader = () => {
-    if (fragments.length === 0) return null;
+  if (isLoading && fragments.length === 0) {
     return (
-      <View style={styles.header}>
-        <Text
-          style={[
-            styles.headerText,
-            { color: isDark ? '#8E8E93' : '#8E8E93' },
-          ]}
-        >
-          共 {fragments.length} 条灵感
-        </Text>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Stack.Screen options={{ title: '碎片库' }} />
+        <LoadingState message="正在加载碎片..." />
       </View>
     );
-  };
+  }
 
-  // 显示错误状态
-  if (error && !isLoading && fragments.length === 0) {
+  if (error && fragments.length === 0) {
     return (
-      <View
-        style={[
-          styles.container,
-          { backgroundColor: isDark ? '#000000' : '#F2F2F7' },
-        ]}
-      >
-        <ErrorState
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Stack.Screen options={{ title: '碎片库' }} />
+        <ScreenState
+          icon="⚠️"
+          title="加载失败"
           message={error}
-          isDark={isDark}
-          onRetry={fetchFragments}
-          onNetworkSettings={handleNetworkSettings}
+          actionLabel="点击重试"
+          onAction={fetchFragments}
+          secondaryActionLabel="网络设置"
+          onSecondaryAction={() => router.push('/network-settings')}
         />
       </View>
     );
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: isDark ? '#000000' : '#F2F2F7' },
-      ]}
-    >
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen
         options={{
           title: '碎片库',
           headerRight: () => (
-            <TouchableOpacity onPress={toggleSelectionMode} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.selectAction}>{isSelectionMode ? '取消' : '选择'}</Text>
+            <TouchableOpacity onPress={selection.toggleSelectionMode} hitSlop={8}>
+              <Text style={[styles.selectAction, { color: theme.colors.primary }]}>
+                {selection.isSelectionMode ? '取消' : '选择'}
+              </Text>
             </TouchableOpacity>
           ),
         }}
@@ -297,46 +108,56 @@ export default function FragmentsScreen() {
       <FlatList
         data={fragments}
         keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        ItemSeparatorComponent={renderSeparator}
-        ListHeaderComponent={renderHeader}
+        renderItem={({ item }) => (
+          <FragmentCard
+            fragment={item}
+            onPress={handleFragmentPress}
+            selectable={selection.isSelectionMode}
+            selected={selection.selectedSet.has(item.id)}
+          />
+        )}
+        ListHeaderComponent={
+          fragments.length > 0 ? (
+            <View style={styles.header}>
+              <Text style={[styles.headerText, { color: theme.colors.textSubtle }]}>
+                共 {fragments.length} 条灵感
+              </Text>
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
-          !isLoading ? <EmptyState isDark={isDark} /> : null
+          <ScreenState icon="📝" title="还没有灵感碎片" message="去首页录一条吧" />
         }
-        contentContainerStyle={
-          fragments.length === 0 ? styles.emptyList : styles.list
-        }
+        contentContainerStyle={fragments.length === 0 ? styles.emptyList : styles.list}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={refreshFragments}
-            tintColor={isDark ? '#FFFFFF' : '#000000'}
+            tintColor={theme.colors.primary}
           />
         }
         showsVerticalScrollIndicator={false}
       />
 
-      {isSelectionMode && (
-        <View
-          style={[
-            styles.floatingBar,
-            { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' },
-          ]}
-        >
+      {selection.isSelectionMode ? (
+        <View style={[styles.floatingBar, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
           <TouchableOpacity
             style={[
               styles.generateButton,
-              { backgroundColor: selectedCount > 0 ? '#007AFF' : '#8E8E93' },
+              {
+                backgroundColor:
+                  selection.selectedCount > 0 ? theme.colors.primary : theme.colors.textSubtle,
+              },
             ]}
             onPress={handleGoGenerate}
             activeOpacity={0.85}
           >
             <Text style={styles.generateButtonText}>
-              交给 AI 编导（已选 {selectedCount}/{maxSelection} 条）
+              交给 AI 编导（已选 {selection.selectedCount}/{selection.maxSelection} 条）
             </Text>
           </TouchableOpacity>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -350,10 +171,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   emptyList: {
-    flex: 1,
-  },
-  separator: {
-    height: 0,
+    flexGrow: 1,
   },
   header: {
     paddingHorizontal: 16,
@@ -361,63 +179,8 @@ const styles = StyleSheet.create({
   },
   headerText: {
     fontSize: 13,
-    fontWeight: '400',
-  },
-  // 空状态样式
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 15,
-  },
-  // 错误状态样式
-  errorContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  errorIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  errorTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  errorMessage: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
-  },
-  actionButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minWidth: 160,
-    alignItems: 'center',
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
   },
   selectAction: {
-    color: '#007AFF',
     fontSize: 16,
     fontWeight: '600',
     marginRight: 16,
@@ -429,11 +192,6 @@ const styles = StyleSheet.create({
     bottom: 16,
     padding: 10,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 4,
   },
   generateButton: {
     borderRadius: 10,
