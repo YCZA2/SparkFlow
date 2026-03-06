@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import io
 import json
 import os
+from pathlib import Path
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -150,6 +151,40 @@ class BackendFlowTestCase(unittest.TestCase):
             self.assertIsNotNone(fragment)
             self.assertEqual(fragment.sync_status, "syncing")
             self.assertTrue(os.path.exists(payload["audio_path"]))
+
+    def test_delete_fragment_removes_audio_file(self) -> None:
+        upload_root = Path(self.temp_dir.name).resolve()
+        user_dir = upload_root / TEST_USER_ID
+        user_dir.mkdir(parents=True, exist_ok=True)
+        audio_file = user_dir / "delete-me.m4a"
+        audio_file.write_bytes(b"fake-audio")
+        relative_audio_path = str(audio_file.relative_to(upload_root.parent))
+
+        with self.SessionLocal() as db:
+            fragment = Fragment(
+                user_id=TEST_USER_ID,
+                transcript="待删除的碎片",
+                audio_path=relative_audio_path,
+                source="voice",
+                sync_status="synced",
+            )
+            db.add(fragment)
+            db.commit()
+            db.refresh(fragment)
+            fragment_id = fragment.id
+
+        with patch.object(fragment_service.settings, "UPLOAD_DIR", str(upload_root)):
+            response = self.client.delete(
+                f"/api/fragments/{fragment_id}",
+                headers=self.auth_headers(),
+            )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(audio_file.exists())
+
+        with self.SessionLocal() as db:
+            deleted = db.query(Fragment).filter(Fragment.id == fragment_id).first()
+            self.assertIsNone(deleted)
 
     def test_transcribe_with_retry_updates_fragment_states(self) -> None:
         with self.SessionLocal() as db:

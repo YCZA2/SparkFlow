@@ -137,7 +137,12 @@ export default function FragmentDetailScreen() {
         options={{
           title: '碎片详情',
           headerRight: () => (
-            <TouchableOpacity onPress={handleDelete} disabled={isDeleting} hitSlop={8}>
+            <TouchableOpacity
+              style={styles.deleteButtonTouchArea}
+              onPress={handleDelete}
+              disabled={isDeleting}
+              hitSlop={8}
+            >
               <Text style={[styles.deleteButton, { color: theme.colors.danger }]}>
                 {isDeleting ? '删除中...' : '删除'}
               </Text>
@@ -216,10 +221,14 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
   },
+  deleteButtonTouchArea: {
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    paddingVertical: 4,
+  },
   deleteButton: {
     fontSize: 16,
-    fontWeight: '500',
-    marginRight: 12,
+    fontWeight: '600',
   },
   headerCard: {
     borderRadius: 12,

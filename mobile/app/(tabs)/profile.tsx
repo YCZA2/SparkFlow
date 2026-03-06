@@ -3,9 +3,9 @@
  * 包含：我的方法论入口、网络设置、关于等
  */
 
-import { StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, TouchableOpacity, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Text, View } from '@/components/Themed';
+import { Text } from '@/components/Themed';
 import { useAuth } from '@/features/auth/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 

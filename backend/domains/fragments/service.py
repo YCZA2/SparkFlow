@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+from pathlib import Path
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.exceptions import NotFoundError, ValidationError
 from models import Fragment
 from services.vector_service import query_similar_fragments as query_similar_fragments_from_vector_db
@@ -13,6 +16,8 @@ from services.vector_visualization_service import build_fragment_visualization
 from utils.serialization import format_iso_datetime, parse_json_list
 
 from . import repository
+
+logger = logging.getLogger(__name__)
 
 VALID_FRAGMENT_SOURCES = {"voice", "manual", "video_parse"}
 
@@ -86,8 +91,42 @@ def create_fragment(
     )
 
 
+def _build_audio_file_candidates(audio_path: str) -> list[Path]:
+    raw_path = Path(audio_path)
+    if raw_path.is_absolute():
+        return [raw_path]
+
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    return [
+        (Path.cwd() / raw_path).resolve(),
+        (upload_root.parent / raw_path).resolve(),
+    ]
+
+
+def _remove_fragment_audio_file(audio_path: Optional[str]) -> None:
+    if not audio_path:
+        return
+
+    seen_paths: set[Path] = set()
+    for candidate in _build_audio_file_candidates(audio_path):
+        if candidate in seen_paths:
+            continue
+        seen_paths.add(candidate)
+
+        if not candidate.exists():
+            continue
+
+        try:
+            candidate.unlink()
+            return
+        except OSError as exc:
+            logger.warning("Failed to delete fragment audio file %s: %s", candidate, exc)
+            return
+
+
 def delete_fragment(db: Session, user_id: str, fragment_id: str) -> None:
     fragment = get_fragment_or_raise(db=db, user_id=user_id, fragment_id=fragment_id)
+    _remove_fragment_audio_file(fragment.audio_path)
     repository.delete(db=db, fragment=fragment)
 
 
