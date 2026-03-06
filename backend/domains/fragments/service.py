@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ValidationError
 from models import Fragment
+from services.vector_service import query_similar_fragments as query_similar_fragments_from_vector_db
 from utils.serialization import format_iso_datetime, parse_json_list
 
 from . import repository
@@ -87,3 +88,43 @@ def create_fragment(
 def delete_fragment(db: Session, user_id: str, fragment_id: str) -> None:
     fragment = get_fragment_or_raise(db=db, user_id=user_id, fragment_id=fragment_id)
     repository.delete(db=db, fragment=fragment)
+
+
+async def query_similar_fragments(
+    db: Session,
+    user_id: str,
+    query_text: str,
+    top_k: int = 5,
+    exclude_ids: Optional[list[str]] = None,
+) -> list[dict[str, Any]]:
+    results = await query_similar_fragments_from_vector_db(
+        user_id=user_id,
+        query_text=query_text,
+        top_k=top_k,
+        exclude_ids=exclude_ids,
+    )
+    if not results:
+        return []
+
+    fragments = repository.get_by_ids(
+        db=db,
+        user_id=user_id,
+        fragment_ids=[item["fragment_id"] for item in results],
+    )
+    fragments_by_id = {fragment.id: fragment for fragment in fragments}
+
+    payload: list[dict[str, Any]] = []
+    for item in results:
+        fragment = fragments_by_id.get(item["fragment_id"])
+        if not fragment:
+            continue
+
+        payload.append(
+            {
+                **serialize_fragment(fragment, include_audio_path=False),
+                "score": item["score"],
+                "metadata": item["metadata"],
+            }
+        )
+
+    return payload

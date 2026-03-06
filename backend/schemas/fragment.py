@@ -45,3 +45,18 @@ class FragmentListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class FragmentSimilarityQuery(BaseModel):
+    """碎片语义查询请求模型"""
+
+    query_text: str = Field(..., description="查询文本")
+    top_k: int = Field(5, ge=1, le=20, description="返回结果数量")
+    exclude_ids: list[str] = Field(default_factory=list, description="需要排除的碎片 ID")
+
+
+class SimilarFragmentItem(FragmentItem):
+    """相似碎片响应模型"""
+
+    score: float
+    metadata: dict = Field(default_factory=dict)

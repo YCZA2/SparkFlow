@@ -42,6 +42,7 @@ from .llm_service import (
     generate_tags,
     generate_summary_and_tags,
 )
+from .vector_service import build_fragment_namespace, upsert_fragment, query_similar_fragments
 
 __all__ = [
     # Factory functions
@@ -58,4 +59,7 @@ __all__ = [
     "generate_summary",
     "generate_tags",
     "generate_summary_and_tags",
+    "build_fragment_namespace",
+    "upsert_fragment",
+    "query_similar_fragments",
 ]

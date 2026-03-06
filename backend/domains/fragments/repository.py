@@ -33,6 +33,17 @@ def get_by_id(db: Session, user_id: str, fragment_id: str) -> Optional[Fragment]
     )
 
 
+def get_by_ids(db: Session, user_id: str, fragment_ids: list[str]) -> list[Fragment]:
+    if not fragment_ids:
+        return []
+
+    return (
+        db.query(Fragment)
+        .filter(Fragment.id.in_(fragment_ids), Fragment.user_id == user_id)
+        .all()
+    )
+
+
 def create(
     db: Session,
     user_id: str,

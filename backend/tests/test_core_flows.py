@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -17,6 +18,7 @@ from sqlalchemy.pool import StaticPool
 from main import app
 from domains.transcription import upload as transcription_upload
 from domains.transcription import workflow as transcription_workflow
+from domains.fragments import service as fragment_service
 from models import Base, Fragment
 from models.database import get_db
 from routers.auth import TEST_USER_ID
@@ -161,6 +163,7 @@ class BackendFlowTestCase(unittest.TestCase):
             patch.object(transcription_workflow, "SessionLocal", self.SessionLocal),
             patch.object(transcription_workflow, "get_stt_service", return_value=fake_stt),
             patch.object(transcription_workflow, "generate_summary_and_tags", AsyncMock(return_value=("摘要", ["标签"]))),
+            patch.object(transcription_workflow, "upsert_fragment", AsyncMock(return_value=True)) as mock_upsert_fragment,
         ):
             result = asyncio.run(
                 transcription_workflow.transcribe_with_retry(
@@ -172,6 +175,14 @@ class BackendFlowTestCase(unittest.TestCase):
             )
 
         self.assertTrue(result["success"])
+        mock_upsert_fragment.assert_awaited_once_with(
+            user_id=TEST_USER_ID,
+            fragment_id=fragment_id,
+            text="转写完成",
+            source="voice",
+            summary="摘要",
+            tags=["标签"],
+        )
         with self.SessionLocal() as db:
             updated = db.query(Fragment).filter(Fragment.id == fragment_id).first()
             self.assertEqual(updated.sync_status, "synced")
@@ -211,3 +222,154 @@ class BackendFlowTestCase(unittest.TestCase):
         with self.SessionLocal() as db:
             failed = db.query(Fragment).filter(Fragment.id == failed_fragment_id).first()
             self.assertEqual(failed.sync_status, "failed")
+
+    def test_transcribe_with_retry_keeps_success_when_vectorization_fails(self) -> None:
+        with self.SessionLocal() as db:
+            fragment = Fragment(
+                user_id=TEST_USER_ID,
+                source="voice",
+                audio_path="uploads/test-user-001/test-vector-fail.m4a",
+                sync_status="syncing",
+            )
+            db.add(fragment)
+            db.commit()
+            db.refresh(fragment)
+            fragment_id = fragment.id
+
+        fake_stt = SimpleNamespace(transcribe=AsyncMock(return_value=SimpleNamespace(text="转写成功但向量化失败")))
+        with (
+            patch.object(transcription_workflow, "SessionLocal", self.SessionLocal),
+            patch.object(transcription_workflow, "get_stt_service", return_value=fake_stt),
+            patch.object(transcription_workflow, "generate_summary_and_tags", AsyncMock(return_value=("摘要", ["标签1", "标签2"]))),
+            patch.object(transcription_workflow, "upsert_fragment", AsyncMock(side_effect=RuntimeError("vector boom"))),
+        ):
+            result = asyncio.run(
+                transcription_workflow.transcribe_with_retry(
+                    audio_path="/tmp/test-vector-fail.m4a",
+                    fragment_id=fragment_id,
+                    user_id=TEST_USER_ID,
+                    max_retries=0,
+                )
+            )
+
+        self.assertTrue(result["success"])
+        with self.SessionLocal() as db:
+            updated = db.query(Fragment).filter(Fragment.id == fragment_id).first()
+            self.assertEqual(updated.sync_status, "synced")
+            self.assertEqual(updated.transcript, "转写成功但向量化失败")
+            self.assertEqual(updated.summary, "摘要")
+            self.assertEqual(updated.tags, json.dumps(["标签1", "标签2"], ensure_ascii=False))
+
+    def test_query_similar_fragments_endpoint(self) -> None:
+        with self.SessionLocal() as db:
+            fragment_1 = Fragment(
+                user_id=TEST_USER_ID,
+                transcript="定位要先找到自己的差异化表达",
+                summary="定位差异化",
+                tags=json.dumps(["定位", "差异化"], ensure_ascii=False),
+                source="voice",
+                sync_status="synced",
+            )
+            fragment_2 = Fragment(
+                user_id=TEST_USER_ID,
+                transcript="口播开头三秒要先抛结论",
+                summary="口播开头",
+                tags=json.dumps(["口播", "开头"], ensure_ascii=False),
+                source="voice",
+                sync_status="synced",
+            )
+            db.add_all([fragment_1, fragment_2])
+            db.commit()
+            db.refresh(fragment_1)
+            db.refresh(fragment_2)
+
+        fake_results = [
+            {
+                "id": fragment_1.id,
+                "transcript": fragment_1.transcript,
+                "summary": fragment_1.summary,
+                "tags": ["定位", "差异化"],
+                "source": "voice",
+                "sync_status": "synced",
+                "created_at": "2026-03-06T00:00:00+00:00",
+                "score": 0.93,
+                "metadata": {"type": "fragment"},
+            },
+            {
+                "id": fragment_2.id,
+                "transcript": fragment_2.transcript,
+                "summary": fragment_2.summary,
+                "tags": ["口播", "开头"],
+                "source": "voice",
+                "sync_status": "synced",
+                "created_at": "2026-03-06T00:00:00+00:00",
+                "score": 0.71,
+                "metadata": {"type": "fragment"},
+            },
+        ]
+        with patch.object(fragment_service, "query_similar_fragments", AsyncMock(return_value=fake_results)):
+            response = self.client.post(
+                "/api/fragments/similar",
+                json={
+                    "query_text": "我想找和定位相关的历史灵感",
+                    "top_k": 2,
+                    "exclude_ids": [fragment_2.id],
+                },
+                headers=self.auth_headers(),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+        self.assertEqual(payload["total"], 2)
+        self.assertEqual(payload["query_text"], "我想找和定位相关的历史灵感")
+        self.assertEqual(payload["items"][0]["id"], fragment_1.id)
+        self.assertEqual(payload["items"][0]["score"], 0.93)
+
+    def test_fragment_service_query_similar_fragments_filters_missing_rows(self) -> None:
+        with self.SessionLocal() as db:
+            fragment = Fragment(
+                user_id=TEST_USER_ID,
+                transcript="用户表达要保留真实感",
+                summary="表达真实感",
+                tags=json.dumps(["表达", "真实感"], ensure_ascii=False),
+                source="voice",
+                sync_status="synced",
+            )
+            db.add(fragment)
+            db.commit()
+            db.refresh(fragment)
+
+            with patch.object(
+                fragment_service,
+                "query_similar_fragments_from_vector_db",
+                AsyncMock(
+                    return_value=[
+                        {
+                            "fragment_id": fragment.id,
+                            "transcript": fragment.transcript,
+                            "score": 0.88,
+                            "metadata": {"source": "voice"},
+                        },
+                        {
+                            "fragment_id": "missing-fragment",
+                            "transcript": "不存在的向量结果",
+                            "score": 0.55,
+                            "metadata": {"source": "voice"},
+                        },
+                    ]
+                ),
+            ):
+                result = asyncio.run(
+                    fragment_service.query_similar_fragments(
+                        db=db,
+                        user_id=TEST_USER_ID,
+                        query_text="找表达风格",
+                        top_k=5,
+                        exclude_ids=[],
+                    )
+                )
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["id"], fragment.id)
+        self.assertEqual(result[0]["score"], 0.88)
+        self.assertEqual(result[0]["metadata"], {"source": "voice"})

@@ -7,7 +7,7 @@ from core import success_response, paginated_data
 from core.auth import get_current_user
 from domains.fragments import service as fragment_service
 from models.database import get_db
-from schemas.fragment import FragmentCreate
+from schemas.fragment import FragmentCreate, FragmentSimilarityQuery
 
 router = APIRouter(
     prefix="/api/fragments",
@@ -44,6 +44,29 @@ async def list_fragments(
             offset=offset,
             serializer=fragment_service.serialize_fragment,
         )
+    )
+
+
+@router.post("/similar")
+async def query_similar_fragments(
+    data: FragmentSimilarityQuery,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """基于语义相似度检索当前用户的历史碎片。"""
+    items = await fragment_service.query_similar_fragments(
+        db=db,
+        user_id=current_user["user_id"],
+        query_text=data.query_text,
+        top_k=data.top_k,
+        exclude_ids=data.exclude_ids,
+    )
+    return success_response(
+        data={
+            "items": items,
+            "total": len(items),
+            "query_text": data.query_text,
+        }
     )
 
 

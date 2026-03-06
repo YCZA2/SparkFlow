@@ -1,6 +1,6 @@
 # SparkFlow — 阶段 11-14: 知识库、向量数据库、每日推盘与全流程验证
 
-> 最后更新：2026-03-05
+> 最后更新：2026-03-06
 
 ---
 
@@ -13,7 +13,22 @@
 | 11.1 | 实现知识库文档上传 API | ✅ 已完成 |
 | 11.2 | 实现知识库文档列表 API | ✅ 已完成 |
 | 11.3 | 实现文件上传解析 (TXT/Word) | ✅ 已完成 |
-| 11.4 | 前端知识库管理入口 | ⏳ 待实施 |
+| 11.4 | 前端知识库管理入口 | ⏭️ **跳过** |
+
+> **决策记录 (2026-03-06)**: 跳过阶段 11.4 前端知识库管理入口，原因：
+> - 知识库功能的产品思路尚未完全明确
+> - 向量数据库可以独立实施，不依赖前端入口
+> - 优先保障阶段 12 碎片语义检索能力，支持每日推盘功能
+> - 知识库前端可在产品思路清晰后补充
+
+### 11.4 跳过说明
+
+原计划的前端入口包括：
+- "我的方法论"入口按钮
+- 知识库列表页面
+- 添加文档（粘贴文本或上传文件）
+
+**当前状态**: 后端 API 已完备，前端入口待产品思路明确后实施。
 
 ### 架构设计
 
@@ -99,82 +114,123 @@ pip install python-docx==1.1.2
 
 ---
 
-## 阶段 12：向量数据库集成
+## 阶段 12：向量数据库集成（碎片语义检索）
+
+> **方向调整 (2026-03-06)**: 基于跳过阶段 11 前端的决策，阶段 12 调整为聚焦**碎片语义检索**，优先支持：
+> 1. 每日推盘的碎片语义关联检查
+> 2. Mode B 的历史碎片风格参考
+>
+> 知识库文档向量化移至可选任务（12.5）
 
 ### 任务清单
 
-| 步骤 | 任务 | 状态 |
-|------|------|------|
-| 12.1 | 配置 ChromaDB 本地向量数据库 | ✅ 已完成 |
-| 12.2 | 创建用户专属向量命名空间 | ⏳ 待实施 |
-| 12.3 | 实现向量相似度查询 | ⏳ 待实施 |
-| 12.4 | 知识库文档上传时自动写入向量库 | ⏳ 待实施 |
-| 12.5 | Mode B 生成时检索知识库 | ⏳ 待实施 |
+| 步骤 | 任务 | 状态 | 优先级 |
+|------|------|------|--------|
+| 12.1 | 碎片自动向量化 | ✅ 已完成 | P0 |
+| 12.2 | 碎片语义相似度查询 | ✅ 已完成 | P0 |
+| 12.3 | Mode B 检索历史碎片 | ⏳ 待实施 | P0 |
+| 12.4 | 知识库文档向量化（可选） | ⏳ 待实施 | P1 |
 
-### 12.1 ChromaDB 配置
+### 12.1 碎片自动向量化
 
-**配置** (`.env`):
-```bash
-VECTOR_DB_PROVIDER=chromadb
-CHROMADB_PATH=./chroma_data
-```
+**目标**: 碎片转写成功后，自动将 `transcript` 写入向量库
 
-**实现**: `backend/services/chroma_vector_db.py`
-
-**状态**: ✅ 已完成，支持抽象接口切换
-
-### 12.2 用户专属向量命名空间
-
-**数据隔离方案**:
+**Collection 设计**:
 ```python
-# 每个用户独立 Collection
+# 用户碎片独立 Collection
 collection = client.get_or_create_collection(
-    name=f"docs_{user_id}",
-    metadata={"user_id": user_id}
+    name=f"fragments_{user_id}",
+    metadata={"user_id": user_id, "type": "fragments"}
 )
 ```
 
-### 12.3 向量相似度查询
+**实现文件**:
+- `backend/services/vector_service.py`
+- `backend/domains/transcription/workflow.py`
+
+**已完成能力**:
+- ✅ 转写成功后自动生成 embedding 并写入 ChromaDB
+- ✅ Collection 按用户隔离：`fragments_{user_id}`
+- ✅ 写入 metadata：`user_id`、`fragment_id`、`source`、`summary`、`tags_json`
+- ✅ 向量化失败仅记录 warning，不影响碎片同步成功
+
+**配置前提** (`.env`):
+```bash
+VECTOR_DB_PROVIDER=chromadb
+CHROMADB_PATH=./chroma_data
+EMBEDDING_PROVIDER=qwen
+EMBEDDING_MODEL=text-embedding-v2
+```
+
+### 12.2 碎片语义相似度查询
 
 **函数签名**:
 ```python
-async def query_similar(
+async def query_similar_fragments(
     user_id: str,
     query_text: str,
-    top_k: int = 3
-) -> list[str]:
-    """检索用户知识库中最相似的文本片段"""
+    top_k: int = 5,
+    exclude_ids: list[str] = None
+) -> list[dict]:
+    """
+    检索用户历史碎片中最相似的片段
+    用于：每日推盘关联检查、Mode B 风格参考
+    """
     pass
 ```
 
-### 12.4 文档自动向量化
+**实现文件**:
+- `backend/services/vector_service.py`
+- `backend/domains/fragments/service.py`
+- `backend/routers/fragments.py`
 
-**流程**:
-```
-上传文档 → 保存到 SQLite → 文本分块 → Embedding → 写入 ChromaDB
-                                    ↓
-                           更新 vector_ref_id 字段
-```
+**已完成能力**:
+- ✅ 新增 `POST /api/fragments/similar`
+- ✅ 支持 `query_text`、`top_k`、`exclude_ids`
+- ✅ 先查向量库，再回表补齐摘要、标签、来源、创建时间等字段
+- ✅ 向量库中存在但数据库不存在的碎片结果会自动过滤
+- ✅ 当用户命名空间不存在时返回空列表
 
-### 12.5 Mode B 知识库检索
+**使用场景**:
+- **每日推盘 (阶段 13)**: 检查昨日碎片与历史碎片的语义关联度
+- **Mode B 生成**: 检索相似主题的历史碎片作为风格参考
 
-**阶段说明**:
-- **阶段 8（MVP）**: Mode B 仅基于碎片内容生成
-- **阶段 12（增强）**: Mode B 检索知识库相似片段作为风格参考
+### 12.3 Mode B 检索历史碎片
 
 **实现逻辑**:
 ```python
-# 使用碎片内容作为查询文本
-similar_chunks = await query_similar(user_id, fragments_text, top_k=3)
+# 使用选中碎片内容作为查询文本
+similar_fragments = await query_similar_fragments(
+    user_id, fragments_text, top_k=3, exclude_ids=selected_ids
+)
 
-# 将参考文本添加到 system prompt
+# 将历史碎片添加到 system prompt
 system_prompt = f"""
-以下是用户过往的写作风格参考：
-{chr(10).join(similar_chunks)}
+以下是该用户过往记录的相关灵感片段，体现了用户的表达习惯：
+---
+[历史碎片1]
+---
+[历史碎片2]
+---
 
-请模仿以上风格，将以下灵感碎片整合为口播稿...
+请结合以上参考片段的语言风格，将以下灵感碎片整合为口播稿...
 """
 ```
+
+**降级处理**:
+- 历史碎片少于 3 条：退化为基于当前碎片的自由发挥
+- 相似度均低于阈值：忽略历史参考
+
+### 12.4 知识库文档向量化（可选）
+
+**状态**: ⏳ 待实施（优先级 P1，时间允许时再做）
+
+**原设计**:
+- Collection 命名: `docs_{user_id}`
+- 长文档需分 chunk 处理
+- Mode B 可同时检索碎片和知识库两个 Collection
+
+**实施前提**: 阶段 11 前端知识库入口完成后
 
 ---
 
@@ -313,7 +369,9 @@ scheduler.add_job(
 
 | 日期 | 问题 | 决策 |
 |------|------|------|
+| 2026-03-06 | 阶段 11 前端入口 | **跳过** 知识库前端管理入口，产品思路明确后补充 |
+| 2026-03-06 | 阶段 12 方向调整 | 聚焦**碎片语义检索**（支持每日推盘 + Mode B），知识库向量化移至可选 |
 | 2026-03-03 | 每日推盘关联逻辑 | 数量 ≥3 **且** 语义相似度匹配 |
 | 2026-03-03 | Mode B 知识库 | 分阶段实现：阶段 8 简化，阶段 12 增强 |
-| 2026-03-03 | 向量数据隔离 | 每用户独立 Collection (`docs_{user_id}`) |
+| 2026-03-03 | 向量数据隔离 | 每用户独立 Collection (`fragments_{user_id}` / `docs_{user_id}`) |
 | 2026-03-03 | 定时任务 | APScheduler 足够，无需 Celery |

@@ -11,6 +11,7 @@ from domains.fragments import repository as fragment_repository
 from models.database import SessionLocal
 from services.factory import get_stt_service
 from services.llm_service import generate_summary_and_tags
+from services.vector_service import upsert_fragment
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,22 @@ async def transcribe_with_retry(
 
                 if updated:
                     logger.info("[Transcribe] Fragment updated: %s", fragment_id)
+                    try:
+                        await upsert_fragment(
+                            user_id=user_id,
+                            fragment_id=fragment_id,
+                            text=transcript,
+                            source="voice",
+                            summary=summary,
+                            tags=tags_list,
+                        )
+                        logger.info("[Transcribe] Fragment vectorized: %s", fragment_id)
+                    except Exception as exc:
+                        logger.warning(
+                            "[Transcribe] vectorization failed for fragment %s: %s",
+                            fragment_id,
+                            str(exc),
+                        )
 
                 return {
                     "success": True,
