@@ -12,6 +12,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Text } from '@/components/Themed';
 import { TeleprompterOverlay } from '@/components/TeleprompterOverlay';
 import { useVideoRecorder } from '@/hooks/useVideoRecorder';
+import { useAppTheme } from '@/theme/useAppTheme';
 
 const FALLBACK_TEXT =
   '今天我想聊一个很多人都在做、但很少人做对的主题：定位。' +
@@ -23,6 +24,7 @@ const FALLBACK_TEXT =
 
 export default function ShootScreen() {
   const router = useRouter();
+  const theme = useAppTheme();
   const { script_id, content } = useLocalSearchParams<{
     script_id?: string;
     content?: string;
@@ -67,15 +69,20 @@ export default function ShootScreen() {
 
   if (!permission.granted) {
     return (
-      <View style={styles.permissionContainer}>
+      <View style={[styles.permissionContainer, { backgroundColor: theme.colors.surface }]}>
         <Stack.Screen options={{ title: '相机权限' }} />
-        <Text style={styles.permissionTitle}>需要相机权限</Text>
-        <Text style={styles.permissionDesc}>为了使用拍摄功能，请授权访问您的相机。</Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+        <Text style={[styles.permissionTitle, { color: theme.colors.text }]}>需要相机权限</Text>
+        <Text style={[styles.permissionDesc, { color: theme.colors.textSubtle }]}>
+          为了使用拍摄功能，请授权访问您的相机。
+        </Text>
+        <TouchableOpacity
+          style={[styles.permissionButton, { backgroundColor: theme.colors.primary }]}
+          onPress={requestPermission}
+        >
           <Text style={styles.permissionButtonText}>授权相机访问</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-          <Text style={styles.closeButtonText}>返回</Text>
+          <Text style={[styles.closeButtonText, { color: theme.colors.textSubtle }]}>返回</Text>
         </TouchableOpacity>
       </View>
     );
@@ -162,26 +169,22 @@ const styles = StyleSheet.create({
   },
   permissionContainer: {
     flex: 1,
-    backgroundColor: '#1C1C1E',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
     gap: 16,
   },
   permissionTitle: {
-    color: '#FFFFFF',
     fontSize: 22,
     fontWeight: '700',
     textAlign: 'center',
   },
   permissionDesc: {
-    color: '#8E8E93',
     fontSize: 16,
     textAlign: 'center',
     lineHeight: 24,
   },
   permissionButton: {
-    backgroundColor: '#007AFF',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 12,
@@ -196,7 +199,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   closeButtonText: {
-    color: '#8E8E93',
     fontSize: 16,
   },
   camera: {

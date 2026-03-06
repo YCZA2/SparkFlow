@@ -38,13 +38,13 @@ function getStatusLabel(status: ScriptStatus): string {
 function getStatusColor(status: ScriptStatus): string {
   switch (status) {
     case 'draft':
-      return '#8E8E93'; // 灰色
+      return 'subtle';
     case 'ready':
-      return '#FF9500'; // 橙色
+      return 'warning';
     case 'filmed':
-      return '#34C759'; // 绿色
+      return 'success';
     default:
-      return '#8E8E93';
+      return 'subtle';
   }
 }
 
@@ -52,7 +52,7 @@ function getStatusColor(status: ScriptStatus): string {
  * 获取模式颜色
  */
 function getModeColor(mode: ScriptMode): string {
-  return mode === 'mode_a' ? '#FF3B30' : '#5856D6';
+  return mode === 'mode_a' ? 'danger' : 'primary';
 }
 
 interface ScriptCardProps {
@@ -67,8 +67,13 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
   const displayTitle = script.title || script.content?.slice(0, 50) || '无标题口播稿';
   const modeLabel = getModeLabel(script.mode);
   const statusLabel = getStatusLabel(script.status);
-  const statusColor = getStatusColor(script.status);
-  const modeColor = getModeColor(script.mode);
+  const statusColor =
+    getStatusColor(script.status) === 'warning'
+      ? theme.colors.warning
+      : getStatusColor(script.status) === 'success'
+      ? theme.colors.success
+      : theme.colors.textSubtle;
+  const modeColor = getModeColor(script.mode) === 'danger' ? theme.colors.danger : theme.colors.primary;
 
   return (
     <TouchableOpacity
@@ -101,8 +106,8 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
 
         {/* 每日推盘标记 */}
         {script.is_daily_push && (
-          <View style={[styles.tag, { backgroundColor: '#FF9500' + '20' }]}>
-            <Text style={[styles.tagText, { color: '#FF9500' }]}>每日推盘</Text>
+          <View style={[styles.tag, { backgroundColor: `${theme.colors.warning}20` }]}>
+            <Text style={[styles.tagText, { color: theme.colors.warning }]}>每日推盘</Text>
           </View>
         )}
       </View>

@@ -3,7 +3,7 @@
  * 包含：我的方法论入口、网络设置、关于等
  */
 
-import { StyleSheet, TouchableOpacity, useColorScheme, ScrollView } from 'react-native';
+import { StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/hooks/useAuth';
@@ -17,34 +17,34 @@ function MenuItem({
   title,
   subtitle,
   onPress,
-  isDark,
+  tone,
 }: {
   icon: string;
   title: string;
   subtitle?: string;
   onPress: () => void;
-  isDark: boolean;
+  tone: ReturnType<typeof useAppTheme>;
 }) {
   return (
     <TouchableOpacity
       style={[
         styles.menuItem,
-        { borderBottomColor: isDark ? '#3A3A3C' : '#E5E5EA' },
+        { borderBottomColor: tone.colors.border },
       ]}
       onPress={onPress}
     >
       <Text style={styles.menuIcon}>{icon}</Text>
       <View style={styles.menuContent}>
-        <Text style={[styles.menuTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+        <Text style={[styles.menuTitle, { color: tone.colors.text }]}>
           {title}
         </Text>
         {subtitle && (
-          <Text style={[styles.menuSubtitle, { color: isDark ? '#8E8E93' : '#666666' }]}>
+          <Text style={[styles.menuSubtitle, { color: tone.colors.textSubtle }]}>
             {subtitle}
           </Text>
         )}
       </View>
-      <Text style={[styles.menuArrow, { color: isDark ? '#8E8E93' : '#999999' }]}>›</Text>
+      <Text style={[styles.menuArrow, { color: tone.colors.textSubtle }]}>›</Text>
     </TouchableOpacity>
   );
 }
@@ -53,8 +53,6 @@ function MenuItem({
  * 我的页面
  */
 export default function ProfileScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
   const theme = useAppTheme();
@@ -85,14 +83,14 @@ export default function ProfileScreen() {
           title="我的方法论"
           subtitle="管理知识库文档"
           onPress={() => {}}
-          isDark={isDark}
+          tone={theme}
         />
         <MenuItem
           icon="📝"
           title="我的口播稿"
           subtitle="查看生成的口播稿"
           onPress={() => router.push('/scripts')}
-          isDark={isDark}
+          tone={theme}
         />
       </View>
 
@@ -103,14 +101,14 @@ export default function ProfileScreen() {
           title="网络设置"
           subtitle="配置后端服务地址"
           onPress={() => router.push('/network-settings')}
-          isDark={isDark}
+          tone={theme}
         />
         <MenuItem
           icon="🔧"
           title="API 测试"
           subtitle="测试后端连接"
           onPress={() => router.push('/test-api')}
-          isDark={isDark}
+          tone={theme}
         />
       </View>
 
@@ -121,7 +119,7 @@ export default function ProfileScreen() {
           title="关于"
           subtitle="灵感编导 v1.0.0"
           onPress={() => {}}
-          isDark={isDark}
+          tone={theme}
         />
       </View>
     </ScrollView>
@@ -144,7 +142,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#0A84FF',
     justifyContent: 'center',
     alignItems: 'center',
   },
