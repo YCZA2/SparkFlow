@@ -157,9 +157,9 @@ export function TeleprompterOverlay({
       // 从暂停恢复
       setIsPaused(false);
       onResume?.();
-      setTimeout(() => {
+      requestAnimationFrame(() => {
         startScrollFromCurrent();
-      }, 50);
+      });
     } else {
       // 暂停
       stopRunningAnimation();

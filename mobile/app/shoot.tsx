@@ -1,19 +1,18 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import * as MediaLibrary from 'expo-media-library';
-import { TeleprompterOverlay } from '@/components/TeleprompterOverlay';
-import { updateScriptStatus } from '@/services/scripts';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
-// 默认提词器文本（用于测试）
+import { Text } from '@/components/Themed';
+import { TeleprompterOverlay } from '@/components/TeleprompterOverlay';
+import { useVideoRecorder } from '@/hooks/useVideoRecorder';
+
 const FALLBACK_TEXT =
   '今天我想聊一个很多人都在做、但很少人做对的主题：定位。' +
   '你会发现，很多账号不缺努力，也不缺更新频率，真正缺的是一句能让人记住你的话。' +
@@ -22,154 +21,41 @@ const FALLBACK_TEXT =
   '所以先问自己三个问题：你最擅长解决什么问题？你想吸引哪一类人？别人为什么要听你说？' +
   '把这三个问题想清楚，再回头做内容，你会发现选题、表达和转化都更顺。';
 
-/**
- * 拍摄页面 - 阶段 10.1-10.4 相机拍摄与保存
- * 功能：
- * - 使用 expo-camera 实现相机预览 (10.1)
- * - 默认前置摄像头，可切换
- * - 叠加提词器组件 (10.2)
- * - 开始/停止录制按钮 (10.3)
- * - 保存视频到系统相册 (10.4)
- * - 更新口播稿状态为已拍摄
- */
 export default function ShootScreen() {
   const router = useRouter();
   const { script_id, content } = useLocalSearchParams<{
     script_id?: string;
     content?: string;
   }>();
-
-  // 相机权限
   const [permission, requestPermission] = useCameraPermissions();
-  // 摄像头方向：默认前置
-  const [facing, setFacing] = useState<CameraType>('front');
-  // 相机引用（用于录制）
-  const cameraRef = useRef<CameraView>(null);
-  // 录制状态
-  const [isRecording, setIsRecording] = useState(false);
+  const recorder = useVideoRecorder(script_id);
 
-  // 切换前后摄像头
-  const toggleCameraFacing = useCallback(() => {
-    // 录制中不允许切换摄像头
-    if (isRecording) return;
-    setFacing((current) => (current === 'back' ? 'front' : 'back'));
-  }, [isRecording]);
-
-  // 关闭按钮
   const handleClose = useCallback(() => {
-    // 录制中不允许关闭
-    if (isRecording) return;
+    if (recorder.isRecording) return;
     router.back();
-  }, [router, isRecording]);
+  }, [recorder.isRecording, router]);
 
-  /**
-   * 保存视频到系统相册
-   * @param videoUri 视频文件 URI
-   */
-  const saveVideoToLibrary = useCallback(async (videoUri: string): Promise<boolean> => {
-    try {
-      // 请求相册写入权限
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-
-      if (status !== 'granted') {
-        Alert.alert(
-          '权限不足',
-          '需要相册访问权限才能保存视频，请在设置中开启。',
-          [{ text: '确定' }]
-        );
-        return false;
-      }
-
-      // 保存视频到相册
-      const asset = await MediaLibrary.createAssetAsync(videoUri);
-      console.log('[Shoot] 视频已保存到相册:', asset.uri);
-
-      return true;
-    } catch (error) {
-      console.error('[Shoot] 保存视频失败:', error);
-      Alert.alert('保存失败', '视频保存到相册时出错，请重试。');
-      return false;
-    }
-  }, []);
-
-  /**
-   * 开始录制视频
-   */
-  const startRecording = useCallback(async () => {
-    if (!cameraRef.current) return;
-
-    try {
-      setIsRecording(true);
-      // 开始录制，设置最大时长为 10 分钟
-      const video = await cameraRef.current.recordAsync({
-        maxDuration: 600, // 10 分钟
-      });
-
-      // 录制完成，video.uri 是视频文件路径
-      if (video?.uri) {
-        console.log('[Shoot] 录制完成:', video.uri);
-
-        // 阶段 10.4: 保存视频到相册
-        const saved = await saveVideoToLibrary(video.uri);
-
-        if (saved) {
-          // 更新口播稿状态为已拍摄
-          if (script_id) {
-            try {
-              await updateScriptStatus(script_id, 'filmed');
-              console.log('[Shoot] 口播稿状态已更新为 filmed');
-            } catch (error) {
-              console.error('[Shoot] 更新口播稿状态失败:', error);
-              // 状态更新失败不影响视频保存成功的提示
-            }
-          }
-
-          Alert.alert(
-            '保存成功',
-            '视频已保存到系统相册',
-            [
-              {
-                text: '继续拍摄',
-                style: 'default',
-              },
-              {
-                text: '返回',
-                style: 'cancel',
-                onPress: () => router.back(),
-              },
-            ]
-          );
-        }
-      }
-
-      setIsRecording(false);
-    } catch (error) {
-      console.error('[Shoot] 录制失败:', error);
-      setIsRecording(false);
-      Alert.alert('录制失败', '视频录制过程中出错，请重试。');
-    }
-  }, [script_id, saveVideoToLibrary, router]);
-
-  /**
-   * 停止录制视频
-   */
-  const stopRecording = useCallback(() => {
-    if (!cameraRef.current) return;
-
-    cameraRef.current.stopRecording();
-    setIsRecording(false);
-  }, []);
-
-  // 录制按钮点击
   const handleRecordPress = useCallback(() => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
+    if (recorder.isRecording) {
+      recorder.stopRecording();
+      return;
     }
-  }, [isRecording, startRecording, stopRecording]);
 
-  // 权限加载中
+    recorder.startRecording(() => {
+      Alert.alert('保存成功', '视频已保存到系统相册', [
+        {
+          text: '继续拍摄',
+          style: 'default',
+        },
+        {
+          text: '返回',
+          style: 'cancel',
+          onPress: () => router.back(),
+        },
+      ]);
+    });
+  }, [recorder, router]);
+
   if (!permission) {
     return (
       <View style={styles.loadingContainer}>
@@ -179,15 +65,12 @@ export default function ShootScreen() {
     );
   }
 
-  // 未授权
   if (!permission.granted) {
     return (
       <View style={styles.permissionContainer}>
         <Stack.Screen options={{ title: '相机权限' }} />
         <Text style={styles.permissionTitle}>需要相机权限</Text>
-        <Text style={styles.permissionDesc}>
-          为了使用拍摄功能，请授权访问您的相机。
-        </Text>
+        <Text style={styles.permissionDesc}>为了使用拍摄功能，请授权访问您的相机。</Text>
         <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
           <Text style={styles.permissionButtonText}>授权相机访问</Text>
         </TouchableOpacity>
@@ -198,70 +81,62 @@ export default function ShootScreen() {
     );
   }
 
-  // 相机预览界面
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* 相机预览 - 全屏 */}
       <CameraView
-        ref={cameraRef}
+        ref={recorder.cameraRef}
         style={styles.camera}
-        facing={facing}
+        facing={recorder.facing}
         mode="video"
-        mirror={facing === 'front'}
+        mirror={recorder.facing === 'front'}
       >
-        {/* 提词器叠加层 - 上半部分 */}
         <View style={styles.teleprompterWrapper}>
           <TeleprompterOverlay text={content?.trim() ? content : FALLBACK_TEXT} />
         </View>
 
-        {/* 顶部控制栏 */}
         <View style={styles.topControls}>
-          {/* 关闭按钮 */}
           <TouchableOpacity
-            style={[styles.iconButton, isRecording && styles.iconButtonDisabled]}
+            style={[styles.iconButton, recorder.isRecording && styles.iconButtonDisabled]}
             onPress={handleClose}
-            disabled={isRecording}
+            disabled={recorder.isRecording}
           >
             <Text style={styles.iconButtonText}>✕</Text>
           </TouchableOpacity>
 
-          {/* 切换摄像头按钮 */}
           <TouchableOpacity
-            style={[styles.iconButton, isRecording && styles.iconButtonDisabled]}
-            onPress={toggleCameraFacing}
-            disabled={isRecording}
+            style={[styles.iconButton, recorder.isRecording && styles.iconButtonDisabled]}
+            onPress={recorder.toggleCameraFacing}
+            disabled={recorder.isRecording}
           >
             <Text style={styles.iconButtonText}>↻</Text>
           </TouchableOpacity>
         </View>
 
-        {/* 底部控制栏 - 录制按钮 */}
         <View style={styles.bottomControls}>
-          {/* 录制时长提示 */}
-          {isRecording && (
+          {recorder.isRecording ? (
             <View style={styles.recordingIndicator}>
               <View style={styles.recordingDot} />
               <Text style={styles.recordingText}>录制中</Text>
             </View>
-          )}
+          ) : null}
 
-          {/* 录制按钮 */}
           <TouchableOpacity
-            style={[
-              styles.recordButton,
-              isRecording && styles.recordButtonActive,
-            ]}
+            style={[styles.recordButton, recorder.isRecording && styles.recordButtonActive]}
             onPress={handleRecordPress}
             activeOpacity={0.8}
           >
-            <View style={[styles.recordButtonInner, isRecording && styles.recordButtonInnerActive]} />
+            <View
+              style={[
+                styles.recordButtonInner,
+                recorder.isRecording && styles.recordButtonInnerActive,
+              ]}
+            />
           </TouchableOpacity>
 
-          {/* 提示文字 */}
           <Text style={styles.hintText}>
-            {isRecording ? '点击停止录制' : '点击开始录制'}
+            {recorder.isRecording ? '点击停止录制' : '点击开始录制'}
           </Text>
         </View>
       </CameraView>

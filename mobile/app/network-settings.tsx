@@ -1,100 +1,46 @@
-/**
- * 网络设置页面
- * 用于配置后端地址和诊断网络连接问题
- */
-
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
-  StyleSheet,
-  View,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
   Alert,
-  useColorScheme,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { Text } from '@/components/Themed';
 import { Stack, useRouter } from 'expo-router';
-import {
-  getBackendUrl,
-  setBackendUrl,
-  discoverBackendUrl,
-  testBackendUrl,
-  inferBackendUrl,
-  getNetworkDiagnostics,
-} from '@/utils/networkConfig';
 
-/**
- * 网络设置页面
- */
+import { Text } from '@/components/Themed';
+import { useNetworkSettings } from '@/hooks/useNetworkSettings';
+import { useAppTheme } from '@/theme/useAppTheme';
+
+const DEFAULT_URL = 'http://192.168.31.157:8000';
+
 export default function NetworkSettingsScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   const router = useRouter();
+  const theme = useAppTheme();
+  const {
+    currentUrl,
+    inputUrl,
+    setInputUrl,
+    isTesting,
+    isAutoDiscovering,
+    testResult,
+    possibleUrls,
+    diagnostics,
+    testCurrentUrl,
+    saveCurrentUrl,
+    autoDiscover,
+    resetToDefault,
+  } = useNetworkSettings();
 
-  const [currentUrl, setCurrentUrl] = useState('');
-  const [inputUrl, setInputUrl] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isAutoDiscovering, setIsAutoDiscovering] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
-  } | null>(null);
-  const [possibleUrls, setPossibleUrls] = useState<string[]>([]);
-  const [diagnostics, setDiagnostics] = useState<{
-    deviceIp: string | null;
-    isBackendAvailable: boolean;
-  } | null>(null);
-
-  // 加载当前配置
-  useEffect(() => {
-    loadCurrentConfig();
-  }, []);
-
-  const loadCurrentConfig = async () => {
-    const url = await getBackendUrl();
-    setCurrentUrl(url);
-    setInputUrl(url);
-
-    // 获取可能的地址列表
-    const urls = await inferBackendUrl();
-    setPossibleUrls(urls);
-
-    // 获取诊断信息
-    const diag = await getNetworkDiagnostics();
-    setDiagnostics(diag);
-  };
-
-  // 测试当前输入的地址
   const handleTest = async () => {
+    const result = await testCurrentUrl();
     if (!inputUrl.trim()) {
-      Alert.alert('错误', '请输入后端地址');
-      return;
-    }
-
-    setIsLoading(true);
-    setTestResult(null);
-
-    try {
-      const isAvailable = await testBackendUrl(inputUrl.trim());
-      setTestResult({
-        success: isAvailable,
-        message: isAvailable
-          ? '✅ 连接成功！后端服务正常运行。'
-          : '❌ 连接失败。请检查地址是否正确，后端服务是否已启动。',
-      });
-    } catch (error) {
-      setTestResult({
-        success: false,
-        message: '❌ 测试出错: ' + (error as Error).message,
-      });
-    } finally {
-      setIsLoading(false);
+      Alert.alert('错误', result.message);
     }
   };
 
-  // 保存配置
   const handleSave = async () => {
     if (!inputUrl.trim()) {
       Alert.alert('错误', '请输入后端地址');
@@ -102,63 +48,20 @@ export default function NetworkSettingsScreen() {
     }
 
     try {
-      await setBackendUrl(inputUrl.trim());
-      setCurrentUrl(inputUrl.trim());
-      Alert.alert(
-        '保存成功',
-        '后端地址已更新为: ' + inputUrl.trim(),
-        [
-          {
-            text: '确定',
-            onPress: () => router.back(),
-          },
-        ]
-      );
-    } catch (error) {
-      Alert.alert('保存失败', (error as Error).message);
+      await saveCurrentUrl();
+      Alert.alert('保存成功', `后端地址已更新为: ${inputUrl.trim()}`, [
+        {
+          text: '确定',
+          onPress: () => router.back(),
+        },
+      ]);
+    } catch (err) {
+      Alert.alert('保存失败', (err as Error).message);
     }
   };
 
-  // 自动发现后端
-  const handleAutoDiscover = async () => {
-    setIsAutoDiscovering(true);
-    setTestResult(null);
-
-    try {
-      const discoveredUrl = await discoverBackendUrl();
-      if (discoveredUrl) {
-        setInputUrl(discoveredUrl);
-        setTestResult({
-          success: true,
-          message: `✅ 自动发现成功！找到可用后端: ${discoveredUrl}`,
-        });
-      } else {
-        setTestResult({
-          success: false,
-          message: '❌ 自动发现失败。未找到可用的后端服务。\n\n请确保：\n1. 后端服务已启动\n2. 手机和电脑在同一 WiFi 网络',
-        });
-      }
-    } catch (error) {
-      setTestResult({
-        success: false,
-        message: '❌ 自动发现出错: ' + (error as Error).message,
-      });
-    } finally {
-      setIsAutoDiscovering(false);
-    }
-  };
-
-  // 选择预设地址
-  const handleSelectUrl = (url: string) => {
-    setInputUrl(url);
-  };
-
-  // 重置为默认
   const handleReset = async () => {
-    const defaultUrl = 'http://192.168.31.157:8000';
-    setInputUrl(defaultUrl);
-    await setBackendUrl(defaultUrl);
-    setCurrentUrl(defaultUrl);
+    await resetToDefault(DEFAULT_URL);
     Alert.alert('重置成功', '已恢复默认地址');
   };
 
@@ -171,57 +74,48 @@ export default function NetworkSettingsScreen() {
         }}
       />
       <ScrollView
-        style={[styles.container, { backgroundColor: isDark ? '#000000' : '#F2F2F7' }]}
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
         contentContainerStyle={styles.content}
       >
-        {/* 当前配置 */}
-        <View style={[styles.section, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
-          <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-            当前配置
-          </Text>
-          <Text style={[styles.currentUrl, { color: isDark ? '#8E8E93' : '#666666' }]}>
-            {currentUrl}
-          </Text>
-          {diagnostics?.deviceIp && (
-            <Text style={[styles.deviceIp, { color: isDark ? '#8E8E93' : '#999999' }]}>
+        <View style={[styles.section, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>当前配置</Text>
+          <Text style={[styles.currentUrl, { color: theme.colors.textSubtle }]}>{currentUrl}</Text>
+          {diagnostics?.deviceIp ? (
+            <Text style={[styles.deviceIp, { color: theme.colors.textSubtle }]}>
               本机 IP: {diagnostics.deviceIp}
             </Text>
-          )}
+          ) : null}
         </View>
 
-        {/* 地址输入 */}
-        <View style={[styles.section, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
-          <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-            后端地址
-          </Text>
-          <Text style={[styles.hint, { color: isDark ? '#8E8E93' : '#666666' }]}>
+        <View style={[styles.section, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>后端地址</Text>
+          <Text style={[styles.hint, { color: theme.colors.textSubtle }]}>
             格式: http://IP地址:端口号
           </Text>
           <TextInput
             style={[
               styles.input,
               {
-                backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                color: isDark ? '#FFFFFF' : '#000000',
-                borderColor: isDark ? '#3A3A3C' : '#E5E5EA',
+                backgroundColor: theme.colors.surfaceMuted,
+                color: theme.colors.text,
+                borderColor: theme.colors.border,
               },
             ]}
             value={inputUrl}
             onChangeText={setInputUrl}
             placeholder="http://192.168.1.100:8000"
-            placeholderTextColor={isDark ? '#8E8E93' : '#999999'}
+            placeholderTextColor={theme.colors.textSubtle}
             autoCapitalize="none"
             autoCorrect={false}
           />
 
-          {/* 按钮组 */}
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.button, styles.testButton]}
+              style={[styles.button, { backgroundColor: theme.colors.primary }]}
               onPress={handleTest}
-              disabled={isLoading}
+              disabled={isTesting}
             >
-              {isLoading ? (
+              {isTesting ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <Text style={styles.buttonText}>测试连接</Text>
@@ -229,77 +123,65 @@ export default function NetworkSettingsScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.button, styles.saveButton]}
+              style={[styles.button, { backgroundColor: theme.colors.success }]}
               onPress={handleSave}
             >
               <Text style={styles.buttonText}>保存</Text>
             </TouchableOpacity>
           </View>
 
-          {/* 自动发现按钮 */}
           <TouchableOpacity
-            style={[styles.button, styles.discoverButton, { marginTop: 8 }]}
-            onPress={handleAutoDiscover}
+            style={[styles.button, styles.fullButton, { backgroundColor: theme.colors.primary }]}
+            onPress={autoDiscover}
             disabled={isAutoDiscovering}
           >
             {isAutoDiscovering ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={styles.buttonText}>🔍 自动发现后端</Text>
+              <Text style={styles.buttonText}>自动发现后端</Text>
             )}
           </TouchableOpacity>
 
-          {/* 测试结果 */}
-          {testResult && (
+          {testResult ? (
             <Text
               style={[
                 styles.testResult,
-                { color: testResult.success ? '#34C759' : '#FF3B30' },
+                { color: testResult.success ? theme.colors.success : theme.colors.danger },
               ]}
             >
               {testResult.message}
             </Text>
-          )}
+          ) : null}
         </View>
 
-        {/* 预设地址 */}
-        <View style={[styles.section, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
-          <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-            可能的后端地址
-          </Text>
-          <Text style={[styles.hint, { color: isDark ? '#8E8E93' : '#666666' }]}>
+        <View style={[styles.section, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>可能的后端地址</Text>
+          <Text style={[styles.hint, { color: theme.colors.textSubtle }]}>
             点击选择以下地址进行测试：
           </Text>
           {possibleUrls.map((url, index) => (
             <TouchableOpacity
-              key={index}
+              key={url}
               style={[
                 styles.urlItem,
-                { borderBottomColor: isDark ? '#3A3A3C' : '#E5E5EA' },
+                { borderBottomColor: theme.colors.border },
                 index === possibleUrls.length - 1 && styles.urlItemLast,
               ]}
-              onPress={() => handleSelectUrl(url)}
+              onPress={() => setInputUrl(url)}
             >
-              <Text style={[styles.urlText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-                {url}
-              </Text>
-              <Text style={[styles.urlArrow, { color: isDark ? '#8E8E93' : '#999999' }]}>
-                ›
-              </Text>
+              <Text style={[styles.urlText, { color: theme.colors.text }]}>{url}</Text>
+              <Text style={[styles.urlArrow, { color: theme.colors.textSubtle }]}>›</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* 帮助信息 */}
-        <View style={[styles.section, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
-          <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-            常见问题
-          </Text>
+        <View style={[styles.section, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>常见问题</Text>
           <View style={styles.faqItem}>
-            <Text style={[styles.faqQuestion, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+            <Text style={[styles.faqQuestion, { color: theme.colors.text }]}>
               如何找到正确的后端地址？
             </Text>
-            <Text style={[styles.faqAnswer, { color: isDark ? '#8E8E93' : '#666666' }]}>
+            <Text style={[styles.faqAnswer, { color: theme.colors.textSubtle }]}>
               1. 确保后端服务已启动（uvicorn main:app --reload）{'\n'}
               2. 确保手机和电脑连接同一 WiFi{'\n'}
               3. 查看电脑的网络 IP 地址{'\n'}
@@ -308,11 +190,8 @@ export default function NetworkSettingsScreen() {
           </View>
         </View>
 
-        {/* 重置按钮 */}
         <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-          <Text style={[styles.resetText, { color: isDark ? '#8E8E93' : '#999999' }]}>
-            恢复默认地址
-          </Text>
+          <Text style={[styles.resetText, { color: theme.colors.textSubtle }]}>恢复默认地址</Text>
         </TouchableOpacity>
       </ScrollView>
     </>
@@ -369,14 +248,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  testButton: {
-    backgroundColor: '#007AFF',
-  },
-  saveButton: {
-    backgroundColor: '#34C759',
-  },
-  discoverButton: {
-    backgroundColor: '#5856D6',
+  fullButton: {
+    marginTop: 8,
   },
   buttonText: {
     color: '#FFFFFF',
