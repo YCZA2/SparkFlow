@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import func
@@ -39,15 +40,19 @@ def create(
     content: str,
     mode: str,
     source_fragment_ids: str,
+    *,
+    title: Optional[str] = None,
+    status: str = "draft",
+    is_daily_push: bool = False,
 ) -> Script:
     script = Script(
         user_id=user_id,
-        title=None,
+        title=title,
         content=content,
         mode=mode,
         source_fragment_ids=source_fragment_ids,
-        status="draft",
-        is_daily_push=False,
+        status=status,
+        is_daily_push=is_daily_push,
     )
     db.add(script)
     db.commit()
@@ -75,4 +80,23 @@ def get_fragments_for_user(db: Session, user_id: str, fragment_ids: list[str]) -
         db.query(Fragment)
         .filter(Fragment.id.in_(fragment_ids), Fragment.user_id == user_id)
         .all()
+    )
+
+
+def get_latest_daily_push_for_window(
+    db: Session,
+    user_id: str,
+    start_at: datetime,
+    end_at: datetime,
+) -> Optional[Script]:
+    return (
+        db.query(Script)
+        .filter(
+            Script.user_id == user_id,
+            Script.is_daily_push.is_(True),
+            Script.created_at >= start_at,
+            Script.created_at < end_at,
+        )
+        .order_by(Script.created_at.desc())
+        .first()
     )

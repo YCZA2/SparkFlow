@@ -44,6 +44,9 @@ export const API_ENDPOINTS = {
   SCRIPTS: {
     LIST: '/api/scripts/',
     GENERATE: '/api/scripts/generate',
+    DAILY_PUSH: '/api/scripts/daily-push',
+    TRIGGER_DAILY_PUSH: '/api/scripts/daily-push/trigger',
+    FORCE_TRIGGER_DAILY_PUSH: '/api/scripts/daily-push/force-trigger',
     DETAIL: (id: string) => `/api/scripts/${id}`,
   },
   KNOWLEDGE: '/api/knowledge',

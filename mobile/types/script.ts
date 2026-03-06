@@ -11,6 +11,7 @@ export interface Script {
   content: string | null;
   mode: ScriptMode;
   source_fragment_ids: string[] | null;
+  source_fragment_count: number;
   status: ScriptStatus;
   is_daily_push: boolean;
   created_at: string | null;

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import func
@@ -51,6 +52,26 @@ def list_vectorizable_by_user(db: Session, user_id: str) -> list[Fragment]:
             Fragment.user_id == user_id,
             Fragment.sync_status == "synced",
             Fragment.transcript.isnot(None),
+        )
+        .order_by(Fragment.created_at.asc())
+        .all()
+    )
+
+
+def list_synced_in_range(
+    db: Session,
+    user_id: str,
+    start_at: datetime,
+    end_at: datetime,
+) -> list[Fragment]:
+    return (
+        db.query(Fragment)
+        .filter(
+            Fragment.user_id == user_id,
+            Fragment.sync_status == "synced",
+            Fragment.transcript.isnot(None),
+            Fragment.created_at >= start_at,
+            Fragment.created_at < end_at,
         )
         .order_by(Fragment.created_at.asc())
         .all()

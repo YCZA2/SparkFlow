@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta
 import io
 import json
 import os
@@ -19,11 +20,14 @@ from main import app
 from domains.transcription import upload as transcription_upload
 from domains.transcription import workflow as transcription_workflow
 from domains.fragments import service as fragment_service
-from models import Base, Fragment
+from domains.scripts import service as script_service
+from models import Base, Fragment, Script
 from models.database import get_db
 from routers.auth import TEST_USER_ID
 from services.base import VectorDocument
+from services import scheduler as scheduler_service
 from services import vector_visualization_service
+from utils.time import get_local_day_bounds
 
 
 class BackendFlowTestCase(unittest.TestCase):
@@ -585,3 +589,220 @@ class BackendFlowTestCase(unittest.TestCase):
     def test_get_fragment_visualization_requires_auth(self) -> None:
         response = self.client.get("/api/fragments/visualization")
         self.assertEqual(response.status_code, 401)
+
+    def test_daily_aggregate_generates_ready_daily_push_script(self) -> None:
+        self.auth_headers()
+        reference_time = datetime.fromisoformat("2026-03-06T08:00:00+00:00")
+        yesterday_start, _ = get_local_day_bounds(reference_time, day_offset=-1)
+
+        with self.SessionLocal() as db:
+            fragments = []
+            for index in range(4):
+                fragment = Fragment(
+                    user_id=TEST_USER_ID,
+                    transcript=f"定位灵感 {index}",
+                    summary="定位表达",
+                    tags=json.dumps(["定位", "表达"], ensure_ascii=False),
+                    source="voice",
+                    sync_status="synced",
+                    created_at=yesterday_start + timedelta(hours=index + 1),
+                )
+                db.add(fragment)
+                fragments.append(fragment)
+            db.commit()
+            for fragment in fragments:
+                db.refresh(fragment)
+
+            match_map = {
+                fragments[0].id: [
+                    {"fragment_id": fragments[1].id, "score": 0.91},
+                    {"fragment_id": fragments[2].id, "score": 0.88},
+                ],
+                fragments[1].id: [
+                    {"fragment_id": fragments[0].id, "score": 0.91},
+                    {"fragment_id": fragments[2].id, "score": 0.86},
+                ],
+                fragments[2].id: [
+                    {"fragment_id": fragments[0].id, "score": 0.88},
+                    {"fragment_id": fragments[1].id, "score": 0.86},
+                ],
+                fragments[3].id: [
+                    {"fragment_id": fragments[0].id, "score": 0.41},
+                ],
+            }
+
+            async def fake_query_similar_fragments(*, exclude_ids=None, **kwargs):
+                fragment_id = exclude_ids[0]
+                return match_map.get(fragment_id, [])
+
+            with (
+                patch.object(
+                    scheduler_service,
+                    "query_similar_fragments",
+                    AsyncMock(side_effect=fake_query_similar_fragments),
+                ),
+                patch.object(
+                    script_service,
+                    "generate_script_content",
+                    AsyncMock(return_value="昨日灵感自动成稿"),
+                ),
+            ):
+                result = asyncio.run(
+                    scheduler_service.daily_aggregate(
+                        reference_time=reference_time,
+                        db=db,
+                    )
+                )
+
+            self.assertEqual(result["generated_scripts"], 1)
+            created_script = db.query(Script).filter(Script.user_id == TEST_USER_ID).one()
+            self.assertTrue(created_script.is_daily_push)
+            self.assertEqual(created_script.status, "ready")
+            self.assertEqual(json.loads(created_script.source_fragment_ids), [fragments[0].id, fragments[1].id, fragments[2].id])
+
+    def test_get_daily_push_endpoint_returns_today_script(self) -> None:
+        headers = self.auth_headers()
+        today_start, today_end = get_local_day_bounds(datetime.fromisoformat("2026-03-06T09:00:00+00:00"))
+
+        with self.SessionLocal() as db:
+            script = Script(
+                user_id=TEST_USER_ID,
+                title="每日灵感推盘",
+                content="今日自动成稿",
+                mode="mode_a",
+                source_fragment_ids=json.dumps(["f1", "f2", "f3"], ensure_ascii=False),
+                status="ready",
+                is_daily_push=True,
+                created_at=today_start + timedelta(hours=1),
+            )
+            db.add(script)
+            db.commit()
+            db.refresh(script)
+
+        with patch.object(script_service, "get_local_day_bounds", return_value=(today_start, today_end)):
+            response = self.client.get("/api/scripts/daily-push", headers=headers)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+        self.assertEqual(payload["id"], script.id)
+        self.assertEqual(payload["source_fragment_count"], 3)
+
+    def test_get_daily_push_endpoint_ignores_previous_days(self) -> None:
+        headers = self.auth_headers()
+        reference_time = datetime.fromisoformat("2026-03-06T09:00:00+00:00")
+        today_start, today_end = get_local_day_bounds(reference_time, day_offset=0)
+        _, yesterday_end = get_local_day_bounds(reference_time, day_offset=-1)
+
+        with self.SessionLocal() as db:
+            old_script = Script(
+                user_id=TEST_USER_ID,
+                title="旧的每日推盘",
+                content="昨天生成的稿件",
+                mode="mode_a",
+                source_fragment_ids=json.dumps(["f1", "f2", "f3"], ensure_ascii=False),
+                status="ready",
+                is_daily_push=True,
+                created_at=yesterday_end - timedelta(minutes=10),
+            )
+            db.add(old_script)
+            db.commit()
+
+        with patch.object(script_service, "get_local_day_bounds", return_value=(today_start, today_end)):
+            response = self.client.get("/api/scripts/daily-push", headers=headers)
+        self.assertEqual(response.status_code, 404)
+
+    def test_trigger_daily_push_endpoint_generates_today_card(self) -> None:
+        headers = self.auth_headers()
+        reference_time = datetime.fromisoformat("2026-03-06T10:00:00+00:00")
+        today_start, today_end = get_local_day_bounds(reference_time, day_offset=0)
+
+        with self.SessionLocal() as db:
+            fragments = []
+            for index in range(3):
+                fragment = Fragment(
+                    user_id=TEST_USER_ID,
+                    transcript=f"今天的定位碎片 {index}",
+                    summary="定位表达",
+                    tags=json.dumps(["定位", "表达"], ensure_ascii=False),
+                    source="voice",
+                    sync_status="synced",
+                    created_at=today_start + timedelta(hours=index + 1),
+                )
+                db.add(fragment)
+                fragments.append(fragment)
+            db.commit()
+            for fragment in fragments:
+                db.refresh(fragment)
+
+        match_map = {
+            fragments[0].id: [
+                {"fragment_id": fragments[1].id, "score": 0.9},
+                {"fragment_id": fragments[2].id, "score": 0.87},
+            ],
+            fragments[1].id: [
+                {"fragment_id": fragments[0].id, "score": 0.9},
+                {"fragment_id": fragments[2].id, "score": 0.85},
+            ],
+            fragments[2].id: [
+                {"fragment_id": fragments[0].id, "score": 0.87},
+                {"fragment_id": fragments[1].id, "score": 0.85},
+            ],
+        }
+
+        async def fake_query_similar_fragments(*, exclude_ids=None, **kwargs):
+            fragment_id = exclude_ids[0]
+            return match_map.get(fragment_id, [])
+
+        with (
+            patch.object(scheduler_service, "get_local_day_bounds", return_value=(today_start, today_end)),
+            patch.object(
+                scheduler_service,
+                "query_similar_fragments",
+                AsyncMock(side_effect=fake_query_similar_fragments),
+            ),
+            patch.object(
+                script_service,
+                "generate_script_content",
+                AsyncMock(return_value="今天立即生成的灵感卡片"),
+            ),
+        ):
+            response = self.client.post("/api/scripts/daily-push/trigger", headers=headers)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+        self.assertTrue(payload["is_daily_push"])
+        self.assertEqual(payload["source_fragment_count"], 3)
+
+    def test_force_trigger_daily_push_endpoint_skips_similarity_check(self) -> None:
+        headers = self.auth_headers()
+        reference_time = datetime.fromisoformat("2026-03-06T10:00:00+00:00")
+        today_start, today_end = get_local_day_bounds(reference_time, day_offset=0)
+
+        with self.SessionLocal() as db:
+            for index in range(3):
+                db.add(
+                    Fragment(
+                        user_id=TEST_USER_ID,
+                        transcript=f"今天的任意碎片 {index}",
+                        summary="临时灵感",
+                        tags=json.dumps(["临时"], ensure_ascii=False),
+                        source="voice",
+                        sync_status="synced",
+                        created_at=today_start + timedelta(hours=index + 1),
+                    )
+                )
+            db.commit()
+
+        with (
+            patch.object(scheduler_service, "get_local_day_bounds", return_value=(today_start, today_end)),
+            patch.object(
+                script_service,
+                "generate_script_content",
+                AsyncMock(return_value="忽略语义关联后的今日成稿"),
+            ),
+        ):
+            response = self.client.post("/api/scripts/daily-push/force-trigger", headers=headers)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+        self.assertTrue(payload["is_daily_push"])
+        self.assertEqual(payload["source_fragment_count"], 3)

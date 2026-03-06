@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     APP_NAME: str = Field(default="SparkFlow API", description="应用名称")
     APP_VERSION: str = Field(default="0.1.0", description="应用版本")
     DEBUG: bool = Field(default=False, description="调试模式")
+    APP_TIMEZONE: str = Field(default="Asia/Shanghai", description="应用业务时区")
 
     # 服务器配置
     HOST: str = Field(default="0.0.0.0", description="服务器主机")
@@ -112,6 +113,15 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE: int = Field(
         default=50 * 1024 * 1024,  # 50MB
         description="最大上传文件大小（字节）"
+    )
+
+    # 每日推盘配置
+    DAILY_PUSH_HOUR: int = Field(default=8, description="每日推盘生成小时")
+    DAILY_PUSH_MINUTE: int = Field(default=0, description="每日推盘生成分钟")
+    DAILY_PUSH_MIN_FRAGMENTS: int = Field(default=3, description="触发每日推盘的最小碎片数")
+    DAILY_PUSH_SIMILARITY_THRESHOLD: float = Field(
+        default=0.72,
+        description="判定碎片主题相关的相似度阈值"
     )
 
     model_config = SettingsConfigDict(

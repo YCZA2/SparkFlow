@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from core.exceptions import NotFoundError, ValidationError
 from models import Fragment, Script
 from services.factory import get_llm_service
+from utils.time import get_local_day_bounds
 from utils.serialization import format_iso_datetime, parse_json_list
 
 from . import repository
@@ -35,6 +36,7 @@ def serialize_script(script: Script) -> dict[str, Any]:
         "content": script.content,
         "mode": script.mode,
         "source_fragment_ids": source_fragment_ids,
+        "source_fragment_count": len(source_fragment_ids),
         "status": script.status,
         "is_daily_push": script.is_daily_push,
         "created_at": format_iso_datetime(script.created_at),
@@ -71,7 +73,7 @@ def _get_fragments_for_user(db: Session, user_id: str, fragment_ids: list[str]) 
     return fragments
 
 
-def _build_fragments_text(fragments: list[Fragment]) -> str:
+def build_fragments_text(fragments: list[Fragment]) -> str:
     parts = [fragment.transcript for fragment in fragments if fragment.transcript]
     if not parts:
         raise ValidationError(
@@ -81,22 +83,13 @@ def _build_fragments_text(fragments: list[Fragment]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-async def generate_script(db: Session, user_id: str, fragment_ids: list[str], mode: str) -> Script:
-    if mode not in VALID_SCRIPT_MODES:
-        raise ValidationError(
-            message=f"无效的生成模式: {mode}",
-            field_errors={"mode": "必须是以下之一: mode_a, mode_b"},
-        )
-
-    logger.info("[Script] start generate mode=%s count=%s", mode, len(fragment_ids))
-    fragments = _get_fragments_for_user(db=db, user_id=user_id, fragment_ids=fragment_ids)
-    fragments_text = _build_fragments_text(fragments)
+async def generate_script_content(mode: str, fragments_text: str) -> str:
     prompt_template = load_prompt_template(mode)
     system_prompt = prompt_template.replace("{fragments_text}", fragments_text)
 
     try:
         llm_service = get_llm_service()
-        content = await llm_service.generate(
+        return await llm_service.generate(
             system_prompt=system_prompt,
             user_message="",
             temperature=0.7,
@@ -109,12 +102,48 @@ async def generate_script(db: Session, user_id: str, fragment_ids: list[str], mo
             field_errors={"llm": str(exc)},
         ) from exc
 
-    script = repository.create(
+
+def create_script_record(
+    db: Session,
+    user_id: str,
+    content: str,
+    mode: str,
+    fragment_ids: list[str],
+    *,
+    title: Optional[str] = None,
+    status: str = "draft",
+    is_daily_push: bool = False,
+) -> Script:
+    return repository.create(
         db=db,
         user_id=user_id,
         content=content,
         mode=mode,
         source_fragment_ids=json.dumps(fragment_ids, ensure_ascii=False),
+        title=title,
+        status=status,
+        is_daily_push=is_daily_push,
+    )
+
+
+async def generate_script(db: Session, user_id: str, fragment_ids: list[str], mode: str) -> Script:
+    if mode not in VALID_SCRIPT_MODES:
+        raise ValidationError(
+            message=f"无效的生成模式: {mode}",
+            field_errors={"mode": "必须是以下之一: mode_a, mode_b"},
+        )
+
+    logger.info("[Script] start generate mode=%s count=%s", mode, len(fragment_ids))
+    fragments = _get_fragments_for_user(db=db, user_id=user_id, fragment_ids=fragment_ids)
+    fragments_text = build_fragments_text(fragments)
+    content = await generate_script_content(mode=mode, fragments_text=fragments_text)
+
+    script = create_script_record(
+        db=db,
+        user_id=user_id,
+        content=content,
+        mode=mode,
+        fragment_ids=fragment_ids,
     )
     logger.info("[Script] created id=%s", script.id)
     return script
@@ -135,6 +164,23 @@ def get_script_or_raise(db: Session, user_id: str, script_id: str) -> Script:
             message="口播稿不存在或无权访问",
             resource_type="script",
             resource_id=script_id,
+        )
+    return script
+
+
+def get_today_daily_push_or_raise(db: Session, user_id: str) -> Script:
+    start_at, end_at = get_local_day_bounds()
+    script = repository.get_latest_daily_push_for_window(
+        db=db,
+        user_id=user_id,
+        start_at=start_at,
+        end_at=end_at,
+    )
+    if not script:
+        raise NotFoundError(
+            message="今日暂无每日推盘稿件",
+            resource_type="script",
+            resource_id="daily-push",
         )
     return script
 

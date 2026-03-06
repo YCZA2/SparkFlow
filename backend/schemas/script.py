@@ -24,6 +24,7 @@ class ScriptItem(BaseModel):
     id: str
     title: Optional[str]
     mode: str
+    source_fragment_count: int = 0
     status: str
     is_daily_push: bool
     created_at: str

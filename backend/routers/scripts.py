@@ -8,6 +8,7 @@ from core.auth import get_current_user
 from domains.scripts import service as script_service
 from models.database import get_db
 from schemas.script import ScriptGenerateRequest, ScriptUpdateRequest
+from services.scheduler import trigger_daily_push_for_user
 
 
 router = APIRouter(
@@ -59,6 +60,49 @@ async def list_scripts(
             offset=offset,
             serializer=script_service.serialize_script,
         )
+    )
+
+
+@router.get("/daily-push")
+async def get_daily_push(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    script = script_service.get_today_daily_push_or_raise(
+        db=db,
+        user_id=current_user["user_id"],
+    )
+    return success_response(data=script_service.serialize_script(script))
+
+
+@router.post("/daily-push/trigger")
+async def trigger_daily_push(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    script = await trigger_daily_push_for_user(
+        db=db,
+        user_id=current_user["user_id"],
+    )
+    return success_response(
+        data=script_service.serialize_script(script),
+        message="今日灵感卡片已生成",
+    )
+
+
+@router.post("/daily-push/force-trigger")
+async def force_trigger_daily_push(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    script = await trigger_daily_push_for_user(
+        db=db,
+        user_id=current_user["user_id"],
+        force=True,
+    )
+    return success_response(
+        data=script_service.serialize_script(script),
+        message="已强制生成今日灵感卡片",
     )
 
 

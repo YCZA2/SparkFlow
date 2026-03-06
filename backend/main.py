@@ -13,6 +13,7 @@ from core.exceptions import (
     AuthenticationError,
 )
 from routers import auth, fragments, knowledge, scripts, test, transcribe
+from services.scheduler import start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +156,16 @@ async def health_check():
         "debug": settings.DEBUG,
         "services": services_status
     })
+
+
+@app.on_event("startup")
+async def on_startup() -> None:
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    stop_scheduler()
 
 
 # 注册核心主链路路由
