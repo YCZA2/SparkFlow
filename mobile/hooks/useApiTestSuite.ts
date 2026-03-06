@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
+import { getUserInfo, loginWithTestUser } from '@/features/auth/api';
 import {
   ApiError,
+  getCurrentBackendUrl,
+  getToken,
+  testConnection,
+} from '@/features/core/api/client';
+import {
   createFragment,
   deleteFragment,
   fetchFragmentDetail,
   fetchFragments,
-  getCurrentBackendUrl,
-  getToken,
-  getTranscribeStatus,
-  getUserInfo,
-  loginWithTestUser,
-  testConnection,
-} from '@/features/test-support/api';
+} from '@/features/fragments/api';
+import { getTranscribeStatus } from '@/features/recording/api';
 
 export interface TestResult {
   name: string;

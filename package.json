@@ -11,5 +11,7 @@
   },
   "name": "SparkFlow",
   "version": "1.0.0",
-  "scripts": {}
+  "scripts": {
+    "dev:mobile": "bash scripts/dev-mobile.sh"
+  }
 }

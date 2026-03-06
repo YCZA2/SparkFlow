@@ -14,15 +14,12 @@ export function useFragments() {
 
   return {
     fragments: list.items,
-    items: list.items,
     isLoading: list.isLoading,
     isRefreshing: list.isRefreshing,
     error: list.error,
     total: list.items.length,
     fetchFragments: list.reload,
     refreshFragments: list.refresh,
-    reload: list.reload,
-    refresh: list.refresh,
   };
 }
 

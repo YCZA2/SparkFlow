@@ -12,8 +12,7 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-rou
 import { Text } from '@/components/Themed';
 import { FragmentCard } from '@/components/FragmentCard';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
-import { useFragments } from '@/features/fragments/hooks';
-import { useFragmentSelection } from '@/hooks/useFragmentSelection';
+import { useFragmentSelection, useFragments } from '@/features/fragments/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
 

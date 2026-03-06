@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from core.exceptions import NotFoundError, ValidationError
 from models import Fragment, Script
 from services.factory import get_llm_service
+from utils.serialization import format_iso_datetime, parse_json_list
 
 from . import repository
 
@@ -26,14 +27,7 @@ MODE_B_PROMPT_FILE = PROMPTS_DIR / "mode_b_brain.txt"
 
 
 def serialize_script(script: Script) -> dict[str, Any]:
-    source_fragment_ids: Optional[list[str]] = None
-    if script.source_fragment_ids:
-        try:
-            parsed = json.loads(script.source_fragment_ids)
-        except json.JSONDecodeError:
-            parsed = None
-        if isinstance(parsed, list):
-            source_fragment_ids = [str(fragment_id) for fragment_id in parsed if fragment_id]
+    source_fragment_ids = parse_json_list(script.source_fragment_ids, allow_csv_fallback=False)
 
     return {
         "id": script.id,
@@ -43,7 +37,7 @@ def serialize_script(script: Script) -> dict[str, Any]:
         "source_fragment_ids": source_fragment_ids,
         "status": script.status,
         "is_daily_push": script.is_daily_push,
-        "created_at": script.created_at.isoformat() if script.created_at else None,
+        "created_at": format_iso_datetime(script.created_at),
     }
 
 

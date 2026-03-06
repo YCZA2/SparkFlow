@@ -2,6 +2,9 @@
  * 碎片笔记类型定义
  */
 
+export type FragmentSource = 'voice' | 'manual' | 'video_parse';
+export type FragmentSyncStatus = 'pending' | 'syncing' | 'synced' | 'failed';
+
 /**
  * 碎片笔记数据模型
  */
@@ -17,9 +20,9 @@ export interface Fragment {
   /** AI自动标签 */
   tags: string[] | null;
   /** 来源: voice | manual | video_parse */
-  source: string;
+  source: FragmentSource;
   /** 同步状态: pending | syncing | synced | failed */
-  sync_status: string;
+  sync_status: FragmentSyncStatus;
   /** 创建时间 */
   created_at: string;
 }
@@ -44,6 +47,10 @@ export interface FragmentListResponse {
 export interface CreateFragmentRequest {
   /** 转写文本 */
   transcript?: string;
+  /** AI摘要 */
+  summary?: string;
+  /** AI标签 */
+  tags?: string[];
   /** 来源 */
-  source?: string;
+  source?: FragmentSource;
 }

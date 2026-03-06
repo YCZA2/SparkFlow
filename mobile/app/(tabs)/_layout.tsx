@@ -9,9 +9,10 @@ import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  const micIcon = Platform.select({ ios: 'mic.circle.fill', default: 'mic' }) as any;
-  const fragmentsIcon = Platform.select({ ios: 'square.stack.3d.up.fill', default: 'square.stack.3d.up.fill' }) as any;
-  const profileIcon = Platform.select({ ios: 'person.circle.fill', default: 'person.circle.fill' }) as any;
+  type SymbolName = React.ComponentProps<typeof SymbolView>['name'];
+  const micIcon = (Platform.select<SymbolName>({ ios: 'mic.circle.fill', default: 'mic' }) ?? 'mic') as SymbolName;
+  const fragmentsIcon = (Platform.select<SymbolName>({ ios: 'square.stack.3d.up.fill', default: 'square.stack.3d.up.fill' }) ?? 'square.stack.3d.up.fill') as SymbolName;
+  const profileIcon = (Platform.select<SymbolName>({ ios: 'person.circle.fill', default: 'person.circle.fill' }) ?? 'person.circle.fill') as SymbolName;
 
   return (
     <Tabs

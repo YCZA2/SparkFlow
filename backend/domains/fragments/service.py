@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ValidationError
 from models import Fragment
+from utils.serialization import format_iso_datetime, parse_json_list
 
 from . import repository
 
@@ -16,19 +16,7 @@ VALID_FRAGMENT_SOURCES = {"voice", "manual", "video_parse"}
 
 
 def _parse_tags(tags_raw: Optional[str]) -> Optional[list[str]]:
-    if not tags_raw:
-        return None
-
-    try:
-        parsed = json.loads(tags_raw)
-    except json.JSONDecodeError:
-        parsed = None
-
-    if isinstance(parsed, list):
-        return [str(tag) for tag in parsed if tag]
-
-    fallback_tags = [tag.strip() for tag in tags_raw.split(",") if tag.strip()]
-    return fallback_tags or None
+    return parse_json_list(tags_raw, allow_csv_fallback=True)
 
 
 def serialize_fragment(fragment: Fragment, include_audio_path: bool = True) -> dict[str, Any]:
@@ -39,7 +27,7 @@ def serialize_fragment(fragment: Fragment, include_audio_path: bool = True) -> d
         "tags": _parse_tags(fragment.tags),
         "source": fragment.source,
         "sync_status": fragment.sync_status,
-        "created_at": fragment.created_at.isoformat() if fragment.created_at else None,
+        "created_at": format_iso_datetime(fragment.created_at),
         "audio_path": fragment.audio_path,
     }
     if not include_audio_path:

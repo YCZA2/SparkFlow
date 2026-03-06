@@ -11,6 +11,7 @@ import certifi
 import asyncio
 import logging
 from typing import Optional
+import time
 
 # 修复 macOS SSL 证书问题
 # 必须在导入 aiohttp/dashscope 之前设置
@@ -25,6 +26,15 @@ ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=ce
 from dashscope.audio.asr import Recognition, RecognitionCallback, RecognitionResult
 
 from core.config import settings
+from constants.audio import (
+    AUDIO_SAMPLE_RATE,
+    BYTES_PER_SECOND,
+    CHUNK_SIZE_BYTES,
+    MIN_RECOGNITION_WAIT_SECONDS,
+    RECOGNITION_POLL_INTERVAL_SECONDS,
+    RECOGNITION_TIMEOUT_BUFFER_SECONDS,
+    WAV_HEADER_SIZE,
+)
 from .base import (
     BaseSTTService,
     TranscriptionResult,
@@ -237,7 +247,7 @@ class DashScopeSTTService(BaseSTTService):
             # 清理临时文件
             try:
                 os.unlink(temp_path)
-            except:
+            except Exception:
                 pass
 
     def _convert_to_wav(self, audio_path: str) -> str:
@@ -264,7 +274,7 @@ class DashScopeSTTService(BaseSTTService):
             audio = AudioSegment.from_file(audio_path)
 
             # 转换为单声道 16kHz WAV
-            audio = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
+            audio = audio.set_channels(1).set_frame_rate(AUDIO_SAMPLE_RATE).set_sample_width(2)
 
             # 保存为临时 WAV 文件
             temp_wav = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
@@ -282,6 +292,60 @@ class DashScopeSTTService(BaseSTTService):
             logger.warning(f"[DashScope STT] 音频转换失败: {e}，尝试直接发送原始文件")
             return audio_path
 
+    def _convert_audio_if_needed(self, audio_path: str, format_str: str) -> tuple[str, str, Optional[str]]:
+        """Convert input audio to WAV when needed."""
+        try:
+            audio_path_to_use = self._convert_to_wav(audio_path)
+            if audio_path_to_use != audio_path:
+                return audio_path_to_use, "wav", audio_path_to_use
+            return audio_path_to_use, format_str, None
+        except Exception as e:
+            logger.warning(f"[DashScope STT] 音频转换失败，使用原始文件: {e}")
+            return audio_path, format_str, None
+
+    def _read_audio_data(self, audio_path: str, format_str: str) -> bytes:
+        """
+        Read audio bytes for streaming recognition.
+
+        WAV files skip the fixed header block when valid.
+        """
+        with open(audio_path, 'rb') as audio_file:
+            header = audio_file.read(WAV_HEADER_SIZE)
+            if len(header) < WAV_HEADER_SIZE:
+                raise STTFileError(f"音频文件太小: {audio_path}")
+
+            if format_str == "wav" and header[:4] != b"RIFF":
+                logger.warning("[DashScope STT] 非 WAV 文件格式，跳过文件头处理")
+                audio_file.seek(0)
+
+            return audio_file.read()
+
+    def _stream_recognize(self, recognition: Recognition, audio_data: bytes) -> None:
+        """Send audio frames in fixed-size chunks."""
+        for offset in range(0, len(audio_data), CHUNK_SIZE_BYTES):
+            recognition.send_audio_frame(audio_data[offset:offset + CHUNK_SIZE_BYTES])
+
+    def _wait_for_result(self, callback: SimpleRecognitionCallback, audio_data_size: int) -> None:
+        """Wait until recognition completes or reaches timeout."""
+        audio_duration = audio_data_size / BYTES_PER_SECOND
+        max_wait = max(
+            MIN_RECOGNITION_WAIT_SECONDS,
+            audio_duration + RECOGNITION_TIMEOUT_BUFFER_SECONDS,
+        )
+
+        wait_time = 0.0
+        while not callback.completed and not callback.error and wait_time < max_wait:
+            time.sleep(RECOGNITION_POLL_INTERVAL_SECONDS)
+            wait_time += RECOGNITION_POLL_INTERVAL_SECONDS
+
+        if not callback.completed and not callback.error:
+            logger.warning(f"[DashScope STT] 识别超时（等待 {wait_time:.1f} 秒）")
+
+        if callback.error:
+            error_msg = callback.error.message if hasattr(callback.error, "message") else "未知错误"
+            logger.error(f"[DashScope STT] 识别失败: {error_msg}")
+            raise STTRecognitionError(f"识别失败: {error_msg}")
+
     def _recognize_file(
         self,
         audio_path: str,
@@ -296,84 +360,28 @@ class DashScopeSTTService(BaseSTTService):
         """
         logger.info(f"[DashScope STT] 调用 SDK: model={self.model}, format={format_str}")
 
-        # 转换为 WAV 格式（16kHz 单声道）
-        temp_wav_path = None
-        try:
-            audio_path_to_use = self._convert_to_wav(audio_path)
-            if audio_path_to_use != audio_path:
-                temp_wav_path = audio_path_to_use
-                format_str = "wav"
-        except Exception as e:
-            logger.warning(f"[DashScope STT] 音频转换失败，使用原始文件: {e}")
+        audio_path_to_use, format_to_use, temp_wav_path = self._convert_audio_if_needed(audio_path, format_str)
 
         try:
-            # 创建回调
             callback = SimpleRecognitionCallback()
-
-            # 创建 Recognition 实例
             recognition = Recognition(
                 model=self.model,
                 callback=callback,
-                format=format_str,
-                sample_rate=16000,
+                format=format_to_use,
+                sample_rate=AUDIO_SAMPLE_RATE,
             )
 
-            # 使用流式方式：start -> send_audio_frame -> stop
-            # 这比 Recognition.call() 更可靠
             logger.info("[DashScope STT] 启动流式识别...")
-
-            # 启动识别
             recognition.start()
 
-            # 读取音频文件并发送
-            # 注意：WAV 文件需要跳过 44 字节的文件头
-            with open(audio_path_to_use, 'rb') as f:
-                # 检查是否为 WAV 文件
-                header = f.read(44)
-                if len(header) < 44:
-                    raise STTFileError(f"音频文件太小: {audio_path_to_use}")
-
-                # 验证 WAV 文件头
-                if format_str == 'wav' and header[:4] != b'RIFF':
-                    logger.warning("[DashScope STT] 非 WAV 文件格式，跳过文件头处理")
-                    f.seek(0)
-                # 读取剩余音频数据
-                audio_data = f.read()
-
+            audio_data = self._read_audio_data(audio_path_to_use, format_to_use)
             logger.info(f"[DashScope STT] 音频数据大小: {len(audio_data)} bytes")
 
-            # 分块发送音频数据（每块约 0.2 秒）
-            chunk_size = 3200  # 16000 * 0.2 = 3200 bytes
-            for i in range(0, len(audio_data), chunk_size):
-                chunk = audio_data[i:i+chunk_size]
-                recognition.send_audio_frame(chunk)
-
+            self._stream_recognize(recognition, audio_data)
             logger.info("[DashScope STT] 音频发送完成，等待识别结果...")
 
-            # 停止识别
             recognition.stop()
-
-            # 等待识别完成
-            # 根据音频时长动态计算超时时间：音频时长 + 5秒缓冲
-            # 16kHz 单声道 16bit 音频：每秒 32000 bytes
-            audio_duration = len(audio_data) / 32000  # 音频时长（秒）
-            max_wait = max(10, audio_duration + 5)  # 至少10秒，或音频时长+5秒
-
-            import time
-            wait_time = 0
-            while not callback.completed and not callback.error and wait_time < max_wait:
-                time.sleep(0.1)
-                wait_time += 0.1
-
-            # 检查是否超时
-            if not callback.completed and not callback.error:
-                logger.warning(f"[DashScope STT] 识别超时（等待 {wait_time:.1f} 秒）")
-
-            # 检查错误
-            if callback.error:
-                error_msg = callback.error.message if hasattr(callback.error, 'message') else "未知错误"
-                logger.error(f"[DashScope STT] 识别失败: {error_msg}")
-                raise STTRecognitionError(f"识别失败: {error_msg}")
+            self._wait_for_result(callback, len(audio_data))
 
             # 合并所有完整句子
             full_text = "".join(callback.sentences)
@@ -407,13 +415,7 @@ class DashScopeSTTService(BaseSTTService):
         返回:
             True 如果服务可用
         """
-        try:
-            if not self.api_key:
-                return False
-            # 简单检查 API key 是否设置，不进行实际调用
-            return True
-        except Exception:
-            return False
+        return bool(self.api_key)
 
     async def close(self):
         """关闭服务（SDK 无需显式关闭）。"""

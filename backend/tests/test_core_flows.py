@@ -71,12 +71,12 @@ class BackendFlowTestCase(unittest.TestCase):
         self.assertEqual(payload["token_type"], "bearer")
 
         protected_response = self.client.get(
-            "/test/protected",
+            "/api/auth/me",
             headers={"Authorization": f"Bearer {payload['access_token']}"},
         )
         self.assertEqual(protected_response.status_code, 200)
         protected_data = protected_response.json()["data"]
-        self.assertEqual(protected_data["user"]["user_id"], TEST_USER_ID)
+        self.assertEqual(protected_data["user_id"], TEST_USER_ID)
 
     def test_generate_script_success_and_failures(self) -> None:
         fragment_id = self.create_fragment()

@@ -1,7 +1,7 @@
 """Knowledge domain service.
 
 封装知识库文档相关业务逻辑：
-- 查询与序列化
+- 序列化
 - 创建与删除
 - 文件解析
 - 权限校验
@@ -9,15 +9,17 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 import tempfile
 import os
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ValidationError
 from models import KnowledgeDoc
+from utils.serialization import format_iso_datetime
+from . import repository
+
 
 VALID_DOC_TYPES = {"high_likes", "language_habit"}
 
@@ -38,64 +40,8 @@ def serialize_knowledge_doc(doc: KnowledgeDoc) -> dict[str, Any]:
         "content": doc.content,
         "doc_type": doc.doc_type,
         "vector_ref_id": doc.vector_ref_id,
-        "created_at": doc.created_at.isoformat() if doc.created_at else None,
+        "created_at": format_iso_datetime(doc.created_at),
     }
-
-
-def list_knowledge_docs(
-    db: Session,
-    user_id: str,
-    doc_type: Optional[str] = None,
-    limit: int = 20,
-    offset: int = 0,
-) -> list[KnowledgeDoc]:
-    """
-    查询用户的知识库文档列表
-
-    Args:
-        db: 数据库会话
-        user_id: 用户 ID
-        doc_type: 文档类型过滤（可选）
-        limit: 返回数量限制
-        offset: 偏移量
-
-    Returns:
-        知识库文档列表，按创建时间降序排列
-    """
-    query = db.query(KnowledgeDoc).filter(KnowledgeDoc.user_id == user_id)
-
-    if doc_type:
-        query = query.filter(KnowledgeDoc.doc_type == doc_type)
-
-    return (
-        query
-        .order_by(KnowledgeDoc.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-        .all()
-    )
-
-
-def count_knowledge_docs(db: Session, user_id: str, doc_type: Optional[str] = None) -> int:
-    """
-    统计用户的知识库文档数量
-
-    Args:
-        db: 数据库会话
-        user_id: 用户 ID
-        doc_type: 文档类型过滤（可选）
-
-    Returns:
-        文档数量
-    """
-    query = db.query(func.count(KnowledgeDoc.id)).filter(
-        KnowledgeDoc.user_id == user_id
-    )
-
-    if doc_type:
-        query = query.filter(KnowledgeDoc.doc_type == doc_type)
-
-    return query.scalar() or 0
 
 
 def get_knowledge_doc_or_raise(db: Session, user_id: str, doc_id: str) -> KnowledgeDoc:
@@ -113,11 +59,7 @@ def get_knowledge_doc_or_raise(db: Session, user_id: str, doc_id: str) -> Knowle
     Raises:
         NotFoundError: 文档不存在或无权访问
     """
-    doc = (
-        db.query(KnowledgeDoc)
-        .filter(KnowledgeDoc.id == doc_id, KnowledgeDoc.user_id == user_id)
-        .first()
-    )
+    doc = repository.get_by_id(db=db, user_id=user_id, doc_id=doc_id)
 
     if not doc:
         raise NotFoundError(
@@ -127,6 +69,50 @@ def get_knowledge_doc_or_raise(db: Session, user_id: str, doc_id: str) -> Knowle
         )
 
     return doc
+
+
+def list_knowledge_docs(
+    db: Session,
+    user_id: str,
+    doc_type: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[KnowledgeDoc]:
+    """
+    查询用户的知识库文档列表
+
+    Args:
+        db: 数据库会话
+        user_id: 用户 ID
+        doc_type: 文档类型过滤（可选）
+        limit: 返回数量限制
+        offset: 偏移量
+
+    Returns:
+        知识库文档列表，按创建时间降序排列
+    """
+    return repository.list_by_user(
+        db=db,
+        user_id=user_id,
+        doc_type=doc_type,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def count_knowledge_docs(db: Session, user_id: str, doc_type: str | None = None) -> int:
+    """
+    统计用户的知识库文档数量
+
+    Args:
+        db: 数据库会话
+        user_id: 用户 ID
+        doc_type: 文档类型过滤（可选）
+
+    Returns:
+        文档数量
+    """
+    return repository.count_by_user(db=db, user_id=user_id, doc_type=doc_type)
 
 
 def create_knowledge_doc(
@@ -160,18 +146,13 @@ def create_knowledge_doc(
         )
 
     # 创建文档记录
-    doc = KnowledgeDoc(
+    return repository.create(
+        db=db,
         user_id=user_id,
         title=title,
         content=content,
         doc_type=doc_type,
     )
-
-    db.add(doc)
-    db.commit()
-    db.refresh(doc)
-
-    return doc
 
 
 def delete_knowledge_doc(db: Session, doc: KnowledgeDoc) -> None:
@@ -182,8 +163,7 @@ def delete_knowledge_doc(db: Session, doc: KnowledgeDoc) -> None:
         db: 数据库会话
         doc: 要删除的文档实例
     """
-    db.delete(doc)
-    db.commit()
+    repository.delete(db=db, doc=doc)
 
 
 def parse_uploaded_file(file_content: bytes, filename: str) -> str:

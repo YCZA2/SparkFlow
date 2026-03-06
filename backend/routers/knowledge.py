@@ -4,50 +4,16 @@
 提供知识库文档的上传、列表等 API 端点
 """
 
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from core import success_response
 from core.auth import get_current_user
+from domains.knowledge import service as knowledge_service
 from models.database import get_db
-from services import knowledge_service
-
-
-# ========== Pydantic 请求/响应模型 ==========
-
-class KnowledgeDocCreate(BaseModel):
-    """创建知识库文档请求模型"""
-    title: str = Field(..., description="文档标题")
-    content: str = Field(..., description="文档内容")
-    doc_type: str = Field(..., description="文档类型：high_likes 或 language_habit")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "title": "我的高赞文案合集",
-                "content": "这是一段很长的文案内容...",
-                "doc_type": "high_likes"
-            }
-        }
-
-
-class KnowledgeDocItem(BaseModel):
-    """知识库文档响应模型"""
-    id: str
-    title: str
-    content: str
-    doc_type: str
-    vector_ref_id: Optional[str]
-    created_at: str
-
-
-class KnowledgeDocListResponse(BaseModel):
-    """知识库文档列表响应模型"""
-    items: List[KnowledgeDocItem]
-    total: int
+from schemas.knowledge import KnowledgeDocCreate
 
 
 # ========== 路由定义 ==========

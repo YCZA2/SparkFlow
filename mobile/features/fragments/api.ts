@@ -1,13 +1,6 @@
 import { API_ENDPOINTS } from '@/constants/config';
 import { del, get, patch, post } from '@/features/core/api/client';
-import type { Fragment, FragmentListResponse } from '@/types/fragment';
-
-export interface CreateFragmentRequest {
-  transcript?: string;
-  summary?: string;
-  tags?: string[];
-  source?: 'voice' | 'manual' | 'video_parse';
-}
+import type { CreateFragmentRequest, Fragment, FragmentListResponse } from '@/types/fragment';
 
 export interface UpdateFragmentRequest {
   transcript?: string;

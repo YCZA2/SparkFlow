@@ -1,22 +1,20 @@
 """
 SparkFlow 后端 - FastAPI 应用程序
 """
+import logging
 from typing import Awaitable, Callable
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-
-from fastapi import Depends
+from fastapi.responses import JSONResponse
 
 from core import settings, AppException, success_response
 from core.exceptions import (
-    NotFoundError,
-    ValidationError,
     AuthenticationError,
 )
-from core.auth import get_current_user
-from routers import auth, fragments, transcribe, scripts, knowledge
+from routers import auth, fragments, knowledge, scripts, test, transcribe
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -76,10 +74,7 @@ async def not_found_handler(request: Request, exc):
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """处理所有未捕获的异常。"""
-    # 记录错误以便调试
-    import traceback
-    print(f"Unhandled exception: {str(exc)}")
-    print(traceback.format_exc())
+    logger.exception("Unhandled exception while handling request %s", request.url.path)
 
     return JSONResponse(
         status_code=500,
@@ -170,84 +165,5 @@ app.include_router(scripts.router)
 
 # 预留扩展能力：知识库接口仍然可用，但尚未接入主创作链路。
 app.include_router(knowledge.router)
-
-
-# Phase 1.2: API Response Format Test Endpoints
-@app.get("/test/success")
-async def test_success_response():
-    """
-    测试成功响应格式的端点。
-
-    测试成功响应格式
-    """
-    return success_response(
-        data={"items": ["fragment1", "fragment2"], "count": 2},
-        message="数据获取成功"
-    )
-
-
-@app.get("/test/not-found")
-async def test_not_found():
-    """
-    测试 404 错误响应格式的端点。
-
-    测试 404 错误响应格式
-    """
-    raise NotFoundError(
-        message="片段未找到",
-        resource_type="fragment",
-        resource_id="test-123"
-    )
-
-
-@app.get("/test/validation-error")
-async def test_validation_error():
-    """
-    测试校验错误响应格式的端点。
-
-    测试校验错误响应格式
-    """
-    raise ValidationError(
-        message="输入数据无效",
-        field_errors={"title": "标题不能为空", "content": "内容过长"}
-    )
-
-
-# Phase 1.3: Authentication Test Endpoints
-@app.get("/test/protected")
-async def test_protected_endpoint(current_user: dict = Depends(get_current_user)):
-    """
-    测试需要认证的受保护端点。
-
-    测试受保护端点（需要认证）
-
-    此端点需要在 Authorization 请求头中提供有效的 JWT 令牌。
-    使用格式：Authorization: Bearer <token>
-
-    返回:
-        当前用户信息
-    """
-    return success_response(
-        data={
-            "message": "您已访问受保护资源",
-            "user": current_user
-        },
-        message="访问已授权"
-    )
-
-
-@app.get("/test/auth-check")
-async def test_auth_check(current_user: dict = Depends(get_current_user)):
-    """
-    验证认证是否正常工作。
-
-    验证认证是否正常工作
-    """
-    return success_response(
-        data={
-            "authenticated": True,
-            "user_id": current_user["user_id"],
-            "role": current_user["role"],
-        },
-        message="认证已验证"
-    )
+if settings.DEBUG:
+    app.include_router(test.router)
