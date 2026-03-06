@@ -763,7 +763,9 @@ pip install dashscope  # 阿里云灵积平台 SDK
 
 ---
 
-## 阶段 12：向量数据库集成（知识库增强）
+## 阶段 12：向量数据库集成（碎片语义检索）
+
+> **方向调整**：基于跳过阶段 11 前端入口的决策，阶段 12 调整为**聚焦碎片语义检索**，为每日推盘和 Mode B 增强提供底层能力。知识库文档向量化移至可选任务。
 
 ### 步骤 12.1：配置 ChromaDB 本地向量数据库
 
@@ -783,64 +785,254 @@ client = chromadb.PersistentClient(path=CHROMADB_PATH)
 
 ---
 
-### 步骤 12.2：创建用户专属向量命名空间
+### 步骤 12.2：碎片自动向量化
 
-在 `vector_service.py` 中实现函数 `upsert_document(user_id: str, doc_id: str, text: str)`。该函数将 `text` 拆分为段落或固定长度的 chunk，使用阿里通义千问 `text-embedding-v2` 模型生成每个 chunk 的向量。
+在 `vector_service.py` 中实现函数 `upsert_fragment(user_id: str, fragment_id: str, text: str)`。该函数将碎片转写文本写入向量库，供后续语义检索使用。
 
 **ChromaDB 数据隔离方案：**
-- 每个用户创建一个独立的 Collection，命名格式：`docs_{user_id}`
-- Collection 元数据中标记 `user_id`，便于管理和清理
+- 每个用户创建一个独立的 Collection，命名格式：`fragments_{user_id}`
+- Collection 元数据中标记 `user_id` 和 `created_at`，便于管理和清理
 
 ```python
 collection = client.get_or_create_collection(
-    name=f"docs_{user_id}",
-    metadata={"user_id": user_id}
+    name=f"fragments_{user_id}",
+    metadata={"user_id": user_id, "type": "fragments"}
 )
 ```
 
+**文本处理：**
+- 直接存储完整转写文本（碎片通常较短，无需分 chunk）
+- 使用阿里通义千问 `text-embedding-v2` 模型生成向量
+- Document metadata 中保存 `fragment_id` 和 `created_at`
+
+**集成到转写流程：**
+修改转写工作流 `backend/domains/transcription/workflow.py`：
+- 在转写成功并更新 fragment 的 `transcript` 后，调用 `upsert_fragment`
+- 异步执行，失败不影响主流程
+
 **验证测试：**
-1. 调用 `upsert_document("test-user-001", "doc-001", "这是一段测试文本，包含了关于口播定位的方法论...")`，无报错
+1. 录制并上传一段语音，等待转写完成
 2. 检查 `chroma_data/` 目录，确认数据文件已更新
-3. 通过 ChromaDB API 查询 `client.list_collections()`，确认 `docs_test-user-001` 集合存在
+3. 通过 ChromaDB API 查询 `client.list_collections()`，确认 `fragments_test-user-001` 集合存在
+4. 调用 `collection.count()` 确认有数据写入
 
 ---
 
-### 步骤 12.3：实现向量相似度查询
+### 步骤 12.3：实现碎片语义相似度查询
 
-在 `vector_service.py` 中实现函数 `query_similar(user_id: str, query_text: str, top_k: int = 3) -> list[str]`。该函数将 `query_text` 转为向量，在对应用户的 Collection 中检索最相似的 `top_k` 条文本 chunk，返回文本列表。
+在 `vector_service.py` 中实现函数 `query_similar_fragments(user_id: str, query_text: str, top_k: int = 5, exclude_ids: list[str] = None) -> list[dict]`。
+
+**功能说明：**
+- 将 `query_text` 转为向量，在对应用户的 Collection 中检索最相似的 `top_k` 条碎片
+- 支持 `exclude_ids` 参数排除指定碎片（如当前正在处理的碎片）
+- 返回包含 `fragment_id`, `text`, `similarity`, `created_at` 的字典列表
+
+**相似度阈值：**
+- 设置相似度阈值（如 0.7），低于阈值的视为无关碎片
+- 阈值可配置，便于调优
 
 **验证测试：**
-1. 先确保步骤 11.2 已写入数据
-2. 调用 `query_similar("test-user-001", "怎么做定位")`，返回一个非空列表，内容与之前写入的文本语义相关
-3. 使用一个不同的 `user_id`（如 `"test-user-002"`）调用同样的 query，返回空列表（数据隔离正确）
-4. 使用 ChromaDB 的 `collection.peek()` 或直接查询验证数据确实存在
+1. 确保已有至少 5 条碎片数据写入向量库
+2. 调用 `query_similar_fragments("test-user-001", "关于个人定位的思考")`，返回相似碎片列表
+3. 返回结果按相似度降序排列，且相似度均大于阈值
+4. 使用不同的 `user_id` 调用，返回空列表（数据隔离正确）
 
 ---
 
-### 步骤 12.4：知识库文档上传时自动写入向量库
+### 步骤 12.3：Mode B 生成时检索历史碎片
 
-修改 `POST /api/knowledge` 端点：在文档保存到 SQLite 后，自动调用 `upsert_document` 将文档内容写入 ChromaDB。将 Collection 名称和文档 ID 写入 `knowledge_docs` 表的 `vector_ref_id` 字段（格式：`docs_{user_id}:{doc_id}`）。
-
-**验证测试：**
-1. 通过 API 上传一篇新的知识文档
-2. DB Browser 中确认 `vector_ref_id` 字段值为 `docs_test-user-001:doc-xxx`
-3. 使用 ChromaDB Python 客户端查询对应 Collection，确认向量数据已写入
-4. 直接查看 `chroma_data/` 目录，确认文件大小增加
-
----
-
-### 步骤 12.5：Mode B 生成时检索知识库
-
-**阶段说明：**
-- **阶段 8（MVP）**：Mode B 仅基于选中的碎片内容生成，不检索知识库
-- **阶段 12（增强）**：修改 `POST /api/scripts/generate` 中 Mode B 的逻辑，在调用 LLM 前，使用碎片内容作为查询文本，调用 `query_similar` 检索该用户知识库中最相关的文本片段（最多3段）
+修改 `POST /api/scripts/generate` 中 Mode B 的逻辑：
 
 **实现逻辑：**
-- 将检索到的参考文本作为 LLM system prompt 的补充上下文（如"以下是用户过往的写作风格参考：..."）
-- 用户知识库为空时，Mode B 退化为基于当前碎片的自由发挥模式
-- 知识库有内容但相似度较低时，使用阈值过滤，只使用高相关度的片段
+1. 将选中的碎片文本拼接作为 `query_text`
+2. 调用 `query_similar_fragments(user_id, query_text, top_k=3, exclude_ids=selected_ids)`
+3. 将检索到的历史碎片作为 LLM system prompt 的补充上下文
 
-**验证测试：** 先为测试用户上传至少一篇包含特定风格用语的知识文档。然后用 Mode B 生成口播稿，生成的内容应体现出知识库中的部分用语或风格。与不加知识库参考的生成结果对比，能看出差异。
+**Prompt 调整（`mode_b_brain.txt`）：**
+在原有 prompt 基础上增加风格参考部分：
+```
+以下是该用户过往记录的相关灵感片段，体现了用户的表达习惯：
+---
+[历史碎片1]
+---
+[历史碎片2]
+---
+
+请结合以上参考片段的语言风格，将以下灵感碎片整合为口播稿...
+```
+
+**降级处理：**
+- 用户历史碎片少于 3 条时，退化为基于当前碎片的自由发挥模式
+- 检索结果相似度均低于阈值时，忽略历史参考
+
+**验证测试：**
+1. 确保测试用户有至少 8 条历史碎片（主题相近）
+2. 选择 2-3 条新碎片用 Mode B 生成口播稿
+3. 对比阶段 8 的 Mode B 输出，观察是否体现出历史碎片的用语风格
+4. 查看后端日志，确认向量检索被正确调用
+
+---
+
+### 步骤 12.4：碎片向量三维可视化
+
+**目标**：将用户的高维向量降维到3D空间，展示碎片的语义聚类关系，形成可交互的"灵感云图"。
+
+**技术方案**：
+
+| 层级 | 技术选型 | 说明 |
+|------|----------|------|
+| 降维算法 | **UMAP** 或 **t-SNE** | 将 1536 维向量降至 3 维，保留局部结构 |
+| 聚类算法 | **HDBSCAN** 或 **K-Means** | 自动识别语义相近的碎片群组 |
+| 后端 API | `POST /api/fragments/visualization` | 返回降维后的3D坐标和聚类信息 |
+| 前端渲染 | **Three.js** 或 **React Three Fiber** | 3D散点图，支持旋转、缩放、点击 |
+| 交互设计 | 点击碎片/类别显示详情，筛选特定类别 | 展示语义关联网络 |
+
+**数据流程**：
+```
+用户请求可视化
+    ↓
+查询用户所有碎片向量 (ChromaDB)
+    ↓
+UMAP/t-SNE 降维到 3D 坐标
+    ↓
+HDBSCAN/K-Means 聚类（距离近的碎片归为一类）
+    ↓
+AI 生成每个类别的标签（基于摘要关键词）
+    ↓
+后端返回 [{fragment_id, x, y, z, cluster_id, summary}]
+    ↓
+前端渲染3D散点图
+    ↓
+交互：点击类别球体展开碎片列表
+```
+
+**核心功能 - 聚类与分类筛选**：
+
+1. **自动聚类**：使用 HDBSCAN 或 K-Means 对3D坐标进行聚类
+   - 距离阈值：语义相似度 > 0.75 的碎片归为同一类
+   - 最小簇大小：至少包含3个碎片才形成独立类别
+   - 噪声点处理：无法归类的碎片标记为"独立灵感"
+
+2. **类别可视化**：
+   - 每个类别用一个半透明球体包裹（类似"力导向气泡"）
+   - 类别球体中心显示类别名称（AI生成的标签）
+   - 类别内碎片以相同颜色区分（不同类别不同色系）
+
+3. **点击交互**：
+   - **点击类别球体**：展开侧边面板，显示该类别下所有碎片列表
+   - **点击单个碎片**：显示碎片详情（完整摘要、标签、时间）
+   - **双击类别**：聚焦到该类别，其他类别淡化显示
+
+4. **筛选功能**：
+   - 顶部显示类别标签栏，点击筛选只显示特定类别
+   - 支持"只看未分类"、"只看最近7天"等快捷筛选
+   - 多选类别进行交叉浏览
+
+**API设计**：
+```python
+POST /api/fragments/visualization
+Request: {
+    "user_id": "xxx",
+    "algorithm": "umap",
+    "n_neighbors": 15,
+    "cluster_method": "hdbscan",
+    "min_cluster_size": 3
+}
+
+Response: {
+    "points": [
+        {
+            "fragment_id": "...",
+            "x": 0.5, "y": -0.3, "z": 0.8,
+            "summary": "关于定位的思考",
+            "tags": ["定位", "个人品牌"],
+            "created_at": "2026-03-06T10:00:00",
+            "cluster_id": 0,  // -1 表示未分类
+            "is_noise": false
+        }
+    ],
+    "clusters": [
+        {
+            "id": 0,
+            "label": "定位与个人品牌",  // AI 自动生成
+            "center": [0.2, 0.1, 0.5],
+            "radius": 0.3,
+            "fragment_count": 8,
+            "keywords": ["定位", "差异化", "个人IP"]
+        }
+    ],
+    "uncategorized_count": 5
+}
+
+# 获取特定类别下的碎片详情
+GET /api/fragments/cluster/{cluster_id}?user_id=xxx
+Response: {
+    "cluster_id": 0,
+    "label": "定位与个人品牌",
+    "fragments": [
+        { "id": "...", "summary": "...", "tags": [...], "created_at": "..." }
+    ]
+}
+```
+
+**AI 类别标签生成**：
+```python
+# 对每个类别内的碎片摘要进行关键词提取
+# 使用 LLM 生成简短标签（2-4 个字）
+prompt = """
+以下是用户灵感碎片的摘要列表：
+{summaries}
+
+请为这个主题类别起一个简短的名称（2-4个字），概括这些碎片的共同主题。
+只需要返回名称，不需要解释。
+"""
+```
+
+**视觉设计**：
+- **碎片粒子**：发光球体，大小随摘要长度变化
+- **类别气泡**：半透明球体包裹同类碎片，脉冲动画效果
+- **连线效果**：同一类别内的碎片有微弱连线，强调关联
+- **颜色方案**：每个类别独立色系，未分类为灰色
+
+**交互细节**：
+1. **默认视图**：所有碎片和类别气泡同时显示
+2. **悬停类别**：高亮该类别，其他类别透明度降低
+3. **点击类别**：
+   - 右侧滑出面板，列出该类别所有碎片卡片
+   - 每个卡片显示摘要、标签、时间
+   - 卡片可点击进入碎片详情页
+4. **点击碎片**：
+   - 弹出模态框显示完整内容
+   - 提供"生成口播稿"快捷按钮
+5. **筛选栏**：
+   - 顶部横向滚动标签栏
+   - 选中类别后3D视图只显示该类碎片
+
+**使用场景**：
+- **灵感回顾**：直观看到自己思考的演变轨迹
+- **模式发现**：发现意想不到的灵感关联（远距离相似）
+- **主题梳理**：通过类别发现自己在哪些主题上积累最多
+- **创作导航**：点击某类别，选择多个碎片生成口播稿
+
+**验证测试**：
+1. 用户至少有15条碎片时，API正确返回聚类结果
+2. 3D场景中类别气泡正确包裹同类碎片
+3. 点击类别气泡，右侧正确展开碎片列表
+4. 筛选标签栏点击后，3D视图正确过滤显示
+5. AI生成的类别标签准确反映碎片主题
+
+---
+
+### 步骤 12.5（可选）：知识库文档向量化
+
+**说明**：此步骤为原阶段 12 计划，因跳过阶段 11 前端入口，调整为**可选任务**。如时间允许或后续需要，再实施知识库文档的向量化。
+
+如需实施：
+1. 在 `vector_service.py` 中实现 `upsert_document(user_id, doc_id, text)`
+2. 使用 `docs_{user_id}` 作为 Collection 名称
+3. 文档内容较长时，按段落或固定长度分 chunk
+4. 修改 `POST /api/knowledge` 端点，在文档保存后调用 `upsert_document`
+5. Mode B 可同时检索 `fragments_{user_id}` 和 `docs_{user_id}` 两个 Collection
 
 ---
 
