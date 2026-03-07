@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { SymbolView } from 'expo-symbols';
+import { useRouter } from 'expo-router';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 import { FragmentCard } from '@/components/FragmentCard';
@@ -18,8 +19,22 @@ import { Text } from '@/components/Themed';
 import { useFragmentsScreen } from '@/features/fragments/useFragmentsScreen';
 import { useAppTheme } from '@/theme/useAppTheme';
 
+// 汉堡菜单图标组件
+function HamburgerMenu({ onPress, color }: { onPress: () => void; color: string }) {
+  return (
+    <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.menuButton}>
+      <View style={styles.hamburger}>
+        <View style={[styles.hamburgerLine, { backgroundColor: color }]} />
+        <View style={[styles.hamburgerLine, { backgroundColor: color }]} />
+        <View style={[styles.hamburgerLine, { backgroundColor: color }]} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 export default function FragmentsScreen() {
   const theme = useAppTheme();
+  const router = useRouter();
   const screen = useFragmentsScreen();
   type SymbolName = React.ComponentProps<typeof SymbolView>['name'];
 
@@ -46,6 +61,11 @@ export default function FragmentsScreen() {
       onPress: screen.openTextNote,
     },
   ];
+
+  // 打开"我的"页面
+  const openProfile = () => {
+    router.push('/profile');
+  };
 
   if (screen.isLoading && screen.fragments.length === 0) {
     return (
@@ -181,7 +201,13 @@ export default function FragmentsScreen() {
           <View style={styles.header}>
             <ScreenHeader
               title="全部碎片"
-              subtitle="像备忘录一样翻看你的语音记录和文字记录。"
+              eyebrow={screen.totalLabel}
+              leading={
+                <HamburgerMenu
+                  onPress={openProfile}
+                  color={theme.colors.text}
+                />
+              }
               trailing={
                 <TouchableOpacity onPress={screen.selection.toggleSelectionMode} hitSlop={8}>
                   <Text style={[styles.selectAction, { color: theme.colors.primary }]}>
@@ -190,9 +216,6 @@ export default function FragmentsScreen() {
                 </TouchableOpacity>
               }
             />
-            <Text style={[styles.totalCount, { color: theme.colors.textSubtle }]}>
-              {screen.totalLabel}
-            </Text>
             <TouchableOpacity
               style={[
                 styles.cloudButton,
@@ -240,10 +263,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
-  totalCount: {
-    marginTop: -8,
-    fontSize: 14,
-    fontWeight: '500',
+  // 汉堡菜单样式
+  menuButton: {
+    padding: 4,
+  },
+  hamburger: {
+    width: 24,
+    height: 20,
+    justifyContent: 'space-between',
+  },
+  hamburgerLine: {
+    width: 24,
+    height: 2.5,
+    borderRadius: 1.25,
   },
   cloudButton: {
     alignSelf: 'flex-start',

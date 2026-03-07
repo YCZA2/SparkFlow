@@ -8,15 +8,17 @@ interface ScreenHeaderProps {
   title: string;
   subtitle?: string;
   eyebrow?: string;
+  leading?: React.ReactNode;
   trailing?: React.ReactNode;
 }
 
-export function ScreenHeader({ title, subtitle, eyebrow, trailing }: ScreenHeaderProps) {
+export function ScreenHeader({ title, subtitle, eyebrow, leading, trailing }: ScreenHeaderProps) {
   const theme = useAppTheme();
 
   return (
     <View style={[styles.container, { marginBottom: theme.layout.sectionGap }]}>
       <View style={styles.row}>
+        {leading ? <View style={styles.leading}>{leading}</View> : null}
         <View style={styles.copy}>
           {eyebrow ? (
             <Text style={[styles.eyebrow, { color: theme.colors.primary }]}>{eyebrow}</Text>
@@ -44,6 +46,10 @@ const styles = StyleSheet.create({
   },
   copy: {
     flex: 1,
+  },
+  leading: {
+    paddingTop: 4,
+    marginRight: 12,
   },
   trailing: {
     paddingTop: 4,

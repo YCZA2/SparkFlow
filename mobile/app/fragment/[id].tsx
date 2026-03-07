@@ -88,7 +88,7 @@ export default function FragmentDetailScreen() {
       setIsDeleting(true);
       await deleteFragment(id);
       router.replace({
-        pathname: '/(tabs)/fragments',
+        pathname: '/',
         params: { refresh: 'true' },
       });
     } catch (err) {

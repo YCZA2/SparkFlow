@@ -101,12 +101,12 @@ export default function RecordAudioScreen() {
 
   const handleCancel = async () => {
     await session.cancel();
-    router.replace('/fragments?refresh=true');
+    router.replace('/?refresh=true');
   };
 
   const handleStop = async () => {
     await session.stopAndUpload();
-    router.replace('/fragments?refresh=true');
+    router.replace('/?refresh=true');
   };
 
   const handlePauseToggle = () => {
