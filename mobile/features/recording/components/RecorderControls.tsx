@@ -5,16 +5,22 @@ import { Text } from '@/components/Themed';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 interface RecorderControlsProps {
-  recorderStatus: 'idle' | 'recording' | 'recorded';
+  recorderStatus: 'idle' | 'recording' | 'paused' | 'recorded';
   durationLabel: string;
   isUploading: boolean;
   hasRecording: boolean;
   onToggleRecording: () => Promise<void>;
 }
 
-function getStatusText(status: 'idle' | 'recording' | 'recorded', durationLabel: string) {
+function getStatusText(
+  status: 'idle' | 'recording' | 'paused' | 'recorded',
+  durationLabel: string
+) {
   if (status === 'recording') {
     return `正在录音… ${durationLabel}`;
+  }
+  if (status === 'paused') {
+    return `录音已暂停 (${durationLabel})`;
   }
   if (status === 'recorded') {
     return `录音完成 (${durationLabel})`;
@@ -70,6 +76,8 @@ export function RecorderControls({
           ? '正在上传音频，请稍候...'
           : recorderStatus === 'recording'
             ? '再次点击结束录音'
+            : recorderStatus === 'paused'
+              ? '录音已暂停，可继续或停止'
             : hasRecording
               ? '录音已保存，可继续重录'
               : '点击按钮开始录音'}

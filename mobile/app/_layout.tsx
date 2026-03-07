@@ -8,6 +8,7 @@ import { PaperProvider } from 'react-native-paper';
 
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { useColorScheme } from '@/components/useColorScheme';
+import { AudioCaptureProvider } from '@/features/recording/AudioCaptureProvider';
 import { AppSessionProvider, useAppSession } from '@/providers/AppSessionProvider';
 
 export {
@@ -45,7 +46,9 @@ export default function RootLayout() {
 
   return (
     <AppSessionProvider>
-      <RootLayoutNav />
+      <AudioCaptureProvider>
+        <RootLayoutNav />
+      </AudioCaptureProvider>
     </AppSessionProvider>
   );
 }
@@ -89,6 +92,11 @@ function RootLayoutNav() {
           <Stack.Screen name="generate" options={{ title: 'AI 编导' }} />
           <Stack.Screen name="script/[id]" options={{ title: '口播稿详情' }} />
           <Stack.Screen name="shoot" options={{ title: '拍摄' }} />
+          <Stack.Screen
+            name="record-audio"
+            options={{ title: '录音', headerShown: false, gestureEnabled: false }}
+          />
+          <Stack.Screen name="knowledge" options={{ title: '知识库', headerShown: true }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
           <Stack.Screen
             name="network-settings"

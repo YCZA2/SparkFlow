@@ -1,12 +1,10 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { BottomActionBar } from '@/components/layout/BottomActionBar';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { Text } from '@/components/Themed';
 import { RecordingStatusCard } from '@/features/recording/components/RecordingStatusCard';
-import { RecorderControls } from '@/features/recording/components/RecorderControls';
 import { useCaptureScreen } from '@/features/capture/useCaptureScreen';
 import { useAppTheme } from '@/theme/useAppTheme';
 
@@ -17,58 +15,20 @@ export default function HomeScreen() {
   return (
     <ScreenContainer
       contentContainerStyle={styles.container}
-      footer={
-        <BottomActionBar>
-          <RecorderControls
-            recorderStatus={screen.recorder.status}
-            durationLabel={screen.recorder.durationLabel}
-            isUploading={screen.upload.status === 'loading'}
-            hasRecording={Boolean(screen.recorder.recordedUri)}
-            onToggleRecording={screen.toggleRecording}
-          />
-        </BottomActionBar>
-      }
-      includeBottomInset
       padded
       scrollable
     >
-      <ScreenHeader
-        eyebrow="捕获"
-        title={screen.title}
-        subtitle={screen.subtitle}
-      />
-
-      <View style={styles.section}>
-        <Pressable
-          style={[
-            styles.textEntryButton,
-            theme.shadow.card,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-            },
-          ]}
-          onPress={screen.openTextNote}
-        >
-          <Text style={[styles.textEntryEyebrow, { color: theme.colors.primary }]}>写下来</Text>
-          <Text style={[styles.textEntryTitle, { color: theme.colors.text }]}>
-            不方便录音时，直接记一条灵感
-          </Text>
-          <Text style={[styles.textEntryHint, { color: theme.colors.textSubtle }]}>
-            选题、金句、观察、提纲都可以先写下，保存后会和语音记录一起进入碎片库。
-          </Text>
-        </Pressable>
-      </View>
+      <ScreenHeader title={screen.title} subtitle={screen.subtitle} />
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>当日状态</Text>
         <RecordingStatusCard
-          isUploading={screen.upload.status === 'loading'}
-          uploadStatus={screen.upload.status}
-          uploadResult={screen.upload.result}
-          uploadError={screen.upload.error}
-          recordedUri={screen.recorder.recordedUri}
-          onPlayRecording={screen.recorder.playRecording}
+          isUploading={screen.isUploading}
+          uploadStatus={screen.uploadStatus}
+          uploadResult={screen.uploadResult}
+          uploadError={screen.uploadError}
+          recordedUri={screen.recordedUri}
+          onPlayRecording={screen.playRecording}
           onRetryUpload={screen.retryUpload}
         />
       </View>
@@ -164,28 +124,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-  },
-  textEntryButton: {
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-  },
-  textEntryEyebrow: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  textEntryTitle: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '700',
-    lineHeight: 24,
-  },
-  textEntryHint: {
-    marginTop: 8,
-    fontSize: 13,
-    lineHeight: 18,
   },
   dailyPushCard: {
     borderRadius: 20,

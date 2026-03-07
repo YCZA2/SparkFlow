@@ -58,7 +58,6 @@ export default function ProfileScreen() {
       >
         <View style={styles.pagePadding}>
           <ScreenHeader
-            eyebrow="我的"
             title="创作工作台"
             subtitle="查看你的身份、稿件入口和基础设置。"
           />

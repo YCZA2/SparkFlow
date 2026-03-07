@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+
 import { FragmentCard } from '@/components/FragmentCard';
 import { BottomActionBar } from '@/components/layout/BottomActionBar';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -18,6 +21,31 @@ import { useAppTheme } from '@/theme/useAppTheme';
 export default function FragmentsScreen() {
   const theme = useAppTheme();
   const screen = useFragmentsScreen();
+  type SymbolName = React.ComponentProps<typeof SymbolView>['name'];
+
+  const quickActions: Array<{
+    key: string;
+    icon: SymbolName;
+    active?: boolean;
+    onPress: () => void;
+  }> = [
+    {
+      key: 'knowledge',
+      icon: 'plus',
+      onPress: screen.openKnowledgePlaceholder,
+    },
+    {
+      key: 'record',
+      icon: 'mic.fill',
+      active: true,
+      onPress: screen.openRecorder,
+    },
+    {
+      key: 'note',
+      icon: 'keyboard',
+      onPress: screen.openTextNote,
+    },
+  ];
 
   if (screen.isLoading && screen.fragments.length === 0) {
     return (
@@ -46,27 +74,91 @@ export default function FragmentsScreen() {
   return (
     <ScreenContainer
       footer={
-        screen.selection.isSelectionMode ? (
-          <BottomActionBar>
-            <TouchableOpacity
+        <BottomActionBar
+          style={styles.footerShell}
+          contentStyle={styles.footerContent}
+        >
+          <View pointerEvents="none" style={styles.footerTransition}>
+            <View
               style={[
-                styles.generateButton,
+                styles.transitionLayerLarge,
+                { backgroundColor: theme.colors.background, opacity: 0.72 },
+              ]}
+            />
+            <View
+              style={[
+                styles.transitionLayerMedium,
+                { backgroundColor: theme.colors.background, opacity: 0.5 },
+              ]}
+            />
+            <View
+              style={[
+                styles.transitionLayerSmall,
+                { backgroundColor: theme.colors.background, opacity: 0.28 },
+              ]}
+            />
+          </View>
+          {screen.selection.isSelectionMode ? (
+            <Animated.View
+              entering={FadeInDown.duration(160)}
+              exiting={FadeOutDown.duration(120)}
+              style={[
+                styles.selectionBar,
+                theme.shadow.card,
                 {
-                  backgroundColor:
-                    screen.selection.selectedCount > 0
-                      ? theme.colors.primary
-                      : theme.colors.textSubtle,
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
                 },
               ]}
-              onPress={screen.onGenerate}
-              activeOpacity={0.85}
             >
-              <Text style={styles.generateButtonText}>
-                交给 AI 编导（已选 {screen.selection.selectedCount}/{screen.selection.maxSelection} 条）
-              </Text>
-            </TouchableOpacity>
-          </BottomActionBar>
-        ) : null
+              <TouchableOpacity
+                style={[
+                  styles.generateButton,
+                  {
+                    backgroundColor:
+                      screen.selection.selectedCount > 0
+                        ? theme.colors.primary
+                        : theme.colors.textSubtle,
+                  },
+                ]}
+                onPress={screen.onGenerate}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.generateButtonText}>
+                  交给 AI 编导（已选 {screen.selection.selectedCount}/{screen.selection.maxSelection} 条）
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+          ) : (
+            <Animated.View
+              entering={FadeInDown.duration(160)}
+              exiting={FadeOutDown.duration(120)}
+              style={[
+                styles.quickActionPill,
+                theme.shadow.card,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              {quickActions.map((action) => (
+                <TouchableOpacity
+                  key={action.key}
+                  style={styles.quickActionButton}
+                  onPress={action.onPress}
+                  activeOpacity={0.78}
+                >
+                  <SymbolView
+                    name={action.icon}
+                    size={30}
+                    tintColor={action.active ? '#F05A28' : theme.colors.text}
+                  />
+                </TouchableOpacity>
+              ))}
+            </Animated.View>
+          )}
+        </BottomActionBar>
       }
     >
       <SectionList
@@ -88,7 +180,6 @@ export default function FragmentsScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <ScreenHeader
-              eyebrow="整理"
               title="全部碎片"
               subtitle="像备忘录一样翻看你的语音记录和文字记录。"
               trailing={
@@ -120,7 +211,7 @@ export default function FragmentsScreen() {
           </View>
         }
         ListEmptyComponent={
-          <ScreenState icon="📝" title="还没有灵感碎片" message="去捕获页记一条吧" />
+          <ScreenState icon="📝" title="还没有灵感碎片" message="去录一条或记一条吧" />
         }
         contentContainerStyle={screen.fragments.length === 0 ? styles.emptyList : styles.list}
         refreshControl={
@@ -139,10 +230,11 @@ export default function FragmentsScreen() {
 
 const styles = StyleSheet.create({
   list: {
-    paddingBottom: 24,
+    paddingBottom: 116,
   },
   emptyList: {
     flexGrow: 1,
+    paddingBottom: 116,
   },
   header: {
     paddingHorizontal: 16,
@@ -187,5 +279,66 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
+  },
+  footerShell: {
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    paddingHorizontal: 14,
+  },
+  footerContent: {
+    paddingTop: 0,
+    paddingBottom: 0,
+    alignItems: 'center',
+  },
+  footerTransition: {
+    width: '100%',
+    maxWidth: 460,
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  transitionLayerLarge: {
+    width: '100%',
+    height: 18,
+    borderRadius: 999,
+  },
+  transitionLayerMedium: {
+    width: '94%',
+    height: 14,
+    borderRadius: 999,
+  },
+  transitionLayerSmall: {
+    width: '88%',
+    height: 10,
+    borderRadius: 999,
+  },
+  quickActionPill: {
+    width: '100%',
+    maxWidth: 420,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 22,
+    minWidth: 248,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    marginBottom: -10,
+  },
+  selectionBar: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 26,
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: -10,
+  },
+  quickActionButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

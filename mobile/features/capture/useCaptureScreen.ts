@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
-import { useAudioRecorder, useAudioUpload } from '@/features/recording/hooks';
+import { useAudioCaptureSession } from '@/features/recording/AudioCaptureProvider';
 import {
   useDailyPushTrigger,
   useForceDailyPushTrigger,
@@ -12,14 +12,17 @@ import {
 export interface CaptureScreenState {
   title: string;
   subtitle: string;
-  recorder: ReturnType<typeof useAudioRecorder>;
-  upload: ReturnType<typeof useAudioUpload>;
   dailyPush: ReturnType<typeof useTodayDailyPush>;
   isBusy: boolean;
   primaryDailyActionLabel: string;
   secondaryDailyActionLabel: string;
-  openTextNote: () => void;
-  toggleRecording: () => Promise<void>;
+  recorderStatus: ReturnType<typeof useAudioCaptureSession>['status'];
+  recordedUri: string | null;
+  uploadStatus: ReturnType<typeof useAudioCaptureSession>['uploadStatus'];
+  uploadResult: ReturnType<typeof useAudioCaptureSession>['uploadResult'];
+  uploadError: string | null;
+  isUploading: boolean;
+  playRecording: () => Promise<void>;
   retryUpload: () => Promise<void>;
   openDailyScript: () => void;
   runDailyPush: () => Promise<void>;
@@ -28,8 +31,7 @@ export interface CaptureScreenState {
 
 export function useCaptureScreen(): CaptureScreenState {
   const router = useRouter();
-  const recorder = useAudioRecorder();
-  const upload = useAudioUpload();
+  const captureSession = useAudioCaptureSession();
   const dailyPush = useTodayDailyPush();
   const dailyPushTrigger = useDailyPushTrigger();
   const forceDailyPushTrigger = useForceDailyPushTrigger();
@@ -40,40 +42,9 @@ export function useCaptureScreen(): CaptureScreenState {
     }, [dailyPush.reload])
   );
 
-  const toggleRecording = useCallback(async () => {
-    if (recorder.status === 'recording') {
-      const uri = await recorder.stopRecording();
-      if (!uri) return;
-
-      try {
-        const result = await upload.upload(uri);
-        if (result) {
-          Alert.alert('上传成功', '音频已上传，正在后台转写中...');
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : '上传失败，请重试';
-        Alert.alert('上传失败', message);
-      }
-      return;
-    }
-
-    upload.reset();
-    await recorder.startRecording();
-  }, [recorder, upload]);
-
   const retryUpload = useCallback(async () => {
-    if (!recorder.recordedUri) return;
-
-    try {
-      await upload.upload(recorder.recordedUri);
-    } catch {
-      // upload hook already stores error state
-    }
-  }, [recorder.recordedUri, upload]);
-
-  const openTextNote = useCallback(() => {
-    router.push('/text-note');
-  }, [router]);
+    await captureSession.retryUpload();
+  }, [captureSession]);
 
   const openDailyScript = useCallback(() => {
     if (!dailyPush.script) return;
@@ -111,19 +82,22 @@ export function useCaptureScreen(): CaptureScreenState {
   return {
     title: '灵感捕手',
     subtitle: '先捕获，再整理，再把今天的灵感写成可拍内容。',
-    recorder,
-    upload,
     dailyPush,
     isBusy:
-      upload.status === 'loading' ||
+      captureSession.isUploading ||
       dailyPushTrigger.status === 'loading' ||
       forceDailyPushTrigger.status === 'loading',
     primaryDailyActionLabel:
       dailyPushTrigger.status === 'loading' ? '生成中...' : '立即生成今日灵感卡片',
     secondaryDailyActionLabel:
       forceDailyPushTrigger.status === 'loading' ? '强制生成中...' : '强制生成',
-    openTextNote,
-    toggleRecording,
+    recorderStatus: captureSession.status,
+    recordedUri: captureSession.recordedUri,
+    uploadStatus: captureSession.uploadStatus,
+    uploadResult: captureSession.uploadResult,
+    uploadError: captureSession.uploadError,
+    isUploading: captureSession.isUploading,
+    playRecording: captureSession.playRecording,
     retryUpload,
     openDailyScript,
     runDailyPush,

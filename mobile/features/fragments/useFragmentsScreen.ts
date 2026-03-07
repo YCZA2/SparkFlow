@@ -20,6 +20,9 @@ export interface FragmentsScreenState {
   totalLabel: string;
   selection: ReturnType<typeof useFragmentSelection>;
   openCloud: () => void;
+  openRecorder: () => void;
+  openTextNote: () => void;
+  openKnowledgePlaceholder: () => void;
   openNetworkSettings: () => void;
   refresh: () => Promise<void>;
   reload: () => Promise<void>;
@@ -112,6 +115,9 @@ export function useFragmentsScreen(): FragmentsScreenState {
     totalLabel: `${fragments.length} 条灵感`,
     selection,
     openCloud: () => router.push('/fragment-cloud'),
+    openRecorder: () => router.push('/record-audio'),
+    openTextNote: () => router.push('/text-note'),
+    openKnowledgePlaceholder: () => router.push('/knowledge'),
     openNetworkSettings: () => router.push('/network-settings'),
     refresh: refreshFragments,
     reload: fetchFragments,

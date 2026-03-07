@@ -7,9 +7,10 @@ import { useAppTheme } from '@/theme/useAppTheme';
 interface BottomActionBarProps {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  contentStyle?: StyleProp<ViewStyle>;
 }
 
-export function BottomActionBar({ children, style }: BottomActionBarProps) {
+export function BottomActionBar({ children, style, contentStyle }: BottomActionBarProps) {
   const theme = useAppTheme();
 
   return (
@@ -25,7 +26,7 @@ export function BottomActionBar({ children, style }: BottomActionBarProps) {
         style,
       ]}
     >
-      <View style={styles.content}>{children}</View>
+      <View style={[styles.content, contentStyle]}>{children}</View>
     </SafeAreaView>
   );
 }

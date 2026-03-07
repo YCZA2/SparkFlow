@@ -29,7 +29,7 @@ interface UploadResult {
 
 export function useAudioRecorder() {
   const recorder = useExpoAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const [status, setStatus] = useState<'idle' | 'recording' | 'recorded'>('idle');
+  const [status, setStatus] = useState<'idle' | 'recording' | 'paused' | 'recorded'>('idle');
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -61,7 +61,22 @@ export function useAudioRecorder() {
     };
   }, []);
 
+  const stopDurationTimer = () => {
+    if (durationTimerRef.current) {
+      clearInterval(durationTimerRef.current);
+      durationTimerRef.current = null;
+    }
+  };
+
+  const startDurationTimer = () => {
+    stopDurationTimer();
+    durationTimerRef.current = setInterval(() => {
+      setDurationSeconds((prev) => prev + 1);
+    }, 1000);
+  };
+
   const reset = () => {
+    stopDurationTimer();
     setRecordedUri(null);
     setDurationSeconds(0);
     setStatus('idle');
@@ -80,23 +95,44 @@ export function useAudioRecorder() {
       await recorder.prepareToRecordAsync();
       recorder.record();
       setStatus('recording');
-      durationTimerRef.current = setInterval(() => {
-        setDurationSeconds((prev) => prev + 1);
-      }, 1000);
+      startDurationTimer();
     } catch (err) {
       console.error('开始录音失败:', err);
       Alert.alert('录音失败', '无法开始录音，请重试');
     }
   };
 
-  const stopRecording = async () => {
-    if (status !== 'recording') return null;
+  const pauseRecording = () => {
+    if (status !== 'recording') return;
 
     try {
-      if (durationTimerRef.current) {
-        clearInterval(durationTimerRef.current);
-        durationTimerRef.current = null;
-      }
+      recorder.pause();
+      stopDurationTimer();
+      setStatus('paused');
+    } catch (err) {
+      console.error('暂停录音失败:', err);
+      Alert.alert('暂停失败', '无法暂停录音，请重试');
+    }
+  };
+
+  const resumeRecording = () => {
+    if (status !== 'paused') return;
+
+    try {
+      recorder.record();
+      setStatus('recording');
+      startDurationTimer();
+    } catch (err) {
+      console.error('继续录音失败:', err);
+      Alert.alert('继续失败', '无法继续录音，请重试');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (status !== 'recording' && status !== 'paused') return null;
+
+    try {
+      stopDurationTimer();
 
       await recorder.stop();
       const uri = recorder.uri;
@@ -151,6 +187,8 @@ export function useAudioRecorder() {
     durationSeconds,
     durationLabel: formatDuration(durationSeconds),
     startRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording,
     playRecording,
     reset,

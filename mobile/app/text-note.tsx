@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Text } from '@/components/Themed';
 import { createFragment } from '@/features/fragments/api';
@@ -20,6 +20,7 @@ const MIN_LENGTH = 1;
 
 export default function TextNoteScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ returnTo?: string; source?: string }>();
   const theme = useAppTheme();
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,6 +40,11 @@ export default function TextNoteScreen() {
         transcript: trimmedContent,
         source: 'manual',
       });
+
+      if (params.returnTo) {
+        router.back();
+        return;
+      }
 
       router.replace(`/fragment/${fragment.id}`);
     } catch (err) {
