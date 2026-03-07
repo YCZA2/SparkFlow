@@ -1,151 +1,131 @@
-/**
- * 碎片卡片组件
- * 展示单个碎片笔记的摘要信息
- */
-
 import React from 'react';
-import {
-  StyleSheet,
-  TouchableOpacity,
-  View,
-  Text,
-} from 'react-native';
-import { formatDate } from '@/utils/date';
-import type { Fragment } from '@/types/fragment';
-import { normalizeFragmentTags } from '@/features/fragments/utils';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
 import { useAppTheme } from '@/theme/useAppTheme';
+import type { Fragment } from '@/types/fragment';
 
-// 卡片组件属性
 interface FragmentCardProps {
-  /** 碎片数据 */
   fragment: Fragment;
-  /** 点击回调 */
   onPress?: (fragment: Fragment) => void;
-  /** 是否显示多选框 */
   selectable?: boolean;
-  /** 当前是否已选中 */
   selected?: boolean;
+  isFirstInSection?: boolean;
+  isLastInSection?: boolean;
 }
 
-/**
- * 获取卡片显示文本
- * 优先使用 summary，否则使用 transcript 前50字符
- */
-function getDisplayText(fragment: Fragment): string {
-  if (fragment.summary) {
-    return fragment.summary;
+function formatTimeLabel(dateString: string): string {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return '--:--';
   }
-  if (fragment.transcript) {
-    return fragment.transcript.length > 50
-      ? fragment.transcript.slice(0, 50) + '...'
-      : fragment.transcript;
-  }
-  return '无内容';
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
 }
 
-/**
- * 碎片卡片组件
- */
+function getCleanText(value: string | null | undefined): string {
+  if (!value) return '';
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function truncate(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trim()}...`;
+}
+
+function getSourceLabel(source: string): string {
+  const labels: Record<string, string> = {
+    voice: '语音记录',
+    manual: '文字记录',
+    video_parse: '视频解析',
+  };
+
+  return labels[source] || source;
+}
+
+function getTitle(fragment: Fragment): string {
+  const summary = getCleanText(fragment.summary);
+  if (summary) return truncate(summary, 30);
+
+  const transcript = getCleanText(fragment.transcript);
+  if (transcript) return truncate(transcript, 30);
+
+  return '无标题灵感';
+}
+
+function getPreview(fragment: Fragment): string {
+  const transcript = getCleanText(fragment.transcript);
+  const summary = getCleanText(fragment.summary);
+
+  if (summary && transcript && summary !== transcript) {
+    return truncate(transcript, 42);
+  }
+
+  if (transcript) return truncate(transcript, 42);
+  if (summary) return truncate(summary, 42);
+
+  return '暂无更多文本';
+}
+
 export function FragmentCard({
   fragment,
   onPress,
   selectable = false,
   selected = false,
+  isFirstInSection = false,
+  isLastInSection = false,
 }: FragmentCardProps) {
   const theme = useAppTheme();
-
-  const displayText = getDisplayText(fragment);
-  const timeText = formatDate(fragment.created_at);
-  const tags = normalizeFragmentTags(fragment.tags);
 
   return (
     <TouchableOpacity
       style={[
         styles.container,
-        [theme.shadow.card, { backgroundColor: theme.colors.surface }],
+        theme.shadow.card,
+        {
+          backgroundColor: theme.colors.surface,
+          borderTopLeftRadius: isFirstInSection ? 26 : 0,
+          borderTopRightRadius: isFirstInSection ? 26 : 0,
+          borderBottomLeftRadius: isLastInSection ? 26 : 0,
+          borderBottomRightRadius: isLastInSection ? 26 : 0,
+          borderTopWidth: isFirstInSection ? 0 : StyleSheet.hairlineWidth,
+          borderTopColor: theme.colors.border,
+        },
       ]}
       onPress={() => onPress?.(fragment)}
-      activeOpacity={0.7}
+      activeOpacity={0.82}
     >
-      <View style={styles.mainRow}>
-        {selectable && (
-          <View
-            style={[
-              styles.checkbox,
-              {
-                borderColor: selected ? theme.colors.primary : theme.colors.border,
-                backgroundColor: selected ? theme.colors.primary : 'transparent',
-              },
-            ]}
-          >
-            {selected && <Text style={styles.checkmark}>✓</Text>}
-          </View>
-        )}
+      <View style={styles.content}>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={1}>
+            {getTitle(fragment)}
+          </Text>
+          {selectable ? (
+            <View
+              style={[
+                styles.checkbox,
+                {
+                  borderColor: selected ? theme.colors.primary : theme.colors.border,
+                  backgroundColor: selected ? theme.colors.primary : theme.colors.surface,
+                },
+              ]}
+            >
+              {selected ? <Text style={styles.checkmark}>✓</Text> : null}
+            </View>
+          ) : null}
+        </View>
 
-        {/* 主内容区域 */}
-        <View style={styles.content}>
-          <Text
-            style={[
-              styles.text,
-              { color: theme.colors.text },
-            ]}
-            numberOfLines={2}
-          >
-            {displayText}
+        <View style={styles.metaRow}>
+          <Text style={[styles.time, { color: theme.colors.textSubtle }]}>
+            {formatTimeLabel(fragment.created_at)}
+          </Text>
+          <Text style={[styles.preview, { color: theme.colors.textSubtle }]} numberOfLines={1}>
+            {getPreview(fragment)}
           </Text>
         </View>
-      </View>
 
-      {/* 标签区域 */}
-      {tags.length > 0 && (
-        <View style={styles.tagsContainer}>
-          {tags.slice(0, 3).map((tag, index) => (
-            <View
-              key={index}
-              style={[
-                styles.tag,
-                { backgroundColor: theme.colors.surfaceMuted },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.tagText,
-                  { color: theme.colors.textSubtle },
-                ]}
-              >
-                {tag}
-              </Text>
-            </View>
-          ))}
-          {tags.length > 3 && (
-            <Text
-              style={[
-                styles.moreTags,
-                { color: theme.colors.textSubtle },
-              ]}
-            >
-              +{tags.length - 3}
-            </Text>
-          )}
-        </View>
-      )}
-
-      {/* 底部信息区域 */}
-      <View style={styles.footer}>
-        <Text
-          style={[
-            styles.time,
-            { color: theme.colors.textSubtle },
-          ]}
-        >
-          {timeText}
-        </Text>
-        <Text
-          style={[
-            styles.source,
-            { color: theme.colors.textSubtle },
-          ]}
-        >
+        <Text style={[styles.source, { color: theme.colors.textSubtle }]} numberOfLines={1}>
           {getSourceLabel(fragment.source)}
         </Text>
       </View>
@@ -153,83 +133,55 @@ export function FragmentCard({
   );
 }
 
-/**
- * 获取来源标签显示文本
- */
-function getSourceLabel(source: string): string {
-  const labels: Record<string, string> = {
-    voice: '语音',
-    manual: '手动',
-    video_parse: '视频解析',
-  };
-  return labels[source] || source;
-}
-
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
-    padding: 16,
     marginHorizontal: 16,
-    marginVertical: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
   },
-  mainRow: {
+  content: {
+    gap: 4,
+  },
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    gap: 12,
+  },
+  title: {
+    flex: 1,
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  time: {
+    fontSize: 15,
+    minWidth: 44,
+  },
+  preview: {
+    flex: 1,
+    fontSize: 15,
+  },
+  source: {
+    fontSize: 14,
+    lineHeight: 18,
   },
   checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    marginRight: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
+    marginTop: 1,
   },
   checkmark: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
-  },
-  content: {
-    flex: 1,
-  },
-  text: {
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '400',
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  tag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    marginRight: 6,
-    marginBottom: 4,
-  },
-  tagText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  moreTags: {
-    fontSize: 12,
-    marginLeft: 2,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  time: {
-    fontSize: 12,
-  },
-  source: {
-    fontSize: 12,
   },
 });

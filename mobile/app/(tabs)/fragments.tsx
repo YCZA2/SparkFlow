@@ -1,34 +1,66 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   Alert,
-  FlatList,
   RefreshControl,
+  SectionList,
   StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
-import { Text } from '@/components/Themed';
 import { FragmentCard } from '@/components/FragmentCard';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
+import { Text } from '@/components/Themed';
 import { useFragmentSelection, useFragments } from '@/features/fragments/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
+
+interface FragmentSection {
+  title: string;
+  data: Fragment[];
+}
+
+function getSectionLabel(dateString: string): string {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '更早';
+
+  const today = new Date();
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const diffDays = Math.round((current.getTime() - target.getTime()) / 86400000);
+
+  if (diffDays === 0) return '今天';
+  if (diffDays === 1) return '昨天';
+  if (date.getFullYear() === today.getFullYear()) {
+    return `${date.getMonth() + 1}月${date.getDate()}日`;
+  }
+
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+function buildSections(fragments: Fragment[]): FragmentSection[] {
+  const sectionMap = new Map<string, Fragment[]>();
+
+  for (const fragment of fragments) {
+    const key = getSectionLabel(fragment.created_at);
+    const current = sectionMap.get(key) ?? [];
+    current.push(fragment);
+    sectionMap.set(key, current);
+  }
+
+  return Array.from(sectionMap.entries()).map(([title, data]) => ({ title, data }));
+}
 
 export default function FragmentsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ refresh?: string }>();
   const theme = useAppTheme();
-  const {
-    fragments,
-    isLoading,
-    isRefreshing,
-    error,
-    refreshFragments,
-    fetchFragments,
-  } = useFragments();
+  const { fragments, isLoading, isRefreshing, error, refreshFragments, fetchFragments } =
+    useFragments();
   const selection = useFragmentSelection(20);
+
+  const sections = useMemo(() => buildSections(fragments), [fragments]);
 
   useFocusEffect(
     useCallback(() => {
@@ -108,34 +140,46 @@ export default function FragmentsScreen() {
         }}
       />
 
-      <FlatList
-        data={fragments}
+      <SectionList
+        sections={sections}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
+        renderItem={({ item, index, section }) => (
           <FragmentCard
             fragment={item}
             onPress={handleFragmentPress}
             selectable={selection.isSelectionMode}
             selected={selection.selectedSet.has(item.id)}
+            isFirstInSection={index === 0}
+            isLastInSection={index === section.data.length - 1}
           />
+        )}
+        renderSectionHeader={({ section }) => (
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{section.title}</Text>
         )}
         ListHeaderComponent={
           <View style={styles.header}>
-            <View>
-              <Text style={[styles.headerText, { color: theme.colors.textSubtle }]}>
-                共 {fragments.length} 条灵感
-              </Text>
-              <Text style={[styles.headerTitle, { color: theme.colors.text }]}>试试灵感云图</Text>
-              <Text style={[styles.headerDesc, { color: theme.colors.textSubtle }]}>
-                把碎片按主题聚在一起看，再从一个主题继续生成口播稿。
-              </Text>
-            </View>
+            <Text style={[styles.totalCount, { color: theme.colors.textSubtle }]}>
+              {fragments.length} 条灵感
+            </Text>
+            <Text style={[styles.heroTitle, { color: theme.colors.text }]}>全部碎片</Text>
+            <Text style={[styles.heroSubtitle, { color: theme.colors.textSubtle }]}>
+              像备忘录一样翻看你的语音记录和文字记录。
+            </Text>
+
             <TouchableOpacity
-              style={[styles.cloudButton, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}
+              style={[
+                styles.cloudButton,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}
               onPress={handleOpenCloud}
               activeOpacity={0.85}
             >
-              <Text style={[styles.cloudButtonText, { color: theme.colors.primary }]}>打开云图</Text>
+              <Text style={[styles.cloudButtonText, { color: theme.colors.primary }]}>
+                打开灵感云图
+              </Text>
             </TouchableOpacity>
           </View>
         }
@@ -150,6 +194,7 @@ export default function FragmentsScreen() {
             tintColor={theme.colors.primary}
           />
         }
+        stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
       />
 
@@ -181,40 +226,49 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   list: {
-    paddingTop: 8,
-    paddingBottom: 24,
+    paddingBottom: 36,
   },
   emptyList: {
     flexGrow: 1,
   },
   header: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
+    paddingTop: 18,
+    paddingBottom: 14,
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginTop: 4,
+  totalCount: {
+    fontSize: 16,
+    fontWeight: '500',
   },
-  headerDesc: {
-    fontSize: 13,
-    lineHeight: 18,
+  heroTitle: {
+    marginTop: 2,
+    fontSize: 38,
+    lineHeight: 44,
+    fontWeight: '800',
+  },
+  heroSubtitle: {
     marginTop: 6,
-  },
-  headerText: {
-    fontSize: 13,
+    fontSize: 15,
+    lineHeight: 21,
   },
   cloudButton: {
     alignSelf: 'flex-start',
+    marginTop: 14,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 14,
+    paddingHorizontal: 15,
     paddingVertical: 10,
   },
   cloudButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 18,
+    marginBottom: 10,
+    paddingHorizontal: 16,
   },
   selectAction: {
     fontSize: 16,
@@ -227,10 +281,10 @@ const styles = StyleSheet.create({
     right: 12,
     bottom: 16,
     padding: 10,
-    borderRadius: 12,
+    borderRadius: 16,
   },
   generateButton: {
-    borderRadius: 10,
+    borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
