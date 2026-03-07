@@ -51,3 +51,7 @@ logs/
 
 # ChromaDB
 chroma_data/
+
+
+# MiniMax
+.minimax
