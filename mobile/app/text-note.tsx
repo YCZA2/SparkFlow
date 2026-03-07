@@ -42,7 +42,8 @@ export default function TextNoteScreen() {
       });
 
       if (params.returnTo) {
-        router.back();
+        // 从录音界面跳转过来的，返回时直接回到主页
+        router.replace('/');
         return;
       }
 

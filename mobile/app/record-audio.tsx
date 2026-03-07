@@ -7,11 +7,13 @@ import {
   View,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { Text } from '@/components/Themed';
 import { useAudioCaptureSession } from '@/features/recording/AudioCaptureProvider';
+import { useAppTheme } from '@/theme/useAppTheme';
 
 function formatTodayLabel() {
   const today = new Date();
@@ -54,29 +56,35 @@ function SecondaryPill({
   label,
   symbol,
   onPress,
-  themeColor,
 }: {
   label: string;
   symbol: React.ComponentProps<typeof SymbolView>['name'];
   onPress: () => void;
-  themeColor: string;
 }) {
+  const theme = useAppTheme();
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.secondaryPill,
-        { opacity: pressed ? 0.72 : 1 },
+        theme.shadow.card,
+        {
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.border,
+          opacity: pressed ? 0.72 : 1,
+        },
       ]}
     >
-      <SymbolView name={symbol} size={22} tintColor={themeColor} />
-      <Text style={[styles.secondaryPillText, { color: themeColor }]}>{label}</Text>
+      <SymbolView name={symbol} size={20} tintColor={theme.colors.text} />
+      <Text style={[styles.secondaryPillText, { color: theme.colors.text }]}>{label}</Text>
     </Pressable>
   );
 }
 
 export default function RecordAudioScreen() {
   const router = useRouter();
+  const theme = useAppTheme();
+  const insets = useSafeAreaInsets();
   const session = useAudioCaptureSession();
   const hasAutoStartedRef = useRef(false);
 
@@ -101,12 +109,20 @@ export default function RecordAudioScreen() {
 
   const handleCancel = async () => {
     await session.cancel();
-    router.replace('/?refresh=true');
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
   };
 
   const handleStop = async () => {
     await session.stopAndUpload();
-    router.replace('/?refresh=true');
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
   };
 
   const handlePauseToggle = () => {
@@ -127,145 +143,132 @@ export default function RecordAudioScreen() {
   };
 
   return (
-    <SafeAreaView
-      edges={['top', 'left', 'right', 'bottom']}
-      style={[styles.safeArea, { backgroundColor: '#F3EFE6' }]}
-    >
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
 
-      <View style={styles.container}>
-        <View style={styles.topBar}>
-          <View style={styles.recRow}>
-            <View style={styles.recDot} />
-            <Text style={[styles.recText, { color: '#FF5A1F' }]}>REC</Text>
-          </View>
-
-          <View style={styles.topActions}>
-            <SecondaryPill
-              label="中英..."
-              symbol="globe"
-              onPress={() => showPlaceholderAlert('语言选择即将接入')}
-              themeColor="#141414"
-            />
-            <IconButton
-              symbol="character.book.closed"
-              onPress={() => showPlaceholderAlert('转写样式即将接入')}
-              color="#141414"
-              backgroundColor="#ECE7DD"
-            />
-            <IconButton
-              symbol="circle.hexagongrid.fill"
-              onPress={() => showPlaceholderAlert('录音标记即将接入')}
-              color="#141414"
-              backgroundColor="#ECE7DD"
-            />
-          </View>
+      {/* 顶部导航栏 */}
+      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
+        <View style={styles.recRow}>
+          {session.status === 'recording' && (
+            <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.recDot} />
+          )}
+          <Text style={[styles.recText, { color: theme.colors.primary }]}>
+            {session.status === 'paused' ? '已暂停' : 'REC'}
+          </Text>
         </View>
 
-        <View style={styles.dateBlock}>
-          <Text style={[styles.dateLabel, { color: '#222222' }]}>{formatTodayLabel()}</Text>
-        </View>
-
-        <View style={styles.timerWrap}>
-          <View style={styles.timerCard}>
-            <Text style={styles.timerText}>{session.durationLabel}</Text>
-            <Text style={styles.timerHint}>
-              {session.status === 'paused' ? '已暂停，随时继续' : '正在聆听你的想法'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.primaryActions}>
+        <View style={styles.topActions}>
+          <SecondaryPill
+            label="中英"
+            symbol="globe"
+            onPress={() => showPlaceholderAlert('语言选择即将接入')}
+          />
           <IconButton
             symbol="xmark"
             onPress={() => void handleCancel()}
-            size={72}
-            color="#111111"
-            backgroundColor="rgba(255,255,255,0.92)"
-          />
-          <Pressable
-            onPress={() => void handleStop()}
-            disabled={session.status === 'uploading'}
-            style={({ pressed }) => [
-              styles.stopButton,
-              {
-                backgroundColor: 'rgba(255,255,255,0.94)',
-                opacity: pressed || session.status === 'uploading' ? 0.72 : 1,
-              },
-            ]}
-          >
-            {session.status === 'uploading' ? (
-              <ActivityIndicator size="small" color="#FF5A1F" />
-            ) : (
-              <View style={styles.stopSquare} />
-            )}
-          </Pressable>
-          <IconButton
-            symbol={session.status === 'paused' ? 'play.fill' : 'pause.fill'}
-            onPress={handlePauseToggle}
-            size={72}
-            color="#111111"
-            backgroundColor="rgba(255,255,255,0.92)"
-          />
-        </View>
-
-        <View style={styles.bottomActions}>
-          <SecondaryPill
-            label="标记"
-            symbol="flag.fill"
-            onPress={() => showPlaceholderAlert('标记功能即将接入')}
-            themeColor="#141414"
-          />
-          <Pressable
-            onPress={handleOpenTextNote}
-            style={({ pressed }) => [
-              styles.noteButton,
-              { opacity: pressed ? 0.72 : 1 },
-            ]}
-          >
-            <Text style={styles.noteButtonText}>添加笔记</Text>
-          </Pressable>
-          <SecondaryPill
-            label="相机"
-            symbol="camera.fill"
-            onPress={() => showPlaceholderAlert('相机联动即将接入')}
-            themeColor="#141414"
+            size={44}
+            color={theme.colors.text}
+            backgroundColor={theme.colors.surface}
           />
         </View>
       </View>
-    </SafeAreaView>
+
+      {/* 日期 */}
+      <View style={styles.dateBlock}>
+        <Text style={[styles.dateLabel, { color: theme.colors.text }]}>{formatTodayLabel()}</Text>
+      </View>
+
+      {/* 计时器 */}
+      <View style={styles.timerWrap}>
+        <View style={[styles.timerCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.timerText, { color: theme.colors.text }]}>{session.durationLabel}</Text>
+          <Text style={[styles.timerHint, { color: theme.colors.textSubtle }]}>
+            {session.status === 'paused' ? '已暂停，点击继续' : '正在聆听你的想法'}
+          </Text>
+        </View>
+      </View>
+
+      {/* 主要操作按钮 */}
+      <View style={styles.primaryActions}>
+        <IconButton
+          symbol={session.status === 'paused' ? 'play.fill' : 'pause.fill'}
+          onPress={handlePauseToggle}
+          size={64}
+          color={theme.colors.text}
+          backgroundColor={theme.colors.surface}
+        />
+
+        <Pressable
+          onPress={() => void handleStop()}
+          disabled={session.status === 'uploading'}
+          style={({ pressed }) => [
+            styles.stopButton,
+            theme.shadow.card,
+            {
+              backgroundColor: theme.colors.primary,
+              opacity: pressed || session.status === 'uploading' ? 0.72 : 1,
+            },
+          ]}
+        >
+          {session.status === 'uploading' ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <View style={styles.stopSquare} />
+          )}
+        </Pressable>
+
+        <IconButton
+          symbol="flag.fill"
+          onPress={() => showPlaceholderAlert('标记功能即将接入')}
+          size={64}
+          color={theme.colors.text}
+          backgroundColor={theme.colors.surface}
+        />
+      </View>
+
+      {/* 底部操作栏 */}
+      <View style={[styles.bottomActions, { paddingBottom: insets.bottom + 20 }]}>
+        <SecondaryPill
+          label="笔记"
+          symbol="square.and.pencil"
+          onPress={handleOpenTextNote}
+        />
+        <SecondaryPill
+          label="相机"
+          symbol="camera.fill"
+          onPress={() => showPlaceholderAlert('相机联动即将接入')}
+        />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
   container: {
     flex: 1,
-    paddingHorizontal: 22,
-    paddingTop: 12,
-    paddingBottom: 18,
+    paddingHorizontal: 16,
   },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingBottom: 12,
   },
   recRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    minWidth: 60,
   },
   recDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#FF4E1A',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FF3B30',
   },
   recText: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
   },
   topActions: {
     flexDirection: 'row',
@@ -273,96 +276,81 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   dateBlock: {
-    marginTop: 22,
+    marginTop: 16,
     alignItems: 'flex-start',
   },
   dateLabel: {
-    fontSize: 30,
-    fontWeight: '800',
+    fontSize: 28,
+    fontWeight: '700',
   },
   timerWrap: {
     flex: 1,
-    minHeight: 320,
     justifyContent: 'center',
     alignItems: 'center',
   },
   timerCard: {
-    minWidth: 240,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.58)',
-    paddingHorizontal: 28,
-    paddingVertical: 34,
+    minWidth: 220,
+    borderRadius: 24,
+    paddingHorizontal: 32,
+    paddingVertical: 28,
     alignItems: 'center',
+    borderWidth: 1,
   },
   timerText: {
-    fontSize: 60,
+    fontSize: 56,
     fontWeight: '800',
-    color: '#111111',
-    letterSpacing: -2,
+    letterSpacing: -1,
+    fontVariant: ['tabular-nums'],
   },
   timerHint: {
-    marginTop: 10,
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#7C756A',
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '500',
   },
   primaryActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-evenly',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 20,
   },
   iconButton: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   stopButton: {
-    width: 128,
-    height: 128,
-    borderRadius: 64,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
   },
   stopSquare: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: '#FF5A1F',
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
   },
   bottomActions: {
-    marginTop: 28,
+    marginTop: 32,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
   },
   secondaryPill: {
     flex: 1,
-    minHeight: 64,
-    borderRadius: 24,
-    backgroundColor: 'rgba(223, 218, 208, 0.72)',
+    height: 52,
+    borderRadius: 999,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 18,
+    gap: 8,
+    borderWidth: 1,
   },
   secondaryPillText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  noteButton: {
-    flex: 1.2,
-    minHeight: 64,
-    borderRadius: 24,
-    backgroundColor: 'rgba(223, 218, 208, 0.72)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 22,
-  },
-  noteButtonText: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#141414',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
