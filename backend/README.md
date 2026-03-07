@@ -27,6 +27,8 @@ Default local address: `http://127.0.0.1:8000`
 - `utils/`: shared utility helpers
 - `constants/`: shared constants
 
+Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `scripts`, `knowledge`, and `scheduler`.
+
 ## Tests
 
 Current tests are runnable with `unittest`:

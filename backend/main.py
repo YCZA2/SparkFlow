@@ -13,6 +13,7 @@ from core.exceptions import (
     AuthenticationError,
 )
 from modules.auth.presentation import router as auth_router
+from modules.fragment_folders.presentation import router as fragment_folders_router
 from modules.fragments.presentation import router as fragments_router
 from modules.knowledge.presentation import router as knowledge_router
 from modules.scripts.application import DailyPushUseCase
@@ -145,6 +146,7 @@ def register_routes(app: FastAPI) -> None:
         return Response(status_code=200)
 
     app.include_router(auth_router)
+    app.include_router(fragment_folders_router)
     app.include_router(fragments_router)
     app.include_router(transcriptions_router)
     app.include_router(scripts_router)

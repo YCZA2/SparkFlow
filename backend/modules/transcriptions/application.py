@@ -8,7 +8,8 @@ from typing import Any
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from core.exceptions import ServiceUnavailableError
+from core.exceptions import NotFoundError, ServiceUnavailableError
+from domains.fragment_folders import repository as fragment_folder_repository
 from domains.fragments import repository as fragment_repository
 from models import Fragment
 from modules.fragments.application import map_fragment
@@ -39,6 +40,7 @@ class TranscriptionUseCase:
         db: Session,
         user_id: str,
         audio: UploadFile,
+        folder_id: str | None = None,
     ) -> dict[str, Any]:
         try:
             is_available = await self.stt_provider.health_check()
@@ -50,6 +52,15 @@ class TranscriptionUseCase:
                 service_name="stt",
             ) from exc
 
+        if folder_id is not None:
+            folder = fragment_folder_repository.get_by_id(db=db, user_id=user_id, folder_id=folder_id)
+            if not folder:
+                raise NotFoundError(
+                    message="文件夹不存在或无权访问",
+                    resource_type="fragment_folder",
+                    resource_id=folder_id,
+                )
+
         saved = await self.audio_storage.save(audio=audio, user_id=user_id)
         fragment = fragment_repository.create(
             db=db,
@@ -58,6 +69,7 @@ class TranscriptionUseCase:
             source="voice",
             audio_path=saved["relative_path"],
             sync_status="syncing",
+            folder_id=folder_id,
         )
         return {
             "fragment_id": fragment.id,

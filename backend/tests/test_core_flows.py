@@ -16,7 +16,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from main import create_app
-from models import Base, Fragment, KnowledgeDoc, Script
+from models import Base, Fragment, FragmentFolder, FragmentTag, KnowledgeDoc, Script
 from modules.auth.application import TEST_USER_ID
 from modules.shared.container import LocalAudioStorage, PromptLoader
 
@@ -150,9 +150,21 @@ class BackendFlowTestCase(unittest.TestCase):
             self.assertEqual(response.json()["error"]["code"], "AUTHENTICATION")
 
     def create_fragment(self, transcript: str = "一条可用于生成稿件的碎片") -> str:
+        return self.create_fragment_with_payload({"transcript": transcript, "source": "manual"})["id"]
+
+    def create_fragment_with_payload(self, payload: dict) -> dict:
         response = self.client.post(
             "/api/fragments",
-            json={"transcript": transcript, "source": "manual"},
+            json=payload,
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(response.status_code, 201)
+        return response.json()["data"]
+
+    def create_folder(self, name: str = "选题箱") -> str:
+        response = self.client.post(
+            "/api/fragment-folders",
+            json={"name": name},
             headers=self.auth_headers(),
         )
         self.assertEqual(response.status_code, 201)
@@ -262,6 +274,135 @@ class BackendFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"]["code"], "VALIDATION")
 
+    def test_fragment_folders_crud_filtering_and_moves(self) -> None:
+        folder_a_id = self.create_folder("选题箱")
+        folder_b_id = self.create_folder("待整理")
+
+        list_folders_response = self.client.get("/api/fragment-folders", headers=self.auth_headers())
+        self.assertEqual(list_folders_response.status_code, 200)
+        folder_counts = {item["id"]: item["fragment_count"] for item in list_folders_response.json()["data"]["items"]}
+        self.assertEqual(folder_counts[folder_a_id], 0)
+        self.assertEqual(folder_counts[folder_b_id], 0)
+
+        in_folder = self.create_fragment_with_payload({"transcript": "放进文件夹的碎片", "source": "manual", "folder_id": folder_a_id})
+        first_unfiled = self.create_fragment("未归类碎片 1")
+        second_unfiled = self.create_fragment("未归类碎片 2")
+
+        self.assertEqual(in_folder["folder_id"], folder_a_id)
+        self.assertEqual(in_folder["folder"]["id"], folder_a_id)
+
+        filtered_response = self.client.get(f"/api/fragments?folder_id={folder_a_id}", headers=self.auth_headers())
+        self.assertEqual(filtered_response.status_code, 200)
+        filtered_ids = {item["id"] for item in filtered_response.json()["data"]["items"]}
+        self.assertEqual(filtered_ids, {in_folder["id"]})
+
+        move_response = self.client.post(
+            "/api/fragments/move",
+            json={"fragment_ids": [first_unfiled, second_unfiled], "folder_id": folder_b_id},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(move_response.status_code, 200)
+        self.assertEqual(move_response.json()["data"]["moved_count"], 2)
+
+        patch_response = self.client.patch(
+            f"/api/fragments/{first_unfiled}",
+            json={"folder_id": None},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(patch_response.status_code, 200)
+        self.assertIsNone(patch_response.json()["data"]["folder_id"])
+
+        rename_response = self.client.patch(
+            f"/api/fragment-folders/{folder_b_id}",
+            json={"name": "已整理"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(rename_response.status_code, 200)
+        self.assertEqual(rename_response.json()["data"]["name"], "已整理")
+
+        non_empty_delete = self.client.delete(f"/api/fragment-folders/{folder_a_id}", headers=self.auth_headers())
+        self.assertEqual(non_empty_delete.status_code, 409)
+        self.assertEqual(non_empty_delete.json()["error"]["code"], "CONFLICT")
+
+        move_out_response = self.client.patch(
+            f"/api/fragments/{in_folder['id']}",
+            json={"folder_id": None},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(move_out_response.status_code, 200)
+
+        empty_delete = self.client.delete(f"/api/fragment-folders/{folder_a_id}", headers=self.auth_headers())
+        self.assertEqual(empty_delete.status_code, 200)
+        self.assertTrue(empty_delete.json()["success"])
+
+        list_after_response = self.client.get("/api/fragment-folders", headers=self.auth_headers())
+        self.assertEqual(list_after_response.status_code, 200)
+        remaining = {item["id"]: item["fragment_count"] for item in list_after_response.json()["data"]["items"]}
+        self.assertNotIn(folder_a_id, remaining)
+        self.assertEqual(remaining[folder_b_id], 1)
+
+    def test_fragment_folder_validation_and_conflicts(self) -> None:
+        folder_id = self.create_folder("灵感仓")
+
+        duplicate_response = self.client.post(
+            "/api/fragment-folders",
+            json={"name": "灵感仓"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(duplicate_response.status_code, 409)
+        self.assertEqual(duplicate_response.json()["error"]["code"], "CONFLICT")
+
+        empty_name_response = self.client.post(
+            "/api/fragment-folders",
+            json={"name": "   "},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(empty_name_response.status_code, 422)
+        self.assertEqual(empty_name_response.json()["error"]["code"], "VALIDATION")
+
+        rename_conflict_response = self.client.post(
+            "/api/fragment-folders",
+            json={"name": "另一个文件夹"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(rename_conflict_response.status_code, 201)
+        second_folder_id = rename_conflict_response.json()["data"]["id"]
+
+        rename_response = self.client.patch(
+            f"/api/fragment-folders/{second_folder_id}",
+            json={"name": "灵感仓"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(rename_response.status_code, 409)
+        self.assertEqual(rename_response.json()["error"]["code"], "CONFLICT")
+
+        invalid_folder_fragment_response = self.client.post(
+            "/api/fragments",
+            json={"transcript": "错误文件夹", "source": "manual", "folder_id": "missing-folder"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(invalid_folder_fragment_response.status_code, 404)
+        self.assertEqual(invalid_folder_fragment_response.json()["error"]["code"], "NOT_FOUND")
+
+        invalid_filter_response = self.client.get("/api/fragments?folder_id=missing-folder", headers=self.auth_headers())
+        self.assertEqual(invalid_filter_response.status_code, 404)
+        self.assertEqual(invalid_filter_response.json()["error"]["code"], "NOT_FOUND")
+
+        invalid_move_response = self.client.post(
+            "/api/fragments/move",
+            json={"fragment_ids": [self.create_fragment("待移动")], "folder_id": "missing-folder"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(invalid_move_response.status_code, 404)
+        self.assertEqual(invalid_move_response.json()["error"]["code"], "NOT_FOUND")
+
+        delete_missing_response = self.client.delete("/api/fragment-folders/missing-folder", headers=self.auth_headers())
+        self.assertEqual(delete_missing_response.status_code, 404)
+        self.assertEqual(delete_missing_response.json()["error"]["code"], "NOT_FOUND")
+
+        with self.SessionLocal() as db:
+            self.assertIsNotNone(db.query(FragmentFolder).filter(FragmentFolder.id == folder_id).first())
+
     def test_generate_script_success_and_failures(self) -> None:
         fragment_id = self.create_fragment()
 
@@ -338,11 +479,13 @@ class BackendFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"]["code"], "VALIDATION")
 
-    def test_upload_audio_transitions_to_synced(self) -> None:
+    def test_upload_audio_transitions_to_synced_with_folder_and_tags(self) -> None:
+        folder_id = self.create_folder("录音箱")
         response = self.client.post(
             "/api/transcriptions",
             headers=self.auth_headers(),
             files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
+            data={"folder_id": folder_id},
         )
         self.assertEqual(response.status_code, 200)
         payload = response.json()["data"]
@@ -357,6 +500,9 @@ class BackendFlowTestCase(unittest.TestCase):
             self.assertIsNotNone(fragment)
             self.assertEqual(fragment.sync_status, "synced")
             self.assertEqual(fragment.transcript, "转写完成")
+            self.assertEqual(fragment.folder_id, folder_id)
+            fragment_tags = db.query(FragmentTag).filter(FragmentTag.fragment_id == fragment.id).all()
+            self.assertGreaterEqual(len(fragment_tags), 1)
             self.assertTrue(os.path.exists(payload["audio_path"]))
 
     def test_get_transcription_status_returns_not_found_for_missing_fragment(self) -> None:

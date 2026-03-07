@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile, status
 from sqlalchemy.orm import Session
 
 from core import success_response
@@ -25,6 +25,7 @@ def get_transcription_use_case(container: ServiceContainer = Depends(get_contain
 async def upload_audio(
     background_tasks: BackgroundTasks,
     audio: UploadFile = File(..., description="音频文件"),
+    folder_id: str | None = Form(None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
     container: ServiceContainer = Depends(get_container),
@@ -35,6 +36,7 @@ async def upload_audio(
         db=db,
         user_id=current_user["user_id"],
         audio=audio,
+        folder_id=folder_id,
     )
     runner.schedule(
         use_case.process_transcription,

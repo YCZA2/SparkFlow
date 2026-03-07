@@ -8,6 +8,7 @@ from core.exceptions import NotFoundError, ValidationError
 from models import Fragment
 from utils.serialization import format_iso_datetime, parse_json_list, parse_json_object_list
 
+from domains.fragment_folders import repository as fragment_folder_repository
 from domains.fragments import repository as fragment_repository
 from modules.shared.ports import AudioStorage, VectorStore
 from .visualization import build_fragment_visualization
@@ -34,6 +35,12 @@ def _map_speaker_segments(raw: Optional[str]) -> Optional[list[dict[str, Any]]]:
 
 
 def map_fragment(fragment: Fragment) -> dict[str, Any]:
+    folder = None
+    if fragment.folder:
+        folder = {
+            "id": fragment.folder.id,
+            "name": fragment.folder.name,
+        }
     return {
         "id": fragment.id,
         "transcript": fragment.transcript,
@@ -44,6 +51,8 @@ def map_fragment(fragment: Fragment) -> dict[str, Any]:
         "sync_status": fragment.sync_status,
         "created_at": format_iso_datetime(fragment.created_at),
         "audio_path": fragment.audio_path,
+        "folder_id": fragment.folder_id,
+        "folder": folder,
     }
 
 
@@ -59,12 +68,14 @@ class FragmentCommandService:
         transcript: Optional[str],
         source: str,
         audio_path: Optional[str],
+        folder_id: Optional[str] = None,
     ) -> Fragment:
         if source not in VALID_FRAGMENT_SOURCES:
             raise ValidationError(
                 message="无效的 source 值",
                 field_errors={"source": f"必须是以下之一: {', '.join(sorted(VALID_FRAGMENT_SOURCES))}"},
             )
+        self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
         return fragment_repository.create(
             db=db,
             user_id=user_id,
@@ -72,12 +83,32 @@ class FragmentCommandService:
             source=source,
             audio_path=audio_path,
             sync_status="synced" if transcript else "pending",
+            folder_id=folder_id,
         )
 
     def delete_fragment(self, *, db: Session, user_id: str, fragment_id: str) -> None:
         fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
         self.audio_storage.delete(fragment.audio_path)
         fragment_repository.delete(db=db, fragment=fragment)
+
+    def update_fragment_folder(self, *, db: Session, user_id: str, fragment_id: str, folder_id: Optional[str]) -> Fragment:
+        fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
+        self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
+        return fragment_repository.update_folder(db=db, fragment=fragment, folder_id=folder_id)
+
+    def move_fragments(self, *, db: Session, user_id: str, fragment_ids: list[str], folder_id: Optional[str]) -> dict[str, Any]:
+        self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
+        fragments = fragment_repository.get_by_ids(db=db, user_id=user_id, fragment_ids=fragment_ids)
+        found_ids = {fragment.id for fragment in fragments}
+        missing_ids = sorted(set(fragment_ids) - found_ids)
+        if missing_ids:
+            raise NotFoundError(
+                message=f"部分碎片不存在或无权访问: {', '.join(missing_ids)}",
+                resource_type="fragment",
+                resource_id=",".join(missing_ids),
+            )
+        updated = fragment_repository.move_by_ids(db=db, fragments=fragments, folder_id=folder_id)
+        return {"items": [map_fragment(fragment) for fragment in updated], "moved_count": len(updated)}
 
     def get_fragment(self, *, db: Session, user_id: str, fragment_id: str) -> Fragment:
         fragment = fragment_repository.get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
@@ -89,14 +120,43 @@ class FragmentCommandService:
             )
         return fragment
 
+    @staticmethod
+    def _validate_folder_exists(db: Session, user_id: str, folder_id: Optional[str]) -> None:
+        if folder_id is None:
+            return
+        folder = fragment_folder_repository.get_by_id(db=db, user_id=user_id, folder_id=folder_id)
+        if not folder:
+            raise NotFoundError(
+                message="文件夹不存在或无权访问",
+                resource_type="fragment_folder",
+                resource_id=folder_id,
+            )
+
 
 class FragmentQueryService:
     def __init__(self, *, vector_store: VectorStore) -> None:
         self.vector_store = vector_store
 
-    def list_fragments(self, *, db: Session, user_id: str, limit: int, offset: int) -> dict[str, Any]:
-        items = fragment_repository.list_by_user(db=db, user_id=user_id, limit=limit, offset=offset)
-        total = fragment_repository.count_by_user(db=db, user_id=user_id)
+    def list_fragments(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        limit: int,
+        offset: int,
+        folder_id: Optional[str] = None,
+        tag: Optional[str] = None,
+    ) -> dict[str, Any]:
+        if folder_id is not None:
+            folder = fragment_folder_repository.get_by_id(db=db, user_id=user_id, folder_id=folder_id)
+            if not folder:
+                raise NotFoundError(
+                    message="文件夹不存在或无权访问",
+                    resource_type="fragment_folder",
+                    resource_id=folder_id,
+                )
+        items = fragment_repository.list_by_user(db=db, user_id=user_id, limit=limit, offset=offset, folder_id=folder_id, tag=tag)
+        total = fragment_repository.count_by_user(db=db, user_id=user_id, folder_id=folder_id, tag=tag)
         return {"items": [map_fragment(item) for item in items], "total": total, "limit": limit, "offset": offset}
 
     async def query_similar(
