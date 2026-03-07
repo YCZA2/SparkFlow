@@ -31,12 +31,14 @@ flowchart LR
 
 ## 2. Frontend Architecture
 
-移动端代码位于 `mobile/`，以 Expo Router 组织页面，以 feature hooks + API client 组织业务调用。
+移动端代码位于 `mobile/`，以 Expo Router 组织路由，以 screen composition + feature hooks + API client 组织业务调用。
 
 ```mermaid
 flowchart TD
     subgraph Mobile[mobile]
-        L[页面层<br>app]
+        L[路由页面层<br>app]
+        SM[Screen Model / Composition<br>capture fragments generate]
+        UI[UI Skeleton<br>ScreenContainer Header ActionBar]
         P[AppSessionProvider<br>启动鉴权和初始化]
         H[Feature Hooks<br>recording fragments scripts auth]
         C[API Client<br>fetchApi and sendForm]
@@ -46,7 +48,9 @@ flowchart TD
     end
 
     L --> P
-    L --> H
+    L --> SM
+    L --> UI
+    SM --> H
     H --> C
     H --> X
     P --> S
@@ -56,15 +60,26 @@ flowchart TD
 
 ### 2.1 Frontend Layers
 
-- `mobile/app/`: 页面与路由入口，负责导航和页面编排。
+- `mobile/app/`: 路由入口与页面装配层，只负责导航、参数读取和拼装页面骨架。
+- `mobile/features/*/use*Screen.ts`: screen model / composition 层，聚合多个 hooks，输出页面直接消费的 view state、按钮状态和导航动作。
+- `mobile/components/layout/`: 通用页面骨架层，提供 `ScreenContainer`、`ScreenHeader`、`BottomActionBar` 等统一布局能力。
 - `mobile/providers/`: 会话初始化、全局状态挂载。
-- `mobile/features/*/hooks.ts`: 页面调用的业务 hooks，管理 loading、error、提交动作。
+- `mobile/features/*/hooks.ts`: 业务 hooks 层，管理 loading、error、提交动作和设备能力调用。
 - `mobile/features/*/api.ts`: 面向具体业务的 API 封装。
 - `mobile/features/core/api/client.ts`: HTTP 基础设施，负责 token、重试、统一错误处理。
 - `mobile/constants/config.ts` + `mobile/utils/networkConfig.ts`: 后端地址管理。
-- `mobile/components/`: 通用 UI 组件。
+- `mobile/components/`: 业务通用 UI 组件，如 `FragmentCard`、`ScriptCard`、`ScreenState`。
 
-### 2.2 Frontend Initialization
+### 2.2 Frontend Navigation and Screen Responsibilities
+
+- tabs 主导航固定为 `捕获 / 碎片 / 我的`，以创作流优先组织一级入口。
+- `捕获`页负责录音、文本输入、当日上传状态和每日推盘触发。
+- `碎片`页负责碎片浏览、选择、进入 AI 编导，以及云图入口。
+- `我的`页负责用户信息、稿件入口和系统设置。
+- `generate` 是从碎片选择流进入的独立步骤页，只负责确认输入和触发生成。
+- `scripts` 是“我的口播稿”二级列表页，不承担生成入口。
+
+### 2.3 Frontend Initialization
 
 应用启动后，`AppSessionProvider` 会完成以下初始化流程：
 
@@ -72,6 +87,13 @@ flowchart TD
 2. 从 `AsyncStorage` 读取 token 和用户信息。
 3. 如果没有 token，则调用 `/api/auth/token` 获取测试用户 JWT。
 4. 将会话状态注入页面树。
+
+### 2.4 Frontend Layout Conventions
+
+- tab 一级页面关闭原生导航栏，统一使用页面内部 `ScreenHeader`，避免系统 header 与业务 header 叠加。
+- 二级页面按需决定是否保留 stack header；自定义页面头部时会显式关闭原生 header。
+- 底部主操作统一通过 `BottomActionBar` 承载，避免各页面重复实现固定底栏。
+- 主题层在 `mobile/theme/tokens.ts` 中增加了 `layout` 语义 token，用于统一页面边距、区块间距和底部操作区留白。
 
 ## 3. Backend Architecture
 
@@ -258,6 +280,7 @@ sequenceDiagram
 典型调用路径如下：
 
 - 页面层 `mobile/app/*`
+- screen model 层 `mobile/features/*/use*Screen.ts`
 - hooks 层 `mobile/features/*/hooks.ts`
 - API 封装层 `mobile/features/*/api.ts`
 - HTTP Client `mobile/features/core/api/client.ts`
@@ -298,6 +321,8 @@ sequenceDiagram
 ## 6. Current Architectural Characteristics
 
 - 移动端本地保存 token 和后端地址，适合真机调试。
+- 移动端前端已从“页面直接组合 hooks”调整为“薄路由页 + screen model + 通用布局骨架”的结构。
+- 一级导航按创作流组织，页面职责更明确，减少首页和列表页的业务混杂。
 - 后端已经从旧的 `routers + domains + services` 组合，重构成模块化单体。
 - 依赖注入集中在 shared container，业务代码不再直接依赖全局 `SessionLocal` 或全局 provider 单例。
 - 外部 AI 能力通过端口接口接入，仍保留替换供应商的扩展性。
@@ -308,7 +333,12 @@ sequenceDiagram
 ## 7. Key Entry Files
 
 - Frontend entry: `mobile/app/_layout.tsx`
+- Tab navigation: `mobile/app/(tabs)/_layout.tsx`
 - Session bootstrap: `mobile/providers/AppSessionProvider.tsx`
+- Screen shell: `mobile/components/layout/ScreenContainer.tsx`
+- Screen composition: `mobile/features/capture/useCaptureScreen.ts`
+- Fragments composition: `mobile/features/fragments/useFragmentsScreen.ts`
+- Generate composition: `mobile/features/scripts/useGenerateScreen.ts`
 - API client: `mobile/features/core/api/client.ts`
 - Recording flow: `mobile/features/recording/hooks.ts`
 - Backend entry: `backend/main.py`

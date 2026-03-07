@@ -122,6 +122,42 @@ ensure_build_mode_deps() {
   ensure_node_tools
 }
 
+free_port() {
+  local port="$1"
+  local label="$2"
+  local pids pid
+
+  if ! command -v lsof >/dev/null 2>&1; then
+    echo "[dev-mobile] lsof not found, skip releasing ${label} port ${port}."
+    return
+  fi
+
+  pids="$(lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -z "${pids}" ]]; then
+    return
+  fi
+
+  echo "[dev-mobile] releasing ${label} port ${port}..."
+  for pid in ${pids}; do
+    kill "${pid}" 2>/dev/null || true
+  done
+
+  for _ in $(seq 1 10); do
+    if ! lsof -tiTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+      return
+    fi
+    sleep 1
+  done
+
+  pids="$(lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -n "${pids}" ]]; then
+    echo "[dev-mobile] force killing ${label} port ${port}..."
+    for pid in ${pids}; do
+      kill -9 "${pid}" 2>/dev/null || true
+    done
+  fi
+}
+
 run_start_mode() {
   local local_ip public_backend_url local_backend_health_url backend_ready
 
@@ -132,6 +168,8 @@ run_start_mode() {
   local_backend_health_url="http://127.0.0.1:${BACKEND_PORT}/health"
 
   echo "[dev-mobile] mode1: starting backend + expo..."
+  free_port "${BACKEND_PORT}" "backend"
+  free_port "${EXPO_PORT}" "expo"
 
   echo "[dev-mobile] starting backend..."
   (
