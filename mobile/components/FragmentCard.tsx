@@ -82,15 +82,8 @@ export function FragmentCard({
     <TouchableOpacity
       style={[
         styles.container,
-        theme.shadow.card,
         {
           backgroundColor: theme.colors.surface,
-          borderTopLeftRadius: isFirstInSection ? 26 : 0,
-          borderTopRightRadius: isFirstInSection ? 26 : 0,
-          borderBottomLeftRadius: isLastInSection ? 26 : 0,
-          borderBottomRightRadius: isLastInSection ? 26 : 0,
-          borderTopWidth: isFirstInSection ? 0 : StyleSheet.hairlineWidth,
-          borderTopColor: theme.colors.border,
         },
       ]}
       onPress={() => onPress?.(fragment)}
@@ -136,53 +129,58 @@ export function FragmentCard({
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
-    marginBottom: 2,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    marginVertical: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
   content: {
-    gap: 4,
+    gap: 2,
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 12,
   },
   title: {
     flex: 1,
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: '700',
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '500',
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
+    marginTop: 2,
   },
   time: {
-    fontSize: 15,
-    minWidth: 44,
+    fontSize: 13,
+    minWidth: 40,
+    color: '#8E8E93',
   },
   preview: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#8E8E93',
   },
   source: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#C7C7CC',
   },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
   },
   checkmark: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
 });

@@ -17,6 +17,7 @@ import { Text } from '@/components/Themed';
 import { useFragmentsScreen } from '@/features/fragments/useFragmentsScreen';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // 汉堡菜单图标组件
 function HamburgerMenu({ onPress, color }: { onPress: () => void; color: string }) {
@@ -92,16 +93,24 @@ export default function FragmentsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* 顶部渐隐遮罩 */}
+      <LinearGradient
+        colors={[theme.colors.background, `${theme.colors.background}00`]}
+        locations={[0.3, 1]}
+        style={[styles.topFade, { height: insets.top + 80 }]}
+        pointerEvents="none"
+      />
+
       {/* 悬浮顶部导航栏 */}
       <View style={[styles.floatingHeader, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerContent}>
           <HamburgerMenu onPress={openProfile} color={theme.colors.text} />
           <View style={styles.headerTitleContainer}>
-            <Text style={[styles.eyebrow, { color: theme.colors.primary }]}>
-              {screen.totalLabel}
-            </Text>
             <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
               全部碎片
+            </Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]}>
+              {screen.totalLabel}
             </Text>
           </View>
           <TouchableOpacity
@@ -158,7 +167,7 @@ export default function FragmentsScreen() {
         }
         contentContainerStyle={[
           screen.fragments.length === 0 ? styles.emptyList : styles.list,
-          { paddingTop: insets.top + 80, paddingBottom: insets.bottom + 120 }
+          { paddingTop: insets.top + 70, paddingBottom: insets.bottom + 100 }
         ]}
         refreshControl={
           <RefreshControl
@@ -169,6 +178,14 @@ export default function FragmentsScreen() {
         }
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
+      />
+
+      {/* 底部渐隐遮罩 */}
+      <LinearGradient
+        colors={[`${theme.colors.background}00`, theme.colors.background]}
+        locations={[0, 0.7]}
+        style={[styles.bottomFade, { height: insets.bottom + 100 }]}
+        pointerEvents="none"
       />
 
       {/* 悬浮底部操作栏 */}
@@ -262,11 +279,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
   },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 4,
+  subtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 2,
   },
   headerTitle: {
     fontSize: 20,
@@ -293,14 +309,15 @@ const styles = StyleSheet.create({
   },
   // 列表样式
   list: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
   },
   emptyList: {
     flexGrow: 1,
     paddingHorizontal: 16,
   },
   listHeader: {
-    marginBottom: 16,
+    marginBottom: 8,
+    marginHorizontal: 16,
   },
   cloudButton: {
     alignSelf: 'flex-start',
@@ -314,14 +331,33 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    marginTop: 18,
-    marginBottom: 10,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 12,
+    marginBottom: 4,
+    marginLeft: 16,
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   selectAction: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  // 渐隐遮罩
+  topFade: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 90,
+  },
+  bottomFade: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 90,
   },
   // 悬浮底部操作栏
   floatingFooter: {
