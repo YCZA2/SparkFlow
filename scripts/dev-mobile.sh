@@ -117,6 +117,22 @@ ensure_start_mode_deps() {
   fi
 }
 
+run_backend_migrations() {
+  local alembic_cmd=()
+
+  if [[ -x "${BACKEND_DIR}/.venv/bin/alembic" ]]; then
+    alembic_cmd=("${BACKEND_DIR}/.venv/bin/alembic")
+  else
+    alembic_cmd=("${BACKEND_PYTHON}" "-m" "alembic")
+  fi
+
+  echo "[dev-mobile] applying backend migrations..."
+  (
+    cd "${BACKEND_DIR}"
+    "${alembic_cmd[@]}" upgrade head
+  )
+}
+
 ensure_build_mode_deps() {
   ensure_workspace
   ensure_node_tools
@@ -170,6 +186,8 @@ run_start_mode() {
   echo "[dev-mobile] mode1: starting backend + expo..."
   free_port "${BACKEND_PORT}" "backend"
   free_port "${EXPO_PORT}" "expo"
+
+  run_backend_migrations
 
   echo "[dev-mobile] starting backend..."
   (

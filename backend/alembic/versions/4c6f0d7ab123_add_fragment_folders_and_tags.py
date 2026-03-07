@@ -20,40 +20,58 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.create_table(
-        "fragment_folders",
-        sa.Column("id", sa.String(), nullable=False),
-        sa.Column("user_id", sa.String(), nullable=False),
-        sa.Column("name", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("user_id", "name", name="uq_fragment_folders_user_name"),
-    )
-    op.add_column("fragments", sa.Column("folder_id", sa.String(), nullable=True))
-    op.create_foreign_key(
-        "fk_fragments_folder_id_fragment_folders",
-        "fragments",
-        "fragment_folders",
-        ["folder_id"],
-        ["id"],
-    )
-    op.create_index("ix_fragments_user_id_folder_id", "fragments", ["user_id", "folder_id"], unique=False)
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    table_names = set(inspector.get_table_names())
 
-    op.create_table(
-        "fragment_tags",
-        sa.Column("id", sa.String(), nullable=False),
-        sa.Column("user_id", sa.String(), nullable=False),
-        sa.Column("fragment_id", sa.String(), nullable=False),
-        sa.Column("tag", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["fragment_id"], ["fragments.id"]),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("user_id", "fragment_id", "tag", name="uq_fragment_tags_user_fragment_tag"),
-    )
-    op.create_index("ix_fragment_tags_user_id_tag", "fragment_tags", ["user_id", "tag"], unique=False)
+    if "fragment_folders" not in table_names:
+        op.create_table(
+            "fragment_folders",
+            sa.Column("id", sa.String(), nullable=False),
+            sa.Column("user_id", sa.String(), nullable=False),
+            sa.Column("name", sa.String(length=50), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint("user_id", "name", name="uq_fragment_folders_user_name"),
+        )
+
+    fragment_columns = {column["name"] for column in inspector.get_columns("fragments")}
+    fragment_foreign_keys = {foreign_key["name"] for foreign_key in inspector.get_foreign_keys("fragments")}
+    fragment_indexes = {index["name"] for index in inspector.get_indexes("fragments")}
+
+    with op.batch_alter_table("fragments") as batch_op:
+        if "folder_id" not in fragment_columns:
+            batch_op.add_column(sa.Column("folder_id", sa.String(), nullable=True))
+        if "fk_fragments_folder_id_fragment_folders" not in fragment_foreign_keys:
+            batch_op.create_foreign_key(
+                "fk_fragments_folder_id_fragment_folders",
+                "fragment_folders",
+                ["folder_id"],
+                ["id"],
+            )
+
+    if "ix_fragments_user_id_folder_id" not in fragment_indexes:
+        op.create_index("ix_fragments_user_id_folder_id", "fragments", ["user_id", "folder_id"], unique=False)
+
+    if "fragment_tags" not in table_names:
+        op.create_table(
+            "fragment_tags",
+            sa.Column("id", sa.String(), nullable=False),
+            sa.Column("user_id", sa.String(), nullable=False),
+            sa.Column("fragment_id", sa.String(), nullable=False),
+            sa.Column("tag", sa.String(length=50), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.ForeignKeyConstraint(["fragment_id"], ["fragments.id"]),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint("user_id", "fragment_id", "tag", name="uq_fragment_tags_user_fragment_tag"),
+        )
+
+    fragment_tag_indexes = {index["name"] for index in inspector.get_indexes("fragment_tags")} if "fragment_tags" in set(sa.inspect(bind).get_table_names()) else set()
+    if "ix_fragment_tags_user_id_tag" not in fragment_tag_indexes:
+        op.create_index("ix_fragment_tags_user_id_tag", "fragment_tags", ["user_id", "tag"], unique=False)
 
 
 def downgrade() -> None:
