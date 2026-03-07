@@ -10,8 +10,9 @@ import ssl
 import certifi
 import asyncio
 import logging
-from typing import Optional
+from typing import Any, Optional
 import time
+from http import HTTPStatus
 
 # 修复 macOS SSL 证书问题
 # 必须在导入 aiohttp/dashscope 之前设置
@@ -37,6 +38,7 @@ from constants.audio import (
 )
 from .base import (
     BaseSTTService,
+    SpeakerSegment,
     TranscriptionResult,
     AudioFormat,
     STTError,
@@ -98,6 +100,7 @@ class DashScopeSTTService(BaseSTTService):
 
     # 默认模型 - paraformer-realtime-v2 支持更多音频格式
     DEFAULT_MODEL = "paraformer-realtime-v2"
+    FILE_TRANSCRIPTION_MODEL = "paraformer-v2"
 
     def __init__(
         self,
@@ -117,6 +120,9 @@ class DashScopeSTTService(BaseSTTService):
 
         self.api_key = api_key or settings.DASHSCOPE_API_KEY
         self.model = model or self.DEFAULT_MODEL
+        self.diarization_enabled = settings.STT_DIARIZATION_ENABLED
+        self.speaker_count = max(0, int(settings.STT_DIARIZATION_SPEAKER_COUNT))
+        self.file_url_mode = (settings.STT_FILE_URL_MODE or "temp").lower()
 
         if not self.api_key:
             raise STTError(
@@ -128,7 +134,13 @@ class DashScopeSTTService(BaseSTTService):
         import dashscope
         dashscope.api_key = self.api_key
 
-        logger.info(f"[DashScope STT] 服务初始化完成，模型: {self.model}")
+        logger.info(
+            "[DashScope STT] 服务初始化完成，模型: %s, diarization=%s, speaker_count=%s, file_url_mode=%s",
+            self.model,
+            self.diarization_enabled,
+            self.speaker_count,
+            self.file_url_mode,
+        )
 
     async def transcribe(
         self,
@@ -182,8 +194,32 @@ class DashScopeSTTService(BaseSTTService):
         logger.info(f"[DashScope STT] 音频格式: {format_str}, 语言: {language}")
 
         try:
-            # 使用 run_in_executor 将同步 SDK 调用转为异步
             loop = asyncio.get_event_loop()
+
+            if self.diarization_enabled:
+                try:
+                    logger.info(
+                        "[DashScope STT] diarization 主链路启用，file_url_mode=%s, speaker_count=%s",
+                        self.file_url_mode,
+                        self.speaker_count,
+                    )
+                    result = await loop.run_in_executor(
+                        None,
+                        self._transcribe_with_diarization,
+                        audio_path,
+                        language,
+                    )
+                    logger.info(
+                        "[DashScope STT] diarization 成功，segments=%s",
+                        len(result.speaker_segments or []),
+                    )
+                    return result
+                except Exception as diarization_error:
+                    logger.warning(
+                        "[DashScope STT] diarization 失败，回退实时识别: %s",
+                        str(diarization_error),
+                    )
+
             result = await loop.run_in_executor(
                 None,
                 self._recognize_file,
@@ -192,7 +228,7 @@ class DashScopeSTTService(BaseSTTService):
                 language
             )
 
-            logger.info(f"[DashScope STT] 转写成功: {result.text[:50] if result.text else '(空)'}...")
+            logger.info(f"[DashScope STT] 回退链路转写成功: {result.text[:50] if result.text else '(空)'}...")
             return result
 
         except STTError:
@@ -302,6 +338,244 @@ class DashScopeSTTService(BaseSTTService):
         except Exception as e:
             logger.warning(f"[DashScope STT] 音频转换失败，使用原始文件: {e}")
             return audio_path, format_str, None
+
+    def _upload_temp_file_url(self, audio_path: str) -> str:
+        """Upload local audio file and return a temporary URL for file transcription APIs."""
+        logger.info("[DashScope STT] 上传临时文件 URL，模式: %s", self.file_url_mode)
+
+        if self.file_url_mode != "temp":
+            raise STTRecognitionError(f"不支持的 STT_FILE_URL_MODE: {self.file_url_mode}")
+
+        try:
+            from dashscope.utils.oss_utils import upload_file
+        except Exception as exc:
+            raise STTRecognitionError(f"临时 URL 上传能力不可用: {exc}") from exc
+
+        upload_attempts: list[tuple[tuple[Any, ...], dict[str, Any]]] = [
+            ((audio_path, self.api_key), {}),
+            ((audio_path,), {"api_key": self.api_key}),
+            ((), {"file_path": audio_path, "api_key": self.api_key}),
+            ((), {"model": self.FILE_TRANSCRIPTION_MODEL, "file_path": audio_path, "api_key": self.api_key}),
+        ]
+
+        last_error: Optional[Exception] = None
+        for args, kwargs in upload_attempts:
+            try:
+                url = upload_file(*args, **kwargs)
+                if isinstance(url, str) and url.startswith("http"):
+                    logger.info("[DashScope STT] 临时 URL 上传成功")
+                    return url
+            except TypeError:
+                continue
+            except Exception as exc:
+                last_error = exc
+
+        if last_error:
+            raise STTRecognitionError(f"上传临时 URL 失败: {last_error}") from last_error
+        raise STTRecognitionError("上传临时 URL 失败: 未获取有效 URL")
+
+    def _extract_segments_from_payload(self, payload: Any) -> list[SpeakerSegment]:
+        """Parse diarization speaker segments from transcription payload."""
+        if not payload:
+            return []
+
+        candidates: list[dict[str, Any]] = []
+        if isinstance(payload, dict):
+            maybe_sentences = payload.get("sentences") or payload.get("segments")
+            if isinstance(maybe_sentences, list):
+                candidates.extend(item for item in maybe_sentences if isinstance(item, dict))
+
+            maybe_results = payload.get("results") or payload.get("output")
+            if isinstance(maybe_results, list):
+                for item in maybe_results:
+                    if not isinstance(item, dict):
+                        continue
+                    segments = item.get("sentences") or item.get("segments")
+                    if isinstance(segments, list):
+                        candidates.extend(seg for seg in segments if isinstance(seg, dict))
+        elif isinstance(payload, list):
+            candidates.extend(item for item in payload if isinstance(item, dict))
+
+        parsed: list[SpeakerSegment] = []
+        for item in candidates:
+            speaker_raw = self._pick_first_defined(
+                item,
+                ("speaker_id", "speakerId", "speaker", "spk"),
+            )
+            text = str(item.get("text") or "").strip()
+            start_raw = self._pick_first_defined(
+                item,
+                ("start_ms", "begin_time", "start_time", "start"),
+            )
+            end_raw = self._pick_first_defined(
+                item,
+                ("end_ms", "end_time", "stop_time", "end"),
+            )
+
+            if speaker_raw is None or not text:
+                continue
+            try:
+                start_ms = int(float(start_raw))
+                end_ms = int(float(end_raw))
+            except (TypeError, ValueError):
+                continue
+            if end_ms < start_ms:
+                continue
+
+            parsed.append(
+                SpeakerSegment(
+                    speaker_id=str(speaker_raw),
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    text=text,
+                )
+            )
+
+        return parsed
+
+    def _normalize_and_merge_segments(self, segments: list[SpeakerSegment]) -> list[SpeakerSegment]:
+        if not segments:
+            return []
+
+        sorted_segments = sorted(segments, key=lambda s: (s.start_ms, s.end_ms))
+        merged: list[SpeakerSegment] = []
+        for segment in sorted_segments:
+            if not merged:
+                merged.append(segment)
+                continue
+
+            last = merged[-1]
+            if segment.speaker_id == last.speaker_id and segment.start_ms <= last.end_ms + 1:
+                merged[-1] = SpeakerSegment(
+                    speaker_id=last.speaker_id,
+                    start_ms=last.start_ms,
+                    end_ms=max(last.end_ms, segment.end_ms),
+                    text=f"{last.text}{segment.text}",
+                )
+                continue
+
+            merged.append(segment)
+        return merged
+
+    def _pick_first_defined(self, data: dict[str, Any], keys: tuple[str, ...]) -> Any:
+        for key in keys:
+            if key in data and data[key] is not None:
+                return data[key]
+        return None
+
+    def _extract_text_from_payload(self, payload: Any) -> str:
+        if isinstance(payload, dict):
+            for key in ("text", "transcript", "result"):
+                value = payload.get(key)
+                if isinstance(value, str):
+                    return value.strip()
+            maybe_sentences = payload.get("sentences") or payload.get("segments")
+            if isinstance(maybe_sentences, list):
+                return "".join(
+                    str(item.get("text") or "").strip()
+                    for item in maybe_sentences
+                    if isinstance(item, dict) and item.get("text")
+                )
+            maybe_results = payload.get("results")
+            if isinstance(maybe_results, list):
+                return "".join(
+                    self._extract_text_from_payload(item)
+                    for item in maybe_results
+                    if isinstance(item, dict)
+                )
+        return ""
+
+    def _convert_response_payload(self, response: Any) -> dict[str, Any]:
+        """Convert different SDK response objects to a plain dict."""
+        if isinstance(response, dict):
+            return response
+
+        if hasattr(response, "output") and isinstance(response.output, dict):
+            payload = dict(response.output)
+        else:
+            payload = {}
+
+        if hasattr(response, "status_code"):
+            payload["_status_code"] = int(response.status_code)
+        if hasattr(response, "message") and response.message:
+            payload["_message"] = str(response.message)
+        return payload
+
+    def _run_file_transcription(self, file_url: str, language: str) -> dict[str, Any]:
+        """Run recorded-file transcription API with diarization."""
+        try:
+            from dashscope.audio.asr import Transcription
+        except Exception as exc:
+            raise STTRecognitionError(f"未找到 Transcription 接口: {exc}") from exc
+
+        transcription_model = self.FILE_TRANSCRIPTION_MODEL
+        language_hints = [language] if language else None
+        parameters = {
+            "diarization_enabled": True,
+            "speaker_count": self.speaker_count,
+        }
+
+        attempts: list[tuple[tuple[Any, ...], dict[str, Any]]] = [
+            (
+                (),
+                {
+                    "model": transcription_model,
+                    "file_urls": [file_url],
+                    "language_hints": language_hints,
+                    "parameters": parameters,
+                },
+            ),
+            (
+                (),
+                {
+                    "model": transcription_model,
+                    "file_urls": [file_url],
+                    "language_hints": language_hints,
+                    "diarization_enabled": True,
+                    "speaker_count": self.speaker_count,
+                },
+            ),
+        ]
+
+        last_error: Optional[Exception] = None
+        for args, kwargs in attempts:
+            try:
+                response = Transcription.call(*args, **kwargs)
+                payload = self._convert_response_payload(response)
+                status_code = payload.get("_status_code")
+                if status_code is not None and status_code != HTTPStatus.OK:
+                    message = payload.get("_message") or "未知错误"
+                    raise STTRecognitionError(f"录音文件识别失败: {message}")
+                return payload
+            except TypeError:
+                continue
+            except Exception as exc:
+                last_error = exc
+
+        if last_error:
+            raise STTRecognitionError(f"录音文件识别失败: {last_error}") from last_error
+        raise STTRecognitionError("录音文件识别失败: 未命中可用调用签名")
+
+    def _transcribe_with_diarization(
+        self,
+        audio_path: str,
+        language: str,
+    ) -> TranscriptionResult:
+        file_url = self._upload_temp_file_url(audio_path)
+        payload = self._run_file_transcription(file_url=file_url, language=language)
+
+        segments = self._normalize_and_merge_segments(self._extract_segments_from_payload(payload))
+        transcript = self._extract_text_from_payload(payload)
+        if not transcript:
+            transcript = "".join(segment.text for segment in segments)
+
+        return TranscriptionResult(
+            text=transcript,
+            confidence=None,
+            duration_ms=None,
+            language=language,
+            speaker_segments=segments or None,
+        )
 
     def _read_audio_data(self, audio_path: str, format_str: str) -> bytes:
         """

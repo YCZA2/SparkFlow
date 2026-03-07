@@ -23,6 +23,7 @@ from .base_llm import (
 from .base_stt import (
     BaseSTTService,
     AudioFormat,
+    SpeakerSegment,
     TranscriptionResult,
     STTError,
     STTFileError,
@@ -58,6 +59,7 @@ __all__ = [
     # STT
     "BaseSTTService",
     "AudioFormat",
+    "SpeakerSegment",
     "TranscriptionResult",
     "STTError",
     "STTFileError",

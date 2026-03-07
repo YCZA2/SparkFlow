@@ -42,7 +42,8 @@
       "expo-sqlite",
       "expo-font",
       "expo-web-browser",
-      "./plugins/withTsinghuaPodsource.js"
+      "./plugins/withTsinghuaPodsource.js",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

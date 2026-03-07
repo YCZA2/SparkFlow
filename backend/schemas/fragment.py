@@ -3,6 +3,15 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+class SpeakerSegmentItem(BaseModel):
+    """说话人分段响应模型。"""
+
+    speaker_id: str
+    start_ms: int
+    end_ms: int
+    text: str
+
+
 class FragmentCreate(BaseModel):
     """创建碎片笔记请求模型"""
 
@@ -24,6 +33,7 @@ class FragmentItem(BaseModel):
 
     id: str
     transcript: Optional[str]
+    speaker_segments: Optional[list[SpeakerSegmentItem]] = None
     summary: Optional[str]
     tags: Optional[list[str]]
     source: str

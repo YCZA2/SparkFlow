@@ -27,6 +27,7 @@ def mark_fragment_synced(
     transcript: str,
     summary: Optional[str],
     tags_json: Optional[str],
+    speaker_segments_json: Optional[str],
 ) -> bool:
     with SessionLocal() as db:
         return fragment_repository.mark_synced(
@@ -36,6 +37,7 @@ def mark_fragment_synced(
             transcript=transcript,
             summary=summary,
             tags_json=tags_json,
+            speaker_segments_json=speaker_segments_json,
         )
 
 
@@ -61,6 +63,8 @@ async def transcribe_with_retry(
                 summary = None
                 tags_list: list[str] = []
                 tags_json = None
+                speaker_segments = getattr(result, "speaker_segments", None)
+                speaker_segments_json = None
 
                 try:
                     summary, tags_list = await generate_summary_and_tags(transcript)
@@ -68,12 +72,44 @@ async def transcribe_with_retry(
                 except Exception as exc:
                     logger.warning("[Transcribe] summary/tags generation failed: %s", str(exc))
 
+                if speaker_segments:
+                    normalized_segments: list[dict[str, Any]] = []
+                    for segment in speaker_segments:
+                        if isinstance(segment, dict):
+                            speaker_id = segment.get("speaker_id")
+                            start_ms = segment.get("start_ms")
+                            end_ms = segment.get("end_ms")
+                            text = segment.get("text")
+                        else:
+                            speaker_id = getattr(segment, "speaker_id", None)
+                            start_ms = getattr(segment, "start_ms", None)
+                            end_ms = getattr(segment, "end_ms", None)
+                            text = getattr(segment, "text", None)
+
+                        if speaker_id is None or start_ms is None or end_ms is None or text is None:
+                            continue
+
+                        normalized_segments.append(
+                            {
+                                "speaker_id": str(speaker_id),
+                                "start_ms": int(start_ms),
+                                "end_ms": int(end_ms),
+                                "text": str(text),
+                            }
+                        )
+
+                    speaker_segments_json = json.dumps(
+                        normalized_segments,
+                        ensure_ascii=False,
+                    ) if normalized_segments else None
+
                 updated = mark_fragment_synced(
                     fragment_id=fragment_id,
                     user_id=user_id,
                     transcript=transcript,
                     summary=summary,
                     tags_json=tags_json,
+                    speaker_segments_json=speaker_segments_json,
                 )
 
                 if updated:
@@ -99,6 +135,7 @@ async def transcribe_with_retry(
                     "success": True,
                     "fragment_id": fragment_id,
                     "transcript": transcript,
+                    "speaker_segments": json.loads(speaker_segments_json) if speaker_segments_json else None,
                     "summary": summary,
                     "tags": tags_list,
                 }

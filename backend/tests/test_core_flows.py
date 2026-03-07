@@ -228,6 +228,7 @@ class BackendFlowTestCase(unittest.TestCase):
             updated = db.query(Fragment).filter(Fragment.id == fragment_id).first()
             self.assertEqual(updated.sync_status, "synced")
             self.assertEqual(updated.transcript, "转写完成")
+            self.assertIsNone(updated.speaker_segments)
             self.assertEqual(updated.summary, "摘要")
             self.assertEqual(updated.tags, '["标签"]')
 
@@ -298,8 +299,93 @@ class BackendFlowTestCase(unittest.TestCase):
             updated = db.query(Fragment).filter(Fragment.id == fragment_id).first()
             self.assertEqual(updated.sync_status, "synced")
             self.assertEqual(updated.transcript, "转写成功但向量化失败")
+            self.assertIsNone(updated.speaker_segments)
             self.assertEqual(updated.summary, "摘要")
             self.assertEqual(updated.tags, json.dumps(["标签1", "标签2"], ensure_ascii=False))
+
+    def test_transcribe_with_retry_persists_speaker_segments(self) -> None:
+        with self.SessionLocal() as db:
+            fragment = Fragment(
+                user_id=TEST_USER_ID,
+                source="voice",
+                audio_path="uploads/test-user-001/test-speaker.m4a",
+                sync_status="syncing",
+            )
+            db.add(fragment)
+            db.commit()
+            db.refresh(fragment)
+            fragment_id = fragment.id
+
+        speaker_segments = [
+            SimpleNamespace(speaker_id="S1", start_ms=0, end_ms=1820, text="你好"),
+            SimpleNamespace(speaker_id="S2", start_ms=1821, end_ms=2960, text="你也好"),
+        ]
+        fake_stt = SimpleNamespace(
+            transcribe=AsyncMock(
+                return_value=SimpleNamespace(
+                    text="你好你也好",
+                    speaker_segments=speaker_segments,
+                )
+            )
+        )
+        with (
+            patch.object(transcription_workflow, "SessionLocal", self.SessionLocal),
+            patch.object(transcription_workflow, "get_stt_service", return_value=fake_stt),
+            patch.object(transcription_workflow, "generate_summary_and_tags", AsyncMock(return_value=("摘要", ["标签"]))),
+            patch.object(transcription_workflow, "upsert_fragment", AsyncMock(return_value=True)),
+        ):
+            result = asyncio.run(
+                transcription_workflow.transcribe_with_retry(
+                    audio_path="/tmp/test-speaker.m4a",
+                    fragment_id=fragment_id,
+                    user_id=TEST_USER_ID,
+                    max_retries=0,
+                )
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(len(result["speaker_segments"]), 2)
+        self.assertEqual(result["speaker_segments"][0]["speaker_id"], "S1")
+        with self.SessionLocal() as db:
+            updated = db.query(Fragment).filter(Fragment.id == fragment_id).first()
+            self.assertEqual(updated.sync_status, "synced")
+            self.assertEqual(
+                json.loads(updated.speaker_segments),
+                [
+                    {"speaker_id": "S1", "start_ms": 0, "end_ms": 1820, "text": "你好"},
+                    {"speaker_id": "S2", "start_ms": 1821, "end_ms": 2960, "text": "你也好"},
+                ],
+            )
+
+    def test_transcribe_status_returns_speaker_segments(self) -> None:
+        with self.SessionLocal() as db:
+            fragment = Fragment(
+                user_id=TEST_USER_ID,
+                source="voice",
+                audio_path="uploads/test-user-001/status-speaker.m4a",
+                transcript="你好你也好",
+                speaker_segments=json.dumps(
+                    [
+                        {"speaker_id": "S1", "start_ms": 0, "end_ms": 1820, "text": "你好"},
+                        {"speaker_id": "S2", "start_ms": 1821, "end_ms": 2960, "text": "你也好"},
+                    ],
+                    ensure_ascii=False,
+                ),
+                sync_status="synced",
+            )
+            db.add(fragment)
+            db.commit()
+            db.refresh(fragment)
+
+        response = self.client.get(
+            f"/api/transcribe/status/{fragment.id}",
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+        self.assertEqual(payload["fragment_id"], fragment.id)
+        self.assertEqual(len(payload["speaker_segments"]), 2)
+        self.assertEqual(payload["speaker_segments"][0]["speaker_id"], "S1")
 
     def test_query_similar_fragments_endpoint(self) -> None:
         with self.SessionLocal() as db:

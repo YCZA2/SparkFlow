@@ -13,7 +13,7 @@ from core.exceptions import NotFoundError, ValidationError
 from models import Fragment
 from services.vector_service import query_similar_fragments as query_similar_fragments_from_vector_db
 from services.vector_visualization_service import build_fragment_visualization
-from utils.serialization import format_iso_datetime, parse_json_list
+from utils.serialization import format_iso_datetime, parse_json_list, parse_json_object_list
 
 from . import repository
 
@@ -26,10 +26,43 @@ def _parse_tags(tags_raw: Optional[str]) -> Optional[list[str]]:
     return parse_json_list(tags_raw, allow_csv_fallback=True)
 
 
+def _parse_speaker_segments(raw: Optional[str]) -> Optional[list[dict[str, Any]]]:
+    parsed = parse_json_object_list(raw)
+    if not parsed:
+        return None
+
+    normalized: list[dict[str, Any]] = []
+    for item in parsed:
+        speaker_id = str(item.get("speaker_id") or "").strip()
+        text = str(item.get("text") or "").strip()
+        try:
+            start_ms = int(item.get("start_ms"))
+            end_ms = int(item.get("end_ms"))
+        except (TypeError, ValueError):
+            continue
+
+        if not speaker_id or not text:
+            continue
+        if end_ms < start_ms:
+            continue
+
+        normalized.append(
+            {
+                "speaker_id": speaker_id,
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "text": text,
+            }
+        )
+
+    return normalized or None
+
+
 def serialize_fragment(fragment: Fragment, include_audio_path: bool = True) -> dict[str, Any]:
     data = {
         "id": fragment.id,
         "transcript": fragment.transcript,
+        "speaker_segments": _parse_speaker_segments(fragment.speaker_segments),
         "summary": fragment.summary,
         "tags": _parse_tags(fragment.tags),
         "source": fragment.source,

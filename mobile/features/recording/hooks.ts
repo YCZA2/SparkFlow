@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
-import { Audio } from 'expo-av';
+import {
+  createAudioPlayer,
+  type AudioPlayer,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder as useExpoAudioRecorder,
+} from 'expo-audio';
 import { CameraType, CameraView } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 
@@ -21,18 +28,20 @@ interface UploadResult {
 }
 
 export function useAudioRecorder() {
+  const recorder = useExpoAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [status, setStatus] = useState<'idle' | 'recording' | 'recorded'>('idle');
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const playerRef = useRef<AudioPlayer | null>(null);
 
   const configureAudioMode = async (recordingEnabled = true) => {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: recordingEnabled,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
+    await setAudioModeAsync({
+      allowsRecording: recordingEnabled,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      shouldRouteThroughEarpiece: false,
+      interruptionMode: 'duckOthers',
     });
   };
 
@@ -45,6 +54,10 @@ export function useAudioRecorder() {
       if (durationTimerRef.current) {
         clearInterval(durationTimerRef.current);
       }
+      if (playerRef.current) {
+        playerRef.current.remove();
+        playerRef.current = null;
+      }
     };
   }, []);
 
@@ -55,7 +68,7 @@ export function useAudioRecorder() {
   };
 
   const startRecording = async () => {
-    const { status: permissionStatus } = await Audio.requestPermissionsAsync();
+    const { status: permissionStatus } = await requestRecordingPermissionsAsync();
     if (permissionStatus !== 'granted') {
       Alert.alert('需要麦克风权限', '请在设置中允许访问麦克风');
       return;
@@ -63,32 +76,8 @@ export function useAudioRecorder() {
 
     try {
       reset();
-      const { recording: nextRecording } = await Audio.Recording.createAsync({
-        android: {
-          extension: '.m4a',
-          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-          audioEncoder: Audio.AndroidAudioEncoder.AAC,
-          sampleRate: 44100,
-          numberOfChannels: 1,
-          bitRate: 128000,
-        },
-        ios: {
-          extension: '.m4a',
-          audioQuality: Audio.IOSAudioQuality.HIGH,
-          sampleRate: 44100,
-          numberOfChannels: 1,
-          bitRate: 128000,
-          linearPCMBitDepth: 16,
-          linearPCMIsBigEndian: false,
-          linearPCMIsFloat: false,
-        },
-        web: {
-          mimeType: 'audio/webm',
-          bitsPerSecond: 128000,
-        },
-      });
-
-      setRecording(nextRecording);
+      await recorder.prepareToRecordAsync();
+      recorder.record();
       setStatus('recording');
       durationTimerRef.current = setInterval(() => {
         setDurationSeconds((prev) => prev + 1);
@@ -100,7 +89,7 @@ export function useAudioRecorder() {
   };
 
   const stopRecording = async () => {
-    if (!recording) return null;
+    if (status !== 'recording') return null;
 
     try {
       if (durationTimerRef.current) {
@@ -108,9 +97,8 @@ export function useAudioRecorder() {
         durationTimerRef.current = null;
       }
 
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(null);
+      await recorder.stop();
+      const uri = recorder.uri;
       if (uri) {
         setRecordedUri(uri);
         setStatus('recorded');
@@ -130,15 +118,25 @@ export function useAudioRecorder() {
 
     try {
       await configureAudioMode(false);
-      const { sound } = await Audio.Sound.createAsync({ uri: recordedUri });
-      await sound.setVolumeAsync(1);
-      await sound.playAsync();
-      sound.setOnPlaybackStatusUpdate(async (playbackStatus) => {
-        if (playbackStatus.isLoaded && playbackStatus.didJustFinish) {
-          await sound.unloadAsync();
+      if (playerRef.current) {
+        playerRef.current.remove();
+        playerRef.current = null;
+      }
+
+      const player = createAudioPlayer(recordedUri);
+      playerRef.current = player;
+
+      const subscription = player.addListener('playbackStatusUpdate', async (playbackStatus) => {
+        if (playbackStatus.didJustFinish) {
+          subscription.remove();
+          player.remove();
+          if (playerRef.current === player) {
+            playerRef.current = null;
+          }
           await configureAudioMode(true);
         }
       });
+      player.play();
     } catch (err) {
       console.error('播放失败:', err);
       Alert.alert('播放失败', '无法播放录音');

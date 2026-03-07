@@ -118,12 +118,14 @@ def mark_synced(
     transcript: str,
     summary: Optional[str],
     tags_json: Optional[str],
+    speaker_segments_json: Optional[str],
 ) -> bool:
     fragment = get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
     if not fragment:
         return False
 
     fragment.transcript = transcript
+    fragment.speaker_segments = speaker_segments_json
     fragment.summary = summary
     fragment.tags = tags_json
     fragment.sync_status = "synced"

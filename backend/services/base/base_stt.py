@@ -21,6 +21,16 @@ class AudioFormat(Enum):
 
 
 @dataclass
+class SpeakerSegment:
+    """说话人分段结果。"""
+
+    speaker_id: str
+    start_ms: int
+    end_ms: int
+    text: str
+
+
+@dataclass
 class TranscriptionResult:
     """转写操作的结果"""
 
@@ -28,6 +38,7 @@ class TranscriptionResult:
     confidence: Optional[float] = None
     duration_ms: Optional[int] = None
     language: Optional[str] = None
+    speaker_segments: Optional[list[SpeakerSegment]] = None
 
 
 class BaseSTTService(ABC):

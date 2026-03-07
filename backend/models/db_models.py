@@ -59,6 +59,7 @@ class Fragment(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     audio_path = Column(String, nullable=True)  # uploads/{user_id}/{uuid}.m4a
     transcript = Column(Text, nullable=True)  # 转写文本
+    speaker_segments = Column(Text, nullable=True)  # JSON数组字符串，说话人分段
     summary = Column(Text, nullable=True)  # AI一句话摘要
     tags = Column(String, nullable=True)  # JSON数组字符串，AI自动标签
     source = Column(String, default="voice", nullable=False)  # 'voice'|'manual'|'video_parse'
