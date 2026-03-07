@@ -23,8 +23,8 @@ import { formatDate } from '@/utils/date';
 
 function getSourceLabel(source: string): string {
   const labels: Record<string, string> = {
-    voice: '语音录入',
-    manual: '手动创建',
+    voice: '语音记录',
+    manual: '文字记录',
     video_parse: '视频解析',
   };
   return labels[source] || source;

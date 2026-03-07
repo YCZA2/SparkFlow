@@ -59,6 +59,10 @@ export default function HomeScreen() {
     }
   };
 
+  const handleOpenTextNote = () => {
+    router.push('/text-note');
+  };
+
   const isUploading = upload.status === 'loading';
 
   const handleTriggerDailyPush = async () => {
@@ -99,9 +103,23 @@ export default function HomeScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>灵感捕手</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]}>
-          随时记录你的灵感碎片
-        </Text>
+        <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]}>说一段，或写一句，先把灵感留下来</Text>
+
+        <Pressable
+          style={[
+            styles.textEntryButton,
+            theme.shadow.card,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+            },
+          ]}
+          onPress={handleOpenTextNote}
+        >
+          <Text style={[styles.textEntryEyebrow, { color: theme.colors.primary }]}>写下来</Text>
+          <Text style={[styles.textEntryTitle, { color: theme.colors.text }]}>不方便录音时，直接记一条灵感</Text>
+          <Text style={[styles.textEntryHint, { color: theme.colors.textSubtle }]}>选题、金句、观察、提纲都可以先写下，保存后会和语音记录一起进入碎片库。</Text>
+        </Pressable>
       </View>
 
       {dailyPush.script ? (
@@ -117,12 +135,8 @@ export default function HomeScreen() {
           onPress={() => router.push(`/script/${dailyPush.script?.id}`)}
         >
           <Text style={[styles.dailyPushEyebrow, { color: theme.colors.warning }]}>每日灵感推盘</Text>
-          <Text style={[styles.dailyPushTitle, { color: theme.colors.text }]}>
-            昨天的 {dailyPush.script.source_fragment_count} 个灵感，已为您写成今日待拍脚本
-          </Text>
-          <Text style={[styles.dailyPushHint, { color: theme.colors.textSubtle }]}>
-            点击查看口播稿，直接进入拍摄流程
-          </Text>
+          <Text style={[styles.dailyPushTitle, { color: theme.colors.text }]}>昨天的 {dailyPush.script.source_fragment_count} 个灵感，已为您写成今日待拍脚本</Text>
+          <Text style={[styles.dailyPushHint, { color: theme.colors.textSubtle }]}>点击查看口播稿，直接进入拍摄流程</Text>
         </Pressable>
       ) : (
         <View>
@@ -142,15 +156,9 @@ export default function HomeScreen() {
             onPress={handleTriggerDailyPush}
             disabled={dailyPushTrigger.status === 'loading' || forceDailyPushTrigger.status === 'loading'}
           >
-            <Text style={[styles.triggerTitle, { color: theme.colors.text }]}>
-              立即生成今日灵感卡片
-            </Text>
-            <Text style={[styles.triggerHint, { color: theme.colors.textSubtle }]}>
-              不等到明天，直接用今天已转写的碎片试生成一张待拍卡片
-            </Text>
-            <Text style={[styles.triggerAction, { color: theme.colors.primary }]}>
-              {dailyPushTrigger.status === 'loading' ? '生成中...' : '点我立即生成'}
-            </Text>
+            <Text style={[styles.triggerTitle, { color: theme.colors.text }]}>立即生成今日灵感卡片</Text>
+            <Text style={[styles.triggerHint, { color: theme.colors.textSubtle }]}>不等到明天，直接用今天已转写的碎片试生成一张待拍卡片</Text>
+            <Text style={[styles.triggerAction, { color: theme.colors.primary }]}>{dailyPushTrigger.status === 'loading' ? '生成中...' : '点我立即生成'}</Text>
           </Pressable>
           <Pressable
             style={[
@@ -168,15 +176,9 @@ export default function HomeScreen() {
             onPress={handleForceTriggerDailyPush}
             disabled={dailyPushTrigger.status === 'loading' || forceDailyPushTrigger.status === 'loading'}
           >
-            <Text style={[styles.forceTriggerTitle, { color: theme.colors.text }]}>
-              强制生成，忽略语义关联
-            </Text>
-            <Text style={[styles.forceTriggerHint, { color: theme.colors.textSubtle }]}>
-              只要今天有至少 3 条已转写碎片，就直接生成，不再判断它们是不是同一主题
-            </Text>
-            <Text style={[styles.forceTriggerAction, { color: theme.colors.danger }]}>
-              {forceDailyPushTrigger.status === 'loading' ? '强制生成中...' : '立即强制生成'}
-            </Text>
+            <Text style={[styles.forceTriggerTitle, { color: theme.colors.text }]}>强制生成，忽略语义关联</Text>
+            <Text style={[styles.forceTriggerHint, { color: theme.colors.textSubtle }]}>只要今天有至少 3 条已转写碎片，就直接生成，不再判断它们是不是同一主题</Text>
+            <Text style={[styles.forceTriggerAction, { color: theme.colors.danger }]}>{forceDailyPushTrigger.status === 'loading' ? '强制生成中...' : '立即强制生成'}</Text>
           </Pressable>
         </View>
       )}
@@ -220,6 +222,30 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     marginTop: 8,
+  },
+  textEntryButton: {
+    marginTop: 18,
+    width: '100%',
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  textEntryEyebrow: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  textEntryTitle: {
+    marginTop: 8,
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 24,
+  },
+  textEntryHint: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 18,
   },
   middleArea: {
     flex: 1,
