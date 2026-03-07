@@ -1,523 +1,131 @@
-# SparkFlow — 阶段 11-14: 知识库、向量数据库、每日推盘与全流程验证
+# SparkFlow — 阶段 11-14 现状记录
 
-> 最后更新：2026-03-06
+> 最后更新：2026-03-08
 
----
+本文档只记录阶段 11-14 在当前仓库中的真实落地状态，不再沿用已经失真的旧路径和旧任务描述。
 
 ## 阶段 11：知识库基础
 
-### 任务清单
+### 当前状态
 
-| 步骤 | 任务 | 状态 |
+| 子项 | 状态 | 说明 |
 |------|------|------|
-| 11.1 | 实现知识库文档上传 API | ✅ 已完成 |
-| 11.2 | 实现知识库文档列表 API | ✅ 已完成 |
-| 11.3 | 实现文件上传解析 (TXT/Word) | ✅ 已完成 |
-| 11.4 | 前端知识库管理入口 | ⏭️ **跳过** |
+| 11.1 文档创建 API | 已完成 | `POST /api/knowledge` |
+| 11.2 文档列表 / 详情 / 删除 | 已完成 | `GET /api/knowledge` / `GET /api/knowledge/{id}` / `DELETE /api/knowledge/{id}` |
+| 11.3 文件上传解析 | 已完成 | 支持 `.txt` / `.docx` |
+| 11.4 移动端知识库入口 | 部分完成 | 只有占位页，没有完整管理 UI |
 
-> **决策记录 (2026-03-06)**: 跳过阶段 11.4 前端知识库管理入口，原因：
-> - 知识库功能的产品思路尚未完全明确
-> - 向量数据库可以独立实施，不依赖前端入口
-> - 优先保障阶段 12 碎片语义检索能力，支持每日推盘功能
-> - 知识库前端可在产品思路清晰后补充
+### 当前实现位置
 
-### 11.4 跳过说明
+- Router: [`backend/modules/knowledge/presentation.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/knowledge/presentation.py)
+- Use case: [`backend/modules/knowledge/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/knowledge/application.py)
+- Repository: `backend/domains/knowledge/repository.py`
+- Mobile placeholder: [`mobile/app/knowledge.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/knowledge.tsx)
 
-原计划的前端入口包括：
-- "我的方法论"入口按钮
-- 知识库列表页面
-- 添加文档（粘贴文本或上传文件）
+### 已落地能力
 
-**当前状态**: 后端 API 已完备，前端入口待产品思路明确后实施。
+- JSON 创建知识库文档。
+- 表单上传 `.txt` / `.docx` 文件并解析内容。
+- 按 `doc_type` 过滤与分页查询。
+- 基于向量库进行知识库搜索。
+- 删除时同步删除对应向量文档。
 
-### 架构设计
+### 当前缺口
 
-**路由层与服务层分离**:
-- **路由层** (`routers/knowledge.py`): 负责 HTTP 请求处理、参数验证、调用服务层
-- **服务层** (`services/knowledge_service.py`): 封装业务逻辑、数据库操作、文件解析
+- 移动端没有真正的“我的方法论”管理页。
+- 长文档 chunking 还没有单独设计。
+- 产品侧还没有决定知识库前端的最终交互。
 
-这种分离模式与 `fragment_service` 和 `script_service` 保持一致，符合项目架构规范。
+## 阶段 12：向量数据库集成
 
-### 11.1 知识库文档上传 API
+### 当前状态
 
-**文件**:
-- `backend/routers/knowledge.py` - 路由层
-- `backend/services/knowledge_service.py` - 服务层
+| 子项 | 状态 | 说明 |
+|------|------|------|
+| 12.1 碎片自动向量化 | 已完成 | 转写成功后自动写入 |
+| 12.2 碎片语义相似检索 | 已完成 | `POST /api/fragments/similar` |
+| 12.3 Mode B 历史碎片增强 | 未完成 | 仍未稳定接入生成流程 |
+| 12.4 碎片向量可视化 | 已完成 | `GET /api/fragments/visualization` |
+| 12.5 知识库向量化增强 | 部分完成 | 文档已写向量，但高级检索策略未展开 |
 
-**端点**:
-- `POST /api/knowledge` - JSON 方式上传
-- `POST /api/knowledge/upload` - 文件上传方式（支持 .txt 和 .docx）
+### 当前实现位置
 
-**请求体 (JSON 方式)**:
-```json
-{
-  "title": "我的高赞文案合集",
-  "content": "这是一段很长的文案内容...",
-  "doc_type": "high_likes"
-}
-```
+- Vector adapter: [`backend/modules/shared/container.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/container.py)
+- Fragment query/use case: [`backend/modules/fragments/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/application.py)
+- Visualization: [`backend/modules/fragments/visualization.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/visualization.py)
+- Chroma provider: `backend/services/chroma_vector_db.py`
 
-**doc_type 枚举**:
-- `'high_likes'` - 高赞文案
-- `'language_habit'` - 语言习惯记录
+### 已落地能力
 
-**功能**:
-- ✅ 创建知识库文档记录到 SQLite
-- ✅ 自动关联当前用户
-- ✅ 验证文档类型有效性
-- ✅ 返回统一格式的成功响应
+- 转写完成后自动生成 embedding 并写入 `fragments_{user_id}`。
+- 可按语义查询相似碎片，并回表补齐摘要、标签、来源和时间。
+- 灵感云图可批量读取用户向量，做 PCA / 聚类 / fallback projection。
+- 知识库文档创建时会同步写入 `knowledge_{user_id}`。
 
-**验证测试**:
-- [ ] 使用 Swagger UI 测试 JSON 方式上传
-- [ ] 测试文件上传方式（.txt 和 .docx）
-- [ ] 验证数据库记录正确创建
+### 当前缺口
 
-### 11.2 知识库文档列表 API
-
-**端点**: `GET /api/knowledge`
-
-**功能**:
-- ✅ 返回当前用户的所有知识库文档列表
-- ✅ 支持按 doc_type 过滤
-- ✅ 支持分页（limit/offset）
-- ✅ 按创建时间降序排列
-
-**额外端点**:
-- `GET /api/knowledge/{doc_id}` - 获取单个文档详情
-- `DELETE /api/knowledge/{doc_id}` - 删除文档
-
-### 11.3 文件上传解析
-
-**支持格式**:
-- `.txt` - 直接读取 UTF-8 编码文本
-- `.docx` - 使用 `python-docx` 库提取文本
-
-**依赖**:
-```bash
-pip install python-docx==1.1.2
-```
-
-**实现细节**:
-- ✅ 自动检测文件扩展名
-- ✅ 使用临时文件处理 .docx 文件
-- ✅ 验证文件内容非空
-- ✅ 错误处理：编码错误、解析失败、缺少依赖
-
-### 11.4 前端知识库管理入口
-
-**文件**: `mobile/app/(tabs)/profile.tsx`（添加入口）
-
-**功能**:
-- "我的方法论"入口按钮
-- 知识库列表页面
-- 添加文档（粘贴文本或上传文件）
-
----
-
-## 阶段 12：向量数据库集成（碎片语义检索）
-
-> **方向调整 (2026-03-06)**: 基于跳过阶段 11 前端的决策，阶段 12 调整为聚焦**碎片语义检索**，优先支持：
-> 1. 每日推盘的碎片语义关联检查
-> 2. Mode B 的历史碎片风格参考
->
-> 知识库文档向量化移至可选任务（12.5）
-
-### 任务清单
-
-| 步骤 | 任务 | 状态 | 优先级 |
-|------|------|------|--------|
-| 12.1 | 碎片自动向量化 | ✅ 已完成 | P0 |
-| 12.2 | 碎片语义相似度查询 | ✅ 已完成 | P0 |
-| 12.3 | Mode B 检索历史碎片 | ⏳ 待实施 | P0 |
-| 12.4 | **碎片向量可视化（MVP 轻量版）** | ✅ 已完成 | P1 |
-| 12.5 | 知识库文档向量化（可选） | ⏳ 待实施 | P2 |
-
-### 12.1 碎片自动向量化
-
-**目标**: 碎片转写成功后，自动将 `transcript` 写入向量库
-
-**Collection 设计**:
-```python
-# 用户碎片独立 Collection
-collection = client.get_or_create_collection(
-    name=f"fragments_{user_id}",
-    metadata={"user_id": user_id, "type": "fragments"}
-)
-```
-
-**实现文件**:
-- `backend/services/vector_service.py`
-- `backend/domains/transcription/workflow.py`
-
-**已完成能力**:
-- ✅ 转写成功后自动生成 embedding 并写入 ChromaDB
-- ✅ Collection 按用户隔离：`fragments_{user_id}`
-- ✅ 写入 metadata：`user_id`、`fragment_id`、`source`、`summary`、`tags_json`
-- ✅ 向量化失败仅记录 warning，不影响碎片同步成功
-
-**配置前提** (`.env`):
-```bash
-VECTOR_DB_PROVIDER=chromadb
-CHROMADB_PATH=./chroma_data
-EMBEDDING_PROVIDER=qwen
-EMBEDDING_MODEL=text-embedding-v2
-```
-
-### 12.2 碎片语义相似度查询
-
-**函数签名**:
-```python
-async def query_similar_fragments(
-    user_id: str,
-    query_text: str,
-    top_k: int = 5,
-    exclude_ids: list[str] = None
-) -> list[dict]:
-    """
-    检索用户历史碎片中最相似的片段
-    用于：每日推盘关联检查、Mode B 风格参考
-    """
-    pass
-```
-
-**实现文件**:
-- `backend/services/vector_service.py`
-- `backend/domains/fragments/service.py`
-- `backend/routers/fragments.py`
-
-**已完成能力**:
-- ✅ 新增 `POST /api/fragments/similar`
-- ✅ 支持 `query_text`、`top_k`、`exclude_ids`
-- ✅ 先查向量库，再回表补齐摘要、标签、来源、创建时间等字段
-- ✅ 向量库中存在但数据库不存在的碎片结果会自动过滤
-- ✅ 当用户命名空间不存在时返回空列表
-
-**使用场景**:
-- **每日推盘 (阶段 13)**: 检查昨日碎片与历史碎片的语义关联度
-- **Mode B 生成**: 检索相似主题的历史碎片作为风格参考
-
-### 12.3 Mode B 检索历史碎片
-
-**实现逻辑**:
-```python
-# 使用选中碎片内容作为查询文本
-similar_fragments = await query_similar_fragments(
-    user_id, fragments_text, top_k=3, exclude_ids=selected_ids
-)
-
-# 将历史碎片添加到 system prompt
-system_prompt = f"""
-以下是该用户过往记录的相关灵感片段，体现了用户的表达习惯：
----
-[历史碎片1]
----
-[历史碎片2]
----
-
-请结合以上参考片段的语言风格，将以下灵感碎片整合为口播稿...
-"""
-```
-
-**降级处理**:
-- 历史碎片少于 3 条：退化为基于当前碎片的自由发挥
-- 相似度均低于阈值：忽略历史参考
-
----
-
-### 12.4 碎片向量可视化（MVP 轻量版）
-
-> **决策记录 (2026-03-06)**:
-> - 允许先跳过 12.3，12.4 不依赖 Mode B 检索增强
-> - 第一版不引入 UMAP / t-SNE / HDBSCAN / Three.js 这类重型栈
-> - 先打通"读取现有向量 → 生成坐标/聚类 → 前端轻量云图"的数据链路
-
-**目标**: 复用已写入 ChromaDB 的碎片向量，生成稳定、可交互的"灵感云图"数据；前端第一版先实现轻量可视化，后续再升级为完整 3D 场景。
-
-**MVP 技术方案**:
-
-| 层级 | 技术选型 | 说明 |
-|------|----------|------|
-| 向量来源 | **ChromaDB 现有 embedding** | 不重复调用 Embedding API，直接复用 12.1 已落库的数据 |
-| 降维算法 | **PCA (3D)** | 先使用确定性、易解释、实现成本低的降维方案 |
-| 聚类算法 | **K-Means** | 仅在碎片数量达到阈值时启用，避免过度设计 |
-| 后端 API | `GET /api/fragments/visualization` | 从当前登录用户上下文读取数据，不额外传 `user_id` |
-| 前端渲染 | **轻量 2D/2.5D 云图** | 首版优先使用 React Native 轻量实现，`z` 轴用于大小/透明度映射 |
-| 类别命名 | **tags + summary 关键词统计** | 首版不把 LLM 放进主请求链路，避免额外延迟和失败点 |
-
-**为什么这样调整**:
-- 当前代码已具备单条写向量和相似检索能力，但还没有"批量读取用户全部向量"能力
-- 当前项目是 Expo App，直接上 Three.js / React Three Fiber 成本高，联调复杂
-- 12.4 是展示能力，不应阻塞在额外模型调用和重型 3D 渲染上
-
-**后端前置改造**:
-1. 在向量数据库抽象层补充"批量读取命名空间文档"能力，返回 `id`、`embedding`、`metadata`、`document`
-2. 在 ChromaDB 实现中封装 `get()` 读取全部碎片向量
-3. 读取结果后回表 SQLite，只保留数据库中仍存在的碎片记录
-
-**数据流程**:
-```
-用户打开灵感云图
-    ↓
-GET /api/fragments/visualization
-    ↓
-读取当前用户在 ChromaDB 中的全部碎片向量
-    ↓
-回表 SQLite 过滤无效碎片并补齐 summary/tags/time
-    ↓
-对原始 embedding 做 PCA 降维到 3D
-    ↓
-在原始 embedding 上做 K-Means 聚类（满足数量阈值时）
-    ↓
-用 tags/summary 统计每个簇的高频关键词生成标签
-    ↓
-后端返回 points + clusters + stats
-    ↓
-前端渲染轻量云图并支持点击筛选
-```
-
-**聚类与降级策略**:
-1. 碎片数 `< 5`：仅返回坐标点，不做聚类，全部 `cluster_id = -1`
-2. 碎片数 `5-7`：做 PCA 坐标，不强制聚类，按点展示
-3. 碎片数 `>= 8`：启用 K-Means 聚类
-4. 聚类数自动估算：`cluster_count = min(6, max(2, round(sqrt(n / 2))))`
-5. 聚类基于**原始 embedding**，不是基于降维后的 3D 坐标
-6. 如果聚类失败，整体降级为仅返回坐标点
-
-**API 设计（修正版）**:
-```python
-GET /api/fragments/visualization
-
-Response: {
-    "points": [
-        {
-            "id": "...",
-            "x": 0.52,
-            "y": -0.31,
-            "z": 0.84,
-            "summary": "关于定位的思考",
-            "tags": ["定位", "个人品牌"],
-            "created_at": "2026-03-06T10:00:00",
-            "cluster_id": 1,
-            "is_noise": false
-        }
-    ],
-    "clusters": [
-        {
-            "id": 1,
-            "label": "定位",
-            "keywords": ["定位", "差异化", "表达"],
-            "fragment_count": 8,
-            "centroid": {"x": 0.18, "y": 0.07, "z": 0.43}
-        }
-    ],
-    "stats": {
-        "total_fragments": 18,
-        "clustered_fragments": 14,
-        "uncategorized_fragments": 4
-    },
-    "meta": {
-        "projection": "pca",
-        "clustering": "kmeans",
-        "used_vector_source": "chromadb"
-    }
-}
-```
-
-**已完成实现（2026-03-06）**:
-- ✅ 向量数据库抽象层新增 `list_documents()`，Chroma 实现支持批量读取已有 embedding
-- ✅ 新增 `backend/services/vector_visualization_service.py`，完成向量回读、SQLite 回表、PCA 投影、聚类和类别命名
-- ✅ 新增 `GET /api/fragments/visualization` 接口
-- ✅ 补充后端测试场景：未认证、脏向量过滤、8 条碎片时的聚类响应
-- ✅ App 新增 `/fragment-cloud` 页面和碎片库入口
-- ✅ 支持点位点击、主题筛选、加入待生成列表并跳转 `/generate`
-- ✅ 旧碎片打开云图时会自动尝试回填向量，避免只有新碎片可见
-- ✅ 若 DashScope embedding 不可用，则降级为基于 `tags/summary/transcript` 的本地文本特征云图
-- ✅ 修复 Embedding 工厂 `DASHSCOPE_API_KEY` 透传缺失与 fragments domain 循环依赖问题
-
-**类别命名策略（首版）**:
-1. 优先统计每个簇中碎片 `tags` 的高频词
-2. 若标签不足，再从 `summary` 中抽取高频关键词
-3. 取前 1-3 个关键词拼接为类别名
-4. 不单独增加 `GET /api/fragments/cluster/{cluster_id}`；前端直接基于返回数据本地筛选
-
-**前端呈现边界（首版）**:
-- 先做 2D/2.5D 灵感云图，不强依赖真实 3D 引擎
-- `x/y` 决定平面位置，`z` 映射为点大小、透明度或层级
-- 点击点显示碎片详情
-- 点击类别标签筛选当前类别
-- 允许从某个类别中多选碎片后继续生成口播稿
-
-**暂不纳入首版的能力**:
-- AI 实时为类别命名
-- 3D 球体包裹、连线网络、力导向动画
-- 双击聚焦、复杂相机控制
-- 独立 cluster 详情接口
-
-**使用场景**:
-- **灵感回顾**: 直观看到近期灵感主题的聚合分布
-- **主题梳理**: 快速发现自己在哪些主题上积累最多
-- **创作导航**: 从某个簇中挑选碎片继续生成口播稿
-
-**验证测试**:
-1. 用户至少有 8 条碎片时，API 返回 `points`、`clusters`、`stats`
-2. 用户碎片少于 5 条时，API 正常降级，只返回点位
-3. 向量库存在但数据库缺失的碎片会被自动过滤
-4. 类别标签由 tags/summary 统计生成，不依赖 LLM
-5. 前端可基于返回数据本地完成类别筛选和点位点击
-
----
-
-### 12.5 知识库文档向量化（可选）
-
-**状态**: ⏳ 待实施（优先级 P2，时间允许时再做）
-
-**原设计**:
-- Collection 命名: `docs_{user_id}`
-- 长文档需分 chunk 处理
-- Mode B 可同时检索碎片和知识库两个 Collection
-
-**实施前提**: 阶段 11 前端知识库入口完成后
-
----
+- `mode_b` 还没有系统化利用相似碎片作为风格参考。
+- 知识库侧还没有 chunk、混合检索、重排序等增强策略。
 
 ## 阶段 13：每日灵感推盘
 
-### 任务清单
+### 当前状态
 
-| 步骤 | 任务 | 状态 |
+| 子项 | 状态 | 说明 |
 |------|------|------|
-| 13.1 | 实现每日聚合逻辑函数 | ⏳ 待实施 |
-| 13.2 | 配置 APScheduler 定时任务 | ⏳ 待实施 |
-| 13.3 | 实现每日推盘 API 查询端点 | ⏳ 待实施 |
-| 13.4 | 前端首页每日灵感卡片 | ⏳ 待实施 |
+| 13.1 每日聚合用例 | 已完成 | `DailyPushUseCase` 已存在 |
+| 13.2 APScheduler 定时任务 | 已完成 | app lifespan 中自动启动 |
+| 13.3 查询 / 触发 API | 已完成 | `GET/POST /api/scripts/daily-push*` |
+| 13.4 移动端首页灵感卡片 | 部分完成 | hooks 已有，当前主首页未稳定接入 |
 
-### 13.1 每日聚合逻辑
+### 当前实现位置
 
-**函数**: `backend/services/scheduler.py::daily_aggregate()`
+- Use case: [`backend/modules/scripts/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/application.py)
+- Router: [`backend/modules/scripts/presentation.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/presentation.py)
+- Scheduler: [`backend/modules/scheduler/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scheduler/application.py)
+- App bootstrap: [`backend/main.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py)
+- Mobile hooks: `mobile/features/scripts/hooks.ts`
 
-**聚合逻辑**:
-1. 查询每个用户昨天（过去 24 小时）创建的碎片笔记
-2. **数量检查**: 碎片数量 >= 3 条
-3. **语义关联检查**: 使用向量检索检查主题相似度
-4. 满足条件时，合并碎片并使用 Mode A 生成口播稿
-5. 写入 `scripts` 表，`is_daily_push=true`
-6. 触发本地推送通知
+### 已落地能力
 
-### 13.2 APScheduler 定时任务
+- 查询今日 daily push 稿件。
+- 为当前用户手动触发生成。
+- 提供强制触发入口，忽略语义集中度不足的限制。
+- 定时任务按 `APP_TIMEZONE` 和配置时间自动执行。
+- 通过向量相似度图找出主题最集中的碎片集合。
 
-**配置**:
-```python
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+### 当前缺口
 
-scheduler = AsyncIOScheduler()
-scheduler.add_job(
-    daily_aggregate,
-    trigger='cron',
-    hour=8,  # 每天早上 8:00
-    minute=0
-)
-```
-
-**生命周期**:
-- FastAPI `startup` 事件: 启动 scheduler
-- FastAPI `shutdown` 事件: 关闭 scheduler
-
-### 13.3 每日推盘 API
-
-**端点**: `GET /api/scripts/daily-push`
-
-**返回**: 用户最新的一条 `is_daily_push=true` 的口播稿，没有则返回 404
-
-### 13.4 前端每日灵感卡片
-
-**位置**: 首页（录音按钮上方）
-
-**显示条件**: 有今日每日推盘稿件时显示
-
-**卡片文案**: "昨天的 N 个灵感，已为您写成今日待拍脚本，去看看？"
-
----
+- 当前主首页并没有稳定展示“昨天的 N 个灵感，已为你写成待拍脚本”的卡片。
+- 本地推送通知链路还没有作为成品收口到移动端主路径。
 
 ## 阶段 14：收尾与全流程验证
 
-### 任务清单
+### 当前状态
 
-| 步骤 | 任务 | 状态 |
+| 子项 | 状态 | 说明 |
 |------|------|------|
-| 14.1 | 端到端冒烟测试 | ⏳ 待实施 |
-| 14.2 | 验证数据库预留字段与架构完整性 | ⏳ 待实施 |
-| 14.3 | 验证 API 完整性与安全机制 | ⏳ 待实施 |
-| 14.4 | 清理与文档化 (README) | ⏳ 待实施 |
+| 14.1 后端路由与核心流程自动化验证 | 部分完成 | `backend/tests` 已覆盖多条主路径 |
+| 14.2 数据库预留字段检查 | 部分完成 | schema 已具备核心预留字段 |
+| 14.3 API 契约与异常路径检查 | 部分完成 | 有 route contracts / core flow tests |
+| 14.4 文档收口 | 进行中 | 本次已更新 architecture / tech-stack / progress |
 
-### 14.1 端到端冒烟测试
+### 当前已有验证
 
-**完整用户旅程**:
+- `backend/tests/test_route_contracts.py`
+- `backend/tests/test_core_flows.py`
+- `mobile/package.json` 中的 `npm run test:state`
 
-1. 打开 App 首页
-2. 点击录音按钮，说一段话（约 15 秒），停止录音
-3. 等待上传、转写、摘要、标签自动生成完成
-4. 切换到碎片库 Tab，确认新碎片出现
-5. 重复录音 2 次，共创建 3 条碎片
-6. 在碎片库中进入多选模式，选中 3 条碎片
-7. 点击"交给 AI 编导"，选择"导师爆款模式"，生成口播稿
-8. 查看生成的口播稿内容
-9. 点击"一键去拍摄"
-10. 提词器在相机画面上方自动滚动
-11. 点击录制，录制约 10 秒，停止
-12. 视频保存到相册
+### 当前仍缺的验证
 
-### 14.2 数据库预留字段验证
+- 真机完整冒烟：录音 -> 转写 -> 合稿 -> 拍摄 -> 相册保存。
+- daily push 前端主路径验证。
+- 知识库移动端真实入口验证。
+- 最终 README / onboarding 统一收口。
 
-**验证清单**:
+## 当前结论
 
-| 表 | 预留字段 | 用途 |
-|----|----------|------|
-| `users` | `role` | RBAC 多角色预留 |
-| `fragments` | `source` | 数据来源标识 ('voice'\|'manual'\|'video_parse') |
-| `scripts` | `is_daily_push` | 每日推盘标记 |
-| `scripts` | `status` | 稿件状态 ('draft'\|'ready'\|'filmed') |
-| `knowledge_docs` | `vector_ref_id` | 向量库引用 ID |
-| `agents` | `status` | 创作者市场预留 |
-
-### 14.3 API 完整性验证
-
-**端点清单**:
-
-| 端点 | 方法 | 鉴权 | 状态 |
-|------|------|------|------|
-| `/api/auth/token` | POST | 公开 | ✅ |
-| `/api/auth/me` | GET | Bearer | ✅ |
-| `/api/auth/refresh` | POST | Bearer | ✅ |
-| `/api/transcribe/` | POST | Bearer | ✅ |
-| `/api/transcribe/status/{id}` | GET | Bearer | ✅ |
-| `/api/fragments/` | GET | Bearer | ✅ |
-| `/api/fragments/{id}` | GET | Bearer | ✅ |
-| `/api/fragments/{id}` | DELETE | Bearer | ✅ |
-| `/api/scripts/generate` | POST | Bearer | ⏳ |
-| `/api/scripts/` | GET | Bearer | ⏳ |
-| `/api/scripts/{id}` | GET | Bearer | ⏳ |
-| `/api/scripts/{id}` | PATCH | Bearer | ⏳ |
-| `/api/scripts/daily-push` | GET | Bearer | ⏳ |
-| `/api/knowledge/` | POST | Bearer | ⏳ |
-| `/api/knowledge/` | GET | Bearer | ⏳ |
-
-### 14.4 文档化
-
-**需要创建的文档**:
-
-- `backend/README.md` - 后端启动指南
-- `mobile/README.md` - 前端启动指南
-- 环境变量模板 `.env.example`
-
----
-
-## 决策记录
-
-| 日期 | 问题 | 决策 |
-|------|------|------|
-| 2026-03-06 | 阶段 11 前端入口 | **跳过** 知识库前端管理入口，产品思路明确后补充 |
-| 2026-03-06 | 阶段 12 方向调整 | 聚焦**碎片语义检索**（支持每日推盘 + Mode B），知识库向量化移至可选 |
-| 2026-03-03 | 每日推盘关联逻辑 | 数量 ≥3 **且** 语义相似度匹配 |
-| 2026-03-03 | Mode B 知识库 | 分阶段实现：阶段 8 简化，阶段 12 增强 |
-| 2026-03-03 | 向量数据隔离 | 每用户独立 Collection (`fragments_{user_id}` / `docs_{user_id}`) |
-| 2026-03-03 | 定时任务 | APScheduler 足够，无需 Celery |
+- 阶段 11 不是“未完成”，而是“后端完成、前端占位”。
+- 阶段 12 的主干能力已经可用，未完成项集中在增强体验而非基础设施。
+- 阶段 13 不能再标记为“待开始”，后端链路已经存在。
+- 阶段 14 也不是完全空白，测试和文档已经有基础，只是还没有完成最终收口。

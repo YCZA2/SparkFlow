@@ -1,298 +1,277 @@
 # SparkFlow Architecture
 
-本文档描述 SparkFlow 当前代码实现对应的前后端架构。当前项目形态是 Expo/React Native 移动端应用配合 FastAPI 后端服务，不是传统浏览器 Web 前端。
+> 最后更新：2026-03-08
+
+本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行。
 
 ## 1. Overall
 
 ```mermaid
 flowchart LR
-    U[用户]
-    M[移动端 App<br>Expo Router + React Native]
-    A[AsyncStorage<br>Token / 用户信息 / 后端地址]
-    B[FastAPI API]
-    DB[(SQLite<br>SQLAlchemy)]
-    FS[(本地文件存储<br>uploads by user)]
-    STT[STT 服务<br>DashScope / Aliyun]
-    LLM[LLM 服务<br>Qwen]
-    VDB[(Chroma Vector DB)]
-    K[知识库能力<br>已接入统一后端模块]
+    U["用户"]
+    M["Mobile App<br/>Expo Router + React Native"]
+    S["AsyncStorage<br/>token / user / backend base url"]
+    API["FastAPI API<br/>模块化单体"]
+    DB[("SQLite<br/>SQLAlchemy")]
+    FS[("uploads/<user_id><br/>本地音频文件")]
+    CHROMA[("ChromaDB<br/>fragments_* / knowledge_*")]
+    STT["STT Provider<br/>DashScope / Aliyun"]
+    LLM["LLM Provider<br/>Qwen"]
+    EMB["Embedding Provider<br/>Qwen"]
+    SCH["APScheduler<br/>daily push cron"]
 
     U --> M
-    M --> A
-    M -->|HTTP API| B
-
-    B --> DB
-    B --> FS
-    B --> STT
-    B --> LLM
-    B --> VDB
-    B --> K
+    M --> S
+    M -->|HTTP| API
+    API --> DB
+    API --> FS
+    API --> CHROMA
+    API --> STT
+    API --> LLM
+    API --> EMB
+    API --> SCH
 ```
 
-## 2. Frontend Architecture
+## 2. Repository Shape
 
-移动端代码位于 `mobile/`，以 Expo Router 组织路由，以 screen composition + feature hooks + API client 组织业务调用。
+- `mobile/`: Expo 移动端，当前采用 stack 路由，不是 tab 路由。
+- `backend/`: FastAPI 后端，业务入口已经收敛到 `modules/*`。
+- `scripts/dev-mobile.sh`: 推荐本地联调入口，同时启动后端与 Expo。
+- `memory-bank/`: 产品、架构、进度与实施记录。
+
+## 3. Mobile Architecture
+
+### 3.1 Routing
+
+移动端路由位于 `mobile/app/`，由 [`mobile/app/_layout.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/_layout.tsx) 统一挂载 `Stack`。
+
+当前主要页面：
+
+- `index.tsx`: 实际首页，展示碎片列表、分组、选择态和底部快捷操作。
+- `record-audio.tsx`: 录音与上传页。
+- `text-note.tsx`: 手动文本碎片录入页。
+- `fragment/[id].tsx`: 单条碎片详情。
+- `fragment-cloud.tsx`: 灵感云图。
+- `generate.tsx`: AI 编导生成确认页。
+- `script/[id].tsx`: 口播稿详情。
+- `scripts.tsx`: 口播稿列表。
+- `shoot.tsx`: 提词器 + 相机拍摄。
+- `profile.tsx`: 创作工作台。
+- `knowledge.tsx`: 知识库占位页，当前还不是完整管理入口。
+- `network-settings.tsx`: 后端地址配置页。
+
+### 3.2 Runtime Layers
 
 ```mermaid
 flowchart TD
-    subgraph Mobile[mobile]
-        L[路由页面层<br>app]
-        SM[Screen Model / Composition<br>capture fragments generate]
-        UI[UI Skeleton<br>ScreenContainer Header ActionBar]
-        P[AppSessionProvider<br>启动鉴权和初始化]
-        H[Feature Hooks<br>recording fragments scripts auth]
-        C[API Client<br>fetchApi and sendForm]
-        S[AsyncStorage]
-        N[networkConfig<br>动态后端地址]
-        X[Expo 能力<br>Audio Camera MediaLibrary]
+    subgraph Mobile["mobile"]
+        R["Routes<br/>app/*"]
+        P["Providers<br/>AppSessionProvider<br/>AudioCaptureProvider"]
+        SM["Screen composition<br/>useFragmentsScreen / useGenerateScreen / useFragmentCloudScreen"]
+        H["Feature hooks<br/>auth / recording / scripts / fragments"]
+        C["HTTP client<br/>features/core/api/client.ts"]
+        CFG["config + networkConfig"]
+        AS["AsyncStorage"]
+        NATIVE["Expo native APIs<br/>Audio / Camera / MediaLibrary / DocumentPicker"]
     end
 
-    L --> P
-    L --> SM
-    L --> UI
+    R --> P
+    R --> SM
     SM --> H
     H --> C
-    H --> X
-    P --> S
-    C --> S
-    C --> N
+    H --> NATIVE
+    C --> CFG
+    C --> AS
+    P --> AS
 ```
 
-### 2.1 Frontend Layers
+### 3.3 Mobile Responsibilities
 
-- `mobile/app/`: 路由入口与页面装配层，只负责导航、参数读取和拼装页面骨架。
-- `mobile/features/*/use*Screen.ts`: screen model / composition 层，聚合多个 hooks，输出页面直接消费的 view state、按钮状态和导航动作。
-- `mobile/components/layout/`: 通用页面骨架层，提供 `ScreenContainer`、`ScreenHeader`、`BottomActionBar` 等统一布局能力。
-- `mobile/providers/`: 会话初始化、全局状态挂载。
-- `mobile/features/*/hooks.ts`: 业务 hooks 层，管理 loading、error、提交动作和设备能力调用。
-- `mobile/features/*/api.ts`: 面向具体业务的 API 封装。
-- `mobile/features/core/api/client.ts`: HTTP 基础设施，负责 token、重试、统一错误处理。
-- `mobile/constants/config.ts` + `mobile/utils/networkConfig.ts`: 后端地址管理。
-- `mobile/components/`: 业务通用 UI 组件，如 `FragmentCard`、`ScriptCard`、`ScreenState`。
+- `AppSessionProvider` 在应用启动时完成后端地址初始化、token 恢复、测试用户自动登录。
+- `AudioCaptureProvider` 承载录音状态、上传状态与录音文件回放能力。
+- `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
+- `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
+- `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态。
+- `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用。
 
-### 2.2 Frontend Navigation and Screen Responsibilities
+### 3.4 Local Persistence
 
-- tabs 主导航固定为 `捕获 / 碎片 / 我的`，以创作流优先组织一级入口。
-- `捕获`页负责录音、文本输入、当日上传状态和每日推盘触发。
-- `碎片`页负责碎片浏览、选择、进入 AI 编导，以及云图入口。
-- `我的`页负责用户信息、稿件入口和系统设置。
-- `generate` 是从碎片选择流进入的独立步骤页，只负责确认输入和触发生成。
-- `scripts` 是“我的口播稿”二级列表页，不承担生成入口。
+当前移动端真正参与主流程的数据持久化是：
 
-### 2.3 Frontend Initialization
+- `AsyncStorage`: token、用户信息、后端 base URL
 
-应用启动后，`AppSessionProvider` 会完成以下初始化流程：
+当前仓库虽然安装了 `expo-sqlite`，也在 `app.json` 中保留了插件，但它还不是主要业务数据通路。
 
-1. 初始化后端地址配置。
-2. 从 `AsyncStorage` 读取 token 和用户信息。
-3. 如果没有 token，则调用 `/api/auth/token` 获取测试用户 JWT。
-4. 将会话状态注入页面树。
+## 4. Backend Architecture
 
-### 2.4 Frontend Layout Conventions
+### 4.1 Layers
 
-- tab 一级页面关闭原生导航栏，统一使用页面内部 `ScreenHeader`，避免系统 header 与业务 header 叠加。
-- 二级页面按需决定是否保留 stack header；自定义页面头部时会显式关闭原生 header。
-- 底部主操作统一通过 `BottomActionBar` 承载，避免各页面重复实现固定底栏。
-- 主题层在 `mobile/theme/tokens.ts` 中增加了 `layout` 语义 token，用于统一页面边距、区块间距和底部操作区留白。
-
-## 3. Backend Architecture
-
-后端代码位于 `backend/`。当前后端已经重构为模块化单体，按业务模块拆分，并统一收敛为 `presentation / application / shared infrastructure` 的依赖方向。
+后端代码位于 `backend/`，已演进为模块化单体结构。
 
 ```mermaid
 flowchart TD
-    subgraph Backend[backend]
-        MAIN[FastAPI App Assembly<br>main.py]
-        MOD[Modules<br>auth fragments transcriptions scripts knowledge scheduler]
-        PRE[Presentation<br>FastAPI routers / DTO]
-        APP[Application<br>Use cases / orchestration]
-        SHR[Shared Container<br>DI / ports / adapters]
-        REPO[Repositories<br>SQLAlchemy]
-        ORM[Session Factory / ORM]
-        DB[(SQLite)]
-        FILES[(uploads/)]
-        EXT[LLM / STT / Embedding / Vector DB]
-        CHROMA[(ChromaDB)]
-    end
+    MAIN["main.py<br/>app assembly + lifespan + routes"]
+    PRE["modules/*/presentation.py<br/>FastAPI Router"]
+    APP["modules/*/application.py<br/>use case / orchestration"]
+    SHARED["modules/shared/*<br/>container / ports / enrichment"]
+    REPO["domains/*/repository.py<br/>SQLAlchemy access"]
+    MODEL["models/*<br/>ORM + session factory"]
+    PROVIDER["services/*<br/>provider adapters / factory"]
+    DB[("SQLite")]
+    UP[("uploads/")]
+    VDB[("ChromaDB")]
 
-    MAIN --> MOD
-    MOD --> PRE
+    MAIN --> PRE
     PRE --> APP
     APP --> REPO
-    APP --> SHR
-    SHR --> EXT
-    REPO --> ORM
-    ORM --> DB
-    SHR --> FILES
-    EXT --> CHROMA
+    APP --> SHARED
+    SHARED --> PROVIDER
+    REPO --> MODEL
+    MODEL --> DB
+    SHARED --> UP
+    PROVIDER --> VDB
 ```
 
-### 3.1 Backend Layers
+### 4.2 Actual Boundaries
 
-- `backend/main.py`: FastAPI 应用装配入口，只负责创建 app、注册路由、异常处理、生命周期和健康检查。
-- `backend/modules/*/presentation.py`: 模块对外 API 层，定义 FastAPI router、请求参数和响应入口。
-- `backend/modules/*/application.py`: 模块应用服务层，负责流程编排、事务边界和状态流转。
-- `backend/modules/shared/container.py`: 统一依赖装配层，负责创建 session factory、provider、文件存储、prompt loader、vector store。
-- `backend/modules/shared/ports.py`: 后端内部端口接口，约束 STT、LLM、Embedding、VectorStore、AudioStorage、JobRunner。
-- `backend/modules/shared/enrichment.py`: 转写增强共享能力，承载 summary/tags 生成与 fallback 逻辑，避免业务模块回退到旧 `services` 业务 helper。
-- `backend/domains/*/repository.py`: 仍保留为 SQLAlchemy 数据访问层，供新 application 层复用。
-- `backend/models/`: SQLAlchemy 模型、引擎、Session 管理。
-- `backend/services/`: 仅保留外部 provider 实现、抽象基类与 factory，不再暴露业务流程 helper。
-- `backend/prompts/`: 口播稿生成 Prompt 模板，由 `PromptLoader` 读取。
+- [`backend/main.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py): 创建 FastAPI app、注册中间件、异常处理器、静态文件、路由和 scheduler 生命周期。
+- `backend/modules/*/presentation.py`: 对外 HTTP 入口。
+- `backend/modules/*/application.py`: 业务编排与用例。
+- `backend/modules/shared/container.py`: DI 容器、`PromptLoader`、`AudioStorage`、`VectorStore` 适配器。
+- `backend/modules/shared/ports.py`: LLM、STT、Embedding、Vector DB、音频存储等端口抽象。
+- `backend/modules/shared/enrichment.py`: 摘要与标签增强逻辑。
+- `backend/domains/*/repository.py`: 数据库读写。
+- `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，而不是继续扩散到 legacy service 文件。
 
-### 3.2 Backend Service Boundaries
+### 4.3 Backend Modules
 
-- 认证：JWT 鉴权，当前默认使用测试用户 token。
-- 碎片：碎片 CRUD、相似检索、向量可视化。
-- 转写：上传音频、创建 fragment、后台异步调用 STT、回写 transcript/summary/tags、向量化。
-- 口播稿：读取 fragments、加载 prompt、调用 LLM 生成 script、每日推盘生成。
-- 知识库：文档创建、上传、检索、删除，统一接入向量存储。
-- 调度：定时触发每日推盘 use case，本身不承载业务规则。
+- `auth`: 测试 token 签发、当前用户信息、refresh。
+- `fragments`: 列表、创建、详情、删除、相似检索、可视化。
+- `transcriptions`: 音频上传、后台转写、状态查询。
+- `scripts`: 合稿、列表、详情、更新、删除、每日推盘。
+- `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
+- `scheduler`: APScheduler 装配与启停。
 
-### 3.3 Data and External Dependencies
+### 4.4 External Dependencies
 
-- 主数据库：SQLite。
-- ORM：SQLAlchemy。
-- 音频存储：本地文件系统 `uploads/{user_id}/`。
-- LLM：通过 shared container 装配，默认使用 `services/factory.py` 创建的 Qwen provider。
-- STT：通过 shared container 装配，当前支持 DashScope 或 Aliyun。
-- Embedding：通过 shared container 装配，默认 Qwen embedding。
-- 向量库：通过 `VectorStore` 端口统一访问，当前底层默认 ChromaDB，本地持久化。
-- Prompt：通过 `PromptLoader` 从 `backend/prompts/` 加载。
-- 业务增强：summary/tags 与向量写入等跨模块辅助逻辑已收敛到 `modules/shared/*` 和模块 application 层，不再通过 legacy `domains/*/service.py` 或 `services/*_service.py` 暴露。
+- LLM: 默认 `Qwen`，通过 `services/factory.py` 创建。
+- STT: 默认 `DashScope`，保留 Aliyun 兼容实现。
+- Embedding: 默认 `Qwen text-embedding-v2`。
+- Vector DB: 默认 `ChromaDB`。
+- Storage: 本地文件系统 `backend/uploads/<user_id>/`。
+- Database: SQLite。
 
-### 3.4 Backend Module Layout
+### 4.5 Namespaces and Storage Conventions
 
-- `backend/modules/auth`: token 签发、刷新、当前用户信息。
-- `backend/modules/fragments`: fragment CRUD、similar、visualization。
-- `backend/modules/transcriptions`: 音频上传、转写状态查询、后台转写任务。
-- `backend/modules/scripts`: script 生成、查询、更新、删除、daily push。
-- `backend/modules/knowledge`: knowledge 文档创建、上传、列表、搜索、删除。
-- `backend/modules/scheduler`: 定时任务装配与启动停止。
-- `backend/modules/shared`: 容器、端口定义、共享适配器。
+- 碎片向量 namespace: `fragments_{user_id}`
+- 知识库向量 namespace: `knowledge_{user_id}`
+- 上传音频路径: `uploads/<user_id>/...`
+- 每日推盘调度时间：使用 `APP_TIMEZONE`，默认 `Asia/Shanghai`，时间点由 `DAILY_PUSH_HOUR` / `DAILY_PUSH_MINUTE` 控制
 
-## 4. Core Business Flows
+## 5. Core Flows
 
-### 4.1 Audio Recording and Transcription
+### 5.1 Audio Upload and Async Transcription
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant App as Mobile App
-    participant API as FastAPI
-    participant File as uploads/
-    participant STT as STT Service
+    participant App as Mobile
+    participant API as /api/transcriptions
+    participant FS as Local Audio Storage
+    participant DB as SQLite
+    participant BG as Background Task
+    participant STT as STT
     participant LLM as Summary/Tags
-    participant DB as SQLite
+    participant VDB as ChromaDB
 
-    User->>App: 开始/停止录音
-    App->>API: POST /api/transcriptions
-    API->>File: 保存音频文件
-    API->>DB: 创建 fragment(syncing)
-    API-->>App: 上传成功，后台转写中
-    API->>STT: 异步转写
-    STT-->>API: transcript
-    API->>LLM: 生成 summary/tags
-    API->>DB: 更新 fragment(synced/failed)
+    App->>API: POST audio
+    API->>FS: save file
+    API->>DB: create fragment(syncing)
+    API-->>App: fragment_id + syncing
+    API->>BG: schedule transcription
+    BG->>STT: transcribe(audio)
+    BG->>LLM: generate summary/tags
+    BG->>DB: mark synced / failed
+    BG->>VDB: upsert fragment embedding
 ```
 
-说明：
+关键点：
 
-- 前端录音依赖 Expo Audio。
-- 上传成功后，接口立即返回，转写在后台异步执行。
-- 转写成功后会补充 `transcript`、`summary`、`tags`。
-- 成功后会继续写入向量库，供 similar / daily push / visualization 使用。
-- 转写失败则 fragment 标记为 `failed`。
+- 上传接口立即返回，转写在后台继续执行。
+- 转写完成后会写回 `transcript`、`summary`、`tags`、`speaker_segments`。
+- 向量写入失败不会回滚主转写结果。
 
-### 4.2 Script Generation
+### 5.2 Script Generation
 
 ```mermaid
 sequenceDiagram
-    participant App as Mobile App
-    participant API as FastAPI
+    participant App as Mobile
+    participant API as /api/scripts/generation
     participant DB as SQLite
+    participant Prompt as PromptLoader
     participant LLM as Qwen
 
-    App->>API: GET /api/fragments
-    API->>DB: 查询碎片列表
-    DB-->>API: fragments
-    API-->>App: fragments
-
-    App->>API: POST /api/scripts/generation
-    API->>DB: 读取选中 fragments
-    API->>API: PromptLoader 加载模板
-    API->>LLM: 按 prompt 生成口播稿
-    LLM-->>API: script content
-    API->>DB: 保存 script
-    API-->>App: 返回 script detail
+    App->>API: fragment_ids + mode
+    API->>DB: load fragments
+    API->>Prompt: load mode prompt
+    API->>LLM: generate script
+    API->>DB: save script
+    API-->>App: script detail
 ```
 
-说明：
+关键点：
 
-- 只有存在有效转写内容的 fragments 才能参与合稿。
-- 合稿模式由前端传入：`mode_a` 或 `mode_b`。
-- Prompt 模板位于 `backend/prompts/`，由 shared container 中的 `PromptLoader` 统一读取。
+- 当前支持 `mode_a` 和 `mode_b`。
+- Prompt 模板来自 `backend/prompts/`。
+- `mode_b` 的历史风格增强仍未完全接到语义检索链路。
 
-### 4.3 Fragment Visualization
+### 5.3 Fragment Visualization
 
 ```mermaid
 sequenceDiagram
-    participant App as Mobile App
-    participant API as FastAPI
-    participant DB as SQLite
+    participant App as Mobile
+    participant API as /api/fragments/visualization
     participant VDB as VectorStore
+    participant DB as SQLite
+    participant Math as visualization_math
 
-    App->>API: GET /api/fragments/visualization
-    API->>VDB: 读取已有 fragment vectors
-    API->>DB: 查询当前用户 fragment 元数据
-    API->>API: 回填缺失向量 / PCA 投影 / 聚类
-    API-->>App: points / clusters / stats / meta
+    App->>API: GET visualization
+    API->>VDB: list fragment documents
+    API->>DB: load fragment metadata
+    API->>Math: PCA / clustering / fallback projection
+    API-->>App: points + clusters + stats + meta
 ```
 
-说明：
+关键点：
 
-- 可视化现在由 `backend/modules/fragments/visualization.py` 负责。
-- 该链路已经不再依赖旧的 `services/vector_visualization_service.py`。
-- 若用户还没有完整向量数据，会基于文本特征做 fallback projection。
+- 实现位于 `backend/modules/fragments/visualization.py`。
+- 首版走轻量 PCA + 聚类，不依赖重型 3D 栈。
 
-### 4.4 Daily Push
+### 5.4 Daily Push
 
 ```mermaid
 sequenceDiagram
     participant Scheduler as APScheduler
-    participant API as DailyPushUseCase
+    participant UseCase as DailyPushUseCase
     participant DB as SQLite
     participant VDB as VectorStore
     participant LLM as Qwen
 
-    Scheduler->>API: run_daily_job()
-    API->>DB: 查询昨日/今日碎片与已有 daily push
-    API->>VDB: 相似度筛选主题相关 fragments
-    API->>LLM: 生成每日推盘内容
-    API->>DB: 保存 ready 状态 script
+    Scheduler->>UseCase: run_daily_job()
+    UseCase->>DB: load yesterday fragments
+    UseCase->>VDB: semantic relatedness check
+    UseCase->>LLM: generate mode_a script
+    UseCase->>DB: save ready daily push script
 ```
 
-说明：
+关键点：
 
-- 手动触发入口为 `/api/scripts/daily-push/trigger` 和 `/api/scripts/daily-push/force-trigger`。
-- 定时任务只负责触发 use case，业务规则都在 `backend/modules/scripts/application.py`。
+- scheduler 在 FastAPI lifespan 内启动与停止。
+- 手动触发接口已存在：`/api/scripts/daily-push/trigger` 和 `/api/scripts/daily-push/force-trigger`。
+- 当前后端链路已完成，但首页“每日灵感卡片”还没有稳定接入到实际主页面。
 
-## 5. Request Path Mapping
+## 6. Current API Surface
 
-典型调用路径如下：
-
-- 页面层 `mobile/app/*`
-- screen model 层 `mobile/features/*/use*Screen.ts`
-- hooks 层 `mobile/features/*/hooks.ts`
-- API 封装层 `mobile/features/*/api.ts`
-- HTTP Client `mobile/features/core/api/client.ts`
-- FastAPI Router `backend/modules/*/presentation.py`
-- Application Service `backend/modules/*/application.py`
-- Shared Container / Port Adapter `backend/modules/shared/*`
-- Repository `backend/domains/*/repository.py`
-- SQLite / uploads / STT / LLM / ChromaDB
-
-当前主要 API 路径如下：
+当前主要公开 API：
 
 - `GET /`
 - `GET /health`
@@ -322,38 +301,29 @@ sequenceDiagram
 - `GET /api/knowledge/{doc_id}`
 - `DELETE /api/knowledge/{doc_id}`
 
-## 6. Current Architectural Characteristics
-
-- 移动端本地保存 token 和后端地址，适合真机调试。
-- 移动端前端已从“页面直接组合 hooks”调整为“薄路由页 + screen model + 通用布局骨架”的结构。
-- 一级导航按创作流组织，页面职责更明确，减少首页和列表页的业务混杂。
-- 后端已经从旧的 `routers + domains + services` 组合，重构成模块化单体。
-- 旧的 `domains/*/service.py`、`domains/transcription/workflow.py`、`services/scheduler.py`、`services/llm_service.py`、`services/vector_service.py` 已移除，避免出现双入口业务实现。
-- 依赖注入集中在 shared container，业务代码不再直接依赖全局 `SessionLocal` 或 legacy provider helper。
-- 外部 AI 能力通过端口接口接入，仍保留替换供应商的扩展性。
-- 转写链路使用异步后台任务，用户等待成本较低。
-- 知识库和碎片可视化已经纳入统一后端架构，而不是预留接口。
-- 测试已覆盖当前全部公开 API 路径，并补充了 `/`、`/health`、401/404/422、上传校验与路由契约检查，后端重构后的边界有自动化保护。
-
 ## 7. Key Entry Files
 
-- Frontend entry: `mobile/app/_layout.tsx`
-- Tab navigation: `mobile/app/(tabs)/_layout.tsx`
-- Session bootstrap: `mobile/providers/AppSessionProvider.tsx`
-- Screen shell: `mobile/components/layout/ScreenContainer.tsx`
-- Screen composition: `mobile/features/capture/useCaptureScreen.ts`
-- Fragments composition: `mobile/features/fragments/useFragmentsScreen.ts`
-- Generate composition: `mobile/features/scripts/useGenerateScreen.ts`
-- API client: `mobile/features/core/api/client.ts`
-- Recording flow: `mobile/features/recording/hooks.ts`
-- Backend entry: `backend/main.py`
-- Container / DI: `backend/modules/shared/container.py`
-- Auth module: `backend/modules/auth/presentation.py`
-- Fragments module: `backend/modules/fragments/presentation.py`
-- Fragment visualization: `backend/modules/fragments/visualization.py`
-- Transcriptions module: `backend/modules/transcriptions/presentation.py`
-- Scripts module: `backend/modules/scripts/application.py`
-- Knowledge module: `backend/modules/knowledge/presentation.py`
-- Scheduler module: `backend/modules/scheduler/application.py`
-- Repositories: `backend/domains/*/repository.py`
-- Provider factory: `backend/services/factory.py`
+- Frontend app entry: [`mobile/app/_layout.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/_layout.tsx)
+- Frontend home: [`mobile/app/index.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/index.tsx)
+- Session bootstrap: [`mobile/providers/AppSessionProvider.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/providers/AppSessionProvider.tsx)
+- Fragment screen model: [`mobile/features/fragments/useFragmentsScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/useFragmentsScreen.ts)
+- Generate screen model: [`mobile/features/scripts/useGenerateScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/scripts/useGenerateScreen.ts)
+- Fragment cloud model: [`mobile/features/fragments/useFragmentCloudScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/useFragmentCloudScreen.ts)
+- Audio state provider: [`mobile/features/recording/AudioCaptureProvider.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/recording/AudioCaptureProvider.tsx)
+- API client: [`mobile/features/core/api/client.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/core/api/client.ts)
+- Backend entry: [`backend/main.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py)
+- Service container: [`backend/modules/shared/container.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/container.py)
+- Fragments module: [`backend/modules/fragments/presentation.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/presentation.py)
+- Fragment visualization: [`backend/modules/fragments/visualization.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/visualization.py)
+- Transcriptions module: [`backend/modules/transcriptions/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/transcriptions/application.py)
+- Scripts module: [`backend/modules/scripts/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/application.py)
+- Knowledge module: [`backend/modules/knowledge/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/knowledge/application.py)
+- Scheduler module: [`backend/modules/scheduler/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scheduler/application.py)
+
+## 8. Current Architectural Notes
+
+- 代码已经从早期的 `routers + service` 形态迁移到 `modules/*` 主入口，但仓库里仍保留一部分 provider 与兼容性 service 文件，不应再把它们当成新的业务层规范。
+- 移动端当前是“碎片列表优先”的首页结构，不是 PRD 里最初设想的 tab 首页。
+- 知识库后端已可用，移动端入口仍是占位页。
+- 每日推盘后端已可运行并带有定时任务，但前端主入口尚未完整消费这条能力。
+- 当前最稳定的本地开发方式是根目录执行 `bash scripts/dev-mobile.sh`，而不是分别手动起多个进程。

@@ -1,242 +1,221 @@
-# SparkFlow — 推荐技术栈
+# SparkFlow — 当前技术栈
 
-## 整体架构一览
+> 最后更新：2026-03-08
 
-```
-┌─────────────────────────────────────────────────┐
-│              Expo (React Native)                │
-│         TypeScript · iOS Simulator              │
-│  ┌───────────┐ ┌──────────┐ ┌───────────────┐  │
-│  │ 录音/相机  │ │ 提词器UI │ │ expo-sqlite   │  │
-│  │ expo-av   │ │ Animated │ │ (本地缓存)     │  │
-│  │expo-camera│ │          │ │               │  │
-│  └───────────┘ └──────────┘ └───────────────┘  │
-│                     │ HTTP                      │
-└─────────────────────┼───────────────────────────┘
-                      │  localhost:8000
-┌─────────────────────┼───────────────────────────┐
-│           FastAPI (Python)                      │
-│  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ 业务路由  │ │ APScheduler│ │ SQLite (主库) │  │
-│  │          │ │ (定时聚合) │ │ SQLAlchemy    │  │
-│  └────┬─────┘ └──────────┘ └────────────────┘  │
-│       │                                         │
-└───────┼─────────────────────────────────────────┘
-        │ HTTPS
-┌───────┼─────────────────────────────────────────┐
-│    外部 API (唯三个花钱的地方)                    │
-│  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ LLM      │ │ STT      │ │ ChromaDB       │  │
-│  │ 阿里/百度 │ │ 阿里/讯飞 │ │ (本地向量库)    │  │
-│  │ /智谱    │ │ /百度    │ │                │  │
-│  └──────────┘ └──────────┘ └────────────────┘  │
-└─────────────────────────────────────────────────┘
-```
+本文档描述当前仓库实际在用的技术栈、关键依赖和本地开发方式，不再保留早期“推荐但未落地”的方案描述。
 
----
+## 1. Stack Snapshot
 
-## 1. 移动端 — Expo (React Native)
-
-| 选型 | 说明 |
-|---|---|
-| **框架** | **Expo SDK 52+** (Managed Workflow) |
-| **语言** | TypeScript |
-| **路由** | expo-router（文件系统路由，类 Next.js） |
-| **UI 组件** | React Native Paper 或 Tamagui（带主题，开箱即用） |
-| **本地数据** | expo-sqlite（碎片笔记离线存储 + 同步队列） |
-| **离线同步** | 录音无网络时本地暂存，恢复后自动上传 |
-
-### 关键 Expo 模块直接对应PRD功能
-
-```
-expo-av            → 模块1：录音按钮（按住/点击录音）
-expo-camera        → 模块3：极简相机（前置/后置切换）
-expo-media-library → 模块3：保存视频到系统相册
-expo-file-system   → 音频文件暂存后上传后端转写
-expo-notifications → 模块2：每日灵感推盘的本地推送
-expo-document-picker → 模块4：上传 TXT/Word 喂养知识库
-expo-sqlite        → 离线碎片缓存
-```
-
-### 为什么选 Expo 而不是纯 Web
-- PRD 明确要求**原生相机 + 提词器叠加层 + 存相册**，浏览器做不到流畅体验
-- macOS 上 `npx expo start --ios` 直接启动 iOS 模拟器，零额外配置
-- Vibe coding 友好：Cursor / Copilot 对 React 代码补全最成熟
-
----
-
-## 2. 后端 — Python + FastAPI
-
-| 选型 | 说明 |
-|---|---|
-| **框架** | **FastAPI** |
-| **运行** | `uvicorn main:app --reload`，本地 8000 端口 |
-| **ORM** | **SQLAlchemy 2.0** + Alembic（数据库迁移） |
-| **定时任务** | **APScheduler**（每日8点灵感聚合，无需 Celery） |
-| **异步队列预留** | 目前不需要；未来加 `arq` 或 `dramatiq` 即可（PRD第五章提到的异步解析） |
-
-### 为什么选 FastAPI + Python
-
-```
-1. 调 LLM/STT/向量 API 的 SDK 全是 Python 一等公民
-   - dashscope (阿里通义千问 + 百炼语音识别 paraformer)
-   - chromadb
-   - langchain (可选，prompt 管理)
-
-2. 一个 main.py 就能跑起来，vibe coding 最快上手
-
-3. 类型提示 + 自动生成 Swagger 文档，前端联调零沟通成本
-```
-
-### 项目结构（建议）
-
-```
-backend/
-├── main.py                 # FastAPI 入口
-├── routers/
-│   ├── fragments.py        # 碎片笔记 CRUD
-│   ├── scripts.py          # AI合稿（双核Agent）
-│   ├── knowledge.py        # 方法论知识库
-│   └── transcribe.py       # 语音转写
-├── services/
-│   ├── llm_service.py      # 统一封装 LLM 调用
-│   ├── stt_service.py      # 语音识别 API 封装
-│   ├── vector_service.py   # 向量库读写
-│   └── scheduler.py        # APScheduler 每日聚合
-├── models/
-│   └── db_models.py        # SQLAlchemy 模型
-├── prompts/
-│   ├── mode_a_boom.txt     # 导师爆款模式 Prompt
-│   └── mode_b_brain.txt    # 专属二脑模式 Prompt
-├── alembic/                # 数据库迁移
-├── data.db                 # SQLite 数据库文件
-└── requirements.txt
-```
-
----
-
-## 3. 数据库 — SQLite
-
-| 选型 | 说明 |
-|---|---|
-| **引擎** | **SQLite 3**（macOS 自带，零安装） |
-| **文件** | 单文件 `data.db`，git 可以 ignore |
-| **ORM** | SQLAlchemy（未来切 PostgreSQL 只改连接字符串） |
-
-### 核心表设计（预留PRD第五章字段）
-
-```sql
--- 用户表（预留 RBAC）
-CREATE TABLE users (
-    id            TEXT PRIMARY KEY,     -- UUID
-    role          TEXT DEFAULT 'user',  -- 'user' | 'creator'  ← PRD预留
-    nickname      TEXT,
-    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 碎片笔记表
-CREATE TABLE fragments (
-    id            TEXT PRIMARY KEY,
-    user_id       TEXT REFERENCES users(id),
-    audio_path    TEXT,                 -- 本地音频文件路径
-    transcript    TEXT,                 -- 转写文本
-    summary       TEXT,                 -- AI 一句话摘要
-    tags          TEXT,                 -- JSON 数组，AI 自动标签
-    source        TEXT DEFAULT 'voice', -- 'voice'|'manual'|'video_parse' ← PRD预留
-    sync_status   TEXT DEFAULT 'pending', -- 'pending'|'syncing'|'synced'|'failed'
-    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 口播稿表
-CREATE TABLE scripts (
-    id            TEXT PRIMARY KEY,
-    user_id       TEXT REFERENCES users(id),
-    title         TEXT,
-    content       TEXT,                 -- 成稿内容
-    mode          TEXT,                 -- 'mode_a' | 'mode_b'
-    source_fragment_ids TEXT,           -- JSON 数组，关联碎片ID
-    status        TEXT DEFAULT 'draft', -- 'draft'|'ready'|'filmed'
-    is_daily_push BOOLEAN DEFAULT 0,   -- 是否每日自动生成
-    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 知识库文档表（模块4）
-CREATE TABLE knowledge_docs (
-    id            TEXT PRIMARY KEY,
-    user_id       TEXT REFERENCES users(id),
-    title         TEXT,
-    content       TEXT,
-    doc_type      TEXT,                 -- 'high_likes'|'language_habit'
-    vector_ref_id TEXT,                 -- 向量库中的引用ID
-    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Agent表（PRD第五章预留）
-CREATE TABLE agents (
-    id            TEXT PRIMARY KEY,
-    creator_id    TEXT REFERENCES users(id),
-    name          TEXT,
-    description   TEXT,
-    status        TEXT DEFAULT 'private', -- 'private'|'pending'|'published'
-    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
----
-
-## 4. 外部 API 选型
-
-| 能力 | 推荐方案 | 理由 |
+| 层级 | 当前选型 | 备注 |
 |---|---|---|
-| **LLM** | **阿里通义千问**（`qwen-turbo`/`qwen-max`）<br>可切换：百度文心、智谱 AI、DeepSeek | 国内 API 稳定，中文理解能力强，性价比高 |
-| **语音转写 STT** | **阿里云百炼/灵积平台**（paraformer-v2，仅需一个 API Key）<br>可切换：阿里云 NLS、讯飞、百度 | 最新 paraformer 模型，与 LLM 共用同一平台，配置更简单 |
-| **向量数据库** | **ChromaDB**（本地，零配置）<br>可切换：Pinecone, Qdrant Cloud | 本地优先零运维，保留抽象接口可无缝切换云服务 |
-| **Embedding** | **阿里通义千问 Embedding**（`text-embedding-v2`）<br>可切换：百度、智谱 | 与 LLM 同平台，统一管理，中文向量化效果好 |
-| **音频存储** | 后端永久保留（支持未来回放功能） | 原始 `.m4a` 文件长期存储 |
+| Mobile | Expo 54 + React Native 0.81 + React 19 | `mobile/package.json` |
+| Routing | expo-router 6 | Stack 路由 |
+| UI | React Native Paper + 自定义 theme | 不是 Web 组件库 |
+| Motion | react-native-reanimated 4 | 用于页面进入与悬浮操作条动画 |
+| Audio | expo-audio | 录音、播放、录音状态管理 |
+| Camera | expo-camera | 提词拍摄页 |
+| Media | expo-media-library | 视频保存到系统相册 |
+| Network | fetch + 自建 API client | 统一 token、错误处理 |
+| Local persistence | AsyncStorage | token / user / backend base URL |
+| Backend | FastAPI 0.135 + Uvicorn 0.41 | 模块化单体 |
+| ORM | SQLAlchemy 2.0 + Alembic | SQLite migrations |
+| Scheduling | APScheduler 3.11 | 每日推盘 cron |
+| LLM | Qwen | 默认通过 DashScope |
+| STT | DashScope / Aliyun | 当前默认 DashScope |
+| Embedding | Qwen text-embedding-v2 | 通过 provider factory 装配 |
+| Vector DB | ChromaDB 0.6 | 本地持久化 |
+| Test | `unittest` + Node `--test` | 后端 API / 移动端少量状态测试 |
 
----
+## 2. Mobile
 
-## 5. 本地开发环境 & 工具
+### 2.1 Core dependencies
+
+来自 [`mobile/package.json`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/package.json)：
+
+- `expo ~54.0.0`
+- `react 19.1.0`
+- `react-native 0.81.5`
+- `expo-router ~6.0.23`
+- `react-native-paper ^5.15.0`
+- `react-native-reanimated ~4.1.1`
+- `@react-native-async-storage/async-storage 2.2.0`
+- `expo-audio ~1.1.1`
+- `expo-camera ~17.0.10`
+- `expo-media-library ~18.2.1`
+- `expo-document-picker ~14.0.8`
+- `expo-dev-client ~6.0.20`
+- `expo-sqlite ~16.0.10`
+
+### 2.2 Current role of each capability
+
+- `expo-router`: 页面组织与深链导航。
+- `expo-audio`: 录音、回放、音频模式切换。
+- `expo-camera`: 拍摄页预览与视频录制。
+- `expo-media-library`: 视频写入系统相册。
+- `expo-document-picker`: 为后续知识库上传预留。
+- `AsyncStorage`: 当前真正参与主流程的本地持久化。
+- `expo-sqlite`: 已安装并保留插件，但当前主流程还没有依赖它存业务数据。
+
+### 2.3 Current frontend architecture choice
+
+当前移动端不是典型 tab app，而是：
+
+- `index` 作为碎片主页
+- `profile` 作为创作工作台
+- 其余页面走 stack 二级流转
+
+这和早期 PRD 里的“底部 tab 捕获 / 碎片 / 我的”已经不一致，文档与新功能都应以当前 stack 结构为准。
+
+## 3. Backend
+
+### 3.1 Core dependencies
+
+来自 [`backend/requirements.txt`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/requirements.txt)：
+
+- `fastapi==0.135.1`
+- `uvicorn==0.41.0`
+- `SQLAlchemy==2.0.48`
+- `alembic==1.18.4`
+- `pydantic==2.12.5`
+- `pydantic-settings==2.8.1`
+- `python-multipart==0.0.22`
+- `dashscope==1.22.1`
+- `chromadb==0.6.3`
+- `httpx==0.28.1`
+- `python-docx==1.1.2`
+- `PyJWT==2.10.1`
+- `APScheduler==3.11.0`
+
+### 3.2 Backend structure choice
+
+当前后端结构不是早期文档里的 `routers/*.py + services/*.py` 主导模式，而是：
+
+- `modules/*/presentation.py`: Router
+- `modules/*/application.py`: Use case / orchestration
+- `modules/shared/*`: container、ports、共享增强逻辑
+- `domains/*/repository.py`: 数据访问
+- `services/*`: 外部 provider 与工厂
+
+这意味着：
+
+- 新接口入口应优先加到 `modules/*`
+- 新业务逻辑应优先放 `application.py`
+- 新 provider 或第三方接入再考虑进入 `services/*`
+
+## 4. Persistence and Storage
+
+### 4.1 Database
+
+- 主数据库：SQLite
+- 默认连接串：`sqlite:///./data.db`
+- ORM：SQLAlchemy
+- 迁移工具：Alembic
+
+### 4.2 File storage
+
+- 音频上传目录：`backend/uploads/<user_id>/`
+- 上传上限：默认 50MB
+- 视频不经过后端存储，移动端直接保存到系统相册
+
+### 4.3 Vector storage
+
+- 向量库：ChromaDB
+- 默认路径：`./chroma_data`
+- 碎片 namespace：`fragments_{user_id}`
+- 知识库 namespace：`knowledge_{user_id}`
+
+## 5. AI and Provider Strategy
+
+### 5.1 Current defaults
+
+来自 [`backend/core/config.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/core/config.py) 与 [`backend/services/factory.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/services/factory.py)：
+
+- `LLM_PROVIDER=qwen`
+- `LLM_MODEL=qwen-turbo`
+- `STT_PROVIDER=dashscope`
+- `EMBEDDING_PROVIDER=qwen`
+- `EMBEDDING_MODEL=text-embedding-v2`
+- `VECTOR_DB_PROVIDER=chromadb`
+
+### 5.2 Extensibility
+
+代码层已经为这些扩展预留了 provider factory，但并非都已实现：
+
+- LLM: 仅 `qwen` 可用，其他 provider 还是占位分支
+- STT: `dashscope` 与 `aliyun` 可选
+- Embedding: 当前仅 `qwen` 可用
+- Vector DB: 当前仅 `chromadb` 可用
+
+所以“可切换”在当前阶段更准确的理解是“接口预留完成，不代表生产可直接切换”。
+
+## 6. Local Development
+
+### 6.1 Recommended way
+
+从仓库根目录启动：
 
 ```bash
-# 一次性安装
-brew install python@3.12 node watchman
-npm install -g expo-cli
-
-# 后端
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install fastapi uvicorn sqlalchemy alembic dashscope chromadb apscheduler python-multipart httpx
-uvicorn main:app --reload   # → http://localhost:8000
-
-# 前端
-cd mobile
-npx create-expo-app@latest --template tabs
-npx expo start --ios        # → 自动启动 iOS 模拟器
+bash scripts/dev-mobile.sh
 ```
 
-| 工具 | 用途 |
-|---|---|
-| **Cursor** | 主力 IDE，AI 写代码 |
-| **iOS Simulator** | Xcode 附带，M 系列 Mac 零配置 |
-| **DB Browser for SQLite** | 可视化查看 data.db |
-| **FastAPI /docs** | 自动生成的 Swagger UI，直接测后端 |
+它会同时启动：
 
----
+- FastAPI backend: `8000`
+- Expo / Metro: `8081`
 
-## 6. 为什么是这套而不是别的
+可用 npm 别名：
 
-| 常见替代 | 不选的理由 |
-|---|---|
-| Flutter | Dart 生态的 AI coding 补全不如 TS/Python |
-| Next.js 纯 Web | 原生相机 + 提词器叠加体验做不到 |
-| Supabase / Firebase | 你说了要本地跑，云 BaaS 多一层网络依赖 |
-| PostgreSQL | MVP 阶段 SQLite 零运维；表结构不变，日后一行改连接串迁移 |
-| LangChain 全家桶 | MVP 只需 `openai` SDK + 手写 Prompt，LangChain 太重 |
-| Redis / Celery | 定时任务用 APScheduler 足够，不值得加基础设施 |
+```bash
+npm run dev:mobile
+npm run dev:mobile:start
+```
 
----
+### 6.2 When native build is required
 
-## 7. 一句话总结
+如果改了 `mobile/ios`、原生配置、Expo 插件或 `app.json`：
 
-> **Expo（React Native）+ FastAPI + SQLite** — 前端一条命令起模拟器，后端一条命令起服务，数据库零安装，三个国内 API（阿里通义千问 LLM + 百炼语音识别 + Embedding，共用同一平台）统一管理，向量库单独一个 client。整个项目 `git clone` 下来五分钟跑起来。
+```bash
+bash scripts/dev-mobile.sh build
+```
+
+### 6.3 Backend only
+
+```bash
+cd backend
+.venv/bin/python -m uvicorn main:app --reload
+```
+
+### 6.4 Tests
+
+后端：
+
+```bash
+cd backend
+.venv/bin/python -m unittest discover -s tests -p 'test*.py'
+```
+
+移动端：
+
+```bash
+cd mobile
+npm run test:state
+```
+
+## 7. Networking Conventions
+
+- App 业务接口端口：`8000`
+- Expo / Metro 端口：`8081`
+- 真机调试时，App 内填写的是后端地址，不是 Metro 地址
+
+示例：
+
+```text
+http://<your-lan-ip>:8000
+```
+
+## 8. Practical Notes
+
+- 当前项目是“本地优先 + 单机联调”形态，文档和脚本都围绕这个前提设计。
+- Expo Dev Client 已接入，因此原生能力变更需要区分“只改 JS/TS”与“需要重建”两类流程。
+- 移动端首页已偏向“碎片管理与创作入口”，不是最初的单一录音主页。
+- 知识库后端已可用，但移动端仍是占位入口；不要把它当成完整的已交付前端模块。

@@ -1,0 +1,148 @@
+# AGENTS.md
+
+This file provides repository-specific guidance to coding agents working in this project.
+
+## Project Overview
+
+SparkFlow（灵感编导 AI）是一个面向知识内容创作者的移动端应用，核心流程包括：
+
+- 采集语音灵感片段
+- 调用 AI 做转写、摘要与内容生成
+- 生成脚本并进入提词录制
+
+当前仓库包含 Expo / React Native 移动端和 FastAPI 后端，默认以本地联调为主。
+
+## Stack
+
+- Mobile: Expo + React Native + TypeScript + expo-router
+- Backend: FastAPI + SQLAlchemy + Alembic
+- Database: SQLite（本地开发）
+- Scheduling: APScheduler
+- AI services: LLM / transcription / vector retrieval adapters in backend services
+
+## Read First
+
+Before making structural or feature changes, read these files first:
+
+1. `memory-bank/PRD.md`
+2. `memory-bank/architecture.md`
+3. `backend/README.md`
+4. `mobile/README.md`
+
+If the change affects architecture, module boundaries, or core flows, update `memory-bank/architecture.md` after finishing.
+
+## Repository Map
+
+### Root
+
+- `backend/`: FastAPI backend
+- `mobile/`: Expo mobile app
+- `scripts/dev-mobile.sh`: recommended local dev entrypoint
+- `memory-bank/`: product and architecture context
+- `CLAUDE.md`: existing Claude-oriented project instructions
+
+### Backend
+
+- `backend/main.py`: FastAPI app entry
+- `backend/modules/*`: feature modules, route layer and application orchestration
+- `backend/domains/*`: domain repositories and persistence logic
+- `backend/services/*`: provider integrations and service implementations
+- `backend/models/`: SQLAlchemy models and DB session setup
+- `backend/prompts/`: AI prompt templates
+- `backend/tests/`: backend tests
+
+### Mobile
+
+- `mobile/app/`: expo-router pages
+- `mobile/features/`: feature hooks, state, and API logic
+- `mobile/components/`: shared UI components
+- `mobile/providers/`: app-level providers and bootstrap logic
+- `mobile/constants/`, `mobile/types/`, `mobile/utils/`, `mobile/theme/`: shared client utilities
+
+## Development Workflow
+
+### Preferred local startup
+
+Use the root script instead of manually starting services:
+
+```bash
+bash scripts/dev-mobile.sh
+```
+
+This starts:
+
+- FastAPI backend on `8000`
+- Expo / Metro on `8081`
+
+Equivalent npm aliases:
+
+```bash
+npm run dev:mobile
+npm run dev:mobile:start
+```
+
+### When native iOS changes are involved
+
+If you changed native config, Expo plugins, `app.json`, or files under `mobile/ios`, rebuild first:
+
+```bash
+bash scripts/dev-mobile.sh build
+```
+
+Then return to normal dev mode:
+
+```bash
+bash scripts/dev-mobile.sh
+```
+
+### Backend only
+
+From `backend/`:
+
+```bash
+uvicorn main:app --reload
+```
+
+Run tests with:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -p 'test*.py'
+```
+
+Run migrations with:
+
+```bash
+.venv/bin/alembic upgrade head
+```
+
+## Mobile/Backend Networking Notes
+
+- App business API address uses port `8000`
+- Expo / Metro bundler uses port `8081`
+- Do not point the app API base URL to `8081`
+- Do not use `8000` as the Metro bundle address
+
+For real-device debugging, the app should use:
+
+```text
+http://<your-lan-ip>:8000
+```
+
+## Project Conventions
+
+- Prefer modular changes; do not collapse new logic into one large file
+- Respect current backend layering: presentation/application/domain/service responsibilities should stay separated
+- Reuse existing scripts and utilities before adding new entrypoints
+- Keep comments concise; add Chinese comments only where logic is non-obvious or project-specific
+- Avoid broad refactors unless they are required for the task
+
+## When Updating Docs
+
+Update documentation when you change:
+
+- startup or build commands
+- architecture or module boundaries
+- major user flows
+- environment assumptions for local development
+
+Prefer updating both the relevant README and `memory-bank/architecture.md` when the change is substantial.
