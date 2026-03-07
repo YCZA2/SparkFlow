@@ -11,13 +11,12 @@ import { useRouter } from 'expo-router';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 import { FragmentCard } from '@/components/FragmentCard';
-import { BottomActionBar } from '@/components/layout/BottomActionBar';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
 import { useFragmentsScreen } from '@/features/fragments/useFragmentsScreen';
 import { useAppTheme } from '@/theme/useAppTheme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // 汉堡菜单图标组件
 function HamburgerMenu({ onPress, color }: { onPress: () => void; color: string }) {
@@ -36,6 +35,7 @@ export default function FragmentsScreen() {
   const theme = useAppTheme();
   const router = useRouter();
   const screen = useFragmentsScreen();
+  const insets = useSafeAreaInsets();
   type SymbolName = React.ComponentProps<typeof SymbolView>['name'];
 
   const quickActions: Array<{
@@ -62,7 +62,6 @@ export default function FragmentsScreen() {
     },
   ];
 
-  // 打开"我的"页面
   const openProfile = () => {
     router.push('/profile');
   };
@@ -92,95 +91,32 @@ export default function FragmentsScreen() {
   }
 
   return (
-    <ScreenContainer
-      footer={
-        <BottomActionBar
-          style={styles.footerShell}
-          contentStyle={styles.footerContent}
-        >
-          <View pointerEvents="none" style={styles.footerTransition}>
-            <View
-              style={[
-                styles.transitionLayerLarge,
-                { backgroundColor: theme.colors.background, opacity: 0.72 },
-              ]}
-            />
-            <View
-              style={[
-                styles.transitionLayerMedium,
-                { backgroundColor: theme.colors.background, opacity: 0.5 },
-              ]}
-            />
-            <View
-              style={[
-                styles.transitionLayerSmall,
-                { backgroundColor: theme.colors.background, opacity: 0.28 },
-              ]}
-            />
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* 悬浮顶部导航栏 */}
+      <View style={[styles.floatingHeader, { paddingTop: insets.top + 12 }]}>
+        <View style={styles.headerContent}>
+          <HamburgerMenu onPress={openProfile} color={theme.colors.text} />
+          <View style={styles.headerTitleContainer}>
+            <Text style={[styles.eyebrow, { color: theme.colors.primary }]}>
+              {screen.totalLabel}
+            </Text>
+            <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+              全部碎片
+            </Text>
           </View>
-          {screen.selection.isSelectionMode ? (
-            <Animated.View
-              entering={FadeInDown.duration(160)}
-              exiting={FadeOutDown.duration(120)}
-              style={[
-                styles.selectionBar,
-                theme.shadow.card,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.generateButton,
-                  {
-                    backgroundColor:
-                      screen.selection.selectedCount > 0
-                        ? theme.colors.primary
-                        : theme.colors.textSubtle,
-                  },
-                ]}
-                onPress={screen.onGenerate}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.generateButtonText}>
-                  交给 AI 编导（已选 {screen.selection.selectedCount}/{screen.selection.maxSelection} 条）
-                </Text>
-              </TouchableOpacity>
-            </Animated.View>
-          ) : (
-            <Animated.View
-              entering={FadeInDown.duration(160)}
-              exiting={FadeOutDown.duration(120)}
-              style={[
-                styles.quickActionPill,
-                theme.shadow.card,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            >
-              {quickActions.map((action) => (
-                <TouchableOpacity
-                  key={action.key}
-                  style={styles.quickActionButton}
-                  onPress={action.onPress}
-                  activeOpacity={0.78}
-                >
-                  <SymbolView
-                    name={action.icon}
-                    size={30}
-                    tintColor={action.active ? '#F05A28' : theme.colors.text}
-                  />
-                </TouchableOpacity>
-              ))}
-            </Animated.View>
-          )}
-        </BottomActionBar>
-      }
-    >
+          <TouchableOpacity
+            onPress={screen.selection.toggleSelectionMode}
+            hitSlop={8}
+            style={styles.selectButton}
+          >
+            <Text style={[styles.selectAction, { color: theme.colors.primary }]}>
+              {screen.selection.isSelectionMode ? '取消' : '选择'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* 列表内容 */}
       <SectionList
         sections={screen.sections}
         keyExtractor={(item) => item.id}
@@ -198,27 +134,11 @@ export default function FragmentsScreen() {
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{section.title}</Text>
         )}
         ListHeaderComponent={
-          <View style={styles.header}>
-            <ScreenHeader
-              title="全部碎片"
-              eyebrow={screen.totalLabel}
-              leading={
-                <HamburgerMenu
-                  onPress={openProfile}
-                  color={theme.colors.text}
-                />
-              }
-              trailing={
-                <TouchableOpacity onPress={screen.selection.toggleSelectionMode} hitSlop={8}>
-                  <Text style={[styles.selectAction, { color: theme.colors.primary }]}>
-                    {screen.selection.isSelectionMode ? '取消' : '选择'}
-                  </Text>
-                </TouchableOpacity>
-              }
-            />
+          <View style={styles.listHeader}>
             <TouchableOpacity
               style={[
                 styles.cloudButton,
+                theme.shadow.card,
                 {
                   backgroundColor: theme.colors.surface,
                   borderColor: theme.colors.border,
@@ -236,7 +156,10 @@ export default function FragmentsScreen() {
         ListEmptyComponent={
           <ScreenState icon="📝" title="还没有灵感碎片" message="去录一条或记一条吧" />
         }
-        contentContainerStyle={screen.fragments.length === 0 ? styles.emptyList : styles.list}
+        contentContainerStyle={[
+          screen.fragments.length === 0 ? styles.emptyList : styles.list,
+          { paddingTop: insets.top + 80, paddingBottom: insets.bottom + 120 }
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={screen.isRefreshing}
@@ -247,25 +170,116 @@ export default function FragmentsScreen() {
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
       />
-    </ScreenContainer>
+
+      {/* 悬浮底部操作栏 */}
+      <View style={[styles.floatingFooter, { bottom: insets.bottom + 20 }]}>
+        {screen.selection.isSelectionMode ? (
+          <Animated.View
+            entering={FadeInDown.duration(160)}
+            exiting={FadeOutDown.duration(120)}
+            style={[
+              styles.selectionBar,
+              theme.shadow.card,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.generateButton,
+                {
+                  backgroundColor:
+                    screen.selection.selectedCount > 0
+                      ? theme.colors.primary
+                      : theme.colors.textSubtle,
+                },
+              ]}
+              onPress={screen.onGenerate}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.generateButtonText}>
+                交给 AI 编导（已选 {screen.selection.selectedCount}/{screen.selection.maxSelection} 条）
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        ) : (
+          <Animated.View
+            entering={FadeInDown.duration(160)}
+            exiting={FadeOutDown.duration(120)}
+            style={[
+              styles.quickActionPill,
+              theme.shadow.card,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            {quickActions.map((action) => (
+              <TouchableOpacity
+                key={action.key}
+                style={styles.quickActionButton}
+                onPress={action.onPress}
+                activeOpacity={0.78}
+              >
+                <SymbolView
+                  name={action.icon}
+                  size={30}
+                  tintColor={action.active ? '#F05A28' : theme.colors.text}
+                />
+              </TouchableOpacity>
+            ))}
+          </Animated.View>
+        )}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  list: {
-    paddingBottom: 116,
+  container: {
+    flex: 1,
   },
-  emptyList: {
-    flexGrow: 1,
-    paddingBottom: 116,
+  // 悬浮顶部导航栏
+  floatingHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    backgroundColor: 'transparent',
   },
-  header: {
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingBottom: 12,
+  },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  eyebrow: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  selectButton: {
+    minWidth: 44,
+    alignItems: 'flex-end',
   },
   // 汉堡菜单样式
   menuButton: {
     padding: 4,
+    minWidth: 44,
   },
   hamburger: {
     width: 24,
@@ -277,9 +291,19 @@ const styles = StyleSheet.create({
     height: 2.5,
     borderRadius: 1.25,
   },
+  // 列表样式
+  list: {
+    paddingHorizontal: 16,
+  },
+  emptyList: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+  },
+  listHeader: {
+    marginBottom: 16,
+  },
   cloudButton: {
     alignSelf: 'flex-start',
-    marginTop: 14,
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 15,
@@ -294,12 +318,36 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 18,
     marginBottom: 10,
-    paddingHorizontal: 16,
   },
   selectAction: {
     fontSize: 16,
     fontWeight: '600',
-    marginRight: 16,
+  },
+  // 悬浮底部操作栏
+  floatingFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  quickActionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 22,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    minWidth: 248,
+  },
+  selectionBar: {
+    width: '90%',
+    maxWidth: 420,
+    borderRadius: 26,
+    borderWidth: 1,
+    padding: 10,
   },
   generateButton: {
     borderRadius: 14,
@@ -311,60 +359,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
-  },
-  footerShell: {
-    backgroundColor: 'transparent',
-    borderTopWidth: 0,
-    paddingHorizontal: 14,
-  },
-  footerContent: {
-    paddingTop: 0,
-    paddingBottom: 0,
-    alignItems: 'center',
-  },
-  footerTransition: {
-    width: '100%',
-    maxWidth: 460,
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
-  },
-  transitionLayerLarge: {
-    width: '100%',
-    height: 18,
-    borderRadius: 999,
-  },
-  transitionLayerMedium: {
-    width: '94%',
-    height: 14,
-    borderRadius: 999,
-  },
-  transitionLayerSmall: {
-    width: '88%',
-    height: 10,
-    borderRadius: 999,
-  },
-  quickActionPill: {
-    width: '100%',
-    maxWidth: 420,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 22,
-    minWidth: 248,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    marginBottom: -10,
-  },
-  selectionBar: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: 26,
-    borderWidth: 1,
-    padding: 10,
-    marginBottom: -10,
   },
   quickActionButton: {
     width: 48,
