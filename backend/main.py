@@ -4,7 +4,7 @@ SparkFlow 后端 - FastAPI 应用程序
 import logging
 from typing import Awaitable, Callable
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -92,10 +92,21 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+def build_root_health_payload() -> dict:
+    """构建根路径健康检查载荷。"""
+    return success_response(data={"status": "ok", "version": settings.APP_VERSION})
+
+
 @app.get("/")
 async def root():
     """健康检查端点"""
-    return success_response(data={"status": "ok", "version": settings.APP_VERSION})
+    return build_root_health_payload()
+
+
+@app.head("/")
+async def root_head() -> Response:
+    """兼容移动端/浏览器使用 HEAD 探测根路径可达性。"""
+    return Response(status_code=200)
 
 
 @app.get("/health")
@@ -156,6 +167,12 @@ async def health_check():
         "debug": settings.DEBUG,
         "services": services_status
     })
+
+
+@app.head("/health")
+async def health_check_head() -> Response:
+    """提供轻量级 HEAD 健康检查，便于设备做连通性探测。"""
+    return Response(status_code=200)
 
 
 @app.on_event("startup")

@@ -1,37 +1,207 @@
 # SparkFlow Mobile
 
-Expo/React Native mobile app for SparkFlow.
+SparkFlow 的 Expo / React Native 移动端工程。
 
-## Quick Start
+## 目录说明
 
-1. Install dependencies:
+- `app/`: expo-router 页面
+- `features/`: 业务 API 与 hooks
+- `components/`: 可复用 UI 组件
+- `providers/`: 应用级 provider 与初始化逻辑
+- `types/`: 共享 TypeScript 类型
+- `utils/`: 工具方法（网络配置、日期等）
+- `constants/`: 常量与接口地址
+
+## 一、推荐用法：统一走 `scripts/dev-mobile.sh`
+
+以后你只需要记住两个模式：
+
+### 模式1：不需要 Build 的修改
+
+适用场景：
+
+- 改 JS / TS
+- 改页面、样式、交互逻辑
+- 改业务接口调用
+- 不涉及 `ios/`、插件、Pod、原生配置
+
+启动命令：
 
 ```bash
+bash scripts/dev-mobile.sh
+```
+
+或：
+
+```bash
+bash scripts/dev-mobile.sh start
+```
+
+它会同时启动：
+
+- 后端 FastAPI（`8000`）
+- Expo / Metro（`8081`）
+
+也可以用 npm 别名：
+
+```bash
+npm run dev:mobile
+```
+
+### 模式2：需要 Build 的修改
+
+适用场景：
+
+- 新增/删除 Expo 原生模块
+- 修改 `app.json`
+- 修改 `ios/` 目录下原生工程文件
+- 修改 `Info.plist`、`AppDelegate.swift`
+- 修改 Pod 或其他 iOS 原生配置
+
+执行命令：
+
+```bash
+bash scripts/dev-mobile.sh build
+```
+
+也可以用 npm 别名：
+
+```bash
+npm run dev:mobile:build
+```
+
+这个模式只做重建相关步骤，不会启动前后端。
+
+执行完模式2后，再执行模式1开始联调：
+
+```bash
+bash scripts/dev-mobile.sh
+```
+
+## 二、模式2 实际会做什么
+
+`build` 模式会依次执行：
+
+```bash
+cd mobile
 npm install
+npx expo prebuild --platform ios --clean
+npx pod-install ios
+npx expo run:ios --device
 ```
 
-2. Start Expo:
+完成后脚本会提示你回到模式1。
+
+## 三、真机联调约定
+
+### 1. 两个端口不要混淆
+
+真机联调时有两个不同用途的地址：
+
+- 后端 API：`http://电脑局域网IP:8000`
+- Expo / Metro Bundler：`http://电脑局域网IP:8081`
+
+其中：
+
+- `8000` 只给应用内业务接口使用
+- `8081` 只给 Expo Dev Client 拉 JS bundle 使用
+
+如果把 `8000` 当成 Metro 地址，通常会看到类似报错：
+
+- `GET /index.bundle?... 404 Not Found`
+- `WebSocket /message?... 403`
+- 红屏里出现 `http://<你的IP>:8000/index.bundle?...`
+
+### 2. 正确的打开方式
+
+推荐流程：
+
+1. 如果刚改了原生配置，先执行模式2：
 
 ```bash
-npx expo start
+bash scripts/dev-mobile.sh build
 ```
 
-## Project Structure
-
-- `app/`: expo-router pages
-- `features/`: feature APIs and hooks
-- `components/`: reusable UI components
-- `providers/`: app-level providers and bootstrap logic
-- `types/`: shared TypeScript types
-- `utils/`: utilities (network config, date helpers)
-- `constants/`: config constants and endpoints
-
-## Development Notes
-
-- Backend URL is managed by `utils/networkConfig.ts`.
-- Authentication token is managed by `features/core/api/client.ts`.
-- For type checks:
+2. 再执行模式1：
 
 ```bash
-npx tsc --noEmit
+bash scripts/dev-mobile.sh
+```
+
+3. 用手机扫描 Expo 终端里的二维码打开项目
+
+不要直接依赖手机桌面上一次残留的开发包状态。
+
+### 3. 应用内网络设置填什么
+
+应用内“网络设置”页面填写的是后端地址，不是 Metro 地址：
+
+```text
+http://电脑局域网IP:8000
+```
+
+例如：
+
+```text
+http://192.168.31.157:8000
+```
+
+## 四、常见问题排查
+
+### 1. 一打开 App 就红屏，出现 `8000/index.bundle`
+
+原因：Dev Client 把后端 `8000` 错当成了 Metro 地址。
+
+处理步骤：
+
+1. 执行模式2重新安装开发包：
+
+```bash
+bash scripts/dev-mobile.sh build
+```
+
+2. 再执行模式1启动联调：
+
+```bash
+bash scripts/dev-mobile.sh
+```
+
+3. 不要直接点手机桌面图标，重新扫码打开项目
+
+### 2. 应用启动后提示“无法连接到后端服务”
+
+按顺序检查：
+
+1. 后端是否已启动
+2. 手机和电脑是否在同一 Wi‑Fi
+3. 应用网络设置中填写的是否为 `http://电脑IP:8000`
+4. 后端日志里是否能看到来自手机 IP 的请求
+
+### 3. 后端日志出现 `HEAD / 200 OK`
+
+这是正常的连通性探测日志，不代表报错。
+
+### 4. 看到 `watchman recrawl` 警告
+
+可以执行：
+
+```bash
+watchman watch-del '/Users/hujiahui/Desktop/VibeCoding/SparkFlow'
+watchman watch-project '/Users/hujiahui/Desktop/VibeCoding/SparkFlow'
+```
+
+## 五、手动命令对照表
+
+如果你以后不想记脚本，可以对照下面理解：
+
+- 模式1 ≈ 启动后端 + `npx expo start --lan`
+- 模式2 ≈ `npm install` + `expo prebuild` + `pod-install` + `expo run:ios --device`
+
+## 六、后端数据库迁移（本项目联调时常用）
+
+当后端有 Alembic 新迁移（例如新增字段）时，先执行：
+
+```bash
+cd backend
+.venv/bin/alembic upgrade head
 ```

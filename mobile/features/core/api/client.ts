@@ -242,7 +242,7 @@ export function del<T = unknown>(endpoint: string, config?: RequestConfig): Prom
 export async function testConnection(): Promise<boolean> {
   try {
     const baseUrl = await getCurrentBaseUrl();
-    const response = await fetch(`${baseUrl}/`);
+    const response = await fetch(`${baseUrl}/health`);
     const data = await response.json();
     return data.success === true && data.data?.status === 'ok';
   } catch {

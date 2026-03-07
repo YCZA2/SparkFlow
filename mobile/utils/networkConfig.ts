@@ -72,7 +72,7 @@ export async function testBackendUrl(url: string): Promise<boolean> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 秒超时
 
-    const response = await fetch(`${url}/`, {
+    const response = await fetch(`${url}/health`, {
       method: 'GET',
       signal: controller.signal,
     });
@@ -81,7 +81,7 @@ export async function testBackendUrl(url: string): Promise<boolean> {
 
     if (response.ok) {
       const data = await response.json();
-      return data.status === 'ok';
+      return data?.success === true && data?.data?.status === 'ok';
     }
     return false;
   } catch {

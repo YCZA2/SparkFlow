@@ -9,9 +9,27 @@ MOBILE_DIR="${ROOT_DIR}/mobile"
 BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 EXPO_PORT="${EXPO_PORT:-8081}"
+IOS_PLATFORM="${IOS_PLATFORM:-ios}"
 
+MODE="${1:-start}"
 BACKEND_PID=""
 EXPO_PID=""
+BACKEND_PYTHON=""
+
+print_usage() {
+  cat <<'USAGE'
+用法：
+  bash scripts/dev-mobile.sh           # 模式1：启动前后端联调（默认）
+  bash scripts/dev-mobile.sh start     # 模式1：启动前后端联调
+  bash scripts/dev-mobile.sh build     # 模式2：执行 iOS 重建，不启动前后端
+  bash scripts/dev-mobile.sh help      # 查看帮助
+
+说明：
+  模式1 适合：只改 JS / TS / 样式 / 页面逻辑，不需要重新 Build。
+  模式2 适合：改了原生配置、插件、Pod、Info.plist、AppDelegate 后，需要重新 Build。
+  执行完模式2后，再执行模式1即可开始联调。
+USAGE
+}
 
 get_local_ip() {
   local iface ip
@@ -42,8 +60,12 @@ get_local_ip() {
 
 cleanup() {
   trap - EXIT INT TERM
-  echo
-  echo "[dev-mobile] stopping processes..."
+
+  if [[ -n "${EXPO_PID}" || -n "${BACKEND_PID}" ]]; then
+    echo
+    echo "[dev-mobile] stopping processes..."
+  fi
+
   if [[ -n "${EXPO_PID}" ]]; then
     kill "${EXPO_PID}" 2>/dev/null || true
   fi
@@ -52,70 +74,151 @@ cleanup() {
   fi
 }
 
-trap cleanup EXIT INT TERM
-
-if [[ ! -d "${BACKEND_DIR}" || ! -d "${MOBILE_DIR}" ]]; then
-  echo "[dev-mobile] backend/ or mobile/ directory not found."
-  exit 1
-fi
-
-if [[ -x "${BACKEND_DIR}/.venv/bin/python" ]]; then
-  BACKEND_PYTHON="${BACKEND_DIR}/.venv/bin/python"
-else
-  BACKEND_PYTHON="python3"
-fi
-
-if ! command -v "${BACKEND_PYTHON}" >/dev/null 2>&1; then
-  echo "[dev-mobile] python not found: ${BACKEND_PYTHON}"
-  exit 1
-fi
-
-if ! command -v npx >/dev/null 2>&1; then
-  echo "[dev-mobile] npx not found. Please install Node.js first."
-  exit 1
-fi
-
-LOCAL_IP="$(get_local_ip)"
-PUBLIC_BACKEND_URL="http://${LOCAL_IP}:${BACKEND_PORT}"
-LOCAL_BACKEND_HEALTH_URL="http://127.0.0.1:${BACKEND_PORT}/health"
-
-echo "[dev-mobile] starting backend..."
-(
-  cd "${BACKEND_DIR}"
-  exec "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
-) &
-BACKEND_PID=$!
-
-echo "[dev-mobile] waiting backend health check: ${LOCAL_BACKEND_HEALTH_URL}"
-BACKEND_READY=0
-for _ in $(seq 1 30); do
-  if curl -fsS "${LOCAL_BACKEND_HEALTH_URL}" >/dev/null 2>&1; then
-    BACKEND_READY=1
-    break
+ensure_workspace() {
+  if [[ ! -d "${BACKEND_DIR}" || ! -d "${MOBILE_DIR}" ]]; then
+    echo "[dev-mobile] backend/ or mobile/ directory not found."
+    exit 1
   fi
-  sleep 1
-done
+}
 
-if [[ "${BACKEND_READY}" -ne 1 ]]; then
-  echo "[dev-mobile] backend health check timeout, but continue to start mobile."
-fi
+ensure_node_tools() {
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "[dev-mobile] npm not found. Please install Node.js first."
+    exit 1
+  fi
 
-echo "[dev-mobile] starting expo (LAN mode)..."
-(
+  if ! command -v npx >/dev/null 2>&1; then
+    echo "[dev-mobile] npx not found. Please install Node.js first."
+    exit 1
+  fi
+}
+
+ensure_backend_python() {
+  if [[ -x "${BACKEND_DIR}/.venv/bin/python" ]]; then
+    BACKEND_PYTHON="${BACKEND_DIR}/.venv/bin/python"
+  else
+    BACKEND_PYTHON="python3"
+  fi
+
+  if ! command -v "${BACKEND_PYTHON}" >/dev/null 2>&1; then
+    echo "[dev-mobile] python not found: ${BACKEND_PYTHON}"
+    exit 1
+  fi
+}
+
+ensure_start_mode_deps() {
+  ensure_workspace
+  ensure_node_tools
+  ensure_backend_python
+
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "[dev-mobile] curl not found."
+    exit 1
+  fi
+}
+
+ensure_build_mode_deps() {
+  ensure_workspace
+  ensure_node_tools
+}
+
+run_start_mode() {
+  local local_ip public_backend_url local_backend_health_url backend_ready
+
+  trap cleanup EXIT INT TERM
+
+  local_ip="$(get_local_ip)"
+  public_backend_url="http://${local_ip}:${BACKEND_PORT}"
+  local_backend_health_url="http://127.0.0.1:${BACKEND_PORT}/health"
+
+  echo "[dev-mobile] mode1: starting backend + expo..."
+
+  echo "[dev-mobile] starting backend..."
+  (
+    cd "${BACKEND_DIR}"
+    exec "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
+  ) &
+  BACKEND_PID=$!
+
+  echo "[dev-mobile] waiting backend health check: ${local_backend_health_url}"
+  backend_ready=0
+  for _ in $(seq 1 30); do
+    if curl -fsS "${local_backend_health_url}" >/dev/null 2>&1; then
+      backend_ready=1
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ "${backend_ready}" -ne 1 ]]; then
+    echo "[dev-mobile] backend health check timeout, but continue to start expo."
+  fi
+
+  echo "[dev-mobile] starting expo (LAN mode)..."
+  (
+    cd "${MOBILE_DIR}"
+    exec npx expo start --lan --port "${EXPO_PORT}"
+  ) &
+  EXPO_PID=$!
+
+  echo
+  echo "========================================"
+  echo "SparkFlow mobile mode1 is ready"
+  echo "Backend API (app network settings): ${public_backend_url}"
+  echo "Backend health: ${local_backend_health_url}"
+  echo "Metro / Expo bundler: http://${local_ip}:${EXPO_PORT}"
+  echo "Tip 1: app 内网络设置填 8000，不要填 8081"
+  echo "Tip 2: 真机打开项目请扫 Expo 二维码"
+  echo "Press Ctrl+C to stop backend and expo."
+  echo "========================================"
+  echo
+
+  wait "${EXPO_PID}"
+}
+
+run_build_mode() {
+  echo "[dev-mobile] mode2: rebuilding iOS app only..."
+  echo "[dev-mobile] this mode does not start backend or expo."
+
   cd "${MOBILE_DIR}"
-  exec npx expo start --lan --port "${EXPO_PORT}"
-) &
-EXPO_PID=$!
 
-echo
-echo "========================================"
-echo "SparkFlow dev started for real device"
-echo "Backend (mobile should use this): ${PUBLIC_BACKEND_URL}"
-echo "Backend local health: ${LOCAL_BACKEND_HEALTH_URL}"
-echo "Expo DevTools: http://localhost:${EXPO_PORT}"
-echo "Tip: if auto-discovery fails, set backend URL manually in app network settings."
-echo "Press Ctrl+C to stop both backend and mobile."
-echo "========================================"
-echo
+  echo "[dev-mobile] step 1/4: npm install"
+  npm install
 
-wait "${EXPO_PID}"
+  echo "[dev-mobile] step 2/4: expo prebuild --platform ${IOS_PLATFORM} --clean"
+  npx expo prebuild --platform "${IOS_PLATFORM}" --clean
+
+  echo "[dev-mobile] step 3/4: pod-install ios"
+  npx pod-install ios
+
+  echo "[dev-mobile] step 4/4: expo run:ios --device"
+  npx expo run:ios --device
+
+  echo
+  echo "========================================"
+  echo "Mode2 build finished."
+  echo "Next step: run 'bash scripts/dev-mobile.sh'"
+  echo "That will start backend + expo for daily development."
+  echo "========================================"
+}
+
+case "${MODE}" in
+  start)
+    ensure_start_mode_deps
+    run_start_mode
+    ;;
+  build)
+    ensure_build_mode_deps
+    run_build_mode
+    ;;
+  help|-h|--help)
+    ensure_workspace
+    print_usage
+    ;;
+  *)
+    echo "[dev-mobile] unknown mode: ${MODE}"
+    echo
+    print_usage
+    exit 1
+    ;;
+esac
