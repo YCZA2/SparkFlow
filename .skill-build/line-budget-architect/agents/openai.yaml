@@ -1,4 +1,0 @@
-interface:
-  display_name: "Line Budget Architect"
-  short_description: "Scan oversized files and propose refactors"
-  default_prompt: "Scan the repository for oversized files, report violations, and propose an architecture-focused refactor plan."
