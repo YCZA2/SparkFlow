@@ -12,8 +12,8 @@ from core.exceptions import ServiceUnavailableError
 from domains.fragments import repository as fragment_repository
 from models import Fragment
 from modules.fragments.application import map_fragment
+from modules.shared.enrichment import build_fallback_summary_and_tags, generate_summary_and_tags
 from modules.shared.ports import AudioStorage, SpeechToTextProvider, TextGenerationProvider, VectorStore
-from services.llm_service import build_fallback_summary_and_tags, generate_summary_and_tags
 
 logger = logging.getLogger(__name__)
 ENRICHMENT_TIMEOUT_SECONDS = 45.0
@@ -79,9 +79,10 @@ class TranscriptionUseCase:
 
     async def _generate_enrichment(self, transcript: str) -> tuple[str, list[str]]:
         try:
-            return await asyncio.wait_for(
-                generate_summary_and_tags(transcript, llm_service=self.llm_provider),
-                timeout=ENRICHMENT_TIMEOUT_SECONDS,
+            return await generate_summary_and_tags(
+                transcript,
+                llm_provider=self.llm_provider,
+                timeout_seconds=ENRICHMENT_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError:
             logger.warning(

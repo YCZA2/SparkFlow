@@ -17,11 +17,13 @@ Default local address: `http://127.0.0.1:8000`
 ## Project Structure
 
 - `main.py`: app entry, middleware, exception handlers, route registration
-- `routers/`: API route layer
-- `domains/`: domain services and repositories
-- `schemas/`: shared Pydantic request/response models
-- `services/`: external provider integrations (LLM/STT/vector)
+- `modules/*/presentation.py`: FastAPI route layer and request/response DTOs
+- `modules/*/application.py`: use cases and orchestration
+- `modules/shared/`: container, ports, shared adapters
+- `domains/*/repository.py`: SQLAlchemy data access
+- `services/`: external provider implementations and factories
 - `models/`: SQLAlchemy models and database session
+- `prompts/`: script generation prompt templates
 - `utils/`: shared utility helpers
 - `constants/`: shared constants
 

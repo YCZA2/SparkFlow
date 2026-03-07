@@ -134,9 +134,10 @@ flowchart TD
 - `backend/modules/*/application.py`: 模块应用服务层，负责流程编排、事务边界和状态流转。
 - `backend/modules/shared/container.py`: 统一依赖装配层，负责创建 session factory、provider、文件存储、prompt loader、vector store。
 - `backend/modules/shared/ports.py`: 后端内部端口接口，约束 STT、LLM、Embedding、VectorStore、AudioStorage、JobRunner。
+- `backend/modules/shared/enrichment.py`: 转写增强共享能力，承载 summary/tags 生成与 fallback 逻辑，避免业务模块回退到旧 `services` 业务 helper。
 - `backend/domains/*/repository.py`: 仍保留为 SQLAlchemy 数据访问层，供新 application 层复用。
 - `backend/models/`: SQLAlchemy 模型、引擎、Session 管理。
-- `backend/services/`: 现阶段主要保留外部 provider 实现和工厂，不再作为业务主入口。
+- `backend/services/`: 仅保留外部 provider 实现、抽象基类与 factory，不再暴露业务流程 helper。
 - `backend/prompts/`: 口播稿生成 Prompt 模板，由 `PromptLoader` 读取。
 
 ### 3.2 Backend Service Boundaries
@@ -158,6 +159,7 @@ flowchart TD
 - Embedding：通过 shared container 装配，默认 Qwen embedding。
 - 向量库：通过 `VectorStore` 端口统一访问，当前底层默认 ChromaDB，本地持久化。
 - Prompt：通过 `PromptLoader` 从 `backend/prompts/` 加载。
+- 业务增强：summary/tags 与向量写入等跨模块辅助逻辑已收敛到 `modules/shared/*` 和模块 application 层，不再通过 legacy `domains/*/service.py` 或 `services/*_service.py` 暴露。
 
 ### 3.4 Backend Module Layout
 
@@ -292,6 +294,8 @@ sequenceDiagram
 
 当前主要 API 路径如下：
 
+- `GET /`
+- `GET /health`
 - `POST /api/auth/token`
 - `GET /api/auth/me`
 - `POST /api/auth/refresh`
@@ -324,11 +328,12 @@ sequenceDiagram
 - 移动端前端已从“页面直接组合 hooks”调整为“薄路由页 + screen model + 通用布局骨架”的结构。
 - 一级导航按创作流组织，页面职责更明确，减少首页和列表页的业务混杂。
 - 后端已经从旧的 `routers + domains + services` 组合，重构成模块化单体。
-- 依赖注入集中在 shared container，业务代码不再直接依赖全局 `SessionLocal` 或全局 provider 单例。
+- 旧的 `domains/*/service.py`、`domains/transcription/workflow.py`、`services/scheduler.py`、`services/llm_service.py`、`services/vector_service.py` 已移除，避免出现双入口业务实现。
+- 依赖注入集中在 shared container，业务代码不再直接依赖全局 `SessionLocal` 或 legacy provider helper。
 - 外部 AI 能力通过端口接口接入，仍保留替换供应商的扩展性。
 - 转写链路使用异步后台任务，用户等待成本较低。
 - 知识库和碎片可视化已经纳入统一后端架构，而不是预留接口。
-- 测试覆盖当前全部公开 API 路径，后端重构后的契约已有集成测试保护。
+- 测试已覆盖当前全部公开 API 路径，并补充了 `/`、`/health`、401/404/422、上传校验与路由契约检查，后端重构后的边界有自动化保护。
 
 ## 7. Key Entry Files
 

@@ -118,6 +118,37 @@ class BackendFlowTestCase(unittest.TestCase):
         token = response.json()["data"]["access_token"]
         return {"Authorization": f"Bearer {token}"}
 
+    def test_root_and_head_health_endpoints(self) -> None:
+        root_response = self.client.get("/")
+        self.assertEqual(root_response.status_code, 200)
+        self.assertEqual(root_response.json()["data"]["status"], "ok")
+
+        root_head_response = self.client.head("/")
+        self.assertEqual(root_head_response.status_code, 200)
+        self.assertEqual(root_head_response.text, "")
+
+        health_head_response = self.client.head("/health")
+        self.assertEqual(health_head_response.status_code, 200)
+        self.assertEqual(health_head_response.text, "")
+
+    def test_protected_routes_require_authentication(self) -> None:
+        protected_routes = [
+            ("get", "/api/auth/me", None),
+            ("post", "/api/auth/refresh", {}),
+            ("get", "/api/fragments", None),
+            ("post", "/api/scripts/daily-push/trigger", None),
+            ("get", "/api/knowledge", None),
+        ]
+
+        for method, path, payload in protected_routes:
+            client_method = getattr(self.client, method)
+            if payload is None:
+                response = client_method(path)
+            else:
+                response = client_method(path, json=payload)
+            self.assertEqual(response.status_code, 401, path)
+            self.assertEqual(response.json()["error"]["code"], "AUTHENTICATION")
+
     def create_fragment(self, transcript: str = "一条可用于生成稿件的碎片") -> str:
         response = self.client.post(
             "/api/fragments",
@@ -222,6 +253,15 @@ class BackendFlowTestCase(unittest.TestCase):
         self.assertEqual(visualization_response.status_code, 200)
         self.assertEqual(visualization_response.json()["data"]["points"][0]["id"], first_id)
 
+    def test_create_fragment_rejects_invalid_source(self) -> None:
+        response = self.client.post(
+            "/api/fragments",
+            json={"transcript": "无效来源", "source": "unknown"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "VALIDATION")
+
     def test_generate_script_success_and_failures(self) -> None:
         fragment_id = self.create_fragment()
 
@@ -253,6 +293,11 @@ class BackendFlowTestCase(unittest.TestCase):
         self.assertEqual(empty_response.status_code, 422)
         self.assertEqual(empty_response.json()["error"]["code"], "VALIDATION")
 
+    def test_get_daily_push_returns_not_found_when_missing(self) -> None:
+        response = self.client.get("/api/scripts/daily-push", headers=self.auth_headers())
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["error"]["code"], "NOT_FOUND")
+
     def test_scripts_list_detail_update_and_delete(self) -> None:
         fragment_id = self.create_fragment("用于脚本列表和详情测试")
         script_id = self.create_script([fragment_id])
@@ -281,6 +326,18 @@ class BackendFlowTestCase(unittest.TestCase):
         not_found_response = self.client.get(f"/api/scripts/{script_id}", headers=self.auth_headers())
         self.assertEqual(not_found_response.status_code, 404)
 
+    def test_update_script_rejects_invalid_status(self) -> None:
+        fragment_id = self.create_fragment("用于非法状态测试")
+        script_id = self.create_script([fragment_id])
+
+        response = self.client.patch(
+            f"/api/scripts/{script_id}",
+            json={"status": "published"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "VALIDATION")
+
     def test_upload_audio_transitions_to_synced(self) -> None:
         response = self.client.post(
             "/api/transcriptions",
@@ -301,6 +358,11 @@ class BackendFlowTestCase(unittest.TestCase):
             self.assertEqual(fragment.sync_status, "synced")
             self.assertEqual(fragment.transcript, "转写完成")
             self.assertTrue(os.path.exists(payload["audio_path"]))
+
+    def test_get_transcription_status_returns_not_found_for_missing_fragment(self) -> None:
+        response = self.client.get("/api/transcriptions/missing-fragment", headers=self.auth_headers())
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["error"]["code"], "NOT_FOUND")
 
     def test_upload_audio_marks_failed_when_stt_crashes(self) -> None:
         self.app.state.container.stt_provider = SimpleNamespace(
@@ -462,6 +524,32 @@ class BackendFlowTestCase(unittest.TestCase):
             self.assertTrue(doc.vector_ref_id)
             deleted = db.query(KnowledgeDoc).filter(KnowledgeDoc.id == uploaded_doc_id).first()
             self.assertIsNone(deleted)
+
+    def test_knowledge_upload_rejects_invalid_file_and_search_validates_top_k(self) -> None:
+        invalid_upload_response = self.client.post(
+            "/api/knowledge/upload",
+            headers=self.auth_headers(),
+            files={"file": ("bad.pdf", io.BytesIO(b"%PDF"), "application/pdf")},
+            data={"title": "坏文件", "doc_type": "high_likes"},
+        )
+        self.assertEqual(invalid_upload_response.status_code, 422)
+        self.assertEqual(invalid_upload_response.json()["error"]["code"], "VALIDATION")
+
+        empty_upload_response = self.client.post(
+            "/api/knowledge/upload",
+            headers=self.auth_headers(),
+            files={"file": ("empty.txt", io.BytesIO(b"   "), "text/plain")},
+            data={"title": "空文件", "doc_type": "high_likes"},
+        )
+        self.assertEqual(empty_upload_response.status_code, 422)
+        self.assertEqual(empty_upload_response.json()["error"]["code"], "VALIDATION")
+
+        invalid_search_response = self.client.post(
+            "/api/knowledge/search",
+            json={"query_text": "定位", "top_k": 0},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(invalid_search_response.status_code, 422)
 
     def test_dependency_wiring_smoke(self) -> None:
         response = self.client.get("/health")
