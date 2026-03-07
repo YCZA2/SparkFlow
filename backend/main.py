@@ -1,5 +1,6 @@
 """SparkFlow backend application entrypoint."""
 import logging
+from contextlib import asynccontextmanager
 from typing import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
@@ -16,22 +17,35 @@ from modules.fragments.presentation import router as fragments_router
 from modules.knowledge.presentation import router as knowledge_router
 from modules.scripts.application import DailyPushUseCase
 from modules.scripts.presentation import router as scripts_router
-from modules.shared.container import build_container
+from modules.shared.container import ServiceContainer, build_container
 from modules.transcriptions.presentation import router as transcriptions_router
 from modules.scheduler.application import SchedulerService, create_scheduler
 
 logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:
+    container = build_container()
+    scheduler_service = _build_scheduler_service(container)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        scheduler_service.start()
+        try:
+            yield
+        finally:
+            scheduler_service.stop()
+
     app = FastAPI(
         title=settings.APP_NAME,
         description="灵感编导 AI - 后端 API 服务",
         version=settings.APP_VERSION,
         docs_url="/docs" if settings.DEBUG else None,
         redoc_url="/redoc" if settings.DEBUG else None,
+        lifespan=lifespan,
     )
 
-    app.state.container = build_container()
+    app.state.container = container
+    app.state.scheduler_service = scheduler_service
 
     app.add_middleware(
         CORSMiddleware,
@@ -44,7 +58,6 @@ def create_app() -> FastAPI:
 
     register_exception_handlers(app)
     register_routes(app)
-    register_lifecycle(app)
     return app
 
 
@@ -138,9 +151,8 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(knowledge_router)
 
 
-def register_lifecycle(app: FastAPI) -> None:
+def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:
     scheduler = create_scheduler()
-    container = app.state.container
 
     async def run_daily_push_job() -> None:
         with container.session_factory() as db:
@@ -151,16 +163,7 @@ def register_lifecycle(app: FastAPI) -> None:
             )
             await use_case.run_daily_job(db=db)
 
-    scheduler_service = SchedulerService(scheduler=scheduler, run_job=run_daily_push_job)
-    app.state.scheduler_service = scheduler_service
-
-    @app.on_event("startup")
-    async def on_startup() -> None:
-        scheduler_service.start()
-
-    @app.on_event("shutdown")
-    async def on_shutdown() -> None:
-        scheduler_service.stop()
+    return SchedulerService(scheduler=scheduler, run_job=run_daily_push_job)
 
 def build_root_health_payload() -> dict:
     """构建根路径健康检查载荷。"""
