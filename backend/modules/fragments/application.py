@@ -9,6 +9,7 @@ from models import Fragment
 from utils.serialization import format_iso_datetime, parse_json_list, parse_json_object_list
 
 from domains.fragment_folders import repository as fragment_folder_repository
+from domains.fragment_tags import repository as fragment_tag_repository
 from domains.fragments import repository as fragment_repository
 from modules.shared.ports import AudioStorage, VectorStore
 from .visualization import build_fragment_visualization
@@ -147,6 +148,7 @@ class FragmentQueryService:
         folder_id: Optional[str] = None,
         tag: Optional[str] = None,
     ) -> dict[str, Any]:
+        normalized_tag = str(tag or "").strip() or None
         if folder_id is not None:
             folder = fragment_folder_repository.get_by_id(db=db, user_id=user_id, folder_id=folder_id)
             if not folder:
@@ -155,9 +157,42 @@ class FragmentQueryService:
                     resource_type="fragment_folder",
                     resource_id=folder_id,
                 )
-        items = fragment_repository.list_by_user(db=db, user_id=user_id, limit=limit, offset=offset, folder_id=folder_id, tag=tag)
-        total = fragment_repository.count_by_user(db=db, user_id=user_id, folder_id=folder_id, tag=tag)
+        items = fragment_repository.list_by_user(
+            db=db,
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
+            folder_id=folder_id,
+            tag=normalized_tag,
+        )
+        total = fragment_repository.count_by_user(
+            db=db,
+            user_id=user_id,
+            folder_id=folder_id,
+            tag=normalized_tag,
+        )
         return {"items": [map_fragment(item) for item in items], "total": total, "limit": limit, "offset": offset}
+
+    def list_tags(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        query_text: Optional[str],
+        limit: int,
+    ) -> dict[str, Any]:
+        normalized_query = str(query_text or "").strip() or None
+        items = fragment_tag_repository.list_tag_stats(
+            db=db,
+            user_id=user_id,
+            query_text=normalized_query,
+            limit=limit,
+        )
+        return {
+            "items": items,
+            "total": len(items),
+            "query_text": normalized_query,
+        }
 
     async def query_similar(
         self,

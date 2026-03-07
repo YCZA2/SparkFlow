@@ -30,6 +30,7 @@ class RouteContractTestCase(unittest.TestCase):
             ("/api/fragments", frozenset({"POST"})),
             ("/api/fragments/move", frozenset({"POST"})),
             ("/api/fragments/similar", frozenset({"POST"})),
+            ("/api/fragments/tags", frozenset({"GET"})),
             ("/api/fragments/visualization", frozenset({"GET"})),
             ("/api/fragments/{fragment_id}", frozenset({"GET"})),
             ("/api/fragments/{fragment_id}", frozenset({"PATCH"})),

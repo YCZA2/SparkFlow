@@ -48,6 +48,7 @@ async def list_fragments(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     folder_id: str | None = Query(None),
+    tag: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
     service: FragmentQueryService = Depends(get_fragment_query_service),
@@ -59,6 +60,7 @@ async def list_fragments(
             limit=limit,
             offset=offset,
             folder_id=folder_id,
+            tag=tag,
         )
     )
 
@@ -124,6 +126,24 @@ async def get_fragment_visualization(
     service: FragmentQueryService = Depends(get_fragment_query_service),
 ):
     return success_response(data=await service.visualization(db=db, user_id=current_user["user_id"]))
+
+
+@router.get("/tags")
+async def list_fragment_tags(
+    query: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=50),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    service: FragmentQueryService = Depends(get_fragment_query_service),
+):
+    return success_response(
+        data=service.list_tags(
+            db=db,
+            user_id=current_user["user_id"],
+            query_text=query,
+            limit=limit,
+        )
+    )
 
 
 @router.get("/{fragment_id}")

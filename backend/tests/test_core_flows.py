@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -15,6 +16,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from domains.fragment_tags import repository as fragment_tag_repository
 from main import create_app
 from models import Base, Fragment, FragmentFolder, FragmentTag, KnowledgeDoc, Script
 from modules.auth.application import TEST_USER_ID
@@ -169,6 +171,19 @@ class BackendFlowTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201)
         return response.json()["data"]["id"]
+
+    def seed_fragment_tags(self, fragment_id: str, tags: list[str]) -> None:
+        with self.SessionLocal() as db:
+            fragment = db.query(Fragment).filter(Fragment.id == fragment_id).first()
+            self.assertIsNotNone(fragment)
+            fragment.tags = json.dumps(tags, ensure_ascii=False)
+            fragment_tag_repository.replace_for_fragment(
+                db=db,
+                user_id=TEST_USER_ID,
+                fragment_id=fragment_id,
+                tags=tags,
+            )
+            db.commit()
 
     def seed_fragment_vector(self, fragment_id: str, transcript: str, *, source: str = "manual") -> None:
         self.app.state.container.vector_store.fragment_docs[fragment_id] = {
@@ -403,6 +418,83 @@ class BackendFlowTestCase(unittest.TestCase):
         with self.SessionLocal() as db:
             self.assertIsNotNone(db.query(FragmentFolder).filter(FragmentFolder.id == folder_id).first())
 
+    def test_fragment_tags_listing_suggestions_filtering_and_delete_consistency(self) -> None:
+        folder_id = self.create_folder("Tag 过滤")
+        alpha_in_folder = self.create_fragment_with_payload(
+            {"transcript": "alpha in folder", "source": "manual", "folder_id": folder_id}
+        )["id"]
+        alpha_free = self.create_fragment("alpha free")
+        beta_free = self.create_fragment("beta free")
+        zabc_fragment = self.create_fragment("zabc free")
+        cherry_fragment = self.create_fragment("cherry free")
+
+        self.seed_fragment_tags(alpha_in_folder, ["apple", "abc"])
+        self.seed_fragment_tags(alpha_free, ["apple", "abd"])
+        self.seed_fragment_tags(beta_free, ["banana", "banana"])
+        self.seed_fragment_tags(zabc_fragment, ["zabc"])
+        self.seed_fragment_tags(cherry_fragment, ["cherry"])
+
+        popular_response = self.client.get("/api/fragments/tags", headers=self.auth_headers())
+        self.assertEqual(popular_response.status_code, 200)
+        popular_items = popular_response.json()["data"]["items"]
+        self.assertEqual(
+            [item["tag"] for item in popular_items[:5]],
+            ["apple", "abc", "abd", "banana", "cherry"],
+        )
+        self.assertEqual(popular_items[0]["fragment_count"], 2)
+        self.assertIsNone(popular_response.json()["data"]["query_text"])
+
+        query_response = self.client.get("/api/fragments/tags?query=ab", headers=self.auth_headers())
+        self.assertEqual(query_response.status_code, 200)
+        self.assertEqual(
+            [item["tag"] for item in query_response.json()["data"]["items"]],
+            ["abc", "abd", "zabc"],
+        )
+        self.assertEqual(query_response.json()["data"]["query_text"], "ab")
+
+        empty_query_response = self.client.get("/api/fragments/tags?query=   ", headers=self.auth_headers())
+        self.assertEqual(empty_query_response.status_code, 200)
+        self.assertIsNone(empty_query_response.json()["data"]["query_text"])
+
+        limit_response = self.client.get("/api/fragments/tags?limit=2", headers=self.auth_headers())
+        self.assertEqual(limit_response.status_code, 200)
+        self.assertEqual(len(limit_response.json()["data"]["items"]), 2)
+
+        invalid_limit_response = self.client.get("/api/fragments/tags?limit=0", headers=self.auth_headers())
+        self.assertEqual(invalid_limit_response.status_code, 422)
+
+        tag_filter_response = self.client.get("/api/fragments?tag=apple", headers=self.auth_headers())
+        self.assertEqual(tag_filter_response.status_code, 200)
+        self.assertEqual(
+            {item["id"] for item in tag_filter_response.json()["data"]["items"]},
+            {alpha_in_folder, alpha_free},
+        )
+
+        combined_filter_response = self.client.get(
+            f"/api/fragments?folder_id={folder_id}&tag=apple",
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(combined_filter_response.status_code, 200)
+        self.assertEqual(
+            {item["id"] for item in combined_filter_response.json()["data"]["items"]},
+            {alpha_in_folder},
+        )
+
+        no_match_response = self.client.get("/api/fragments?tag=missing", headers=self.auth_headers())
+        self.assertEqual(no_match_response.status_code, 200)
+        self.assertEqual(no_match_response.json()["data"]["items"], [])
+        self.assertEqual(no_match_response.json()["data"]["total"], 0)
+
+        delete_response = self.client.delete(f"/api/fragments/{zabc_fragment}", headers=self.auth_headers())
+        self.assertEqual(delete_response.status_code, 204)
+
+        after_delete_response = self.client.get("/api/fragments/tags?query=ab", headers=self.auth_headers())
+        self.assertEqual(after_delete_response.status_code, 200)
+        self.assertEqual(
+            [item["tag"] for item in after_delete_response.json()["data"]["items"]],
+            ["abc", "abd"],
+        )
+
     def test_generate_script_success_and_failures(self) -> None:
         fragment_id = self.create_fragment()
 
@@ -504,6 +596,10 @@ class BackendFlowTestCase(unittest.TestCase):
             fragment_tags = db.query(FragmentTag).filter(FragmentTag.fragment_id == fragment.id).all()
             self.assertGreaterEqual(len(fragment_tags), 1)
             self.assertTrue(os.path.exists(payload["audio_path"]))
+
+        tags_response = self.client.get("/api/fragments/tags", headers=self.auth_headers())
+        self.assertEqual(tags_response.status_code, 200)
+        self.assertGreaterEqual(tags_response.json()["data"]["total"], 1)
 
     def test_get_transcription_status_returns_not_found_for_missing_fragment(self) -> None:
         response = self.client.get("/api/transcriptions/missing-fragment", headers=self.auth_headers())
