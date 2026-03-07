@@ -61,6 +61,18 @@ export function useFragmentAudioPlayer(audioPath: string | null | undefined) {
     }).catch((error) => {
       console.error('配置播放器音频模式失败:', error);
     });
+
+    return () => {
+      setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: false,
+        interruptionMode: 'duckOthers',
+      }).catch((error) => {
+        console.error('恢复录音音频模式失败:', error);
+      });
+    };
   }, []);
 
   const durationMs = toMilliseconds(status.duration ?? 0);

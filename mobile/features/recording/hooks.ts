@@ -76,6 +76,7 @@ export function useAudioRecorder() {
 
     try {
       reset();
+      await configureAudioMode(true);
       await recorder.prepareToRecordAsync();
       recorder.record();
       setStatus('recording');
