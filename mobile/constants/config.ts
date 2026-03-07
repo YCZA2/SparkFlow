@@ -36,14 +36,15 @@ export const API_ENDPOINTS = {
     REFRESH: '/api/auth/refresh',
   },
   FRAGMENTS: {
-    LIST: '/api/fragments/',  // 必须与后端路由匹配，带斜杠
+    LIST: '/api/fragments',
     DETAIL: (id: string) => `/api/fragments/${id}`,
     VISUALIZATION: '/api/fragments/visualization',
+    SIMILAR: '/api/fragments/similar',
   },
-  TRANSCRIBE: '/api/transcribe',
+  TRANSCRIPTIONS: '/api/transcriptions',
   SCRIPTS: {
-    LIST: '/api/scripts/',
-    GENERATE: '/api/scripts/generate',
+    LIST: '/api/scripts',
+    GENERATE: '/api/scripts/generation',
     DAILY_PUSH: '/api/scripts/daily-push',
     TRIGGER_DAILY_PUSH: '/api/scripts/daily-push/trigger',
     FORCE_TRIGGER_DAILY_PUSH: '/api/scripts/daily-push/force-trigger',

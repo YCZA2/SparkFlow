@@ -70,19 +70,6 @@ async def query_similar_fragments(
     )
 
 
-@router.get("/visualization")
-async def get_fragment_visualization(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """获取当前用户的碎片向量可视化数据。"""
-    data = await fragment_service.get_fragment_visualization(
-        db=db,
-        user_id=current_user["user_id"],
-    )
-    return success_response(data=data)
-
-
 @router.get("/{fragment_id}")
 async def get_fragment(
     fragment_id: str,

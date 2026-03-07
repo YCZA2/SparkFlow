@@ -66,7 +66,7 @@ class NotFoundError(AppException):
 
         super().__init__(
             message=message,
-            code="NOT_FOUND_ERROR",
+            code="NOT_FOUND",
             status_code=status.HTTP_404_NOT_FOUND,
             details=details if details else None
         )
@@ -82,7 +82,7 @@ class ValidationError(AppException):
     ):
         super().__init__(
             message=message,
-            code="VALIDATION_ERROR",
+            code="VALIDATION",
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             details=field_errors
         )
@@ -97,7 +97,7 @@ class AuthenticationError(AppException):
     ):
         super().__init__(
             message=message,
-            code="AUTHENTICATION_ERROR",
+            code="AUTHENTICATION",
             status_code=status.HTTP_401_UNAUTHORIZED
         )
 
@@ -111,7 +111,7 @@ class PermissionDeniedError(AppException):
     ):
         super().__init__(
             message=message,
-            code="PERMISSION_DENIED_ERROR",
+            code="PERMISSION_DENIED",
             status_code=status.HTTP_403_FORBIDDEN
         )
 
@@ -125,7 +125,7 @@ class ConflictError(AppException):
     ):
         super().__init__(
             message=message,
-            code="CONFLICT_ERROR",
+            code="CONFLICT",
             status_code=status.HTTP_409_CONFLICT
         )
 
@@ -141,7 +141,7 @@ class ServiceUnavailableError(AppException):
         details = {"service": service_name} if service_name else None
         super().__init__(
             message=message,
-            code="SERVICE_UNAVAILABLE",
+            code="EXTERNAL_SERVICE_UNAVAILABLE",
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             details=details
         )

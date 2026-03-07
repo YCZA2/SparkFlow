@@ -15,7 +15,7 @@ flowchart LR
     STT[STT 服务<br>DashScope / Aliyun]
     LLM[LLM 服务<br>Qwen]
     VDB[(Chroma Vector DB)]
-    K[知识库能力<br>预留接口]
+    K[知识库能力<br>已接入统一后端模块]
 
     U --> M
     M --> A
@@ -75,62 +75,77 @@ flowchart TD
 
 ## 3. Backend Architecture
 
-后端代码位于 `backend/`，以 FastAPI 路由层、domain service 层、repository 层、外部服务适配层分层组织。
+后端代码位于 `backend/`。当前后端已经重构为模块化单体，按业务模块拆分，并统一收敛为 `presentation / application / shared infrastructure` 的依赖方向。
 
 ```mermaid
 flowchart TD
     subgraph Backend[backend]
-        MAIN[FastAPI app<br>main.py]
-        R[Routers<br>auth fragments transcribe scripts knowledge]
-        AUTH[Auth<br>JWT]
-        DOM[Domain Services<br>fragments scripts transcription]
-        REPO[Repository]
-        FACTORY[Service Factory]
-        EXT[LLM STT Embedding VectorDB]
-        ORM[SQLAlchemy Session]
+        MAIN[FastAPI App Assembly<br>main.py]
+        MOD[Modules<br>auth fragments transcriptions scripts knowledge scheduler]
+        PRE[Presentation<br>FastAPI routers / DTO]
+        APP[Application<br>Use cases / orchestration]
+        SHR[Shared Container<br>DI / ports / adapters]
+        REPO[Repositories<br>SQLAlchemy]
+        ORM[Session Factory / ORM]
         DB[(SQLite)]
         FILES[(uploads/)]
+        EXT[LLM / STT / Embedding / Vector DB]
         CHROMA[(ChromaDB)]
     end
 
-    MAIN --> R
-    R --> AUTH
-    R --> DOM
-    DOM --> REPO
-    DOM --> FACTORY
+    MAIN --> MOD
+    MOD --> PRE
+    PRE --> APP
+    APP --> REPO
+    APP --> SHR
+    SHR --> EXT
     REPO --> ORM
     ORM --> DB
-    DOM --> FILES
-    FACTORY --> EXT
+    SHR --> FILES
     EXT --> CHROMA
 ```
 
 ### 3.1 Backend Layers
 
-- `backend/main.py`: FastAPI 应用入口，注册路由、中间件、异常处理、健康检查。
-- `backend/routers/`: API 路由层，处理请求参数、鉴权依赖、响应格式。
-- `backend/domains/`: 领域服务层，承载核心业务逻辑。
-- `backend/domains/*/repository.py`: 数据访问层，封装 ORM 查询和持久化。
-- `backend/services/`: 外部能力适配层和工厂层，封装 LLM、STT、Embedding、Vector DB。
+- `backend/main.py`: FastAPI 应用装配入口，只负责创建 app、注册路由、异常处理、生命周期和健康检查。
+- `backend/modules/*/presentation.py`: 模块对外 API 层，定义 FastAPI router、请求参数和响应入口。
+- `backend/modules/*/application.py`: 模块应用服务层，负责流程编排、事务边界和状态流转。
+- `backend/modules/shared/container.py`: 统一依赖装配层，负责创建 session factory、provider、文件存储、prompt loader、vector store。
+- `backend/modules/shared/ports.py`: 后端内部端口接口，约束 STT、LLM、Embedding、VectorStore、AudioStorage、JobRunner。
+- `backend/domains/*/repository.py`: 仍保留为 SQLAlchemy 数据访问层，供新 application 层复用。
 - `backend/models/`: SQLAlchemy 模型、引擎、Session 管理。
-- `backend/prompts/`: AI 合稿 Prompt 模板。
+- `backend/services/`: 现阶段主要保留外部 provider 实现和工厂，不再作为业务主入口。
+- `backend/prompts/`: 口播稿生成 Prompt 模板，由 `PromptLoader` 读取。
 
 ### 3.2 Backend Service Boundaries
 
 - 认证：JWT 鉴权，当前默认使用测试用户 token。
-- 碎片：碎片 CRUD、转写状态查询。
-- 转写：上传音频、创建 fragment、异步调用 STT、回写 transcript/summary/tags。
-- 口播稿：读取已转写 fragments，拼接 prompt，调用 LLM 生成 script。
-- 知识库：接口已注册，当前未接入主创作链路。
+- 碎片：碎片 CRUD、相似检索、向量可视化。
+- 转写：上传音频、创建 fragment、后台异步调用 STT、回写 transcript/summary/tags、向量化。
+- 口播稿：读取 fragments、加载 prompt、调用 LLM 生成 script、每日推盘生成。
+- 知识库：文档创建、上传、检索、删除，统一接入向量存储。
+- 调度：定时触发每日推盘 use case，本身不承载业务规则。
 
 ### 3.3 Data and External Dependencies
 
 - 主数据库：SQLite。
 - ORM：SQLAlchemy。
 - 音频存储：本地文件系统 `uploads/{user_id}/`。
-- LLM：当前通过 `services/factory.py` 统一创建，默认 Qwen。
-- STT：当前支持 DashScope 或 Aliyun。
-- 向量库：当前默认 ChromaDB，本地持久化。
+- LLM：通过 shared container 装配，默认使用 `services/factory.py` 创建的 Qwen provider。
+- STT：通过 shared container 装配，当前支持 DashScope 或 Aliyun。
+- Embedding：通过 shared container 装配，默认 Qwen embedding。
+- 向量库：通过 `VectorStore` 端口统一访问，当前底层默认 ChromaDB，本地持久化。
+- Prompt：通过 `PromptLoader` 从 `backend/prompts/` 加载。
+
+### 3.4 Backend Module Layout
+
+- `backend/modules/auth`: token 签发、刷新、当前用户信息。
+- `backend/modules/fragments`: fragment CRUD、similar、visualization。
+- `backend/modules/transcriptions`: 音频上传、转写状态查询、后台转写任务。
+- `backend/modules/scripts`: script 生成、查询、更新、删除、daily push。
+- `backend/modules/knowledge`: knowledge 文档创建、上传、列表、搜索、删除。
+- `backend/modules/scheduler`: 定时任务装配与启动停止。
+- `backend/modules/shared`: 容器、端口定义、共享适配器。
 
 ## 4. Core Business Flows
 
@@ -147,7 +162,7 @@ sequenceDiagram
     participant DB as SQLite
 
     User->>App: 开始/停止录音
-    App->>API: POST /api/transcribe
+    App->>API: POST /api/transcriptions
     API->>File: 保存音频文件
     API->>DB: 创建 fragment(syncing)
     API-->>App: 上传成功，后台转写中
@@ -162,6 +177,7 @@ sequenceDiagram
 - 前端录音依赖 Expo Audio。
 - 上传成功后，接口立即返回，转写在后台异步执行。
 - 转写成功后会补充 `transcript`、`summary`、`tags`。
+- 成功后会继续写入向量库，供 similar / daily push / visualization 使用。
 - 转写失败则 fragment 标记为 `failed`。
 
 ### 4.2 Script Generation
@@ -173,13 +189,14 @@ sequenceDiagram
     participant DB as SQLite
     participant LLM as Qwen
 
-    App->>API: GET /api/fragments/
+    App->>API: GET /api/fragments
     API->>DB: 查询碎片列表
     DB-->>API: fragments
     API-->>App: fragments
 
-    App->>API: POST /api/scripts/generate
+    App->>API: POST /api/scripts/generation
     API->>DB: 读取选中 fragments
+    API->>API: PromptLoader 加载模板
     API->>LLM: 按 prompt 生成口播稿
     LLM-->>API: script content
     API->>DB: 保存 script
@@ -190,7 +207,51 @@ sequenceDiagram
 
 - 只有存在有效转写内容的 fragments 才能参与合稿。
 - 合稿模式由前端传入：`mode_a` 或 `mode_b`。
-- Prompt 模板位于 `backend/prompts/`。
+- Prompt 模板位于 `backend/prompts/`，由 shared container 中的 `PromptLoader` 统一读取。
+
+### 4.3 Fragment Visualization
+
+```mermaid
+sequenceDiagram
+    participant App as Mobile App
+    participant API as FastAPI
+    participant DB as SQLite
+    participant VDB as VectorStore
+
+    App->>API: GET /api/fragments/visualization
+    API->>VDB: 读取已有 fragment vectors
+    API->>DB: 查询当前用户 fragment 元数据
+    API->>API: 回填缺失向量 / PCA 投影 / 聚类
+    API-->>App: points / clusters / stats / meta
+```
+
+说明：
+
+- 可视化现在由 `backend/modules/fragments/visualization.py` 负责。
+- 该链路已经不再依赖旧的 `services/vector_visualization_service.py`。
+- 若用户还没有完整向量数据，会基于文本特征做 fallback projection。
+
+### 4.4 Daily Push
+
+```mermaid
+sequenceDiagram
+    participant Scheduler as APScheduler
+    participant API as DailyPushUseCase
+    participant DB as SQLite
+    participant VDB as VectorStore
+    participant LLM as Qwen
+
+    Scheduler->>API: run_daily_job()
+    API->>DB: 查询昨日/今日碎片与已有 daily push
+    API->>VDB: 相似度筛选主题相关 fragments
+    API->>LLM: 生成每日推盘内容
+    API->>DB: 保存 ready 状态 script
+```
+
+说明：
+
+- 手动触发入口为 `/api/scripts/daily-push/trigger` 和 `/api/scripts/daily-push/force-trigger`。
+- 定时任务只负责触发 use case，业务规则都在 `backend/modules/scripts/application.py`。
 
 ## 5. Request Path Mapping
 
@@ -200,18 +261,49 @@ sequenceDiagram
 - hooks 层 `mobile/features/*/hooks.ts`
 - API 封装层 `mobile/features/*/api.ts`
 - HTTP Client `mobile/features/core/api/client.ts`
-- FastAPI Router `backend/routers/*.py`
-- Domain Service `backend/domains/*/service.py`
-- Repository / External Service
+- FastAPI Router `backend/modules/*/presentation.py`
+- Application Service `backend/modules/*/application.py`
+- Shared Container / Port Adapter `backend/modules/shared/*`
+- Repository `backend/domains/*/repository.py`
 - SQLite / uploads / STT / LLM / ChromaDB
+
+当前主要 API 路径如下：
+
+- `POST /api/auth/token`
+- `GET /api/auth/me`
+- `POST /api/auth/refresh`
+- `GET /api/fragments`
+- `POST /api/fragments`
+- `GET /api/fragments/{fragment_id}`
+- `DELETE /api/fragments/{fragment_id}`
+- `POST /api/fragments/similar`
+- `GET /api/fragments/visualization`
+- `POST /api/transcriptions`
+- `GET /api/transcriptions/{fragment_id}`
+- `POST /api/scripts/generation`
+- `GET /api/scripts`
+- `GET /api/scripts/daily-push`
+- `POST /api/scripts/daily-push/trigger`
+- `POST /api/scripts/daily-push/force-trigger`
+- `GET /api/scripts/{script_id}`
+- `PATCH /api/scripts/{script_id}`
+- `DELETE /api/scripts/{script_id}`
+- `POST /api/knowledge`
+- `POST /api/knowledge/upload`
+- `GET /api/knowledge`
+- `POST /api/knowledge/search`
+- `GET /api/knowledge/{doc_id}`
+- `DELETE /api/knowledge/{doc_id}`
 
 ## 6. Current Architectural Characteristics
 
 - 移动端本地保存 token 和后端地址，适合真机调试。
-- 后端按 domain 分层，业务边界已经比单纯 router-service 更清晰。
-- 外部 AI 能力通过工厂层切换，具备替换供应商的扩展性。
+- 后端已经从旧的 `routers + domains + services` 组合，重构成模块化单体。
+- 依赖注入集中在 shared container，业务代码不再直接依赖全局 `SessionLocal` 或全局 provider 单例。
+- 外部 AI 能力通过端口接口接入，仍保留替换供应商的扩展性。
 - 转写链路使用异步后台任务，用户等待成本较低。
-- 知识库能力已具备接口和向量库基础，但尚未并入主生成链路。
+- 知识库和碎片可视化已经纳入统一后端架构，而不是预留接口。
+- 测试覆盖当前全部公开 API 路径，后端重构后的契约已有集成测试保护。
 
 ## 7. Key Entry Files
 
@@ -220,10 +312,13 @@ sequenceDiagram
 - API client: `mobile/features/core/api/client.ts`
 - Recording flow: `mobile/features/recording/hooks.ts`
 - Backend entry: `backend/main.py`
-- Auth router: `backend/routers/auth.py`
-- Fragments router: `backend/routers/fragments.py`
-- Transcribe router: `backend/routers/transcribe.py`
-- Scripts router: `backend/routers/scripts.py`
-- Script domain service: `backend/domains/scripts/service.py`
-- Transcription workflow: `backend/domains/transcription/workflow.py`
-- Service factory: `backend/services/factory.py`
+- Container / DI: `backend/modules/shared/container.py`
+- Auth module: `backend/modules/auth/presentation.py`
+- Fragments module: `backend/modules/fragments/presentation.py`
+- Fragment visualization: `backend/modules/fragments/visualization.py`
+- Transcriptions module: `backend/modules/transcriptions/presentation.py`
+- Scripts module: `backend/modules/scripts/application.py`
+- Knowledge module: `backend/modules/knowledge/presentation.py`
+- Scheduler module: `backend/modules/scheduler/application.py`
+- Repositories: `backend/domains/*/repository.py`
+- Provider factory: `backend/services/factory.py`

@@ -11,7 +11,6 @@ __all__ = [
     "create_fragment",
     "delete_fragment",
     "get_fragment_or_raise",
-    "get_fragment_visualization",
     "list_fragments",
     "query_similar_fragments",
     "serialize_fragment",

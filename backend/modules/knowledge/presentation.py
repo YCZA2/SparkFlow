@@ -1,0 +1,96 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from core import success_response
+from core.auth import get_current_user
+from modules.shared.container import ServiceContainer, get_container, get_db_session
+
+from .application import KnowledgeUseCase, map_knowledge_doc, parse_uploaded_file
+
+router = APIRouter(prefix="/api/knowledge", tags=["knowledge"], responses={401: {"description": "未认证"}})
+
+
+class KnowledgeDocCreateRequest(BaseModel):
+    title: str
+    content: str
+    doc_type: str
+
+
+class KnowledgeSearchRequest(BaseModel):
+    query_text: str
+    top_k: int = Field(5, ge=1, le=20)
+
+
+def get_knowledge_use_case(container: ServiceContainer = Depends(get_container)) -> KnowledgeUseCase:
+    return KnowledgeUseCase(vector_store=container.vector_store)
+
+
+@router.post("")
+async def create_knowledge_doc(
+    data: KnowledgeDocCreateRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
+):
+    doc = await use_case.create_doc(db=db, user_id=current_user["user_id"], title=data.title, content=data.content, doc_type=data.doc_type)
+    return success_response(data=map_knowledge_doc(doc), message="知识库文档创建成功")
+
+
+@router.post("/upload")
+async def upload_knowledge_doc(
+    file: UploadFile = File(..., description="TXT 或 Word 文档"),
+    title: str = Form(...),
+    doc_type: str = Form(...),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
+):
+    content = parse_uploaded_file(file_content=await file.read(), filename=file.filename or "")
+    doc = await use_case.create_doc(db=db, user_id=current_user["user_id"], title=title, content=content, doc_type=doc_type)
+    return success_response(data=map_knowledge_doc(doc), message="知识库文档上传成功")
+
+
+@router.get("")
+async def list_knowledge_docs(
+    doc_type: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
+):
+    return success_response(data=use_case.list_docs(db=db, user_id=current_user["user_id"], doc_type=doc_type, limit=limit, offset=offset))
+
+
+@router.post("/search")
+async def search_knowledge_docs(
+    data: KnowledgeSearchRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
+):
+    return success_response(data=await use_case.search_docs(db=db, user_id=current_user["user_id"], query_text=data.query_text, top_k=data.top_k))
+
+
+@router.get("/{doc_id}")
+async def get_knowledge_doc(
+    doc_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
+):
+    return success_response(data=map_knowledge_doc(use_case.get_doc(db=db, user_id=current_user["user_id"], doc_id=doc_id)))
+
+
+@router.delete("/{doc_id}")
+async def delete_knowledge_doc(
+    doc_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
+):
+    await use_case.delete_doc(db=db, user_id=current_user["user_id"], doc_id=doc_id)
+    return success_response(data=None, message="知识库文档删除成功")

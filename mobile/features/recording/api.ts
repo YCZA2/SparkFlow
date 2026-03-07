@@ -28,9 +28,9 @@ export async function uploadAudio<T = UploadAudioResponse>(uri: string): Promise
     type: 'audio/m4a',
   } as never);
 
-  return sendForm<T>(`${API_ENDPOINTS.TRANSCRIBE}/`, 'POST', formData);
+  return sendForm<T>(API_ENDPOINTS.TRANSCRIPTIONS, 'POST', formData);
 }
 
 export async function getTranscribeStatus(fragmentId: string): Promise<TranscribeStatusResponse> {
-  return fetchApi<TranscribeStatusResponse>(`${API_ENDPOINTS.TRANSCRIBE}/status/${fragmentId}`);
+  return fetchApi<TranscribeStatusResponse>(`${API_ENDPOINTS.TRANSCRIPTIONS}/${fragmentId}`);
 }

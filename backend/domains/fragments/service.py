@@ -12,7 +12,6 @@ from core.config import settings
 from core.exceptions import NotFoundError, ValidationError
 from models import Fragment
 from services.vector_service import query_similar_fragments as query_similar_fragments_from_vector_db
-from services.vector_visualization_service import build_fragment_visualization
 from utils.serialization import format_iso_datetime, parse_json_list, parse_json_object_list
 
 from . import repository
@@ -201,7 +200,3 @@ async def query_similar_fragments(
         )
 
     return payload
-
-
-async def get_fragment_visualization(db: Session, user_id: str) -> dict[str, Any]:
-    return await build_fragment_visualization(db=db, user_id=user_id)

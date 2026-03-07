@@ -18,7 +18,7 @@ export async function fetchDailyPush(): Promise<Script | null> {
   try {
     return await get<Script>(API_ENDPOINTS.SCRIPTS.DAILY_PUSH);
   } catch (error) {
-    if (error instanceof ApiError && error.code === 'NOT_FOUND_ERROR') {
+    if (error instanceof ApiError && error.code === 'NOT_FOUND') {
       return null;
     }
     throw error;
