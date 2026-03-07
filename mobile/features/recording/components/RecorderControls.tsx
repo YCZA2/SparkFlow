@@ -81,7 +81,7 @@ export function RecorderControls({
 const styles = StyleSheet.create({
   recorderContainer: {
     alignItems: 'center',
-    paddingBottom: 80,
+    paddingBottom: 4,
     paddingHorizontal: 20,
   },
   statusText: {

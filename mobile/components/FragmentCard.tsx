@@ -136,6 +136,7 @@ export function FragmentCard({
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
+    marginBottom: 2,
     paddingHorizontal: 18,
     paddingVertical: 14,
   },

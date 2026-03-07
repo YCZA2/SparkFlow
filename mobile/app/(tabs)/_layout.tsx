@@ -18,14 +18,12 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
+        headerShown: false,
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: '灵感捕手',
+          title: '捕获',
           tabBarIcon: ({ color }) => (
             <SymbolView
               name={micIcon}
@@ -38,7 +36,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="fragments"
         options={{
-          title: '碎片库',
+          title: '碎片',
           tabBarIcon: ({ color }) => (
             <SymbolView
               name={fragmentsIcon}

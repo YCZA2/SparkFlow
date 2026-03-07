@@ -2,9 +2,11 @@ import React, { useCallback } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 
-import { Text } from '@/components/Themed';
-import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { ScriptCard } from '@/components/ScriptCard';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { ScreenHeader } from '@/components/layout/ScreenHeader';
+import { LoadingState, ScreenState } from '@/components/ScreenState';
+import { Text } from '@/components/Themed';
 import { useScripts } from '@/features/scripts/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 
@@ -21,17 +23,17 @@ export default function ScriptsScreen() {
 
   if (isLoading && items.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Stack.Screen options={{ title: '我的口播稿' }} />
+      <ScreenContainer>
+        <Stack.Screen options={{ title: '我的口播稿', headerShown: false }} />
         <LoadingState message="正在加载口播稿..." />
-      </View>
+      </ScreenContainer>
     );
   }
 
   if (error && items.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Stack.Screen options={{ title: '我的口播稿' }} />
+      <ScreenContainer>
+        <Stack.Screen options={{ title: '我的口播稿', headerShown: false }} />
         <ScreenState
           icon="⚠️"
           title="加载失败"
@@ -41,31 +43,38 @@ export default function ScriptsScreen() {
           secondaryActionLabel="网络设置"
           onSecondaryAction={() => router.push('/network-settings')}
         />
-      </View>
+      </ScreenContainer>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Stack.Screen options={{ title: '我的口播稿' }} />
+    <ScreenContainer>
+      <Stack.Screen options={{ title: '我的口播稿', headerShown: false }} />
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <ScriptCard script={item} onPress={(script) => router.push(`/script/${script.id}`)} />}
+        renderItem={({ item }) => (
+          <ScriptCard script={item} onPress={(script) => router.push(`/script/${script.id}`)} />
+        )}
         ListHeaderComponent={
-          items.length > 0 ? (
-            <View style={styles.header}>
+          <View style={styles.header}>
+            <ScreenHeader
+              eyebrow="稿件"
+              title="我的口播稿"
+              subtitle="查看已经生成的稿件，继续修改、拍摄或回看。"
+            />
+            {items.length > 0 ? (
               <Text style={[styles.headerText, { color: theme.colors.textSubtle }]}>
                 共 {items.length} 篇口播稿
               </Text>
-            </View>
-          ) : null
+            ) : null}
+          </View>
         }
         ListEmptyComponent={
           <ScreenState
             icon="📄"
             title="还没有口播稿"
-            message="去碎片库选择灵感，生成你的第一篇口播稿"
+            message="去碎片页选择灵感，生成你的第一篇口播稿"
           />
         }
         contentContainerStyle={items.length === 0 ? styles.emptyList : styles.list}
@@ -78,16 +87,12 @@ export default function ScriptsScreen() {
         }
         showsVerticalScrollIndicator={false}
       />
-    </View>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   list: {
-    paddingTop: 8,
     paddingBottom: 24,
   },
   emptyList: {
@@ -95,9 +100,10 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 8,
   },
   headerText: {
+    marginTop: -8,
     fontSize: 13,
   },
 });

@@ -1,158 +1,153 @@
-import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import React from 'react';
+import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Stack } from 'expo-router';
 
-import { Text } from '@/components/Themed';
+import { BottomActionBar } from '@/components/layout/BottomActionBar';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
-import { useSelectedFragments } from '@/features/fragments/hooks';
-import { useGenerateScript } from '@/features/scripts/hooks';
+import { Text } from '@/components/Themed';
+import { useGenerateScreen } from '@/features/scripts/useGenerateScreen';
 import { useAppTheme } from '@/theme/useAppTheme';
-import type { Fragment } from '@/types/fragment';
-import type { ScriptMode } from '@/types/script';
-
-function displayFragmentText(fragment: Fragment): string {
-  if (fragment.summary) return fragment.summary;
-  if (fragment.transcript) return fragment.transcript.slice(0, 80);
-  return '无内容';
-}
 
 export default function GenerateScreen() {
-  const router = useRouter();
   const theme = useAppTheme();
-  const { fragmentIds } = useLocalSearchParams<{ fragmentIds?: string | string[] }>();
-  const { ids, fragments, isLoading, error } = useSelectedFragments(fragmentIds);
-  const [mode, setMode] = useState<ScriptMode>('mode_a');
-  const generator = useGenerateScript();
+  const screen = useGenerateScreen();
 
-  const handleGenerate = async () => {
-    if (ids.length === 0) {
-      Alert.alert('无法生成', '未接收到选中的碎片');
-      return;
-    }
-
-    try {
-      const script = await generator.run(ids, mode);
-      router.replace(`/script/${script.id}`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '生成失败';
-      Alert.alert('生成失败', message);
-    }
-  };
-
-  if (isLoading) {
+  if (screen.isLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <ScreenContainer>
         <Stack.Screen options={{ title: 'AI 编导' }} />
         <LoadingState message="正在读取碎片..." />
-      </View>
+      </ScreenContainer>
     );
   }
 
-  if (error) {
+  if (screen.error) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <ScreenContainer>
         <Stack.Screen options={{ title: 'AI 编导' }} />
-        <ScreenState icon="⚠️" title="加载失败" message={error} actionLabel="返回碎片库" onAction={() => router.back()} />
-      </View>
+        <ScreenState
+          icon="⚠️"
+          title="加载失败"
+          message={screen.error}
+          actionLabel="返回碎片库"
+          onAction={screen.goBack}
+        />
+      </ScreenContainer>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <ScreenContainer
+      footer={
+        <BottomActionBar>
+          <TouchableOpacity
+            style={[
+              styles.generateButton,
+              {
+                backgroundColor: screen.canGenerate
+                  ? theme.colors.primary
+                  : theme.colors.textSubtle,
+              },
+            ]}
+            onPress={screen.generate}
+            disabled={!screen.canGenerate}
+            activeOpacity={0.85}
+          >
+            {screen.generator.status === 'loading' ? (
+              <View style={styles.generatingRow}>
+                <ActivityIndicator color="#FFFFFF" />
+                <Text style={styles.generateButtonText}>AI 正在编写…</Text>
+              </View>
+            ) : (
+              <Text style={styles.generateButtonText}>生成口播稿</Text>
+            )}
+          </TouchableOpacity>
+          {screen.generator.error ? (
+            <Text style={[styles.errorText, { color: theme.colors.danger }]}>
+              {screen.generator.error}
+            </Text>
+          ) : null}
+        </BottomActionBar>
+      }
+      includeBottomInset
+      padded
+      scrollable
+    >
       <Stack.Screen options={{ title: 'AI 编导' }} />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>已选碎片（{ids.length}）</Text>
+      <ScreenHeader
+        eyebrow="生成"
+        title="AI 编导"
+        subtitle="确认选中的碎片和生成模式，整理成一篇可直接拍摄的口播稿。"
+      />
 
-        {fragments.length === 0 ? (
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+          {screen.selectedSummary}
+        </Text>
+
+        {screen.fragments.length === 0 ? (
           <ScreenState title="未选择碎片" message="请返回碎片库至少选择 1 条碎片。" />
         ) : (
-          fragments.map((fragment) => (
+          screen.fragments.map((fragment) => (
             <View
               key={fragment.id}
-              style={[styles.fragmentCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}
+              style={[
+                styles.fragmentCard,
+                theme.shadow.card,
+                { backgroundColor: theme.colors.surface },
+              ]}
             >
               <Text style={[styles.fragmentText, { color: theme.colors.text }]}>
-                {displayFragmentText(fragment)}
+                {screen.getFragmentDisplayText(fragment)}
               </Text>
             </View>
           ))
         )}
+      </View>
 
+      <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>生成模式</Text>
-
-        {[
-          ['mode_a', '导师爆款模式', '黄金结构，节奏强，适合直接拍摄'],
-          ['mode_b', '我的专属二脑', '更自然，贴近个人表达习惯'],
-        ].map(([value, title, description]) => (
+        {screen.modeOptions.map((option) => (
           <TouchableOpacity
-            key={value}
+            key={option.value}
             style={[
               styles.modeCard,
               theme.shadow.card,
               {
                 backgroundColor: theme.colors.surface,
-                borderColor: mode === value ? theme.colors.primary : 'transparent',
+                borderColor:
+                  screen.mode === option.value ? theme.colors.primary : 'transparent',
               },
             ]}
-            onPress={() => setMode(value as ScriptMode)}
+            onPress={() => screen.setMode(option.value)}
             activeOpacity={0.85}
           >
-            <Text style={[styles.modeTitle, { color: theme.colors.text }]}>{title}</Text>
-            <Text style={[styles.modeDesc, { color: theme.colors.textSubtle }]}>{description}</Text>
+            <Text style={[styles.modeTitle, { color: theme.colors.text }]}>{option.title}</Text>
+            <Text style={[styles.modeDesc, { color: theme.colors.textSubtle }]}>
+              {option.description}
+            </Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
-
-      <View style={[styles.bottomBar, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
-        <TouchableOpacity
-          style={[styles.generateButton, { backgroundColor: theme.colors.primary }]}
-          onPress={handleGenerate}
-          disabled={generator.status === 'loading' || ids.length === 0}
-          activeOpacity={0.85}
-        >
-          {generator.status === 'loading' ? (
-            <View style={styles.generatingRow}>
-              <ActivityIndicator color="#FFFFFF" />
-              <Text style={styles.generateButtonText}>AI 正在编写…</Text>
-            </View>
-          ) : (
-            <Text style={styles.generateButtonText}>生成口播稿</Text>
-          )}
-        </TouchableOpacity>
-        {generator.error ? (
-          <Text style={[styles.errorText, { color: theme.colors.danger }]}>{generator.error}</Text>
-        ) : null}
       </View>
-    </View>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 140,
+  section: {
+    gap: 12,
+    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    marginBottom: 12,
-    marginTop: 6,
   },
   fragmentCard: {
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: 12,
+    padding: 14,
   },
   fragmentText: {
     fontSize: 14,
@@ -161,7 +156,6 @@ const styles = StyleSheet.create({
   modeCard: {
     borderRadius: 12,
     padding: 14,
-    marginBottom: 10,
     borderWidth: 2,
   },
   modeTitle: {
@@ -172,15 +166,6 @@ const styles = StyleSheet.create({
   modeDesc: {
     fontSize: 13,
     lineHeight: 18,
-  },
-  bottomBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
   },
   generateButton: {
     borderRadius: 12,

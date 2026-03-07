@@ -24,6 +24,13 @@ export interface AppTheme {
     lg: number;
     xl: number;
   };
+  layout: {
+    screenPadding: number;
+    sectionGap: number;
+    heroGap: number;
+    cardGap: number;
+    bottomBarPadding: number;
+  };
   radius: {
     sm: number;
     md: number;
@@ -47,6 +54,14 @@ const spacing = {
   md: 12,
   lg: 16,
   xl: 24,
+};
+
+const layout = {
+  screenPadding: 16,
+  sectionGap: 24,
+  heroGap: 12,
+  cardGap: 12,
+  bottomBarPadding: 16,
 };
 
 const radius = {
@@ -73,6 +88,7 @@ export const themes: Record<ThemeName, AppTheme> = {
       warning: '#FF9500',
     },
     spacing,
+    layout,
     radius,
     shadow: {
       card: {
@@ -100,6 +116,7 @@ export const themes: Record<ThemeName, AppTheme> = {
       warning: '#FFD60A',
     },
     spacing,
+    layout,
     radius,
     shadow: {
       card: {

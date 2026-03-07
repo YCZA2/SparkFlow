@@ -79,7 +79,8 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
     <TouchableOpacity
       style={[
         styles.card,
-        [theme.shadow.card, { backgroundColor: theme.colors.surface }],
+        theme.shadow.card,
+        { backgroundColor: theme.colors.surface },
       ]}
       onPress={() => onPress(script)}
       activeOpacity={0.7}
@@ -125,9 +126,9 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
-    marginVertical: 6,
+    marginBottom: 12,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
   },
   title: {
     fontSize: 16,

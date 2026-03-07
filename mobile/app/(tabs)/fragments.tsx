@@ -1,154 +1,83 @@
-import React, { useCallback, useMemo } from 'react';
+import React from 'react';
 import {
-  Alert,
   RefreshControl,
   SectionList,
   StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-
 import { FragmentCard } from '@/components/FragmentCard';
+import { BottomActionBar } from '@/components/layout/BottomActionBar';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
-import { useFragmentSelection, useFragments } from '@/features/fragments/hooks';
+import { useFragmentsScreen } from '@/features/fragments/useFragmentsScreen';
 import { useAppTheme } from '@/theme/useAppTheme';
-import type { Fragment } from '@/types/fragment';
-
-interface FragmentSection {
-  title: string;
-  data: Fragment[];
-}
-
-function getSectionLabel(dateString: string): string {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return '更早';
-
-  const today = new Date();
-  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const diffDays = Math.round((current.getTime() - target.getTime()) / 86400000);
-
-  if (diffDays === 0) return '今天';
-  if (diffDays === 1) return '昨天';
-  if (date.getFullYear() === today.getFullYear()) {
-    return `${date.getMonth() + 1}月${date.getDate()}日`;
-  }
-
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
-}
-
-function buildSections(fragments: Fragment[]): FragmentSection[] {
-  const sectionMap = new Map<string, Fragment[]>();
-
-  for (const fragment of fragments) {
-    const key = getSectionLabel(fragment.created_at);
-    const current = sectionMap.get(key) ?? [];
-    current.push(fragment);
-    sectionMap.set(key, current);
-  }
-
-  return Array.from(sectionMap.entries()).map(([title, data]) => ({ title, data }));
-}
 
 export default function FragmentsScreen() {
-  const router = useRouter();
-  const params = useLocalSearchParams<{ refresh?: string }>();
   const theme = useAppTheme();
-  const { fragments, isLoading, isRefreshing, error, refreshFragments, fetchFragments } =
-    useFragments();
-  const selection = useFragmentSelection(20);
+  const screen = useFragmentsScreen();
 
-  const sections = useMemo(() => buildSections(fragments), [fragments]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (params.refresh === 'true') {
-        fetchFragments();
-        router.setParams({ refresh: undefined });
-      }
-    }, [fetchFragments, params.refresh, router])
-  );
-
-  const handleFragmentPress = (fragment: Fragment) => {
-    if (selection.isSelectionMode) {
-      const accepted = selection.toggleSelect(fragment.id);
-      if (!accepted) {
-        Alert.alert('已达上限', `最多选择 ${selection.maxSelection} 条碎片`);
-      }
-      return;
-    }
-
-    router.push(`/fragment/${fragment.id}`);
-  };
-
-  const handleGoGenerate = () => {
-    if (selection.selectedCount === 0) {
-      Alert.alert('请选择碎片', '请至少选择 1 条碎片');
-      return;
-    }
-
-    router.push({
-      pathname: '/generate',
-      params: { fragmentIds: selection.selectedIds.join(',') },
-    });
-  };
-
-  const handleOpenCloud = () => {
-    router.push('/fragment-cloud' as never);
-  };
-
-  if (isLoading && fragments.length === 0) {
+  if (screen.isLoading && screen.fragments.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Stack.Screen options={{ title: '碎片库' }} />
+      <ScreenContainer>
         <LoadingState message="正在加载碎片..." />
-      </View>
+      </ScreenContainer>
     );
   }
 
-  if (error && fragments.length === 0) {
+  if (screen.error && screen.fragments.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Stack.Screen options={{ title: '碎片库' }} />
+      <ScreenContainer>
         <ScreenState
           icon="⚠️"
           title="加载失败"
-          message={error}
+          message={screen.error}
           actionLabel="点击重试"
-          onAction={fetchFragments}
+          onAction={screen.reload}
           secondaryActionLabel="网络设置"
-          onSecondaryAction={() => router.push('/network-settings')}
+          onSecondaryAction={screen.openNetworkSettings}
         />
-      </View>
+      </ScreenContainer>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Stack.Screen
-        options={{
-          title: '碎片库',
-          headerRight: () => (
-            <TouchableOpacity onPress={selection.toggleSelectionMode} hitSlop={8}>
-              <Text style={[styles.selectAction, { color: theme.colors.primary }]}>
-                {selection.isSelectionMode ? '取消' : '选择'}
+    <ScreenContainer
+      footer={
+        screen.selection.isSelectionMode ? (
+          <BottomActionBar>
+            <TouchableOpacity
+              style={[
+                styles.generateButton,
+                {
+                  backgroundColor:
+                    screen.selection.selectedCount > 0
+                      ? theme.colors.primary
+                      : theme.colors.textSubtle,
+                },
+              ]}
+              onPress={screen.onGenerate}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.generateButtonText}>
+                交给 AI 编导（已选 {screen.selection.selectedCount}/{screen.selection.maxSelection} 条）
               </Text>
             </TouchableOpacity>
-          ),
-        }}
-      />
-
+          </BottomActionBar>
+        ) : null
+      }
+    >
       <SectionList
-        sections={sections}
+        sections={screen.sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item, index, section }) => (
           <FragmentCard
             fragment={item}
-            onPress={handleFragmentPress}
-            selectable={selection.isSelectionMode}
-            selected={selection.selectedSet.has(item.id)}
+            onPress={screen.onFragmentPress}
+            selectable={screen.selection.isSelectionMode}
+            selected={screen.selection.selectedSet.has(item.id)}
             isFirstInSection={index === 0}
             isLastInSection={index === section.data.length - 1}
           />
@@ -158,14 +87,21 @@ export default function FragmentsScreen() {
         )}
         ListHeaderComponent={
           <View style={styles.header}>
+            <ScreenHeader
+              eyebrow="整理"
+              title="全部碎片"
+              subtitle="像备忘录一样翻看你的语音记录和文字记录。"
+              trailing={
+                <TouchableOpacity onPress={screen.selection.toggleSelectionMode} hitSlop={8}>
+                  <Text style={[styles.selectAction, { color: theme.colors.primary }]}>
+                    {screen.selection.isSelectionMode ? '取消' : '选择'}
+                  </Text>
+                </TouchableOpacity>
+              }
+            />
             <Text style={[styles.totalCount, { color: theme.colors.textSubtle }]}>
-              {fragments.length} 条灵感
+              {screen.totalLabel}
             </Text>
-            <Text style={[styles.heroTitle, { color: theme.colors.text }]}>全部碎片</Text>
-            <Text style={[styles.heroSubtitle, { color: theme.colors.textSubtle }]}>
-              像备忘录一样翻看你的语音记录和文字记录。
-            </Text>
-
             <TouchableOpacity
               style={[
                 styles.cloudButton,
@@ -174,7 +110,7 @@ export default function FragmentsScreen() {
                   borderColor: theme.colors.border,
                 },
               ]}
-              onPress={handleOpenCloud}
+              onPress={screen.openCloud}
               activeOpacity={0.85}
             >
               <Text style={[styles.cloudButtonText, { color: theme.colors.primary }]}>
@@ -184,72 +120,38 @@ export default function FragmentsScreen() {
           </View>
         }
         ListEmptyComponent={
-          <ScreenState icon="📝" title="还没有灵感碎片" message="去首页录一条吧" />
+          <ScreenState icon="📝" title="还没有灵感碎片" message="去捕获页记一条吧" />
         }
-        contentContainerStyle={fragments.length === 0 ? styles.emptyList : styles.list}
+        contentContainerStyle={screen.fragments.length === 0 ? styles.emptyList : styles.list}
         refreshControl={
           <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={refreshFragments}
+            refreshing={screen.isRefreshing}
+            onRefresh={screen.refresh}
             tintColor={theme.colors.primary}
           />
         }
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
       />
-
-      {selection.isSelectionMode ? (
-        <View style={[styles.floatingBar, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-          <TouchableOpacity
-            style={[
-              styles.generateButton,
-              {
-                backgroundColor:
-                  selection.selectedCount > 0 ? theme.colors.primary : theme.colors.textSubtle,
-              },
-            ]}
-            onPress={handleGoGenerate}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.generateButtonText}>
-              交给 AI 编导（已选 {selection.selectedCount}/{selection.maxSelection} 条）
-            </Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-    </View>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   list: {
-    paddingBottom: 36,
+    paddingBottom: 24,
   },
   emptyList: {
     flexGrow: 1,
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 14,
+    paddingBottom: 12,
   },
   totalCount: {
-    fontSize: 16,
+    marginTop: -8,
+    fontSize: 14,
     fontWeight: '500',
-  },
-  heroTitle: {
-    marginTop: 2,
-    fontSize: 38,
-    lineHeight: 44,
-    fontWeight: '800',
-  },
-  heroSubtitle: {
-    marginTop: 6,
-    fontSize: 15,
-    lineHeight: 21,
   },
   cloudButton: {
     alignSelf: 'flex-start',
@@ -275,19 +177,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginRight: 16,
   },
-  floatingBar: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 16,
-    padding: 10,
-    borderRadius: 16,
-  },
   generateButton: {
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 14,
   },
   generateButtonText: {
     color: '#FFFFFF',
