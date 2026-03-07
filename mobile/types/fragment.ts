@@ -5,6 +5,13 @@
 export type FragmentSource = 'voice' | 'manual' | 'video_parse';
 export type FragmentSyncStatus = 'pending' | 'syncing' | 'synced' | 'failed';
 
+export interface SpeakerSegment {
+  speaker_id: string;
+  start_ms: number;
+  end_ms: number;
+  text: string;
+}
+
 /**
  * 碎片笔记数据模型
  */
@@ -15,6 +22,8 @@ export interface Fragment {
   audio_path: string | null;
   /** 转写文本 */
   transcript: string | null;
+  /** 说话人分段 */
+  speaker_segments: SpeakerSegment[] | null;
   /** AI一句话摘要 */
   summary: string | null;
   /** AI自动标签 */

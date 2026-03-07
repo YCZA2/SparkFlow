@@ -10,19 +10,36 @@ import ssl
 import certifi
 import asyncio
 import logging
+import httpx
 from typing import Any, Optional
 import time
 from http import HTTPStatus
 
-# 修复 macOS SSL 证书问题
-# 必须在导入 aiohttp/dashscope 之前设置
-os.environ['SSL_CERT_FILE'] = certifi.where()
-os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+# 修复 Python/aiohttp 在部分 macOS 环境下无法正确加载系统 CA 的问题。
+# aiohttp 会在导入时缓存 SSL context，因此这里必须在导入 dashscope 前显式替换。
+_CERTIFI_CA_FILE = certifi.where()
+os.environ["SSL_CERT_FILE"] = _CERTIFI_CA_FILE
+os.environ["REQUESTS_CA_BUNDLE"] = _CERTIFI_CA_FILE
 
-# 使用 certifi 证书创建默认 SSL 上下文
-# 注意：_create_unverified_context 在某些情况下会导致连接失败
-_original_create_default_https_context = ssl._create_default_https_context
-ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=certifi.where())
+_original_create_default_context = ssl.create_default_context
+
+
+def _create_default_context_with_certifi(*args, **kwargs):
+    if not args and not any(key in kwargs for key in ("cafile", "capath", "cadata")):
+        kwargs["cafile"] = _CERTIFI_CA_FILE
+    return _original_create_default_context(*args, **kwargs)
+
+
+ssl.create_default_context = _create_default_context_with_certifi
+ssl._create_default_https_context = _create_default_context_with_certifi
+
+try:
+    import aiohttp.connector
+
+    aiohttp.connector._SSL_CONTEXT_VERIFIED = _original_create_default_context(cafile=_CERTIFI_CA_FILE)
+except Exception:
+    # aiohttp 可能尚未安装或导入失败，稍后由 dashscope 正常导入。
+    pass
 
 from dashscope.audio.asr import Recognition, RecognitionCallback, RecognitionResult
 
@@ -340,69 +357,64 @@ class DashScopeSTTService(BaseSTTService):
             return audio_path, format_str, None
 
     def _upload_temp_file_url(self, audio_path: str) -> str:
-        """Upload local audio file and return a temporary URL for file transcription APIs."""
+        """Upload local audio file and return a URL accepted by file transcription APIs."""
         logger.info("[DashScope STT] 上传临时文件 URL，模式: %s", self.file_url_mode)
 
         if self.file_url_mode != "temp":
             raise STTRecognitionError(f"不支持的 STT_FILE_URL_MODE: {self.file_url_mode}")
 
         try:
-            from dashscope.utils.oss_utils import upload_file
+            from dashscope.utils.oss_utils import OssUtils
         except Exception as exc:
             raise STTRecognitionError(f"临时 URL 上传能力不可用: {exc}") from exc
 
-        upload_attempts: list[tuple[tuple[Any, ...], dict[str, Any]]] = [
-            ((audio_path, self.api_key), {}),
-            ((audio_path,), {"api_key": self.api_key}),
-            ((), {"file_path": audio_path, "api_key": self.api_key}),
-            ((), {"model": self.FILE_TRANSCRIPTION_MODEL, "file_path": audio_path, "api_key": self.api_key}),
-        ]
+        try:
+            file_url = OssUtils.upload(
+                model=self.FILE_TRANSCRIPTION_MODEL,
+                file_path=audio_path,
+                api_key=self.api_key,
+            )
+        except Exception as exc:
+            raise STTRecognitionError(f"上传临时 URL 失败: {exc}") from exc
 
-        last_error: Optional[Exception] = None
-        for args, kwargs in upload_attempts:
-            try:
-                url = upload_file(*args, **kwargs)
-                if isinstance(url, str) and url.startswith("http"):
-                    logger.info("[DashScope STT] 临时 URL 上传成功")
-                    return url
-            except TypeError:
-                continue
-            except Exception as exc:
-                last_error = exc
+        if isinstance(file_url, str) and (file_url.startswith("oss://") or file_url.startswith("http")):
+            logger.info("[DashScope STT] 临时 URL 上传成功: %s", file_url)
+            return file_url
 
-        if last_error:
-            raise STTRecognitionError(f"上传临时 URL 失败: {last_error}") from last_error
-        raise STTRecognitionError("上传临时 URL 失败: 未获取有效 URL")
+        raise STTRecognitionError(f"上传临时 URL 失败: 返回值无效 {file_url!r}")
+    def _collect_segment_candidates(self, payload: Any) -> list[dict[str, Any]]:
+        candidates: list[dict[str, Any]] = []
+
+        if isinstance(payload, dict):
+            maybe_sentences = payload.get("sentences") or payload.get("segments")
+            if isinstance(maybe_sentences, list):
+                candidates.extend(item for item in maybe_sentences if isinstance(item, dict))
+
+            for key in ("transcripts", "results", "output"):
+                nested = payload.get(key)
+                if isinstance(nested, list):
+                    for item in nested:
+                        candidates.extend(self._collect_segment_candidates(item))
+                elif isinstance(nested, dict):
+                    candidates.extend(self._collect_segment_candidates(nested))
+        elif isinstance(payload, list):
+            for item in payload:
+                candidates.extend(self._collect_segment_candidates(item))
+
+        return candidates
 
     def _extract_segments_from_payload(self, payload: Any) -> list[SpeakerSegment]:
         """Parse diarization speaker segments from transcription payload."""
         if not payload:
             return []
 
-        candidates: list[dict[str, Any]] = []
-        if isinstance(payload, dict):
-            maybe_sentences = payload.get("sentences") or payload.get("segments")
-            if isinstance(maybe_sentences, list):
-                candidates.extend(item for item in maybe_sentences if isinstance(item, dict))
-
-            maybe_results = payload.get("results") or payload.get("output")
-            if isinstance(maybe_results, list):
-                for item in maybe_results:
-                    if not isinstance(item, dict):
-                        continue
-                    segments = item.get("sentences") or item.get("segments")
-                    if isinstance(segments, list):
-                        candidates.extend(seg for seg in segments if isinstance(seg, dict))
-        elif isinstance(payload, list):
-            candidates.extend(item for item in payload if isinstance(item, dict))
-
         parsed: list[SpeakerSegment] = []
-        for item in candidates:
+        for item in self._collect_segment_candidates(payload):
             speaker_raw = self._pick_first_defined(
                 item,
                 ("speaker_id", "speakerId", "speaker", "spk"),
             )
-            text = str(item.get("text") or "").strip()
+            text = str(item.get("text") or item.get("transcript") or "").strip()
             start_raw = self._pick_first_defined(
                 item,
                 ("start_ms", "begin_time", "start_time", "start"),
@@ -465,96 +477,193 @@ class DashScopeSTTService(BaseSTTService):
 
     def _extract_text_from_payload(self, payload: Any) -> str:
         if isinstance(payload, dict):
-            for key in ("text", "transcript", "result"):
+            maybe_transcripts = payload.get("transcripts")
+            if isinstance(maybe_transcripts, list):
+                text = "".join(
+                    self._extract_text_from_payload(item)
+                    for item in maybe_transcripts
+                    if isinstance(item, dict)
+                )
+                if text:
+                    return text
+
+            for key in ("transcript", "text", "result"):
                 value = payload.get(key)
-                if isinstance(value, str):
+                if isinstance(value, str) and value.strip():
                     return value.strip()
+
             maybe_sentences = payload.get("sentences") or payload.get("segments")
             if isinstance(maybe_sentences, list):
                 return "".join(
-                    str(item.get("text") or "").strip()
+                    str(item.get("text") or item.get("transcript") or "").strip()
                     for item in maybe_sentences
-                    if isinstance(item, dict) and item.get("text")
+                    if isinstance(item, dict) and (item.get("text") or item.get("transcript"))
                 )
-            maybe_results = payload.get("results")
-            if isinstance(maybe_results, list):
-                return "".join(
-                    self._extract_text_from_payload(item)
-                    for item in maybe_results
-                    if isinstance(item, dict)
-                )
+
+            for key in ("results", "output"):
+                nested = payload.get(key)
+                if isinstance(nested, list):
+                    text = "".join(
+                        self._extract_text_from_payload(item)
+                        for item in nested
+                        if isinstance(item, dict)
+                    )
+                    if text:
+                        return text
+                elif isinstance(nested, dict):
+                    text = self._extract_text_from_payload(nested)
+                    if text:
+                        return text
+        elif isinstance(payload, list):
+            return "".join(
+                self._extract_text_from_payload(item)
+                for item in payload
+                if isinstance(item, dict)
+            )
         return ""
 
-    def _convert_response_payload(self, response: Any) -> dict[str, Any]:
-        """Convert different SDK response objects to a plain dict."""
-        if isinstance(response, dict):
-            return response
+    def _dashscope_rest_headers(self, file_url: Optional[str] = None) -> dict[str, str]:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "X-DashScope-Async": "enable",
+        }
+        if isinstance(file_url, str) and file_url.startswith("oss://"):
+            headers["X-DashScope-OssResourceResolve"] = "enable"
+        return headers
 
-        if hasattr(response, "output") and isinstance(response.output, dict):
-            payload = dict(response.output)
-        else:
-            payload = {}
+    def _parse_rest_error(self, response: httpx.Response) -> str:
+        try:
+            payload = response.json()
+        except ValueError:
+            return response.text.strip() or f"HTTP {response.status_code}"
 
-        if hasattr(response, "status_code"):
-            payload["_status_code"] = int(response.status_code)
-        if hasattr(response, "message") and response.message:
-            payload["_message"] = str(response.message)
+        if isinstance(payload, dict):
+            return str(payload.get("message") or payload.get("code") or payload)
+        return str(payload)
+
+    def _request_dashscope_json(
+        self,
+        client: httpx.Client,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json_body: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        response = client.request(method, url, headers=headers, json=json_body)
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise STTRecognitionError(f"DashScope 返回了非 JSON 响应: {response.text[:200]}") from exc
+
+        if response.status_code != HTTPStatus.OK:
+            message = self._parse_rest_error(response)
+            raise STTRecognitionError(f"DashScope 请求失败({response.status_code}): {message}")
+        if not isinstance(payload, dict):
+            raise STTRecognitionError(f"DashScope 返回了异常响应: {payload!r}")
+        return payload
+
+    def _build_file_transcription_parameters(self, language: str) -> dict[str, Any]:
+        parameters: dict[str, Any] = {
+            "diarization_enabled": True,
+        }
+        if language:
+            parameters["language_hints"] = [language]
+        if self.speaker_count >= 2:
+            parameters["speaker_count"] = self.speaker_count
+        return parameters
+
+    def _extract_transcription_result_url(self, payload: dict[str, Any]) -> str:
+        output = payload.get("output") if isinstance(payload, dict) else None
+        if not isinstance(output, dict):
+            raise STTRecognitionError("录音文件识别失败: 缺少 output")
+
+        results = output.get("results")
+        if isinstance(results, list):
+            for item in results:
+                if not isinstance(item, dict):
+                    continue
+                result_url = item.get("transcription_url") or item.get("url") or item.get("result_url")
+                if isinstance(result_url, str) and result_url:
+                    return result_url
+
+        raise STTRecognitionError(f"录音文件识别失败: 未找到 transcription_url，响应: {payload}")
+
+    def _download_transcription_result(
+        self,
+        client: httpx.Client,
+        result_url: str,
+    ) -> dict[str, Any]:
+        response = client.get(result_url, headers={"Authorization": f"Bearer {self.api_key}"})
+        if response.status_code != HTTPStatus.OK:
+            message = self._parse_rest_error(response)
+            raise STTRecognitionError(f"下载录音文件识别结果失败({response.status_code}): {message}")
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise STTRecognitionError(f"录音文件识别结果不是 JSON: {response.text[:200]}") from exc
+        if not isinstance(payload, dict):
+            raise STTRecognitionError(f"录音文件识别结果格式异常: {payload!r}")
         return payload
 
     def _run_file_transcription(self, file_url: str, language: str) -> dict[str, Any]:
-        """Run recorded-file transcription API with diarization."""
-        try:
-            from dashscope.audio.asr import Transcription
-        except Exception as exc:
-            raise STTRecognitionError(f"未找到 Transcription 接口: {exc}") from exc
-
-        transcription_model = self.FILE_TRANSCRIPTION_MODEL
-        language_hints = [language] if language else None
-        parameters = {
-            "diarization_enabled": True,
-            "speaker_count": self.speaker_count,
+        """Run recorded-file transcription via the official RESTful async task flow."""
+        submit_url = "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription"
+        task_url_prefix = "https://dashscope.aliyuncs.com/api/v1/tasks"
+        request_body = {
+            "model": self.FILE_TRANSCRIPTION_MODEL,
+            "input": {
+                "file_urls": [file_url],
+            },
+            "parameters": self._build_file_transcription_parameters(language),
         }
 
-        attempts: list[tuple[tuple[Any, ...], dict[str, Any]]] = [
-            (
-                (),
-                {
-                    "model": transcription_model,
-                    "file_urls": [file_url],
-                    "language_hints": language_hints,
-                    "parameters": parameters,
-                },
-            ),
-            (
-                (),
-                {
-                    "model": transcription_model,
-                    "file_urls": [file_url],
-                    "language_hints": language_hints,
-                    "diarization_enabled": True,
-                    "speaker_count": self.speaker_count,
-                },
-            ),
-        ]
+        logger.info("[DashScope STT] 提交录音文件识别任务，file_url=%s", file_url)
+        timeout = httpx.Timeout(connect=10.0, read=60.0, write=60.0, pool=60.0)
+        with httpx.Client(timeout=timeout, verify=_CERTIFI_CA_FILE, follow_redirects=True) as client:
+            submit_payload = self._request_dashscope_json(
+                client,
+                "POST",
+                submit_url,
+                headers=self._dashscope_rest_headers(file_url=file_url),
+                json_body=request_body,
+            )
+            output = submit_payload.get("output") or {}
+            task_id = output.get("task_id")
+            task_status = str(output.get("task_status") or "").upper()
+            if not task_id:
+                raise STTRecognitionError(f"录音文件识别失败: 提交成功但缺少 task_id，响应: {submit_payload}")
 
-        last_error: Optional[Exception] = None
-        for args, kwargs in attempts:
-            try:
-                response = Transcription.call(*args, **kwargs)
-                payload = self._convert_response_payload(response)
-                status_code = payload.get("_status_code")
-                if status_code is not None and status_code != HTTPStatus.OK:
-                    message = payload.get("_message") or "未知错误"
-                    raise STTRecognitionError(f"录音文件识别失败: {message}")
-                return payload
-            except TypeError:
-                continue
-            except Exception as exc:
-                last_error = exc
+            logger.info("[DashScope STT] 录音文件识别任务已提交: task_id=%s, status=%s", task_id, task_status)
+            deadline = time.monotonic() + 180
+            poll_headers = {
+                "Authorization": f"Bearer {self.api_key}",
+            }
+            if isinstance(file_url, str) and file_url.startswith("oss://"):
+                poll_headers["X-DashScope-OssResourceResolve"] = "enable"
 
-        if last_error:
-            raise STTRecognitionError(f"录音文件识别失败: {last_error}") from last_error
-        raise STTRecognitionError("录音文件识别失败: 未命中可用调用签名")
+            while True:
+                task_payload = self._request_dashscope_json(
+                    client,
+                    "GET",
+                    f"{task_url_prefix}/{task_id}",
+                    headers=poll_headers,
+                )
+                output = task_payload.get("output") or {}
+                task_status = str(output.get("task_status") or "UNKNOWN").upper()
+                if task_status == "SUCCEEDED":
+                    result_url = self._extract_transcription_result_url(task_payload)
+                    logger.info("[DashScope STT] 录音文件识别任务完成: task_id=%s", task_id)
+                    return self._download_transcription_result(client, result_url)
+                if task_status in {"FAILED", "CANCELED", "UNKNOWN"}:
+                    message = task_payload.get("message") or output.get("message") or task_status
+                    raise STTRecognitionError(f"录音文件识别失败: task_id={task_id}, status={task_status}, message={message}")
+                if time.monotonic() >= deadline:
+                    raise STTRecognitionError(f"录音文件识别超时: task_id={task_id}, status={task_status}")
+
+                logger.info("[DashScope STT] 录音文件识别轮询中: task_id=%s, status=%s", task_id, task_status)
+                time.sleep(1)
 
     def _transcribe_with_diarization(
         self,

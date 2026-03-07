@@ -387,6 +387,39 @@ class BackendFlowTestCase(unittest.TestCase):
         self.assertEqual(len(payload["speaker_segments"]), 2)
         self.assertEqual(payload["speaker_segments"][0]["speaker_id"], "S1")
 
+    def test_fragment_detail_returns_speaker_segments(self) -> None:
+        with self.SessionLocal() as db:
+            fragment = Fragment(
+                user_id=TEST_USER_ID,
+                source="voice",
+                audio_path="uploads/test-user-001/detail-speaker.m4a",
+                transcript="你好你也好",
+                speaker_segments=json.dumps(
+                    [
+                        {"speaker_id": "S1", "start_ms": 0, "end_ms": 1820, "text": "你好"},
+                        {"speaker_id": "S2", "start_ms": 1821, "end_ms": 2960, "text": "你也好"},
+                    ],
+                    ensure_ascii=False,
+                ),
+                summary="摘要",
+                tags=json.dumps(["访谈", "对话"], ensure_ascii=False),
+                sync_status="synced",
+            )
+            db.add(fragment)
+            db.commit()
+            db.refresh(fragment)
+
+        response = self.client.get(
+            f"/api/fragments/{fragment.id}",
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+        self.assertEqual(payload["id"], fragment.id)
+        self.assertEqual(len(payload["speaker_segments"]), 2)
+        self.assertEqual(payload["speaker_segments"][1]["speaker_id"], "S2")
+        self.assertEqual(payload["tags"], ["访谈", "对话"])
+
     def test_query_similar_fragments_endpoint(self) -> None:
         with self.SessionLocal() as db:
             fragment_1 = Fragment(
