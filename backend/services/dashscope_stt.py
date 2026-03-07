@@ -11,6 +11,7 @@ import certifi
 import asyncio
 import logging
 import httpx
+from abc import ABC, abstractmethod
 from typing import Any, Optional
 import time
 from http import HTTPStatus
@@ -65,6 +66,106 @@ from .base import (
 
 # 配置日志记录器
 logger = logging.getLogger(__name__)
+
+
+class DashScopeTranscriptionStrategy(ABC):
+    """DashScope 转写策略接口。"""
+
+    name: str
+    supports_speaker_diarization: bool = False
+
+    @abstractmethod
+    async def transcribe(
+        self,
+        service: "DashScopeSTTService",
+        *,
+        audio_path: str,
+        format_str: str,
+        language: str,
+    ) -> TranscriptionResult:
+        """执行转写并返回统一结果。"""
+
+
+class DashScopeRealtimeRecognitionStrategy(DashScopeTranscriptionStrategy):
+    name = "realtime"
+    supports_speaker_diarization = False
+
+    async def transcribe(
+        self,
+        service: "DashScopeSTTService",
+        *,
+        audio_path: str,
+        format_str: str,
+        language: str,
+    ) -> TranscriptionResult:
+        if service.diarization_enabled:
+            logger.info("[DashScope STT] realtime 策略不支持说话人分离，将仅返回全文转写")
+
+        loop = asyncio.get_running_loop()
+        return await asyncio.wait_for(
+            loop.run_in_executor(None, service._recognize_file, audio_path, format_str, language),
+            timeout=service.realtime_timeout_seconds,
+        )
+
+
+class DashScopeFileRecognitionStrategy(DashScopeTranscriptionStrategy):
+    name = "file"
+    supports_speaker_diarization = True
+
+    async def transcribe(
+        self,
+        service: "DashScopeSTTService",
+        *,
+        audio_path: str,
+        format_str: str,
+        language: str,
+    ) -> TranscriptionResult:
+        loop = asyncio.get_running_loop()
+        return await asyncio.wait_for(
+            loop.run_in_executor(None, service._transcribe_recorded_file, audio_path, language),
+            timeout=service.file_transcription_timeout_seconds,
+        )
+
+
+class DashScopeAutoRecognitionStrategy(DashScopeTranscriptionStrategy):
+    name = "auto"
+    supports_speaker_diarization = True
+
+    def __init__(self) -> None:
+        self.file_strategy = DashScopeFileRecognitionStrategy()
+        self.realtime_strategy = DashScopeRealtimeRecognitionStrategy()
+
+    async def transcribe(
+        self,
+        service: "DashScopeSTTService",
+        *,
+        audio_path: str,
+        format_str: str,
+        language: str,
+    ) -> TranscriptionResult:
+        if service.diarization_enabled:
+            try:
+                logger.info(
+                    "[DashScope STT] auto 策略优先尝试文件识别以保留说话人分离能力"
+                )
+                return await self.file_strategy.transcribe(
+                    service,
+                    audio_path=audio_path,
+                    format_str=format_str,
+                    language=language,
+                )
+            except Exception as diarization_error:
+                logger.warning(
+                    "[DashScope STT] 文件识别失败，回退 realtime: %s",
+                    str(diarization_error),
+                )
+
+        return await self.realtime_strategy.transcribe(
+            service,
+            audio_path=audio_path,
+            format_str=format_str,
+            language=language,
+        )
 
 
 class SimpleRecognitionCallback(RecognitionCallback):
@@ -140,6 +241,14 @@ class DashScopeSTTService(BaseSTTService):
         self.diarization_enabled = settings.STT_DIARIZATION_ENABLED
         self.speaker_count = max(0, int(settings.STT_DIARIZATION_SPEAKER_COUNT))
         self.file_url_mode = (settings.STT_FILE_URL_MODE or "temp").lower()
+        self.strategy_name = (settings.STT_DASHSCOPE_STRATEGY or "realtime").lower()
+        self.realtime_timeout_seconds = max(1, int(settings.STT_REALTIME_TIMEOUT_SECONDS))
+        self.file_transcription_timeout_seconds = max(1, int(settings.STT_FILE_TRANSCRIPTION_TIMEOUT_SECONDS))
+        self._strategies: dict[str, DashScopeTranscriptionStrategy] = {
+            "realtime": DashScopeRealtimeRecognitionStrategy(),
+            "file": DashScopeFileRecognitionStrategy(),
+            "auto": DashScopeAutoRecognitionStrategy(),
+        }
 
         if not self.api_key:
             raise STTError(
@@ -152,12 +261,20 @@ class DashScopeSTTService(BaseSTTService):
         dashscope.api_key = self.api_key
 
         logger.info(
-            "[DashScope STT] 服务初始化完成，模型: %s, diarization=%s, speaker_count=%s, file_url_mode=%s",
+            "[DashScope STT] 服务初始化完成，模型: %s, strategy=%s, diarization=%s, speaker_count=%s, file_url_mode=%s",
             self.model,
+            self.strategy_name,
             self.diarization_enabled,
             self.speaker_count,
             self.file_url_mode,
         )
+
+    def _get_strategy(self) -> DashScopeTranscriptionStrategy:
+        strategy = self._strategies.get(self.strategy_name)
+        if strategy is None:
+            supported = ", ".join(sorted(self._strategies))
+            raise STTRecognitionError(f"不支持的 DashScope STT 策略: {self.strategy_name}，支持: {supported}")
+        return strategy
 
     async def transcribe(
         self,
@@ -211,45 +328,25 @@ class DashScopeSTTService(BaseSTTService):
         logger.info(f"[DashScope STT] 音频格式: {format_str}, 语言: {language}")
 
         try:
-            loop = asyncio.get_event_loop()
-
-            if self.diarization_enabled:
-                try:
-                    logger.info(
-                        "[DashScope STT] diarization 主链路启用，file_url_mode=%s, speaker_count=%s",
-                        self.file_url_mode,
-                        self.speaker_count,
-                    )
-                    result = await loop.run_in_executor(
-                        None,
-                        self._transcribe_with_diarization,
-                        audio_path,
-                        language,
-                    )
-                    logger.info(
-                        "[DashScope STT] diarization 成功，segments=%s",
-                        len(result.speaker_segments or []),
-                    )
-                    return result
-                except Exception as diarization_error:
-                    logger.warning(
-                        "[DashScope STT] diarization 失败，回退实时识别: %s",
-                        str(diarization_error),
-                    )
-
-            result = await loop.run_in_executor(
-                None,
-                self._recognize_file,
-                audio_path,
-                format_str,
-                language
+            strategy = self._get_strategy()
+            result = await strategy.transcribe(
+                self,
+                audio_path=audio_path,
+                format_str=format_str,
+                language=language,
             )
-
-            logger.info(f"[DashScope STT] 回退链路转写成功: {result.text[:50] if result.text else '(空)'}...")
+            logger.info(
+                "[DashScope STT] %s 策略转写成功: %s...",
+                strategy.name,
+                result.text[:50] if result.text else "(空)",
+            )
             return result
 
         except STTError:
             raise
+        except asyncio.TimeoutError as exc:
+            logger.error("[DashScope STT] %s 策略执行超时", self.strategy_name)
+            raise STTRecognitionError(f"语音识别超时: strategy={self.strategy_name}") from exc
         except Exception as e:
             logger.error(f"[DashScope STT] 转写失败: {str(e)}")
             raise STTRecognitionError(f"语音识别失败: {str(e)}")
@@ -565,12 +662,12 @@ class DashScopeSTTService(BaseSTTService):
         return payload
 
     def _build_file_transcription_parameters(self, language: str) -> dict[str, Any]:
-        parameters: dict[str, Any] = {
-            "diarization_enabled": True,
-        }
+        parameters: dict[str, Any] = {}
+        if self.diarization_enabled:
+            parameters["diarization_enabled"] = True
         if language:
             parameters["language_hints"] = [language]
-        if self.speaker_count >= 2:
+        if self.diarization_enabled and self.speaker_count >= 2:
             parameters["speaker_count"] = self.speaker_count
         return parameters
 
@@ -665,7 +762,7 @@ class DashScopeSTTService(BaseSTTService):
                 logger.info("[DashScope STT] 录音文件识别轮询中: task_id=%s, status=%s", task_id, task_status)
                 time.sleep(1)
 
-    def _transcribe_with_diarization(
+    def _transcribe_recorded_file(
         self,
         audio_path: str,
         language: str,

@@ -13,9 +13,10 @@ from domains.fragments import repository as fragment_repository
 from models import Fragment
 from modules.fragments.application import map_fragment
 from modules.shared.ports import AudioStorage, SpeechToTextProvider, TextGenerationProvider, VectorStore
-from services.llm_service import generate_summary_and_tags
+from services.llm_service import build_fallback_summary_and_tags, generate_summary_and_tags
 
 logger = logging.getLogger(__name__)
+ENRICHMENT_TIMEOUT_SECONDS = 45.0
 
 
 class TranscriptionUseCase:
@@ -76,6 +77,19 @@ class TranscriptionUseCase:
         payload["fragment_id"] = payload.pop("id")
         return payload
 
+    async def _generate_enrichment(self, transcript: str) -> tuple[str, list[str]]:
+        try:
+            return await asyncio.wait_for(
+                generate_summary_and_tags(transcript, llm_service=self.llm_provider),
+                timeout=ENRICHMENT_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "summary/tag generation timed out for transcript length=%s, using fallback",
+                len(transcript or ""),
+            )
+            return build_fallback_summary_and_tags(transcript)
+
     async def process_transcription(
         self,
         *,
@@ -86,62 +100,67 @@ class TranscriptionUseCase:
         max_retries: int = 2,
     ) -> dict[str, Any]:
         last_error: str | None = None
-        for attempt in range(max_retries + 1):
-            try:
-                result = await self.stt_provider.transcribe(audio_path)
-                transcript = result.text
-                summary, tags = await generate_summary_and_tags(transcript, llm_service=self.llm_provider)
-                speaker_segments = getattr(result, "speaker_segments", None) or []
-                normalized_segments = []
-                for segment in speaker_segments:
-                    if isinstance(segment, dict):
-                        speaker_id = segment.get("speaker_id")
-                        start_ms = segment.get("start_ms")
-                        end_ms = segment.get("end_ms")
-                        text = segment.get("text")
-                    else:
-                        speaker_id = getattr(segment, "speaker_id", None)
-                        start_ms = getattr(segment, "start_ms", None)
-                        end_ms = getattr(segment, "end_ms", None)
-                        text = getattr(segment, "text", None)
-                    if speaker_id is None or start_ms is None or end_ms is None or text is None:
-                        continue
-                    normalized_segments.append(
-                        {
-                            "speaker_id": str(speaker_id),
-                            "start_ms": int(start_ms),
-                            "end_ms": int(end_ms),
-                            "text": str(text),
-                        }
-                    )
-                with session_factory() as db:
-                    updated = fragment_repository.mark_synced(
-                        db=db,
-                        fragment_id=fragment_id,
-                        user_id=user_id,
-                        transcript=transcript,
-                        summary=summary,
-                        tags_json=json.dumps(tags, ensure_ascii=False),
-                        speaker_segments_json=json.dumps(normalized_segments, ensure_ascii=False) if normalized_segments else None,
-                    )
-                if updated:
-                    try:
-                        await self.vector_store.upsert_fragment(
-                            user_id=user_id,
-                            fragment_id=fragment_id,
-                            text=transcript,
-                            source="voice",
-                            summary=summary,
-                            tags=tags,
+        try:
+            for attempt in range(max_retries + 1):
+                try:
+                    result = await self.stt_provider.transcribe(audio_path)
+                    transcript = result.text or ""
+                    summary, tags = await self._generate_enrichment(transcript)
+                    speaker_segments = getattr(result, "speaker_segments", None) or []
+                    normalized_segments = []
+                    for segment in speaker_segments:
+                        if isinstance(segment, dict):
+                            speaker_id = segment.get("speaker_id")
+                            start_ms = segment.get("start_ms")
+                            end_ms = segment.get("end_ms")
+                            text = segment.get("text")
+                        else:
+                            speaker_id = getattr(segment, "speaker_id", None)
+                            start_ms = getattr(segment, "start_ms", None)
+                            end_ms = getattr(segment, "end_ms", None)
+                            text = getattr(segment, "text", None)
+                        if speaker_id is None or start_ms is None or end_ms is None or text is None:
+                            continue
+                        normalized_segments.append(
+                            {
+                                "speaker_id": str(speaker_id),
+                                "start_ms": int(start_ms),
+                                "end_ms": int(end_ms),
+                                "text": str(text),
+                            }
                         )
-                    except Exception:
-                        logger.warning("vectorization failed for fragment %s", fragment_id, exc_info=True)
-                return {"success": True, "fragment_id": fragment_id, "transcript": transcript}
-            except Exception as exc:
-                last_error = str(exc)
-                logger.error("transcription attempt failed for fragment %s: %s", fragment_id, last_error)
-                if attempt < max_retries:
-                    await asyncio.sleep((2 ** (attempt + 1)) - 1)
+                    with session_factory() as db:
+                        updated = fragment_repository.mark_synced(
+                            db=db,
+                            fragment_id=fragment_id,
+                            user_id=user_id,
+                            transcript=transcript,
+                            summary=summary,
+                            tags_json=json.dumps(tags, ensure_ascii=False),
+                            speaker_segments_json=json.dumps(normalized_segments, ensure_ascii=False) if normalized_segments else None,
+                        )
+                    if updated:
+                        try:
+                            await self.vector_store.upsert_fragment(
+                                user_id=user_id,
+                                fragment_id=fragment_id,
+                                text=transcript,
+                                source="voice",
+                                summary=summary,
+                                tags=tags,
+                            )
+                        except Exception:
+                            logger.warning("vectorization failed for fragment %s", fragment_id, exc_info=True)
+                    return {"success": True, "fragment_id": fragment_id, "transcript": transcript}
+                except Exception as exc:
+                    last_error = str(exc)
+                    logger.error("transcription attempt failed for fragment %s: %s", fragment_id, last_error)
+                    if attempt < max_retries:
+                        await asyncio.sleep((2 ** (attempt + 1)) - 1)
+        except asyncio.CancelledError:
+            last_error = "transcription job cancelled"
+            logger.warning("transcription job cancelled for fragment %s", fragment_id)
+
         with session_factory() as db:
             fragment_repository.mark_failed(db=db, fragment_id=fragment_id, user_id=user_id)
         return {"success": False, "fragment_id": fragment_id, "error": last_error}

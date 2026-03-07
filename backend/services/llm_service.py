@@ -293,3 +293,8 @@ async def generate_summary_and_tags(
     except Exception as e:
         logger.error(f"[Summary+Tags] 并行生成失败: {str(e)}")
         return _generate_fallback_summary(transcript), _generate_fallback_tags(transcript)
+
+
+def build_fallback_summary_and_tags(transcript: str) -> tuple[str, List[str]]:
+    """为摘要/标签生成失败场景提供统一兜底结果。"""
+    return _generate_fallback_summary(transcript), _generate_fallback_tags(transcript)

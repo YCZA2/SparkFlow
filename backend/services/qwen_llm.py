@@ -5,6 +5,7 @@
 """
 
 import os
+import asyncio
 from typing import Optional, AsyncGenerator
 
 from .base import BaseLLMService, LLMError, LLMRateLimitError, LLMAuthenticationError, LLMTimeoutError
@@ -55,6 +56,43 @@ class QwenLLMService(BaseLLMService):
                 "未安装 dashscope 包。请运行: pip install dashscope"
             )
 
+    def _generate_sync(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        temperature: float,
+        max_tokens: Optional[int],
+        extra_kwargs: dict,
+    ) -> str:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ]
+
+        response = self.dashscope.Generation.call(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens or 2000,
+            result_format="message",
+            **extra_kwargs,
+        )
+
+        if response.status_code != 200:
+            error_code = response.code if hasattr(response, 'code') else "UNKNOWN"
+            error_message = response.message if hasattr(response, 'message') else "未知错误"
+
+            if error_code == "Throttling.RateQuota":
+                raise LLMRateLimitError(f"超出速率限制: {error_message}")
+            if error_code in ["InvalidApiKey", "AuthenticationFailed"]:
+                raise LLMAuthenticationError(f"认证失败: {error_message}")
+            raise LLMError(f"API 错误: {error_message}", code=error_code)
+
+        if response.output and response.output.choices:
+            return response.output.choices[0].message.content
+        raise LLMError("API 返回空响应", code="EMPTY_RESPONSE")
+
     async def generate(
         self,
         system_prompt: str,
@@ -76,39 +114,15 @@ class QwenLLMService(BaseLLMService):
         返回:
             生成的文本响应
         """
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ]
-
         try:
-            response = self.dashscope.Generation.call(
-                model=self.model,
-                messages=messages,
+            return await asyncio.to_thread(
+                self._generate_sync,
+                system_prompt=system_prompt,
+                user_message=user_message,
                 temperature=temperature,
-                max_tokens=max_tokens or 2000,
-                result_format="message",
-                **kwargs
+                max_tokens=max_tokens,
+                extra_kwargs=kwargs,
             )
-
-            # 检查错误
-            if response.status_code != 200:
-                error_code = response.code if hasattr(response, 'code') else "UNKNOWN"
-                error_message = response.message if hasattr(response, 'message') else "未知错误"
-
-                if error_code == "Throttling.RateQuota":
-                    raise LLMRateLimitError(f"超出速率限制: {error_message}")
-                elif error_code in ["InvalidApiKey", "AuthenticationFailed"]:
-                    raise LLMAuthenticationError(f"认证失败: {error_message}")
-                else:
-                    raise LLMError(f"API 错误: {error_message}", code=error_code)
-
-            # 提取生成的文本
-            if response.output and response.output.choices:
-                return response.output.choices[0].message.content
-            else:
-                raise LLMError("API 返回空响应", code="EMPTY_RESPONSE")
-
         except (LLMError,):
             raise
         except Exception as e:

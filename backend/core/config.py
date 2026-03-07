@@ -82,6 +82,18 @@ class Settings(BaseSettings):
         default="temp",
         description="录音文件识别的文件 URL 模式: temp | oss"
     )
+    STT_DASHSCOPE_STRATEGY: str = Field(
+        default="realtime",
+        description="DashScope 转写策略: realtime | file | auto"
+    )
+    STT_REALTIME_TIMEOUT_SECONDS: int = Field(
+        default=300,
+        description="DashScope 实时识别超时时间（秒）"
+    )
+    STT_FILE_TRANSCRIPTION_TIMEOUT_SECONDS: int = Field(
+        default=300,
+        description="DashScope 录音文件识别超时时间（秒）"
+    )
 
     # 阿里云 NLS (传统方式，需要三个密钥)
     ALIBABA_CLOUD_ACCESS_KEY_ID: Optional[str] = Field(

@@ -2,6 +2,7 @@ import io
 import os
 import tempfile
 import unittest
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -316,6 +317,53 @@ class BackendFlowTestCase(unittest.TestCase):
 
         with self.SessionLocal() as db:
             fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
+            self.assertEqual(fragment.sync_status, "failed")
+
+    def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(self) -> None:
+        async def slow_generate(**kwargs):
+            await asyncio.sleep(0.05)
+            return "不会被用到"
+
+        self.app.state.container.llm_provider = SimpleNamespace(
+            generate=slow_generate,
+            health_check=AsyncMock(return_value=True),
+        )
+
+        with patch("modules.transcriptions.application.ENRICHMENT_TIMEOUT_SECONDS", 0.01):
+            response = self.client.post(
+                "/api/transcriptions",
+                headers=self.auth_headers(),
+                files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+
+        with self.SessionLocal() as db:
+            fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
+            self.assertIsNotNone(fragment)
+            self.assertEqual(fragment.sync_status, "synced")
+            self.assertEqual(fragment.transcript, "转写完成")
+            self.assertTrue(fragment.summary)
+            self.assertTrue(fragment.tags)
+
+    def test_upload_audio_marks_failed_when_transcription_is_cancelled(self) -> None:
+        self.app.state.container.stt_provider = SimpleNamespace(
+            transcribe=AsyncMock(side_effect=asyncio.CancelledError()),
+            health_check=AsyncMock(return_value=True),
+        )
+
+        response = self.client.post(
+            "/api/transcriptions",
+            headers=self.auth_headers(),
+            files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+
+        with self.SessionLocal() as db:
+            fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
+            self.assertIsNotNone(fragment)
             self.assertEqual(fragment.sync_status, "failed")
 
     def test_delete_fragment_removes_audio_file(self) -> None:

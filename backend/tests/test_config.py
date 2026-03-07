@@ -16,3 +16,15 @@ class SettingsTestCase(unittest.TestCase):
                 os.environ.pop("DEBUG", None)
             else:
                 os.environ["DEBUG"] = original
+
+    def test_dashscope_strategy_defaults_to_realtime(self) -> None:
+        original = os.environ.get("STT_DASHSCOPE_STRATEGY")
+        try:
+            os.environ.pop("STT_DASHSCOPE_STRATEGY", None)
+            settings = Settings()
+            self.assertEqual(settings.STT_DASHSCOPE_STRATEGY, "realtime")
+        finally:
+            if original is None:
+                os.environ.pop("STT_DASHSCOPE_STRATEGY", None)
+            else:
+                os.environ["STT_DASHSCOPE_STRATEGY"] = original
