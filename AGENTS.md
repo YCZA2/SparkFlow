@@ -30,6 +30,7 @@ Before making structural or feature changes, read these files first:
 4. `mobile/README.md`
 
 If the change affects architecture, module boundaries, or core flows, update `memory-bank/architecture.md` after finishing.
+If the change also updates repository conventions, development workflow, or agent-facing rules, update `AGENTS.md` in the same pass.
 
 ## Repository Map
 
@@ -133,8 +134,10 @@ http://<your-lan-ip>:8000
 - Prefer modular changes; do not collapse new logic into one large file
 - Respect current backend layering: presentation/application/domain/service responsibilities should stay separated
 - Reuse existing scripts and utilities before adding new entrypoints
-- Keep comments concise; add Chinese comments only where logic is non-obvious or project-specific
+- Keep comments concise. For every new or modified function, add a brief Chinese comment describing its responsibility or intent; for non-obvious or project-specific logic, also explain the key constraint or reason, but avoid line-by-line restatement of the code
 - Avoid broad refactors unless they are required for the task
+- Do not introduce structural drift: follow the existing module boundaries, routing shape, and layering instead of bypassing them for convenience
+- Do not let files grow into monoliths; when logic, state, or UI keeps expanding, split it into focused modules/components/hooks before it becomes a large single file
 
 ## When Updating Docs
 
@@ -144,5 +147,6 @@ Update documentation when you change:
 - architecture or module boundaries
 - major user flows
 - environment assumptions for local development
+- repository conventions or agent workflow constraints
 
-Prefer updating both the relevant README and `memory-bank/architecture.md` when the change is substantial.
+After any structural change, update the corresponding implementation-facing docs in the same pass, including the relevant README, the matching file under `memory-bank/`, and `AGENTS.md` when conventions or collaboration rules changed.
