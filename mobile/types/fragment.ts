@@ -62,6 +62,8 @@ export interface CreateFragmentRequest {
   tags?: string[];
   /** 来源 */
   source?: FragmentSource;
+  /** 文件夹ID，不传表示放入"全部"文件夹 */
+  folder_id?: string;
 }
 
 export interface FragmentVisualizationPoint {

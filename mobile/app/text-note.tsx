@@ -20,7 +20,7 @@ const MIN_LENGTH = 1;
 
 export default function TextNoteScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ returnTo?: string; source?: string }>();
+  const params = useLocalSearchParams<{ returnTo?: string; source?: string; folderId?: string }>();
   const theme = useAppTheme();
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,10 +36,13 @@ export default function TextNoteScreen() {
 
     try {
       setIsSubmitting(true);
-      const fragment = await createFragment({
-        transcript: trimmedContent,
-        source: 'manual',
-      });
+      const fragment = await createFragment(
+        {
+          transcript: trimmedContent,
+          source: 'manual',
+        },
+        params.folderId
+      );
 
       if (params.returnTo) {
         // 从录音界面跳转过来的，返回时直接回到主页

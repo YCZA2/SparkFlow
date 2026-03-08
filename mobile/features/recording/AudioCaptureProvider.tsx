@@ -17,7 +17,7 @@ interface AudioCaptureSessionValue {
   start: () => Promise<void>;
   pause: () => void;
   resume: () => void;
-  stopAndUpload: () => Promise<boolean>;
+  stopAndUpload: (folderId?: string) => Promise<boolean>;
   cancel: () => Promise<void>;
   reset: () => void;
   retryUpload: () => Promise<void>;
@@ -43,14 +43,14 @@ export function AudioCaptureProvider({ children }: { children: React.ReactNode }
     recorder.resumeRecording();
   }, [recorder]);
 
-  const stopAndUpload = useCallback(async () => {
+  const stopAndUpload = useCallback(async (folderId?: string) => {
     const uri = await recorder.stopRecording();
     if (!uri) {
       return false;
     }
 
     try {
-      await upload.upload(uri);
+      await upload.upload(uri, folderId);
       recorder.reset();
       return true;
     } catch {

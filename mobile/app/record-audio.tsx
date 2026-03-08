@@ -6,7 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
@@ -83,6 +83,7 @@ function SecondaryPill({
 
 export default function RecordAudioScreen() {
   const router = useRouter();
+  const { folderId } = useLocalSearchParams<{ folderId?: string }>();
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const session = useAudioCaptureSession();
@@ -117,7 +118,7 @@ export default function RecordAudioScreen() {
   };
 
   const handleStop = async () => {
-    await session.stopAndUpload();
+    await session.stopAndUpload(folderId);
     if (router.canGoBack()) {
       router.back();
     } else {
@@ -138,7 +139,11 @@ export default function RecordAudioScreen() {
   const handleOpenTextNote = () => {
     router.push({
       pathname: '/text-note',
-      params: { returnTo: '/record-audio', source: 'recording' },
+      params: {
+        returnTo: '/record-audio',
+        source: 'recording',
+        ...(folderId && { folderId }),
+      },
     });
   };
 

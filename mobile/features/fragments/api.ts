@@ -32,8 +32,10 @@ export async function deleteFragment(id: string): Promise<void> {
   await del<void>(API_ENDPOINTS.FRAGMENTS.DETAIL(id));
 }
 
-export async function createFragment(data: CreateFragmentRequest): Promise<Fragment> {
-  return post<Fragment>(API_ENDPOINTS.FRAGMENTS.LIST, data);
+export async function createFragment(data: CreateFragmentRequest, folderId?: string): Promise<Fragment> {
+  // 如果传入了 folderId，合并到请求数据中
+  const requestData = folderId ? { ...data, folder_id: folderId } : data;
+  return post<Fragment>(API_ENDPOINTS.FRAGMENTS.LIST, requestData);
 }
 
 export async function updateFragment(id: string, data: UpdateFragmentRequest): Promise<Fragment> {

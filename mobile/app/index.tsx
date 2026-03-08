@@ -9,7 +9,6 @@ import {
 import { SymbolView } from 'expo-symbols';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
@@ -21,6 +20,7 @@ import { useDrawer } from '@/providers/DrawerProvider';
 import { useFolders } from '@/features/folders/hooks';
 import type { FragmentFolder } from '@/types/folder';
 import { InputDialog } from '@/components/InputDialog';
+import { QuickActionBar } from '@/components/QuickActionBar';
 
 // 汉堡菜单图标组件
 function HamburgerMenu({ onPress, color }: { onPress: () => void; color: string }) {
@@ -109,30 +109,6 @@ export default function FoldersScreen() {
     };
     return [allFolder, ...folders];
   }, [folders, allFragmentsCount]);
-
-  const quickActions: Array<{
-    key: string;
-    icon: SymbolName;
-    active?: boolean;
-    onPress: () => void;
-  }> = [
-    {
-      key: 'knowledge',
-      icon: 'plus',
-      onPress: () => router.push('/knowledge'),
-    },
-    {
-      key: 'record',
-      icon: 'mic.fill',
-      active: true,
-      onPress: () => router.push('/record-audio'),
-    },
-    {
-      key: 'note',
-      icon: 'keyboard',
-      onPress: () => router.push('/text-note'),
-    },
-  ];
 
   // 页面聚焦时刷新
   useFocusEffect(
@@ -253,35 +229,7 @@ export default function FoldersScreen() {
       />
 
       {/* 悬浮底部操作栏 */}
-      <View style={[styles.floatingFooter, { bottom: insets.bottom + 20 }]}>
-        <Animated.View
-          entering={FadeInDown.duration(160)}
-          exiting={FadeOutDown.duration(120)}
-          style={[
-            styles.quickActionPill,
-            theme.shadow.card,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          {quickActions.map((action) => (
-            <TouchableOpacity
-              key={action.key}
-              style={styles.quickActionButton}
-              onPress={action.onPress}
-              activeOpacity={0.78}
-            >
-              <SymbolView
-                name={action.icon}
-                size={30}
-                tintColor={action.active ? '#F05A28' : theme.colors.text}
-              />
-            </TouchableOpacity>
-          ))}
-        </Animated.View>
-      </View>
+      <QuickActionBar />
 
       {/* 新建文件夹弹窗 */}
       <InputDialog
@@ -403,31 +351,5 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 90,
-  },
-  // 悬浮底部操作栏
-  floatingFooter: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 100,
-  },
-  quickActionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 22,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    minWidth: 248,
-  },
-  quickActionButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

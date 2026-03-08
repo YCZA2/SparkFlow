@@ -19,7 +19,7 @@ export interface TranscribeStatusResponse {
   created_at: string;
 }
 
-export async function uploadAudio<T = UploadAudioResponse>(uri: string): Promise<T> {
+export async function uploadAudio<T = UploadAudioResponse>(uri: string, folderId?: string): Promise<T> {
   const filename = uri.split('/').pop() || 'recording.m4a';
   const formData = new FormData();
   formData.append('audio', {
@@ -27,6 +27,11 @@ export async function uploadAudio<T = UploadAudioResponse>(uri: string): Promise
     name: filename,
     type: 'audio/m4a',
   } as never);
+
+  // 如果指定了文件夹ID，添加到表单中
+  if (folderId) {
+    formData.append('folder_id', folderId);
+  }
 
   return sendForm<T>(API_ENDPOINTS.TRANSCRIPTIONS, 'POST', formData);
 }

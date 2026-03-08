@@ -200,7 +200,7 @@ export function useAudioUpload() {
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const upload = async (uri: string) => {
+  const upload = async (uri: string, folderId?: string) => {
     if (!uri) return null;
 
     try {
@@ -213,7 +213,7 @@ export function useAudioUpload() {
         relative_path: string;
         file_size: number;
         message: string;
-      }>(uri);
+      }>(uri, folderId);
       const nextResult = {
         fragment_id: response.fragment_id,
         audio_path: response.audio_path,
