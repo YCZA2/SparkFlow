@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import BackgroundTasks, Request, UploadFile
+from httpx import AsyncClient, Timeout
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.config import Settings, settings
@@ -30,6 +31,8 @@ from .ports import (
     SpeechToTextProvider,
     TextGenerationProvider,
     VectorStore,
+    WebSearchProvider,
+    WebSearchResult,
 )
 
 FRAGMENT_NAMESPACE_PREFIX = "fragments"
@@ -314,6 +317,11 @@ class PromptLoader:
         return prompt_file.read_text(encoding="utf-8")
 
 
+class EmptyWebSearchProvider(WebSearchProvider):
+    async def search(self, *, query_text: str, top_k: int) -> list[WebSearchResult]:
+        return []
+
+
 @dataclass
 class ServiceContainer:
     settings: Settings
@@ -326,6 +334,8 @@ class ServiceContainer:
     imported_audio_storage: ImportedAudioStorage
     external_media_provider: ExternalMediaProvider
     prompt_loader: PromptLoader
+    web_search_provider: WebSearchProvider
+    dify_http_client: AsyncClient
 
 
 def build_container() -> ServiceContainer:
@@ -344,6 +354,8 @@ def build_container() -> ServiceContainer:
         imported_audio_storage=LocalImportedAudioStorage(settings.UPLOAD_DIR),
         external_media_provider=ExternalMediaService(),
         prompt_loader=PromptLoader(Path(__file__).resolve().parents[2] / "prompts"),
+        web_search_provider=EmptyWebSearchProvider(),
+        dify_http_client=AsyncClient(timeout=Timeout(connect=10.0, read=60.0, write=60.0, pool=60.0)),
     )
 
 

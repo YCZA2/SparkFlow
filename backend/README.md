@@ -14,6 +14,14 @@ uvicorn main:app --reload
 
 Default local address: `http://127.0.0.1:8000`
 
+如果启用 Dify 外挂工作流，还需要配置：
+
+```bash
+DIFY_BASE_URL=https://your-dify.example.com/v1
+DIFY_API_KEY=app-xxx
+DIFY_SCRIPT_WORKFLOW_ID=wf-script-research
+```
+
 ## Backend Architecture
 
 当前后端按如下层级协作：
@@ -37,6 +45,9 @@ Default local address: `http://127.0.0.1:8000`
    - 外部能力抽象与适配层。
    - 负责 LLM、STT、Embedding、VectorStore、AudioStorage 等端口与实现。
    - `modules/shared/audio_ingestion.py` 提供统一音频碎片导入管线，供上传音频和外部链接导入复用。
+7. `modules/agent`
+   - Dify 外挂工作流层。
+   - 负责脚本研究 run 的创建、状态刷新、结果映射与脚本回流。
 
 ## Folder Guide
 
@@ -56,6 +67,7 @@ Default local address: `http://127.0.0.1:8000`
 - `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接转 m4a，并直接创建碎片进入统一转写流程。
 - `modules/scripts/`: 口播稿生成、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
+- `modules/agent/`: Dify 外挂脚本研究工作流和 run 状态管理。
 - `modules/debug_logs/`: 接收移动端调试日志并落盘到本地文件。
 - `modules/scheduler/`: APScheduler 装配与每日推盘调度入口。
 - `modules/shared/`: 模块共享端口、DI 容器、增强逻辑，不承载独立业务模块。
@@ -101,7 +113,19 @@ Default local address: `http://127.0.0.1:8000`
 - `presentation.py` 通过 `response_model=ResponseModel[...]` 声明标准返回结构。
 - OpenAPI 文档默认使用中文 `summary` / `description`，便于产品、前端和后端共同阅读。
 
-Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `debug_logs`, and `scheduler`.
+Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `agent`, `debug_logs`, and `scheduler`.
+
+外挂工作流接口：
+
+- `POST /api/agent/script-research-runs`
+- `GET /api/agent/runs/{run_id}`
+- `POST /api/agent/runs/{run_id}/refresh`
+
+当前接入策略：
+
+- SparkFlow 后端先收集 fragments、knowledge hits 和可选 web hits
+- Dify 只消费整理后的上下文并生成结构化输出
+- 本地 `agent_runs` 记录是运行状态事实源，成功后再回流创建 `scripts`
 
 ## Frontend Debug Logs
 

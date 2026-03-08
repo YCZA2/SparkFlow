@@ -68,6 +68,28 @@ class Settings(BaseSettings):
         description="抖音 Web Cookie，用于外部媒体导入时提高解析成功率"
     )
 
+    # Dify 外挂工作流配置
+    DIFY_BASE_URL: Optional[str] = Field(
+        default=None,
+        description="Dify API 基础地址，例如 https://dify.example.com/v1"
+    )
+    DIFY_API_KEY: Optional[str] = Field(
+        default=None,
+        description="Dify 应用 API Key"
+    )
+    DIFY_SCRIPT_WORKFLOW_ID: Optional[str] = Field(
+        default=None,
+        description="脚本研究工作流标识，用于本地记录和校验"
+    )
+    DIFY_POLL_INTERVAL_SECONDS: int = Field(
+        default=2,
+        description="轮询 Dify 运行状态的建议间隔"
+    )
+    DIFY_POLL_TIMEOUT_SECONDS: int = Field(
+        default=120,
+        description="等待 Dify 运行完成的超时时间"
+    )
+
     # STT 配置
     STT_PROVIDER: str = Field(
         default="dashscope",
@@ -170,6 +192,14 @@ class Settings(BaseSettings):
                 return False
             if normalized in TRUTHY_DEBUG_VALUES:
                 return True
+        return value
+
+    @field_validator("DIFY_BASE_URL", mode="before")
+    @classmethod
+    def normalize_dify_base_url(cls, value):
+        if isinstance(value, str):
+            normalized = value.strip().rstrip("/")
+            return normalized or None
         return value
 
     def ensure_directories(self):

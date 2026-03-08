@@ -6,6 +6,7 @@
 
 from models.database import Base, engine, SessionLocal, get_db, init_db
 from models.db_models import (
+    AgentRun,
     Fragment,
     Agent,
     FragmentFolder,
@@ -31,5 +32,6 @@ __all__ = [
     "Script",
     "KnowledgeDoc",
     "Agent",
+    "AgentRun",
     "generate_uuid",
 ]
