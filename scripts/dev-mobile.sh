@@ -19,15 +19,17 @@ BACKEND_PYTHON=""
 print_usage() {
   cat <<'USAGE'
 用法：
-  bash scripts/dev-mobile.sh           # 模式1：启动前后端联调（默认）
-  bash scripts/dev-mobile.sh start     # 模式1：启动前后端联调
+  bash scripts/dev-mobile.sh           # 模式1：启动前后端联调（默认，LAN 模式）
+  bash scripts/dev-mobile.sh start     # 模式1：启动前后端联调（LAN 模式）
+  bash scripts/dev-mobile.sh simulator # 模式3：启动前后端联调（iOS Simulator）
   bash scripts/dev-mobile.sh build     # 模式2：执行 iOS 重建，不启动前后端
   bash scripts/dev-mobile.sh help      # 查看帮助
 
 说明：
-  模式1 适合：只改 JS / TS / 样式 / 页面逻辑，不需要重新 Build。
+  模式1 适合：只改 JS / TS / 样式 / 页面逻辑，LAN 模式便于真机测试。
+  模式3 适合：只改 JS / TS / 样式 / 页面逻辑，使用本地 iOS Simulator 调试。
   模式2 适合：改了原生配置、插件、Pod、Info.plist、AppDelegate 后，需要重新 Build。
-  执行完模式2后，再执行模式1即可开始联调。
+  执行完模式2后，再执行模式1或模式3即可开始联调。
 USAGE
 }
 
@@ -232,6 +234,61 @@ run_start_mode() {
   wait "${EXPO_PID}"
 }
 
+run_simulator_mode() {
+  local local_ip public_backend_url local_backend_health_url backend_ready
+
+  trap cleanup EXIT INT TERM
+
+  local_ip="127.0.0.1"
+  public_backend_url="http://${local_ip}:${BACKEND_PORT}"
+  local_backend_health_url="http://127.0.0.1:${BACKEND_PORT}/health"
+
+  echo "[dev-mobile] mode3: starting backend + expo (iOS Simulator)..."
+  free_port "${BACKEND_PORT}" "backend"
+
+  run_backend_migrations
+
+  echo "[dev-mobile] starting backend..."
+  (
+    cd "${BACKEND_DIR}"
+    exec "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
+  ) &
+  BACKEND_PID=$!
+
+  echo "[dev-mobile] waiting backend health check: ${local_backend_health_url}"
+  backend_ready=0
+  for _ in $(seq 1 30); do
+    if curl -fsS "${local_backend_health_url}" >/dev/null 2>&1; then
+      backend_ready=1
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ "${backend_ready}" -ne 1 ]]; then
+    echo "[dev-mobile] backend health check timeout, but continue to start expo."
+  fi
+
+  echo "[dev-mobile] starting expo (iOS Simulator)..."
+  (
+    cd "${MOBILE_DIR}"
+    exec npx expo start --ios
+  ) &
+  EXPO_PID=$!
+
+  echo
+  echo "========================================"
+  echo "SparkFlow mobile mode3 is ready"
+  echo "Backend API: ${public_backend_url}"
+  echo "Backend health: ${local_backend_health_url}"
+  echo "Tip: app 内网络设置填 127.0.0.1:8000"
+  echo "Press Ctrl+C to stop backend and expo."
+  echo "========================================"
+  echo
+
+  wait "${EXPO_PID}"
+}
+
 run_build_mode() {
   echo "[dev-mobile] mode2: rebuilding iOS app only..."
   echo "[dev-mobile] this mode does not start backend or expo."
@@ -262,6 +319,10 @@ case "${MODE}" in
   start)
     ensure_start_mode_deps
     run_start_mode
+    ;;
+  simulator)
+    ensure_start_mode_deps
+    run_simulator_mode
     ;;
   build)
     ensure_build_mode_deps

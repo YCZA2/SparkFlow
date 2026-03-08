@@ -14,6 +14,7 @@
   "scripts": {
     "dev:mobile": "bash scripts/dev-mobile.sh",
     "dev:mobile:start": "bash scripts/dev-mobile.sh start",
+    "dev:mobile:simulator": "bash scripts/dev-mobile.sh simulator", 
     "dev:mobile:build": "bash scripts/dev-mobile.sh build"
   }
 }
