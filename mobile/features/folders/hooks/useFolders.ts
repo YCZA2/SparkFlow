@@ -11,6 +11,8 @@ export interface UseFoldersReturn {
   isLoading: boolean;
   /** 是否刷新中 */
   isRefreshing: boolean;
+  /** 是否正在创建文件夹 */
+  isCreating: boolean;
   /** 错误信息 */
   error: string | null;
   /** 文件夹总数 */
@@ -21,6 +23,8 @@ export interface UseFoldersReturn {
   fetchFolders: () => Promise<void>;
   /** 刷新文件夹列表 */
   refreshFolders: () => Promise<void>;
+  /** 创建新文件夹 */
+  createNewFolder: (name: string) => Promise<void>;
 }
 
 /**
@@ -31,6 +35,7 @@ export function useFolders(): UseFoldersReturn {
   const [folders, setFolders] = useState<FragmentFolder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [allFragmentsCount, setAllFragmentsCount] = useState(0);
@@ -71,14 +76,36 @@ export function useFolders(): UseFoldersReturn {
     }
   }, []);
 
+  /**
+   * 创建新文件夹
+   * @param name - 文件夹名称
+   */
+  const createNewFolder = useCallback(async (name: string) => {
+    setIsCreating(true);
+    setError(null);
+    try {
+      const newFolder = await folderApi.createFolder({ name });
+      setFolders((prev) => [newFolder, ...prev]);
+      setTotal((prev) => prev + 1);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '创建文件夹失败';
+      setError(errorMessage);
+      throw err; // 向上抛出错误以便调用方处理
+    } finally {
+      setIsCreating(false);
+    }
+  }, []);
+
   return {
     folders,
     isLoading,
     isRefreshing,
+    isCreating,
     error,
     total,
     allFragmentsCount,
     fetchFolders,
     refreshFolders,
+    createNewFolder,
   };
 }

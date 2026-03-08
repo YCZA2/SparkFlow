@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useDrawer } from '@/providers/DrawerProvider';
 import { useFolders } from '@/features/folders/hooks';
 import type { FragmentFolder } from '@/types/folder';
+import { InputDialog } from '@/components/InputDialog';
 
 // 汉堡菜单图标组件
 function HamburgerMenu({ onPress, color }: { onPress: () => void; color: string }) {
@@ -93,8 +94,9 @@ export default function FoldersScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { toggle } = useDrawer();
-  const { folders, isLoading, isRefreshing, error, total, allFragmentsCount, fetchFolders, refreshFolders } =
+  const { folders, isLoading, isRefreshing, isCreating, error, total, allFragmentsCount, fetchFolders, refreshFolders, createNewFolder } =
     useFolders();
+  const [showCreateDialog, setShowCreateDialog] = React.useState(false);
 
   // 构造显示用的文件夹列表，添加虚拟"全部"文件夹
   const displayFolders = React.useMemo(() => {
@@ -195,7 +197,18 @@ export default function FoldersScreen() {
               {total} 个文件夹
             </Text>
           </View>
-          <View style={styles.selectButton} />
+          <TouchableOpacity
+            onPress={() => setShowCreateDialog(true)}
+            disabled={isCreating}
+            style={styles.newFolderButton}
+            hitSlop={8}
+          >
+            <SymbolView
+              name="folder.badge.plus"
+              size={28}
+              tintColor={isCreating ? theme.colors.textSubtle : theme.colors.primary}
+            />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -269,6 +282,24 @@ export default function FoldersScreen() {
           ))}
         </Animated.View>
       </View>
+
+      {/* 新建文件夹弹窗 */}
+      <InputDialog
+        visible={showCreateDialog}
+        title="新建文件夹"
+        placeholder="请输入文件夹名称"
+        confirmText="创建"
+        cancelText="取消"
+        onConfirm={async (name) => {
+          try {
+            await createNewFolder(name);
+            setShowCreateDialog(false);
+          } catch {
+            // 错误已在hook中处理，这里只需保持弹窗打开
+          }
+        }}
+        onCancel={() => setShowCreateDialog(false)}
+      />
     </View>
   );
 }
@@ -306,9 +337,10 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
-  selectButton: {
+  newFolderButton: {
     minWidth: 44,
     alignItems: 'flex-end',
+    padding: 4,
   },
   // 汉堡菜单样式
   menuButton: {
