@@ -13,8 +13,11 @@ export interface UpdateFragmentRequest {
   tags?: string[];
 }
 
-export async function fetchFragments(): Promise<FragmentListResponse> {
-  return get<FragmentListResponse>(API_ENDPOINTS.FRAGMENTS.LIST);
+export async function fetchFragments(folderId?: string): Promise<FragmentListResponse> {
+  const url = folderId
+    ? `${API_ENDPOINTS.FRAGMENTS.LIST}?folder_id=${encodeURIComponent(folderId)}`
+    : API_ENDPOINTS.FRAGMENTS.LIST;
+  return get<FragmentListResponse>(url);
 }
 
 export async function fetchFragmentDetail(id: string): Promise<Fragment> {

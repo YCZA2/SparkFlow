@@ -1,24 +1,25 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
+  FlatList,
   RefreshControl,
-  SectionList,
   StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
-import { FragmentCard } from '@/components/FragmentCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
-import { useFragmentsScreen } from '@/features/fragments/useFragmentsScreen';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDrawer } from '@/providers/DrawerProvider';
+import { useFolders } from '@/features/folders/hooks';
+import type { FragmentFolder } from '@/types/folder';
 
 // 汉堡菜单图标组件
 function HamburgerMenu({ onPress, color }: { onPress: () => void; color: string }) {
@@ -33,13 +34,79 @@ function HamburgerMenu({ onPress, color }: { onPress: () => void; color: string 
   );
 }
 
-export default function FragmentsScreen() {
+type SymbolName = React.ComponentProps<typeof SymbolView>['name'];
+
+// 文件夹卡片组件
+function FolderCard({
+  folder,
+  onPress,
+  icon,
+}: {
+  folder: FragmentFolder;
+  onPress: (folder: FragmentFolder) => void;
+  icon?: SymbolName;
+}) {
+  const theme = useAppTheme();
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.folderCard,
+        theme.shadow.card,
+        {
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.border,
+        },
+      ]}
+      onPress={() => onPress(folder)}
+      activeOpacity={0.85}
+    >
+      <View style={styles.folderIconContainer}>
+        <SymbolView
+          name={icon || 'folder.fill'}
+          size={40}
+          tintColor={theme.colors.primary}
+        />
+      </View>
+      <View style={styles.folderInfo}>
+        <Text
+          style={[styles.folderName, { color: theme.colors.text }]}
+          numberOfLines={1}
+        >
+          {folder.name}
+        </Text>
+        <Text style={[styles.folderCount, { color: theme.colors.textSubtle }]}>
+          {folder.fragment_count} 条碎片
+        </Text>
+      </View>
+      <SymbolView
+        name="chevron.right"
+        size={20}
+        tintColor={theme.colors.textSubtle}
+      />
+    </TouchableOpacity>
+  );
+}
+
+export default function FoldersScreen() {
   const theme = useAppTheme();
   const router = useRouter();
-  const screen = useFragmentsScreen();
   const insets = useSafeAreaInsets();
   const { toggle } = useDrawer();
-  type SymbolName = React.ComponentProps<typeof SymbolView>['name'];
+  const { folders, isLoading, isRefreshing, error, total, allFragmentsCount, fetchFolders, refreshFolders } =
+    useFolders();
+
+  // 构造显示用的文件夹列表，添加虚拟"全部"文件夹
+  const displayFolders = React.useMemo(() => {
+    const allFolder: FragmentFolder = {
+      id: '__all__',
+      name: '全部',
+      fragment_count: allFragmentsCount,
+      created_at: null,
+      updated_at: null,
+    };
+    return [allFolder, ...folders];
+  }, [folders, allFragmentsCount]);
 
   const quickActions: Array<{
     key: string;
@@ -50,40 +117,57 @@ export default function FragmentsScreen() {
     {
       key: 'knowledge',
       icon: 'plus',
-      onPress: screen.openKnowledgePlaceholder,
+      onPress: () => router.push('/knowledge'),
     },
     {
       key: 'record',
       icon: 'mic.fill',
       active: true,
-      onPress: screen.openRecorder,
+      onPress: () => router.push('/record-audio'),
     },
     {
       key: 'note',
       icon: 'keyboard',
-      onPress: screen.openTextNote,
+      onPress: () => router.push('/text-note'),
     },
   ];
 
-  if (screen.isLoading && screen.fragments.length === 0) {
+  // 页面聚焦时刷新
+  useFocusEffect(
+    useCallback(() => {
+      void fetchFolders();
+    }, [fetchFolders])
+  );
+
+  const handleFolderPress = useCallback(
+    (folder: FragmentFolder) => {
+      router.push({
+        pathname: '/folder/[id]',
+        params: { id: folder.id, name: folder.name },
+      });
+    },
+    [router]
+  );
+
+  if (isLoading && folders.length === 0) {
     return (
       <ScreenContainer>
-        <LoadingState message="正在加载碎片..." />
+        <LoadingState message="正在加载文件夹..." />
       </ScreenContainer>
     );
   }
 
-  if (screen.error && screen.fragments.length === 0) {
+  if (error && folders.length === 0) {
     return (
       <ScreenContainer>
         <ScreenState
           icon="⚠️"
           title="加载失败"
-          message={screen.error}
+          message={error}
           actionLabel="点击重试"
-          onAction={screen.reload}
+          onAction={fetchFolders}
           secondaryActionLabel="网络设置"
-          onSecondaryAction={screen.openNetworkSettings}
+          onSecondaryAction={() => router.push('/network-settings')}
         />
       </ScreenContainer>
     );
@@ -105,76 +189,45 @@ export default function FragmentsScreen() {
           <HamburgerMenu onPress={toggle} color={theme.colors.text} />
           <View style={styles.headerTitleContainer}>
             <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-              全部碎片
+              全部文件夹
             </Text>
             <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]}>
-              {screen.totalLabel}
+              {total} 个文件夹
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={screen.selection.toggleSelectionMode}
-            hitSlop={8}
-            style={styles.selectButton}
-          >
-            <Text style={[styles.selectAction, { color: theme.colors.primary }]}>
-              {screen.selection.isSelectionMode ? '取消' : '选择'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.selectButton} />
         </View>
       </View>
 
       {/* 列表内容 */}
-      <SectionList
-        sections={screen.sections}
+      <FlatList
+        data={displayFolders}
         keyExtractor={(item) => item.id}
-        renderItem={({ item, index, section }) => (
-          <FragmentCard
-            fragment={item}
-            onPress={screen.onFragmentPress}
-            selectable={screen.selection.isSelectionMode}
-            selected={screen.selection.selectedSet.has(item.id)}
-            isFirstInSection={index === 0}
-            isLastInSection={index === section.data.length - 1}
+        renderItem={({ item }) => (
+          <FolderCard
+            folder={item}
+            onPress={handleFolderPress}
+            icon={item.id === '__all__' ? 'tray.full' : 'folder.fill'}
           />
         )}
-        renderSectionHeader={({ section }) => (
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{section.title}</Text>
-        )}
-        ListHeaderComponent={
-          <View style={styles.listHeader}>
-            <TouchableOpacity
-              style={[
-                styles.cloudButton,
-                theme.shadow.card,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-              onPress={screen.openCloud}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.cloudButtonText, { color: theme.colors.primary }]}>
-                打开灵感云图
-              </Text>
-            </TouchableOpacity>
-          </View>
-        }
         ListEmptyComponent={
-          <ScreenState icon="📝" title="还没有灵感碎片" message="去录一条或记一条吧" />
+          <ScreenState
+            icon="📁"
+            title="还没有文件夹"
+            message="系统会自动创建文件夹，或从后端同步"
+          />
         }
         contentContainerStyle={[
-          screen.fragments.length === 0 ? styles.emptyList : styles.list,
+          displayFolders.length === 0 ? styles.emptyList : styles.list,
           { paddingTop: insets.top + 70, paddingBottom: insets.bottom + 100 }
         ]}
         refreshControl={
           <RefreshControl
-            refreshing={screen.isRefreshing}
-            onRefresh={screen.refresh}
+            refreshing={isRefreshing}
+            onRefresh={refreshFolders}
             tintColor={theme.colors.primary}
           />
         }
-        stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
       />
 
@@ -188,66 +241,33 @@ export default function FragmentsScreen() {
 
       {/* 悬浮底部操作栏 */}
       <View style={[styles.floatingFooter, { bottom: insets.bottom + 20 }]}>
-        {screen.selection.isSelectionMode ? (
-          <Animated.View
-            entering={FadeInDown.duration(160)}
-            exiting={FadeOutDown.duration(120)}
-            style={[
-              styles.selectionBar,
-              theme.shadow.card,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
+        <Animated.View
+          entering={FadeInDown.duration(160)}
+          exiting={FadeOutDown.duration(120)}
+          style={[
+            styles.quickActionPill,
+            theme.shadow.card,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
+          {quickActions.map((action) => (
             <TouchableOpacity
-              style={[
-                styles.generateButton,
-                {
-                  backgroundColor:
-                    screen.selection.selectedCount > 0
-                      ? theme.colors.primary
-                      : theme.colors.textSubtle,
-                },
-              ]}
-              onPress={screen.onGenerate}
-              activeOpacity={0.85}
+              key={action.key}
+              style={styles.quickActionButton}
+              onPress={action.onPress}
+              activeOpacity={0.78}
             >
-              <Text style={styles.generateButtonText}>
-                交给 AI 编导（已选 {screen.selection.selectedCount}/{screen.selection.maxSelection} 条）
-              </Text>
+              <SymbolView
+                name={action.icon}
+                size={30}
+                tintColor={action.active ? '#F05A28' : theme.colors.text}
+              />
             </TouchableOpacity>
-          </Animated.View>
-        ) : (
-          <Animated.View
-            entering={FadeInDown.duration(160)}
-            exiting={FadeOutDown.duration(120)}
-            style={[
-              styles.quickActionPill,
-              theme.shadow.card,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            {quickActions.map((action) => (
-              <TouchableOpacity
-                key={action.key}
-                style={styles.quickActionButton}
-                onPress={action.onPress}
-                activeOpacity={0.78}
-              >
-                <SymbolView
-                  name={action.icon}
-                  size={30}
-                  tintColor={action.active ? '#F05A28' : theme.colors.text}
-                />
-              </TouchableOpacity>
-            ))}
-          </Animated.View>
-        )}
+          ))}
+        </Animated.View>
       </View>
     </View>
   );
@@ -307,40 +327,35 @@ const styles = StyleSheet.create({
   },
   // 列表样式
   list: {
-    paddingHorizontal: 0,
+    paddingHorizontal: 16,
   },
   emptyList: {
     flexGrow: 1,
     paddingHorizontal: 16,
   },
-  listHeader: {
-    marginBottom: 8,
-    marginHorizontal: 16,
-  },
-  cloudButton: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
+  // 文件夹卡片样式
+  folderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginBottom: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
   },
-  cloudButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
+  folderIconContainer: {
+    marginRight: 16,
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 12,
-    marginBottom: 4,
-    marginLeft: 16,
-    color: '#8E8E93',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  folderInfo: {
+    flex: 1,
   },
-  selectAction: {
-    fontSize: 16,
+  folderName: {
+    fontSize: 17,
     fontWeight: '600',
+    marginBottom: 4,
+  },
+  folderCount: {
+    fontSize: 14,
+    fontWeight: '400',
   },
   // 渐隐遮罩
   topFade: {
@@ -375,24 +390,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 14,
     minWidth: 248,
-  },
-  selectionBar: {
-    width: '90%',
-    maxWidth: 420,
-    borderRadius: 26,
-    borderWidth: 1,
-    padding: 10,
-  },
-  generateButton: {
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-  },
-  generateButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
   },
   quickActionButton: {
     width: 48,

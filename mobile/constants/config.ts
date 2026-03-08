@@ -52,6 +52,10 @@ export const API_ENDPOINTS = {
     DETAIL: (id: string) => `/api/scripts/${id}`,
   },
   KNOWLEDGE: '/api/knowledge',
+  FOLDERS: {
+    LIST: '/api/fragment-folders',
+    DETAIL: (id: string) => `/api/fragment-folders/${id}`,
+  },
 } as const;
 
 // 分页配置

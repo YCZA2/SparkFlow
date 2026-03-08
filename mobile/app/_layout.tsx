@@ -114,6 +114,13 @@ function RootLayoutNav() {
               title: '我的',
             }}
           />
+          <Stack.Screen
+            name="folder/[id]"
+            options={{
+              headerShown: false,
+              title: '文件夹',
+            }}
+          />
           <Stack.Screen name="fragment-cloud" options={{ title: '灵感云图' }} />
           <Stack.Screen name="generate" options={{ title: 'AI 编导' }} />
           <Stack.Screen name="script/[id]" options={{ title: '口播稿详情' }} />
