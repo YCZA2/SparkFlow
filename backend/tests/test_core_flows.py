@@ -349,6 +349,7 @@ class BackendFlowTestCase(unittest.TestCase):
         empty_delete = self.client.delete(f"/api/fragment-folders/{folder_a_id}", headers=self.auth_headers())
         self.assertEqual(empty_delete.status_code, 200)
         self.assertTrue(empty_delete.json()["success"])
+        self.assertIsNone(empty_delete.json()["data"])
 
         list_after_response = self.client.get("/api/fragment-folders", headers=self.auth_headers())
         self.assertEqual(list_after_response.status_code, 200)
@@ -486,7 +487,9 @@ class BackendFlowTestCase(unittest.TestCase):
         self.assertEqual(no_match_response.json()["data"]["total"], 0)
 
         delete_response = self.client.delete(f"/api/fragments/{zabc_fragment}", headers=self.auth_headers())
-        self.assertEqual(delete_response.status_code, 204)
+        self.assertEqual(delete_response.status_code, 200)
+        self.assertTrue(delete_response.json()["success"])
+        self.assertIsNone(delete_response.json()["data"])
 
         after_delete_response = self.client.get("/api/fragments/tags?query=ab", headers=self.auth_headers())
         self.assertEqual(after_delete_response.status_code, 200)
@@ -554,7 +557,9 @@ class BackendFlowTestCase(unittest.TestCase):
         self.assertEqual(update_response.json()["data"]["title"], "新的标题")
 
         delete_response = self.client.delete(f"/api/scripts/{script_id}", headers=self.auth_headers())
-        self.assertEqual(delete_response.status_code, 204)
+        self.assertEqual(delete_response.status_code, 200)
+        self.assertTrue(delete_response.json()["success"])
+        self.assertIsNone(delete_response.json()["data"])
 
         not_found_response = self.client.get(f"/api/scripts/{script_id}", headers=self.auth_headers())
         self.assertEqual(not_found_response.status_code, 404)
@@ -692,7 +697,9 @@ class BackendFlowTestCase(unittest.TestCase):
             fragment_id = fragment.id
 
         response = self.client.delete(f"/api/fragments/{fragment_id}", headers=self.auth_headers())
-        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+        self.assertIsNone(response.json()["data"])
         self.assertFalse(audio_file.exists())
 
     def test_scripts_daily_push_trigger_get_force_trigger_and_idempotency(self) -> None:
@@ -759,6 +766,7 @@ class BackendFlowTestCase(unittest.TestCase):
         delete_response = self.client.delete(f"/api/knowledge/{uploaded_doc_id}", headers=self.auth_headers())
         self.assertEqual(delete_response.status_code, 200)
         self.assertTrue(delete_response.json()["success"])
+        self.assertIsNone(delete_response.json()["data"])
 
         with self.SessionLocal() as db:
             doc = db.query(KnowledgeDoc).filter(KnowledgeDoc.id == doc_id).first()

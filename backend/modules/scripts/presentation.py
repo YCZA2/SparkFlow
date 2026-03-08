@@ -1,27 +1,16 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, status
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from core import success_response
+from core import ResponseModel, success_response
 from core.auth import get_current_user
 from modules.shared.container import ServiceContainer, get_container, get_db_session
 
 from .application import DailyPushUseCase, ScriptCommandService, ScriptGenerationUseCase, ScriptQueryService, map_script
+from .schemas import ScriptDetail, ScriptGenerationRequest, ScriptListResponse, ScriptUpdateRequest
 
 router = APIRouter(prefix="/api/scripts", tags=["scripts"], responses={401: {"description": "未认证"}})
-
-
-class ScriptGenerationRequest(BaseModel):
-    fragment_ids: list[str] = Field(..., min_length=1, max_length=20)
-    mode: str
-
-
-class ScriptUpdateRequest(BaseModel):
-    status: str | None = None
-    title: str | None = None
-
 
 def get_script_generation_use_case(container: ServiceContainer = Depends(get_container)) -> ScriptGenerationUseCase:
     return ScriptGenerationUseCase(llm_provider=container.llm_provider, prompt_loader=container.prompt_loader)
@@ -35,7 +24,13 @@ def get_daily_push_use_case(container: ServiceContainer = Depends(get_container)
     )
 
 
-@router.post("/generation", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/generation",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ResponseModel[ScriptDetail],
+    summary="生成口播稿",
+    description="基于选中的碎片和生成模式，调用大模型生成一篇新的口播稿。",
+)
 async def generate_script(
     data: ScriptGenerationRequest,
     current_user: dict = Depends(get_current_user),
@@ -46,7 +41,12 @@ async def generate_script(
     return success_response(data=map_script(script), message="口播稿生成成功")
 
 
-@router.get("")
+@router.get(
+    "",
+    response_model=ResponseModel[ScriptListResponse],
+    summary="获取口播稿列表",
+    description="按分页返回当前用户的口播稿列表。",
+)
 async def list_scripts(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -56,7 +56,12 @@ async def list_scripts(
     return success_response(data=ScriptQueryService().list_scripts(db=db, user_id=current_user["user_id"], limit=limit, offset=offset))
 
 
-@router.get("/daily-push")
+@router.get(
+    "/daily-push",
+    response_model=ResponseModel[ScriptDetail],
+    summary="获取今日推盘稿",
+    description="返回今天生成的每日灵感推盘稿，如果当天尚未生成则返回未找到错误。",
+)
 async def get_daily_push(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
@@ -64,7 +69,12 @@ async def get_daily_push(
     return success_response(data=map_script(ScriptQueryService().get_today_daily_push(db=db, user_id=current_user["user_id"])))
 
 
-@router.post("/daily-push/trigger")
+@router.post(
+    "/daily-push/trigger",
+    response_model=ResponseModel[ScriptDetail],
+    summary="立即触发今日推盘",
+    description="根据今天已转写的碎片即时生成一篇今日灵感推盘稿。",
+)
 async def trigger_daily_push(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
@@ -74,7 +84,12 @@ async def trigger_daily_push(
     return success_response(data=map_script(script), message="今日灵感卡片已生成")
 
 
-@router.post("/daily-push/force-trigger")
+@router.post(
+    "/daily-push/force-trigger",
+    response_model=ResponseModel[ScriptDetail],
+    summary="强制触发今日推盘",
+    description="忽略语义聚合约束，基于今天的碎片强制生成一篇今日灵感推盘稿。",
+)
 async def force_trigger_daily_push(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
@@ -84,7 +99,12 @@ async def force_trigger_daily_push(
     return success_response(data=map_script(script), message="已强制生成今日灵感卡片")
 
 
-@router.get("/{script_id}")
+@router.get(
+    "/{script_id}",
+    response_model=ResponseModel[ScriptDetail],
+    summary="获取口播稿详情",
+    description="根据口播稿 ID 返回单篇稿件的完整内容和来源碎片信息。",
+)
 async def get_script(
     script_id: str,
     current_user: dict = Depends(get_current_user),
@@ -93,7 +113,12 @@ async def get_script(
     return success_response(data=map_script(ScriptQueryService().get_script(db=db, user_id=current_user["user_id"], script_id=script_id)))
 
 
-@router.patch("/{script_id}")
+@router.patch(
+    "/{script_id}",
+    response_model=ResponseModel[ScriptDetail],
+    summary="更新口播稿",
+    description="更新口播稿标题或状态，状态仅支持 draft、ready、filmed。",
+)
 async def update_script(
     script_id: str,
     data: ScriptUpdateRequest,
@@ -110,11 +135,16 @@ async def update_script(
     return success_response(data=map_script(script), message="口播稿更新成功")
 
 
-@router.delete("/{script_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{script_id}",
+    response_model=ResponseModel[None],
+    summary="删除口播稿",
+    description="删除指定的口播稿记录。",
+)
 async def delete_script(
     script_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
     ScriptCommandService().delete_script(db=db, user_id=current_user["user_id"], script_id=script_id)
-    return None
+    return success_response(data=None, message="口播稿删除成功")

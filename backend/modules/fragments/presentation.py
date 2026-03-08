@@ -1,39 +1,27 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, status
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from core import success_response
+from core import ResponseModel, success_response
 from core.auth import get_current_user
 from modules.shared.container import get_container, get_db_session, ServiceContainer
 
 from .application import FragmentCommandService, FragmentQueryService, map_fragment
+from .schemas import (
+    FragmentBatchMoveRequest,
+    FragmentBatchMoveResponse,
+    FragmentCreateRequest,
+    FragmentFolderUpdateRequest,
+    FragmentItem,
+    FragmentListResponse,
+    FragmentTagListResponse,
+    FragmentVisualizationResponse,
+    SimilarityQueryRequest,
+    SimilarFragmentListResponse,
+)
 
 router = APIRouter(prefix="/api/fragments", tags=["fragments"], responses={401: {"description": "未认证"}})
-
-
-class FragmentCreateRequest(BaseModel):
-    transcript: str | None = Field(None, description="转写文本")
-    source: str = Field("voice", description="来源")
-    audio_path: str | None = Field(None, description="音频路径")
-    folder_id: str | None = Field(None, description="文件夹 ID")
-
-
-class FragmentFolderUpdateRequest(BaseModel):
-    folder_id: str | None = Field(..., description="文件夹 ID，传 null 表示移出文件夹")
-
-
-class FragmentBatchMoveRequest(BaseModel):
-    fragment_ids: list[str] = Field(..., min_length=1, max_length=100)
-    folder_id: str | None = Field(..., description="目标文件夹 ID，传 null 表示移出文件夹")
-
-
-class SimilarityQueryRequest(BaseModel):
-    query_text: str
-    top_k: int = Field(5, ge=1, le=20)
-    exclude_ids: list[str] = Field(default_factory=list)
-
 
 def get_fragment_command_service(container: ServiceContainer = Depends(get_container)) -> FragmentCommandService:
     return FragmentCommandService(audio_storage=container.audio_storage)
@@ -43,7 +31,12 @@ def get_fragment_query_service(container: ServiceContainer = Depends(get_contain
     return FragmentQueryService(vector_store=container.vector_store)
 
 
-@router.get("")
+@router.get(
+    "",
+    response_model=ResponseModel[FragmentListResponse],
+    summary="获取碎片列表",
+    description="按分页返回当前用户的碎片列表，可按文件夹和标签过滤。",
+)
 async def list_fragments(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -65,7 +58,13 @@ async def list_fragments(
     )
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ResponseModel[FragmentItem],
+    summary="创建碎片",
+    description="创建一条文本碎片记录，适用于手动录入或外部导入后的碎片落库。",
+)
 async def create_fragment(
     data: FragmentCreateRequest,
     current_user: dict = Depends(get_current_user),
@@ -83,7 +82,12 @@ async def create_fragment(
     return success_response(data=map_fragment(fragment), message="碎片笔记创建成功")
 
 
-@router.post("/similar")
+@router.post(
+    "/similar",
+    response_model=ResponseModel[SimilarFragmentListResponse],
+    summary="检索相似碎片",
+    description="基于语义向量查询与输入文本最相似的碎片，可排除指定碎片 ID。",
+)
 async def query_similar_fragments(
     data: SimilarityQueryRequest,
     current_user: dict = Depends(get_current_user),
@@ -101,7 +105,12 @@ async def query_similar_fragments(
     )
 
 
-@router.post("/move")
+@router.post(
+    "/move",
+    response_model=ResponseModel[FragmentBatchMoveResponse],
+    summary="批量移动碎片",
+    description="将多条碎片批量移动到目标文件夹，传入 null 可将碎片移出文件夹。",
+)
 async def move_fragments(
     data: FragmentBatchMoveRequest,
     current_user: dict = Depends(get_current_user),
@@ -119,7 +128,12 @@ async def move_fragments(
     )
 
 
-@router.get("/visualization")
+@router.get(
+    "/visualization",
+    response_model=ResponseModel[FragmentVisualizationResponse],
+    summary="获取碎片云图数据",
+    description="返回碎片向量降维和聚类后的可视化点位、簇信息与统计摘要。",
+)
 async def get_fragment_visualization(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
@@ -128,7 +142,12 @@ async def get_fragment_visualization(
     return success_response(data=await service.visualization(db=db, user_id=current_user["user_id"]))
 
 
-@router.get("/tags")
+@router.get(
+    "/tags",
+    response_model=ResponseModel[FragmentTagListResponse],
+    summary="获取标签列表",
+    description="返回当前用户碎片标签的统计结果，可按关键字搜索标签。",
+)
 async def list_fragment_tags(
     query: str | None = Query(None),
     limit: int = Query(20, ge=1, le=50),
@@ -146,7 +165,12 @@ async def list_fragment_tags(
     )
 
 
-@router.get("/{fragment_id}")
+@router.get(
+    "/{fragment_id}",
+    response_model=ResponseModel[FragmentItem],
+    summary="获取碎片详情",
+    description="根据碎片 ID 返回单条碎片的完整信息。",
+)
 async def get_fragment(
     fragment_id: str,
     current_user: dict = Depends(get_current_user),
@@ -156,7 +180,12 @@ async def get_fragment(
     return success_response(data=map_fragment(service.get_fragment(db=db, user_id=current_user["user_id"], fragment_id=fragment_id)))
 
 
-@router.patch("/{fragment_id}")
+@router.patch(
+    "/{fragment_id}",
+    response_model=ResponseModel[FragmentItem],
+    summary="更新碎片文件夹",
+    description="更新单条碎片的归属文件夹，传入 null 表示移出文件夹。",
+)
 async def update_fragment(
     fragment_id: str,
     data: FragmentFolderUpdateRequest,
@@ -173,7 +202,12 @@ async def update_fragment(
     return success_response(data=map_fragment(fragment), message="碎片更新成功")
 
 
-@router.delete("/{fragment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{fragment_id}",
+    response_model=ResponseModel[None],
+    summary="删除碎片",
+    description="删除指定碎片，并尝试清理关联的本地音频文件。",
+)
 async def delete_fragment(
     fragment_id: str,
     current_user: dict = Depends(get_current_user),
@@ -181,4 +215,4 @@ async def delete_fragment(
     service: FragmentCommandService = Depends(get_fragment_command_service),
 ):
     service.delete_fragment(db=db, user_id=current_user["user_id"], fragment_id=fragment_id)
-    return None
+    return success_response(data=None, message="碎片删除成功")

@@ -10,18 +10,19 @@ from models import FragmentFolder
 from utils.serialization import format_iso_datetime
 
 from domains.fragment_folders import repository as fragment_folder_repository
+from .schemas import FragmentFolderItem, FragmentFolderListResponse
 
 MAX_FOLDER_NAME_LENGTH = 50
 
 
-def map_fragment_folder(folder: FragmentFolder, *, fragment_count: int = 0) -> dict[str, Any]:
-    return {
-        "id": folder.id,
-        "name": folder.name,
-        "fragment_count": fragment_count,
-        "created_at": format_iso_datetime(folder.created_at),
-        "updated_at": format_iso_datetime(folder.updated_at),
-    }
+def map_fragment_folder(folder: FragmentFolder, *, fragment_count: int = 0) -> FragmentFolderItem:
+    return FragmentFolderItem(
+        id=folder.id,
+        name=folder.name,
+        fragment_count=fragment_count,
+        created_at=format_iso_datetime(folder.created_at),
+        updated_at=format_iso_datetime(folder.updated_at),
+    )
 
 
 def normalize_folder_name(name: str) -> str:
@@ -37,10 +38,10 @@ def normalize_folder_name(name: str) -> str:
 
 
 class FragmentFolderQueryService:
-    def list_folders(self, *, db: Session, user_id: str) -> dict[str, Any]:
+    def list_folders(self, *, db: Session, user_id: str) -> FragmentFolderListResponse:
         rows = fragment_folder_repository.list_by_user_with_counts(db=db, user_id=user_id)
         items = [map_fragment_folder(folder, fragment_count=count) for folder, count in rows]
-        return {"items": items, "total": len(items)}
+        return FragmentFolderListResponse(items=items, total=len(items))
 
     def get_folder(self, *, db: Session, user_id: str, folder_id: str) -> FragmentFolder:
         folder = fragment_folder_repository.get_by_id(db=db, user_id=user_id, folder_id=folder_id)

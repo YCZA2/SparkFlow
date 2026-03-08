@@ -17,24 +17,25 @@ from domains.fragments import repository as fragment_repository
 from domains.scripts import repository as script_repository
 from modules.shared.container import PromptLoader
 from modules.shared.ports import TextGenerationProvider, VectorStore
+from .schemas import ScriptDetail, ScriptItem, ScriptListResponse
 
 VALID_SCRIPT_MODES = {"mode_a", "mode_b"}
 VALID_SCRIPT_STATUSES = {"draft", "ready", "filmed"}
 
 
-def map_script(script: Script) -> dict[str, Any]:
+def map_script(script: Script) -> ScriptDetail:
     source_fragment_ids = parse_json_list(script.source_fragment_ids, allow_csv_fallback=False)
-    return {
-        "id": script.id,
-        "title": script.title,
-        "content": script.content,
-        "mode": script.mode,
-        "source_fragment_ids": source_fragment_ids,
-        "source_fragment_count": len(source_fragment_ids),
-        "status": script.status,
-        "is_daily_push": script.is_daily_push,
-        "created_at": format_iso_datetime(script.created_at),
-    }
+    return ScriptDetail(
+        id=script.id,
+        title=script.title,
+        content=script.content,
+        mode=script.mode,
+        source_fragment_ids=source_fragment_ids,
+        source_fragment_count=len(source_fragment_ids),
+        status=script.status,
+        is_daily_push=script.is_daily_push,
+        created_at=format_iso_datetime(script.created_at),
+    )
 
 
 def build_fragments_text(fragments: list[Fragment]) -> str:
@@ -78,10 +79,15 @@ class ScriptGenerationUseCase:
 
 
 class ScriptQueryService:
-    def list_scripts(self, *, db: Session, user_id: str, limit: int, offset: int) -> dict[str, Any]:
+    def list_scripts(self, *, db: Session, user_id: str, limit: int, offset: int) -> ScriptListResponse:
         items = script_repository.list_by_user(db=db, user_id=user_id, limit=limit, offset=offset)
         total = script_repository.count_by_user(db=db, user_id=user_id)
-        return {"items": [map_script(item) for item in items], "total": total, "limit": limit, "offset": offset}
+        return ScriptListResponse(
+            items=[ScriptItem.model_validate(map_script(item).model_dump()) for item in items],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
 
     def get_script(self, *, db: Session, user_id: str, script_id: str) -> Script:
         script = script_repository.get_by_id(db=db, user_id=user_id, script_id=script_id)

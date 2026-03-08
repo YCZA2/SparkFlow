@@ -12,19 +12,20 @@ from utils.serialization import format_iso_datetime
 
 from domains.knowledge import repository as knowledge_repository
 from modules.shared.ports import VectorStore
+from .schemas import KnowledgeDocItem, KnowledgeDocListResponse, KnowledgeSearchItem, KnowledgeSearchResponse
 
 VALID_DOC_TYPES = {"high_likes", "language_habit"}
 
 
-def map_knowledge_doc(doc: KnowledgeDoc) -> dict[str, Any]:
-    return {
-        "id": doc.id,
-        "title": doc.title,
-        "content": doc.content,
-        "doc_type": doc.doc_type,
-        "vector_ref_id": doc.vector_ref_id,
-        "created_at": format_iso_datetime(doc.created_at),
-    }
+def map_knowledge_doc(doc: KnowledgeDoc) -> KnowledgeDocItem:
+    return KnowledgeDocItem(
+        id=doc.id,
+        title=doc.title,
+        content=doc.content,
+        doc_type=doc.doc_type,
+        vector_ref_id=doc.vector_ref_id,
+        created_at=format_iso_datetime(doc.created_at),
+    )
 
 
 def parse_uploaded_file(file_content: bytes, filename: str) -> str:
@@ -77,12 +78,17 @@ class KnowledgeUseCase:
             db.rollback()
         return doc
 
-    def list_docs(self, *, db: Session, user_id: str, doc_type: Optional[str], limit: int, offset: int) -> dict[str, Any]:
+    def list_docs(self, *, db: Session, user_id: str, doc_type: Optional[str], limit: int, offset: int) -> KnowledgeDocListResponse:
         if doc_type and doc_type not in VALID_DOC_TYPES:
             raise ValidationError(message="文档类型无效", field_errors={"doc_type": f"必须是以下之一: {', '.join(sorted(VALID_DOC_TYPES))}"})
         docs = knowledge_repository.list_by_user(db=db, user_id=user_id, doc_type=doc_type, limit=limit, offset=offset)
         total = knowledge_repository.count_by_user(db=db, user_id=user_id, doc_type=doc_type)
-        return {"items": [map_knowledge_doc(doc) for doc in docs], "total": total, "limit": limit, "offset": offset}
+        return KnowledgeDocListResponse(
+            items=[map_knowledge_doc(doc) for doc in docs],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
 
     def get_doc(self, *, db: Session, user_id: str, doc_id: str) -> KnowledgeDoc:
         doc = knowledge_repository.get_by_id(db=db, user_id=user_id, doc_id=doc_id)
@@ -90,19 +96,18 @@ class KnowledgeUseCase:
             raise NotFoundError(message="知识库文档不存在或无权访问", resource_type="knowledge_doc", resource_id=doc_id)
         return doc
 
-    async def search_docs(self, *, db: Session, user_id: str, query_text: str, top_k: int) -> dict[str, Any]:
+    async def search_docs(self, *, db: Session, user_id: str, query_text: str, top_k: int) -> KnowledgeSearchResponse:
         results = await self.vector_store.query_knowledge_docs(user_id=user_id, query_text=query_text, top_k=top_k)
         doc_ids = [item["doc_id"] for item in results]
         docs = {doc.id: doc for doc in knowledge_repository.list_by_user(db=db, user_id=user_id, limit=100, offset=0) if doc.id in doc_ids}
-        items = []
+        items: list[KnowledgeSearchItem] = []
         for item in results:
             doc = docs.get(item["doc_id"])
             if not doc:
                 continue
             payload = map_knowledge_doc(doc)
-            payload["score"] = item["score"]
-            items.append(payload)
-        return {"items": items, "total": len(items), "query_text": query_text}
+            items.append(KnowledgeSearchItem(**payload.model_dump(), score=float(item["score"])))
+        return KnowledgeSearchResponse(items=items, total=len(items), query_text=query_text)
 
     async def delete_doc(self, *, db: Session, user_id: str, doc_id: str) -> None:
         doc = self.get_doc(db=db, user_id=user_id, doc_id=doc_id)

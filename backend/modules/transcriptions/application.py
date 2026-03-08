@@ -15,6 +15,7 @@ from models import Fragment
 from modules.fragments.application import map_fragment
 from modules.shared.enrichment import build_fallback_summary_and_tags, generate_summary_and_tags
 from modules.shared.ports import AudioStorage, SpeechToTextProvider, TextGenerationProvider, VectorStore
+from .schemas import AudioUploadResponse, TranscriptionStatusResponse
 
 logger = logging.getLogger(__name__)
 ENRICHMENT_TIMEOUT_SECONDS = 45.0
@@ -41,7 +42,7 @@ class TranscriptionUseCase:
         user_id: str,
         audio: UploadFile,
         folder_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> AudioUploadResponse:
         try:
             is_available = await self.stt_provider.health_check()
             if not is_available:
@@ -71,23 +72,23 @@ class TranscriptionUseCase:
             sync_status="syncing",
             folder_id=folder_id,
         )
-        return {
-            "fragment_id": fragment.id,
-            "audio_path": saved["file_path"],
-            "relative_path": saved["relative_path"],
-            "file_size": saved["file_size"],
-            "duration": None,
-            "sync_status": "syncing",
-        }
+        return AudioUploadResponse(
+            fragment_id=fragment.id,
+            audio_path=saved["file_path"],
+            relative_path=saved["relative_path"],
+            file_size=saved["file_size"],
+            duration=None,
+            sync_status="syncing",
+        )
 
-    def get_status(self, *, db: Session, user_id: str, fragment_id: str) -> dict[str, Any]:
+    def get_status(self, *, db: Session, user_id: str, fragment_id: str) -> TranscriptionStatusResponse:
         fragment = fragment_repository.get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
         if not fragment:
             from core.exceptions import NotFoundError
             raise NotFoundError(message="碎片笔记不存在或无权访问", resource_type="fragment", resource_id=fragment_id)
-        payload = map_fragment(fragment)
-        payload["fragment_id"] = payload.pop("id")
-        return payload
+        payload = map_fragment(fragment).model_dump()
+        payload["fragment_id"] = payload["id"]
+        return TranscriptionStatusResponse.model_validate(payload)
 
     async def _generate_enrichment(self, transcript: str) -> tuple[str, list[str]]:
         try:

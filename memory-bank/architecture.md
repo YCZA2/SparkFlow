@@ -136,14 +136,41 @@ flowchart TD
 
 - [`backend/main.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py): 创建 FastAPI app、注册中间件、异常处理器、静态文件、路由和 scheduler 生命周期。
 - `backend/modules/*/presentation.py`: 对外 HTTP 入口。
+- `backend/modules/*/schemas.py`: 当前模块自有的 API request/response DTO，避免跨目录重复定义 contract。
 - `backend/modules/*/application.py`: 业务编排与用例。
+- `backend/domains/*/repository.py`: 仓储层，只负责 SQLAlchemy 数据访问。
+- `backend/models/*`: ORM 模型、数据库 engine、session 工厂。
+
+当前约定：
+
+- 模块内 `schemas.py` 是后端 API contract 的单一事实源。
+- `presentation.py` 应显式声明 `response_model=ResponseModel[...]`，让 OpenAPI 可直接作为前后端并行开发的契约。
+- 删除接口统一返回 `200 + ResponseModel[None]`，成功时 `data` 为 `null`。
 - `backend/modules/shared/container.py`: DI 容器、`PromptLoader`、`AudioStorage`、`VectorStore` 适配器。
 - `backend/modules/shared/ports.py`: LLM、STT、Embedding、Vector DB、音频存储等端口抽象。
 - `backend/modules/shared/enrichment.py`: 摘要与标签增强逻辑。
-- `backend/domains/*/repository.py`: 数据库读写。
 - `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，而不是继续扩散到 legacy service 文件。
 
-### 4.3 Backend Modules
+### 4.3 Backend Folder Map
+
+- `backend/core/`: 配置、认证、统一响应模型、异常体系。
+- `backend/constants/`: 共享常量定义。
+- `backend/utils/`: 时间、序列化等通用工具。
+- `backend/modules/`: 当前后端主业务入口，按业务模块拆分。
+- `backend/modules/shared/`: 多模块共享端口、容器和公共能力，不单独对外暴露业务路由。
+- `backend/domains/`: 仓储目录，按业务实体或聚合划分查询与写入逻辑。
+- `backend/models/`: SQLAlchemy ORM 模型和数据库初始化。
+- `backend/services/`: 外部 provider 的适配实现和实例工厂。
+- `backend/prompts/`: LLM prompt 模板。
+- `backend/alembic/`: 数据库迁移脚本。
+- `backend/tests/`: 后端自动化测试。
+- `backend/uploads/`: 本地音频文件存储。
+- `backend/chroma_data/`: 本地向量库持久化目录。
+- `backend/scripts/`: 后端辅助脚本。
+- `backend/routers/`: 早期路由目录残留，当前不应再作为新增功能的主要入口。
+- `backend/schemas/`: 已废弃的旧全局 schema 目录，后续应避免继续使用或新增内容。
+
+### 4.4 Backend Modules
 
 - `auth`: 测试 token 签发、当前用户信息、refresh。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
@@ -153,7 +180,17 @@ flowchart TD
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
 - `scheduler`: APScheduler 装配与启停。
 
-### 4.4 External Dependencies
+### 4.5 Backend Coding Conventions
+
+- 新增接口时，优先补模块内 `schemas.py`，不要把 request/response model 内联到 `presentation.py`。
+- `presentation.py` 只负责 HTTP 适配，不承载核心业务规则。
+- `application.py` 负责用例编排、数据校验、错误抛出和 provider 调用。
+- repository 仅负责数据读写，不承载流程级业务编排。
+- 如需跨模块复用，优先抽到 `modules/shared/`；不要回退到全局 `backend/schemas/` 模式。
+- 所有对外接口默认走标准响应包裹 `ResponseModel`，并补中文 `summary` / `description`。
+- 注释应简短，只解释非显然业务约束或实现原因。
+
+### 4.6 External Dependencies
 
 - LLM: 默认 `Qwen`，通过 `services/factory.py` 创建。
 - STT: 默认 `DashScope`，保留 Aliyun 兼容实现。
@@ -162,7 +199,7 @@ flowchart TD
 - Storage: 本地文件系统 `backend/uploads/<user_id>/`。
 - Database: SQLite。
 
-### 4.5 Namespaces and Storage Conventions
+### 4.7 Namespaces and Storage Conventions
 
 - 碎片文件夹表：`fragment_folders`
 - 碎片归一化标签表：`fragment_tags`
