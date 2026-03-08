@@ -18,6 +18,7 @@ import { useFragmentsScreen } from '@/features/fragments/useFragmentsScreen';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useDrawer } from '@/providers/DrawerProvider';
 
 // 汉堡菜单图标组件
 function HamburgerMenu({ onPress, color }: { onPress: () => void; color: string }) {
@@ -37,6 +38,7 @@ export default function FragmentsScreen() {
   const router = useRouter();
   const screen = useFragmentsScreen();
   const insets = useSafeAreaInsets();
+  const { toggle } = useDrawer();
   type SymbolName = React.ComponentProps<typeof SymbolView>['name'];
 
   const quickActions: Array<{
@@ -62,10 +64,6 @@ export default function FragmentsScreen() {
       onPress: screen.openTextNote,
     },
   ];
-
-  const openProfile = () => {
-    router.push('/profile');
-  };
 
   if (screen.isLoading && screen.fragments.length === 0) {
     return (
@@ -104,7 +102,7 @@ export default function FragmentsScreen() {
       {/* 悬浮顶部导航栏 */}
       <View style={[styles.floatingHeader, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerContent}>
-          <HamburgerMenu onPress={openProfile} color={theme.colors.text} />
+          <HamburgerMenu onPress={toggle} color={theme.colors.text} />
           <View style={styles.headerTitleContainer}>
             <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
               全部碎片

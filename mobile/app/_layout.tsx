@@ -8,8 +8,11 @@ import { PaperProvider } from 'react-native-paper';
 
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { useColorScheme } from '@/components/useColorScheme';
+import { Drawer } from '@/components/Drawer/Drawer';
+import { DrawerBackdrop } from '@/components/Drawer/DrawerBackdrop';
 import { AudioCaptureProvider } from '@/features/recording/AudioCaptureProvider';
 import { AppSessionProvider, useAppSession } from '@/providers/AppSessionProvider';
+import { DrawerProvider, useDrawer } from '@/providers/DrawerProvider';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -46,9 +49,11 @@ export default function RootLayout() {
 
   return (
     <AppSessionProvider>
-      <AudioCaptureProvider>
-        <RootLayoutNav />
-      </AudioCaptureProvider>
+      <DrawerProvider>
+        <AudioCaptureProvider>
+          <RootLayoutNav />
+        </AudioCaptureProvider>
+      </DrawerProvider>
     </AppSessionProvider>
   );
 }
@@ -56,6 +61,7 @@ export default function RootLayout() {
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const session = useAppSession();
+  const { isOpen, close } = useDrawer();
 
   if (!session.isReady) {
     return <LoadingState message="正在准备应用..." />;
@@ -113,6 +119,9 @@ function RootLayoutNav() {
             }}
           />
         </Stack>
+        {/* 抽屉菜单 */}
+        {isOpen && <DrawerBackdrop onPress={close} />}
+        {isOpen && <Drawer />}
       </ThemeProvider>
     </PaperProvider>
   );
