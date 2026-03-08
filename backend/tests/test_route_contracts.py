@@ -22,6 +22,7 @@ class RouteContractTestCase(unittest.TestCase):
             ("/api/auth/token", frozenset({"POST"})),
             ("/api/auth/me", frozenset({"GET"})),
             ("/api/auth/refresh", frozenset({"POST"})),
+            ("/api/external-media/audio-imports", frozenset({"POST"})),
             ("/api/fragment-folders", frozenset({"GET"})),
             ("/api/fragment-folders", frozenset({"POST"})),
             ("/api/fragment-folders/{folder_id}", frozenset({"PATCH"})),

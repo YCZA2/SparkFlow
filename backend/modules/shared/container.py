@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -18,8 +19,18 @@ from services.factory import (
     create_stt_service,
     create_vector_db_service,
 )
+from services.external_media import ExternalMediaService
 
-from .ports import AudioStorage, EmbeddingProvider, JobRunner, SpeechToTextProvider, TextGenerationProvider, VectorStore
+from .ports import (
+    AudioStorage,
+    EmbeddingProvider,
+    ExternalMediaProvider,
+    ImportedAudioStorage,
+    JobRunner,
+    SpeechToTextProvider,
+    TextGenerationProvider,
+    VectorStore,
+)
 
 FRAGMENT_NAMESPACE_PREFIX = "fragments"
 KNOWLEDGE_NAMESPACE_PREFIX = "knowledge"
@@ -115,6 +126,58 @@ class FastApiBackgroundJobRunner(JobRunner):
 
     def schedule(self, task: Any, /, *args: Any, **kwargs: Any) -> None:
         self.background_tasks.add_task(task, *args, **kwargs)
+
+
+class LocalImportedAudioStorage(ImportedAudioStorage):
+    def __init__(self, upload_dir: str) -> None:
+        self.upload_dir = Path(upload_dir).resolve()
+
+    @staticmethod
+    def _sanitize_stem(value: str) -> str:
+        sanitized = "".join("_" if ch in '\\/:*?"<>|' else ch for ch in (value or "").strip())
+        sanitized = " ".join(sanitized.split()).strip(" .")
+        return sanitized[:80] or "audio"
+
+    def _ensure_dir(self, user_id: str, platform: str) -> Path:
+        destination = self.upload_dir / "external_media" / user_id / platform
+        destination.mkdir(parents=True, exist_ok=True)
+        return destination
+
+    async def save_file(self, *, source_path: str, user_id: str, platform: str, filename: str) -> dict[str, Any]:
+        source = Path(source_path).resolve()
+        if not source.exists():
+            raise ValidationError(message="导入音频文件不存在", field_errors={"audio": "外部媒体下载结果无效"})
+
+        ext = source.suffix.lower() or ".m4a"
+        if ext != ".m4a":
+            ext = ".m4a"
+        destination_dir = self._ensure_dir(user_id, platform)
+        destination = destination_dir / f"{self._sanitize_stem(Path(filename).stem)}{ext}"
+        suffix = 1
+        while destination.exists():
+            destination = destination_dir / f"{self._sanitize_stem(Path(filename).stem)}-{suffix}{ext}"
+            suffix += 1
+
+        shutil.copy2(source, destination)
+        relative_path = destination.relative_to(self.upload_dir.parent)
+        return {
+            "file_path": str(destination),
+            "relative_path": str(relative_path),
+            "file_size": destination.stat().st_size,
+        }
+
+    def resolve_path(self, audio_path: str) -> Path:
+        raw_path = Path(audio_path)
+        if raw_path.is_absolute():
+            return raw_path
+        return (self.upload_dir.parent / raw_path).resolve()
+
+    def delete(self, audio_path: Optional[str]) -> None:
+        if not audio_path:
+            return
+        candidate = self.resolve_path(audio_path)
+        if candidate.exists():
+            candidate.unlink()
 
 
 class AppVectorStore(VectorStore):
@@ -260,6 +323,8 @@ class ServiceContainer:
     embedding_provider: EmbeddingProvider
     vector_store: VectorStore
     audio_storage: AudioStorage
+    imported_audio_storage: ImportedAudioStorage
+    external_media_provider: ExternalMediaProvider
     prompt_loader: PromptLoader
 
 
@@ -276,6 +341,8 @@ def build_container() -> ServiceContainer:
         embedding_provider=embedding_provider,
         vector_store=AppVectorStore(embedding_provider=embedding_provider, vector_db_provider=vector_db_provider),
         audio_storage=LocalAudioStorage(settings.UPLOAD_DIR),
+        imported_audio_storage=LocalImportedAudioStorage(settings.UPLOAD_DIR),
+        external_media_provider=ExternalMediaService(),
         prompt_loader=PromptLoader(Path(__file__).resolve().parents[2] / "prompts"),
     )
 

@@ -1,0 +1,38 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends
+
+from core import ResponseModel, success_response
+from core.auth import get_current_user
+from modules.shared.container import ServiceContainer, get_container
+
+from .application import ExternalMediaUseCase
+from .schemas import ExternalAudioImportRequest, ExternalAudioImportResponse
+
+router = APIRouter(prefix="/api/external-media", tags=["external_media"], responses={401: {"description": "未认证"}})
+
+
+def get_external_media_use_case(container: ServiceContainer = Depends(get_container)) -> ExternalMediaUseCase:
+    return ExternalMediaUseCase(
+        external_media_provider=container.external_media_provider,
+        imported_audio_storage=container.imported_audio_storage,
+    )
+
+
+@router.post(
+    "/audio-imports",
+    response_model=ResponseModel[ExternalAudioImportResponse],
+    summary="导入外部媒体音频",
+    description="接收外部媒体分享链接，下载并转换为 m4a 音频后保存到后端 uploads 目录。",
+)
+async def import_external_audio(
+    data: ExternalAudioImportRequest,
+    current_user: dict = Depends(get_current_user),
+    use_case: ExternalMediaUseCase = Depends(get_external_media_use_case),
+):
+    payload = await use_case.import_audio(
+        user_id=current_user["user_id"],
+        share_url=data.share_url,
+        platform=data.platform,
+    )
+    return success_response(data=payload, message="外部媒体音频导入成功")

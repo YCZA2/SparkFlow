@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Protocol
 
@@ -77,6 +78,29 @@ class AudioStorage(Protocol):
     async def save(self, *, audio: UploadFile, user_id: str) -> dict[str, Any]: ...
     def delete(self, audio_path: Optional[str]) -> None: ...
     def resolve_path(self, audio_path: str) -> Path: ...
+
+
+@dataclass
+class ExternalMediaResolvedAudio:
+    platform: str
+    share_url: str
+    media_id: str
+    title: str | None
+    author: str | None
+    cover_url: str | None
+    content_type: str
+    local_audio_path: str
+
+
+class ImportedAudioStorage(Protocol):
+    async def save_file(self, *, source_path: str, user_id: str, platform: str, filename: str) -> dict[str, Any]: ...
+    def delete(self, audio_path: Optional[str]) -> None: ...
+    def resolve_path(self, audio_path: str) -> Path: ...
+
+
+class ExternalMediaProvider(Protocol):
+    async def resolve_audio(self, *, share_url: str, platform: str) -> ExternalMediaResolvedAudio: ...
+    async def health_check(self) -> bool: ...
 
 
 class JobRunner(Protocol):

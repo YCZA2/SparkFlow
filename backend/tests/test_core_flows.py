@@ -20,7 +20,8 @@ from domains.fragment_tags import repository as fragment_tag_repository
 from main import create_app
 from models import Base, Fragment, FragmentFolder, FragmentTag, KnowledgeDoc, Script
 from modules.auth.application import TEST_USER_ID
-from modules.shared.container import LocalAudioStorage, PromptLoader
+from modules.shared.container import LocalAudioStorage, LocalImportedAudioStorage, PromptLoader
+from modules.shared.ports import ExternalMediaResolvedAudio
 
 
 class FakeVectorStore:
@@ -82,6 +83,22 @@ class FakeVectorStore:
         return True
 
 
+class FakeExternalMediaProvider:
+    def __init__(self) -> None:
+        self.next_result: ExternalMediaResolvedAudio | None = None
+        self.next_error: Exception | None = None
+
+    async def resolve_audio(self, *, share_url: str, platform: str) -> ExternalMediaResolvedAudio:
+        if self.next_error is not None:
+            raise self.next_error
+        if self.next_result is not None:
+            return self.next_result
+        raise RuntimeError("fake external media provider not configured")
+
+    async def health_check(self) -> bool:
+        return True
+
+
 class BackendFlowTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -96,7 +113,9 @@ class BackendFlowTestCase(unittest.TestCase):
         self.app = create_app()
         self.app.state.container.session_factory = self.SessionLocal
         self.app.state.container.audio_storage = LocalAudioStorage(self.temp_dir.name)
+        self.app.state.container.imported_audio_storage = LocalImportedAudioStorage(self.temp_dir.name)
         self.app.state.container.vector_store = FakeVectorStore()
+        self.app.state.container.external_media_provider = FakeExternalMediaProvider()
         self.app.state.container.prompt_loader = PromptLoader(Path.cwd() / "prompts")
         self.app.state.container.llm_provider = SimpleNamespace(
             generate=AsyncMock(return_value="生成后的口播稿"),
@@ -140,6 +159,7 @@ class BackendFlowTestCase(unittest.TestCase):
             ("get", "/api/fragments", None),
             ("post", "/api/scripts/daily-push/trigger", None),
             ("get", "/api/knowledge", None),
+            ("post", "/api/external-media/audio-imports", {"share_url": "https://v.douyin.com/test", "platform": "auto"}),
         ]
 
         for method, path, payload in protected_routes:
@@ -288,6 +308,67 @@ class BackendFlowTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"]["code"], "VALIDATION")
+
+    def test_import_external_audio_returns_saved_url(self) -> None:
+        temp_audio = Path(self.temp_dir.name) / "incoming.m4a"
+        temp_audio.write_bytes(b"fake-m4a-audio")
+        self.app.state.container.external_media_provider.next_result = ExternalMediaResolvedAudio(
+            platform="douyin",
+            share_url="https://v.douyin.com/demo",
+            media_id="7614713222814088953",
+            title="别说了 拿大力胶吧",
+            author="老薯的薯",
+            cover_url="https://example.com/cover.jpg",
+            content_type="video",
+            local_audio_path=str(temp_audio),
+        )
+
+        response = self.client.post(
+            "/api/external-media/audio-imports",
+            json={"share_url": "https://v.douyin.com/demo", "platform": "auto"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+        self.assertEqual(payload["platform"], "douyin")
+        self.assertEqual(payload["media_id"], "7614713222814088953")
+        self.assertIn("external_media/", payload["audio_relative_path"])
+        self.assertTrue(payload["audio_public_url"].startswith("/"))
+
+        saved_path = self.app.state.container.imported_audio_storage.resolve_path(payload["audio_relative_path"])
+        self.assertTrue(saved_path.exists())
+        self.assertFalse(temp_audio.exists())
+
+    def test_import_external_audio_rejects_invalid_link(self) -> None:
+        from core.exceptions import ValidationError
+
+        self.app.state.container.external_media_provider.next_error = ValidationError(
+            message="无法识别外部媒体链接",
+            field_errors={"share_url": "当前仅支持抖音分享链接"},
+        )
+        response = self.client.post(
+            "/api/external-media/audio-imports",
+            json={"share_url": "https://example.com/not-supported", "platform": "auto"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "VALIDATION")
+
+    def test_import_external_audio_returns_error_when_provider_fails(self) -> None:
+        from core.exceptions import AppException
+
+        self.app.state.container.external_media_provider.next_error = AppException(
+            message="抖音内容解析失败",
+            code="EXTERNAL_MEDIA_IMPORT_FAILED",
+            status_code=502,
+        )
+        response = self.client.post(
+            "/api/external-media/audio-imports",
+            json={"share_url": "https://v.douyin.com/demo", "platform": "douyin"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["error"]["code"], "EXTERNAL_MEDIA_IMPORT_FAILED")
 
     def test_fragment_folders_crud_filtering_and_moves(self) -> None:
         folder_a_id = self.create_folder("选题箱")

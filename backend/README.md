@@ -52,6 +52,7 @@ Default local address: `http://127.0.0.1:8000`
 - `modules/fragment_folders/`: 碎片文件夹 CRUD 和文件夹统计。
 - `modules/fragments/`: 碎片列表、详情、移动、标签、相似检索、可视化。
 - `modules/transcriptions/`: 音频上传、后台转写、转写状态查询。
+- `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接转 m4a。
 - `modules/scripts/`: 口播稿生成、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
 - `modules/debug_logs/`: 接收移动端调试日志并落盘到本地文件。
@@ -71,6 +72,7 @@ Default local address: `http://127.0.0.1:8000`
 - `tests/`: `unittest` 测试。
 - `scripts/`: 后端本地辅助脚本。
 - `uploads/`: 本地音频上传目录。
+- `uploads/external_media/<user_id>/<platform>/`: 外部媒体导入后的音频文件。
 - `chroma_data/`: 本地 ChromaDB 数据目录。
 - `runtime_logs/`: 运行时日志目录，当前包含移动端错误日志文件。
 

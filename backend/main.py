@@ -14,6 +14,7 @@ from core.exceptions import (
 )
 from modules.auth.presentation import router as auth_router
 from modules.debug_logs.presentation import router as debug_logs_router
+from modules.external_media.presentation import router as external_media_router
 from modules.fragment_folders.presentation import router as fragment_folders_router
 from modules.fragments.presentation import router as fragments_router
 from modules.knowledge.presentation import router as knowledge_router
@@ -148,6 +149,7 @@ def register_routes(app: FastAPI) -> None:
 
     app.include_router(auth_router)
     app.include_router(debug_logs_router)
+    app.include_router(external_media_router)
     app.include_router(fragment_folders_router)
     app.include_router(fragments_router)
     app.include_router(transcriptions_router)

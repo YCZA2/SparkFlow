@@ -177,6 +177,7 @@ flowchart TD
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
 - `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化。
 - `transcriptions`: 音频上传、后台转写、状态查询。
+- `external_media`: 外部媒体音频导入，当前支持抖音分享链接下载并转成 m4a。
 - `scripts`: 合稿、列表、详情、更新、删除、每日推盘。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
 - `debug_logs`: 移动端调试日志接收与本地落盘。
@@ -244,7 +245,30 @@ sequenceDiagram
 - 转写完成后会写回 `transcript`、`summary`、`tags`、`speaker_segments`，并同步刷新 `fragment_tags` 明细。
 - 向量写入失败不会回滚主转写结果。
 
-### 5.2 Script Generation
+### 5.2 External Media Audio Import
+
+```mermaid
+sequenceDiagram
+    participant App as Client
+    participant API as /api/external-media/audio-imports
+    participant Provider as ExternalMediaProvider
+    participant FF as ffmpeg
+    participant FS as uploads/external_media
+
+    App->>API: POST share_url + platform
+    API->>Provider: resolve_audio(...)
+    Provider->>FF: extract m4a from remote video url
+    FF-->>Provider: temp m4a path
+    API->>FS: save imported audio
+    API-->>App: audio_public_url + metadata
+```
+
+关键点：
+
+- 当前接口只落盘保存外部音频，不创建 fragment，也不触发现有转写链路。
+- 对外接口按多平台抽象设计，但 v1 只有抖音 provider。
+- 导入文件统一保存到 `uploads/external_media/<user_id>/<platform>/`，输出格式固定为 `m4a`。
+### 5.3 Script Generation
 
 ```mermaid
 sequenceDiagram
