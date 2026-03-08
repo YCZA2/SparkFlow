@@ -113,7 +113,7 @@ flowchart TD
     MAIN["main.py<br/>app assembly + lifespan + routes"]
     PRE["modules/*/presentation.py<br/>FastAPI Router"]
     APP["modules/*/application.py<br/>use case / orchestration"]
-    SHARED["modules/shared/*<br/>container / ports / enrichment"]
+    SHARED["modules/shared/*<br/>container / ports / enrichment / audio_ingestion"]
     REPO["domains/*/repository.py<br/>SQLAlchemy access"]
     MODEL["models/*<br/>ORM + session factory"]
     PROVIDER["services/*<br/>provider adapters / factory"]
@@ -149,6 +149,7 @@ flowchart TD
 - `backend/modules/shared/container.py`: DI 容器、`PromptLoader`、`AudioStorage`、`VectorStore` 适配器。
 - `backend/modules/shared/ports.py`: LLM、STT、Embedding、Vector DB、音频存储等端口抽象。
 - `backend/modules/shared/enrichment.py`: 摘要与标签增强逻辑。
+- `backend/modules/shared/audio_ingestion.py`: 统一音频碎片导入管线，负责建碎片、调度转写与可扩展 hooks。
 - `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，而不是继续扩散到 legacy service 文件。
 
 ### 4.3 Backend Folder Map
@@ -176,8 +177,8 @@ flowchart TD
 - `auth`: 测试 token 签发、当前用户信息、refresh。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
 - `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化。
-- `transcriptions`: 音频上传、后台转写、状态查询。
-- `external_media`: 外部媒体音频导入，当前支持抖音分享链接下载并转成 m4a。
+- `transcriptions`: 音频上传、后台转写、状态查询，上传入口会创建 `source=voice`、`audio_source=upload` 的碎片。
+- `external_media`: 外部媒体音频导入，当前支持抖音分享链接下载并转成 m4a，导入完成后直接创建 `source=voice`、`audio_source=external_link` 的碎片并接入同一条转写管线。
 - `scripts`: 合稿、列表、详情、更新、删除、每日推盘。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
 - `debug_logs`: 移动端调试日志接收与本地落盘。
@@ -207,6 +208,7 @@ flowchart TD
 - 碎片文件夹表：`fragment_folders`
 - 碎片归一化标签表：`fragment_tags`
 - `fragments.folder_id` 指向真实文件夹；“全部”只是前端系统视图，不落库。
+- `fragments.audio_source` 用于区分音频来源；当前取值为 `upload` / `external_link` / `null`
 - 碎片向量 namespace: `fragments_{user_id}`
 - 知识库向量 namespace: `knowledge_{user_id}`
 - 上传音频路径: `uploads/<user_id>/...`
@@ -230,7 +232,8 @@ sequenceDiagram
 
     App->>API: POST audio (+ optional folder_id)
     API->>FS: save file
-    API->>DB: create fragment(syncing)
+    API->>API: audio_ingestion.ingest_audio(upload)
+    API->>DB: create fragment(source=voice, audio_source=upload, syncing)
     API-->>App: fragment_id + syncing
     API->>BG: schedule transcription
     BG->>STT: transcribe(audio)
@@ -254,18 +257,23 @@ sequenceDiagram
     participant Provider as ExternalMediaProvider
     participant FF as ffmpeg
     participant FS as uploads/external_media
+    participant DB as SQLite
+    participant BG as Background Task
 
     App->>API: POST share_url + platform
     API->>Provider: resolve_audio(...)
     Provider->>FF: extract m4a from remote video url
     FF-->>Provider: temp m4a path
     API->>FS: save imported audio
-    API-->>App: audio_public_url + metadata
+    API->>API: audio_ingestion.ingest_audio(external_link)
+    API->>DB: create fragment(source=voice, audio_source=external_link, syncing)
+    API->>BG: schedule transcription
+    API-->>App: fragment_id + sync_status + media metadata
 ```
 
 关键点：
 
-- 当前接口只落盘保存外部音频，不创建 fragment，也不触发现有转写链路。
+- 当前接口会在保存外部音频后直接创建 fragment，并接入统一后台转写链路。
 - 对外接口按多平台抽象设计，但 v1 只有抖音 provider。
 - 导入文件统一保存到 `uploads/external_media/<user_id>/<platform>/`，输出格式固定为 `m4a`。
 ### 5.3 Script Generation

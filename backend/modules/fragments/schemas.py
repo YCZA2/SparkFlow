@@ -18,6 +18,7 @@ class SpeakerSegmentItem(BaseModel):
 class FragmentCreateRequest(BaseModel):
     transcript: str | None = Field(None, description="转写文本")
     source: str = Field("voice", description="来源：voice, manual, video_parse")
+    audio_source: str | None = Field(None, description="音频来源：upload, external_link")
     audio_path: str | None = Field(None, description="音频路径")
     folder_id: str | None = Field(None, description="文件夹 ID")
 
@@ -44,6 +45,7 @@ class FragmentItem(BaseModel):
     summary: str | None = None
     tags: list[str] | None = None
     source: str
+    audio_source: str | None = None
     sync_status: str
     created_at: str | None = None
     audio_path: str | None = None

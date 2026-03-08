@@ -36,6 +36,7 @@ Default local address: `http://127.0.0.1:8000`
 6. `modules/shared` + `services`
    - 外部能力抽象与适配层。
    - 负责 LLM、STT、Embedding、VectorStore、AudioStorage 等端口与实现。
+   - `modules/shared/audio_ingestion.py` 提供统一音频碎片导入管线，供上传音频和外部链接导入复用。
 
 ## Folder Guide
 
@@ -52,7 +53,7 @@ Default local address: `http://127.0.0.1:8000`
 - `modules/fragment_folders/`: 碎片文件夹 CRUD 和文件夹统计。
 - `modules/fragments/`: 碎片列表、详情、移动、标签、相似检索、可视化。
 - `modules/transcriptions/`: 音频上传、后台转写、转写状态查询。
-- `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接转 m4a。
+- `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接转 m4a，并直接创建碎片进入统一转写流程。
 - `modules/scripts/`: 口播稿生成、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
 - `modules/debug_logs/`: 接收移动端调试日志并落盘到本地文件。
@@ -100,7 +101,7 @@ Default local address: `http://127.0.0.1:8000`
 - `presentation.py` 通过 `response_model=ResponseModel[...]` 声明标准返回结构。
 - OpenAPI 文档默认使用中文 `summary` / `description`，便于产品、前端和后端共同阅读。
 
-Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `scripts`, `knowledge`, `debug_logs`, and `scheduler`.
+Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `debug_logs`, and `scheduler`.
 
 ## Frontend Debug Logs
 

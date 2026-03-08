@@ -11,6 +11,10 @@ class ExternalAudioImportRequest(BaseModel):
 
 
 class ExternalAudioImportResponse(BaseModel):
+    fragment_id: str
+    sync_status: str
+    source: str
+    audio_source: str
     platform: str
     share_url: str
     media_id: str

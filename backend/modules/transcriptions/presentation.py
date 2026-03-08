@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from core import ResponseModel, success_response
 from core.auth import get_current_user
+from modules.shared.audio_ingestion import AudioIngestionService
 from modules.shared.container import FastApiBackgroundJobRunner, ServiceContainer, get_container, get_db_session
 
 from .application import TranscriptionUseCase
@@ -16,9 +17,11 @@ router = APIRouter(prefix="/api/transcriptions", tags=["transcriptions"], respon
 def get_transcription_use_case(container: ServiceContainer = Depends(get_container)) -> TranscriptionUseCase:
     return TranscriptionUseCase(
         audio_storage=container.audio_storage,
-        stt_provider=container.stt_provider,
-        llm_provider=container.llm_provider,
-        vector_store=container.vector_store,
+        ingestion_service=AudioIngestionService(
+            stt_provider=container.stt_provider,
+            llm_provider=container.llm_provider,
+            vector_store=container.vector_store,
+        ),
     )
 
 
@@ -43,14 +46,9 @@ async def upload_audio(
         db=db,
         user_id=current_user["user_id"],
         audio=audio,
-        folder_id=folder_id,
-    )
-    runner.schedule(
-        use_case.process_transcription,
-        fragment_id=payload.fragment_id,
-        user_id=current_user["user_id"],
-        audio_path=payload.audio_path,
+        runner=runner,
         session_factory=container.session_factory,
+        folder_id=folder_id,
     )
     return success_response(data=payload, message="音频上传成功，正在转写中")
 

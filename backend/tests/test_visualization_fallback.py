@@ -42,6 +42,7 @@ class VisualizationFallbackTestCase(unittest.IsolatedAsyncioTestCase):
                 user_id="test-user-001",
                 transcript="这是一个关于定位方法的碎片",
                 source="manual",
+                audio_source=None,
                 audio_path=None,
                 sync_status="synced",
             )
@@ -64,6 +65,7 @@ class VisualizationFallbackTestCase(unittest.IsolatedAsyncioTestCase):
                 user_id="test-user-001",
                 transcript="这是另一个碎片",
                 source="manual",
+                audio_source=None,
                 audio_path=None,
                 sync_status="synced",
             )

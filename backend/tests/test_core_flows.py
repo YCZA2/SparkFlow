@@ -309,6 +309,15 @@ class BackendFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"]["code"], "VALIDATION")
 
+    def test_create_fragment_rejects_invalid_audio_source(self) -> None:
+        response = self.client.post(
+            "/api/fragments",
+            json={"transcript": "无效音频来源", "source": "voice", "audio_source": "crawler"},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "VALIDATION")
+
     def test_import_external_audio_returns_saved_url(self) -> None:
         temp_audio = Path(self.temp_dir.name) / "incoming.m4a"
         temp_audio.write_bytes(b"fake-m4a-audio")
@@ -332,12 +341,22 @@ class BackendFlowTestCase(unittest.TestCase):
         payload = response.json()["data"]
         self.assertEqual(payload["platform"], "douyin")
         self.assertEqual(payload["media_id"], "7614713222814088953")
+        self.assertEqual(payload["source"], "voice")
+        self.assertEqual(payload["audio_source"], "external_link")
+        self.assertEqual(payload["sync_status"], "syncing")
+        self.assertTrue(payload["fragment_id"])
         self.assertIn("external_media/", payload["audio_relative_path"])
         self.assertTrue(payload["audio_public_url"].startswith("/"))
 
         saved_path = self.app.state.container.imported_audio_storage.resolve_path(payload["audio_relative_path"])
         self.assertTrue(saved_path.exists())
         self.assertFalse(temp_audio.exists())
+        with self.SessionLocal() as db:
+            fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
+            self.assertIsNotNone(fragment)
+            self.assertEqual(fragment.source, "voice")
+            self.assertEqual(fragment.audio_source, "external_link")
+            self.assertEqual(fragment.sync_status, "synced")
 
     def test_import_external_audio_rejects_invalid_link(self) -> None:
         from core.exceptions import ValidationError
@@ -672,10 +691,12 @@ class BackendFlowTestCase(unittest.TestCase):
         status_response = self.client.get(f"/api/transcriptions/{payload['fragment_id']}", headers=self.auth_headers())
         self.assertEqual(status_response.status_code, 200)
         self.assertIn(status_response.json()["data"]["sync_status"], {"syncing", "synced"})
+        self.assertEqual(status_response.json()["data"]["audio_source"], "upload")
 
         with self.SessionLocal() as db:
             fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
             self.assertIsNotNone(fragment)
+            self.assertEqual(fragment.audio_source, "upload")
             self.assertEqual(fragment.sync_status, "synced")
             self.assertEqual(fragment.transcript, "转写完成")
             self.assertEqual(fragment.folder_id, folder_id)
@@ -707,6 +728,7 @@ class BackendFlowTestCase(unittest.TestCase):
 
         with self.SessionLocal() as db:
             fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
+            self.assertEqual(fragment.audio_source, "upload")
             self.assertEqual(fragment.sync_status, "failed")
 
     def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(self) -> None:
@@ -719,7 +741,7 @@ class BackendFlowTestCase(unittest.TestCase):
             health_check=AsyncMock(return_value=True),
         )
 
-        with patch("modules.transcriptions.application.ENRICHMENT_TIMEOUT_SECONDS", 0.01):
+        with patch("modules.shared.audio_ingestion.ENRICHMENT_TIMEOUT_SECONDS", 0.01):
             response = self.client.post(
                 "/api/transcriptions",
                 headers=self.auth_headers(),
@@ -732,6 +754,7 @@ class BackendFlowTestCase(unittest.TestCase):
         with self.SessionLocal() as db:
             fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
             self.assertIsNotNone(fragment)
+            self.assertEqual(fragment.audio_source, "upload")
             self.assertEqual(fragment.sync_status, "synced")
             self.assertEqual(fragment.transcript, "转写完成")
             self.assertTrue(fragment.summary)
@@ -754,6 +777,7 @@ class BackendFlowTestCase(unittest.TestCase):
         with self.SessionLocal() as db:
             fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
             self.assertIsNotNone(fragment)
+            self.assertEqual(fragment.audio_source, "upload")
             self.assertEqual(fragment.sync_status, "failed")
 
     def test_delete_fragment_removes_audio_file(self) -> None:
@@ -770,6 +794,7 @@ class BackendFlowTestCase(unittest.TestCase):
                 transcript="待删除的碎片",
                 audio_path=relative_audio_path,
                 source="voice",
+                audio_source="upload",
                 sync_status="synced",
             )
             db.add(fragment)

@@ -100,6 +100,7 @@ class Fragment(Base):
     summary = Column(Text, nullable=True)  # AI一句话摘要
     tags = Column(String, nullable=True)  # JSON数组字符串，AI自动标签
     source = Column(String, default="voice", nullable=False)  # 'voice'|'manual'|'video_parse'
+    audio_source = Column(String, nullable=True)  # 'upload'|'external_link'|None
     sync_status = Column(String, default="pending", nullable=False)  # 'pending'|'syncing'|'synced'|'failed'
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 

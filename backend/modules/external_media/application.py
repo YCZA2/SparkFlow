@@ -3,7 +3,11 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from sqlalchemy.orm import Session
+
+from modules.shared.audio_ingestion import AudioIngestionRequest, AudioIngestionService
 from modules.shared.ports import ExternalMediaProvider, ImportedAudioStorage
+from modules.shared.ports import JobRunner
 
 from .schemas import ExternalAudioImportResponse
 
@@ -14,11 +18,24 @@ class ExternalMediaUseCase:
         *,
         external_media_provider: ExternalMediaProvider,
         imported_audio_storage: ImportedAudioStorage,
+        ingestion_service: AudioIngestionService,
     ) -> None:
         self.external_media_provider = external_media_provider
         self.imported_audio_storage = imported_audio_storage
+        self.ingestion_service = ingestion_service
 
-    async def import_audio(self, *, user_id: str, share_url: str, platform: str) -> ExternalAudioImportResponse:
+    async def import_audio(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        share_url: str,
+        platform: str,
+        runner: JobRunner,
+        session_factory,
+        folder_id: str | None = None,
+    ) -> ExternalAudioImportResponse:
+        await self.ingestion_service.ensure_transcription_available()
         resolved = await self.external_media_provider.resolve_audio(share_url=share_url, platform=platform)
         filename = self._build_filename(
             platform=resolved.platform,
@@ -37,7 +54,27 @@ class ExternalMediaUseCase:
             await self._cleanup_temp(resolved.local_audio_path)
 
         relative_path = self._to_posix(saved["relative_path"])
+        ingestion_result = await self.ingestion_service.ingest_audio(
+            db=db,
+            request=AudioIngestionRequest(
+                user_id=user_id,
+                audio_path=relative_path,
+                folder_id=folder_id,
+                audio_source="external_link",
+                source_context={
+                    "platform": resolved.platform,
+                    "share_url": resolved.share_url,
+                    "media_id": resolved.media_id,
+                },
+            ),
+            runner=runner,
+            session_factory=session_factory,
+        )
         return ExternalAudioImportResponse(
+            fragment_id=ingestion_result.fragment_id,
+            sync_status=ingestion_result.sync_status,
+            source=ingestion_result.source,
+            audio_source=ingestion_result.audio_source,
             platform=resolved.platform,
             share_url=resolved.share_url,
             media_id=resolved.media_id,

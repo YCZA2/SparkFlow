@@ -27,6 +27,7 @@ from .schemas import (
 from .visualization import build_fragment_visualization
 
 VALID_FRAGMENT_SOURCES = {"voice", "manual", "video_parse"}
+VALID_AUDIO_SOURCES = {"upload", "external_link"}
 
 
 def _map_speaker_segments(raw: Optional[str]) -> Optional[list[SpeakerSegmentItem]]:
@@ -65,6 +66,7 @@ def map_fragment(fragment: Fragment) -> FragmentItem:
         summary=fragment.summary,
         tags=parse_json_list(fragment.tags, allow_csv_fallback=True),
         source=fragment.source,
+        audio_source=fragment.audio_source,
         sync_status=fragment.sync_status,
         created_at=format_iso_datetime(fragment.created_at),
         audio_path=fragment.audio_path,
@@ -84,6 +86,7 @@ class FragmentCommandService:
         user_id: str,
         transcript: Optional[str],
         source: str,
+        audio_source: Optional[str],
         audio_path: Optional[str],
         folder_id: Optional[str] = None,
     ) -> Fragment:
@@ -92,12 +95,18 @@ class FragmentCommandService:
                 message="无效的 source 值",
                 field_errors={"source": f"必须是以下之一: {', '.join(sorted(VALID_FRAGMENT_SOURCES))}"},
             )
+        if audio_source is not None and audio_source not in VALID_AUDIO_SOURCES:
+            raise ValidationError(
+                message="无效的 audio_source 值",
+                field_errors={"audio_source": f"必须是以下之一: {', '.join(sorted(VALID_AUDIO_SOURCES))}"},
+            )
         self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
         return fragment_repository.create(
             db=db,
             user_id=user_id,
             transcript=transcript,
             source=source,
+            audio_source=audio_source,
             audio_path=audio_path,
             sync_status="synced" if transcript else "pending",
             folder_id=folder_id,

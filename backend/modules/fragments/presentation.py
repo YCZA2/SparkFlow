@@ -76,6 +76,7 @@ async def create_fragment(
         user_id=current_user["user_id"],
         transcript=data.transcript,
         source=data.source,
+        audio_source=data.audio_source,
         audio_path=data.audio_path,
         folder_id=data.folder_id,
     )

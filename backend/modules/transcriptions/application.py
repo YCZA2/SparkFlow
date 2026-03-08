@@ -1,24 +1,13 @@
 from __future__ import annotations
 
-import asyncio
-import json
-import logging
-from typing import Any
-
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundError, ServiceUnavailableError
-from domains.fragment_folders import repository as fragment_folder_repository
 from domains.fragments import repository as fragment_repository
-from models import Fragment
 from modules.fragments.application import map_fragment
-from modules.shared.enrichment import build_fallback_summary_and_tags, generate_summary_and_tags
-from modules.shared.ports import AudioStorage, SpeechToTextProvider, TextGenerationProvider, VectorStore
+from modules.shared.audio_ingestion import AudioIngestionRequest, AudioIngestionService
+from modules.shared.ports import AudioStorage, JobRunner
 from .schemas import AudioUploadResponse, TranscriptionStatusResponse
-
-logger = logging.getLogger(__name__)
-ENRICHMENT_TIMEOUT_SECONDS = 45.0
 
 
 class TranscriptionUseCase:
@@ -26,14 +15,10 @@ class TranscriptionUseCase:
         self,
         *,
         audio_storage: AudioStorage,
-        stt_provider: SpeechToTextProvider,
-        llm_provider: TextGenerationProvider,
-        vector_store: VectorStore,
+        ingestion_service: AudioIngestionService,
     ) -> None:
         self.audio_storage = audio_storage
-        self.stt_provider = stt_provider
-        self.llm_provider = llm_provider
-        self.vector_store = vector_store
+        self.ingestion_service = ingestion_service
 
     async def upload_audio(
         self,
@@ -41,44 +26,30 @@ class TranscriptionUseCase:
         db: Session,
         user_id: str,
         audio: UploadFile,
+        runner: JobRunner,
+        session_factory,
         folder_id: str | None = None,
     ) -> AudioUploadResponse:
-        try:
-            is_available = await self.stt_provider.health_check()
-            if not is_available:
-                raise RuntimeError("health check returned unavailable")
-        except Exception as exc:
-            raise ServiceUnavailableError(
-                message=f"语音转写服务暂时不可用: {str(exc)}",
-                service_name="stt",
-            ) from exc
-
-        if folder_id is not None:
-            folder = fragment_folder_repository.get_by_id(db=db, user_id=user_id, folder_id=folder_id)
-            if not folder:
-                raise NotFoundError(
-                    message="文件夹不存在或无权访问",
-                    resource_type="fragment_folder",
-                    resource_id=folder_id,
-                )
-
+        await self.ingestion_service.ensure_transcription_available()
         saved = await self.audio_storage.save(audio=audio, user_id=user_id)
-        fragment = fragment_repository.create(
+        result = await self.ingestion_service.ingest_audio(
             db=db,
-            user_id=user_id,
-            transcript=None,
-            source="voice",
-            audio_path=saved["relative_path"],
-            sync_status="syncing",
-            folder_id=folder_id,
+            request=AudioIngestionRequest(
+                user_id=user_id,
+                audio_path=saved["relative_path"],
+                folder_id=folder_id,
+                audio_source="upload",
+            ),
+            runner=runner,
+            session_factory=session_factory,
         )
         return AudioUploadResponse(
-            fragment_id=fragment.id,
+            fragment_id=result.fragment_id,
             audio_path=saved["file_path"],
             relative_path=saved["relative_path"],
             file_size=saved["file_size"],
             duration=None,
-            sync_status="syncing",
+            sync_status=result.sync_status,
         )
 
     def get_status(self, *, db: Session, user_id: str, fragment_id: str) -> TranscriptionStatusResponse:
@@ -89,92 +60,3 @@ class TranscriptionUseCase:
         payload = map_fragment(fragment).model_dump()
         payload["fragment_id"] = payload["id"]
         return TranscriptionStatusResponse.model_validate(payload)
-
-    async def _generate_enrichment(self, transcript: str) -> tuple[str, list[str]]:
-        try:
-            return await generate_summary_and_tags(
-                transcript,
-                llm_provider=self.llm_provider,
-                timeout_seconds=ENRICHMENT_TIMEOUT_SECONDS,
-            )
-        except asyncio.TimeoutError:
-            logger.warning(
-                "summary/tag generation timed out for transcript length=%s, using fallback",
-                len(transcript or ""),
-            )
-            return build_fallback_summary_and_tags(transcript)
-
-    async def process_transcription(
-        self,
-        *,
-        fragment_id: str,
-        user_id: str,
-        audio_path: str,
-        session_factory,
-        max_retries: int = 2,
-    ) -> dict[str, Any]:
-        last_error: str | None = None
-        try:
-            for attempt in range(max_retries + 1):
-                try:
-                    result = await self.stt_provider.transcribe(audio_path)
-                    transcript = result.text or ""
-                    summary, tags = await self._generate_enrichment(transcript)
-                    speaker_segments = getattr(result, "speaker_segments", None) or []
-                    normalized_segments = []
-                    for segment in speaker_segments:
-                        if isinstance(segment, dict):
-                            speaker_id = segment.get("speaker_id")
-                            start_ms = segment.get("start_ms")
-                            end_ms = segment.get("end_ms")
-                            text = segment.get("text")
-                        else:
-                            speaker_id = getattr(segment, "speaker_id", None)
-                            start_ms = getattr(segment, "start_ms", None)
-                            end_ms = getattr(segment, "end_ms", None)
-                            text = getattr(segment, "text", None)
-                        if speaker_id is None or start_ms is None or end_ms is None or text is None:
-                            continue
-                        normalized_segments.append(
-                            {
-                                "speaker_id": str(speaker_id),
-                                "start_ms": int(start_ms),
-                                "end_ms": int(end_ms),
-                                "text": str(text),
-                            }
-                        )
-                    with session_factory() as db:
-                        updated = fragment_repository.mark_synced(
-                            db=db,
-                            fragment_id=fragment_id,
-                            user_id=user_id,
-                            transcript=transcript,
-                            summary=summary,
-                            tags_json=json.dumps(tags, ensure_ascii=False),
-                            speaker_segments_json=json.dumps(normalized_segments, ensure_ascii=False) if normalized_segments else None,
-                        )
-                    if updated:
-                        try:
-                            await self.vector_store.upsert_fragment(
-                                user_id=user_id,
-                                fragment_id=fragment_id,
-                                text=transcript,
-                                source="voice",
-                                summary=summary,
-                                tags=tags,
-                            )
-                        except Exception:
-                            logger.warning("vectorization failed for fragment %s", fragment_id, exc_info=True)
-                    return {"success": True, "fragment_id": fragment_id, "transcript": transcript}
-                except Exception as exc:
-                    last_error = str(exc)
-                    logger.error("transcription attempt failed for fragment %s: %s", fragment_id, last_error)
-                    if attempt < max_retries:
-                        await asyncio.sleep((2 ** (attempt + 1)) - 1)
-        except asyncio.CancelledError:
-            last_error = "transcription job cancelled"
-            logger.warning("transcription job cancelled for fragment %s", fragment_id)
-
-        with session_factory() as db:
-            fragment_repository.mark_failed(db=db, fragment_id=fragment_id, user_id=user_id)
-        return {"success": False, "fragment_id": fragment_id, "error": last_error}

@@ -113,6 +113,7 @@ def create(
     user_id: str,
     transcript: Optional[str],
     source: str,
+    audio_source: Optional[str],
     audio_path: Optional[str],
     sync_status: str,
     *,
@@ -127,6 +128,7 @@ def create(
         audio_path=audio_path,
         tags=tags_json,
         source=source,
+        audio_source=audio_source,
         sync_status=sync_status,
     )
     db.add(fragment)
