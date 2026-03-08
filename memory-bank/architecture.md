@@ -1,6 +1,6 @@
 # SparkFlow Architecture
 
-> 最后更新：2026-03-08
+> 最后更新：2026-03-09
 
 本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行。
 
@@ -453,3 +453,33 @@ sequenceDiagram
 - 知识库后端已可用，移动端入口仍是占位页。
 - 每日推盘后端已可运行并带有定时任务，但前端主入口尚未完整消费这条能力。
 - 当前最稳定的本地开发方式是根目录执行 `bash scripts/dev-mobile.sh`，而不是分别手动起多个进程。
+
+## 9. Frontend / Backend Collaboration
+
+随着移动端与后端可能由不同成员并行开发，当前仓库默认采用“契约驱动 + 用户流驱动”的协作方式。
+
+### 9.1 Collaboration Defaults
+
+- 需求以用户流拆分，不只按前端页面或后端接口拆分。
+- 后端模块内 `schemas.py` 是 API contract 单一事实源。
+- `presentation.py` 上声明的 `response_model=ResponseModel[...]` 与 `/docs`、`/redoc` 一起构成前后端联调契约。
+- 前端可以基于 contract 先做 mock 和页面状态流，不等待后端完整实现。
+- 后端字段应尽量追加兼容，避免无通知的破坏性改动。
+
+### 9.2 Expected Workflow
+
+1. 先明确用户流与验收标准。
+2. 后端先定义最小 request / response contract。
+3. 前端按 contract 完成页面、loading、empty、error 和 mock。
+4. 后端补齐真实业务实现、测试和响应样例。
+5. 双方通过 `bash scripts/dev-mobile.sh` 做本地联调。
+6. 合并前同步更新 README / architecture / API 示例。
+
+### 9.3 Current Coordination Rules
+
+- 新接口优先新增或更新模块内 `schemas.py`，不要只在聊天里约定字段。
+- 涉及状态流转的接口，联调时必须覆盖“处理中 / 成功 / 失败”三个方向。
+- 联调问题优先结合 `backend/runtime_logs/mobile-debug.log` 与后端接口日志排查，而不是只看前端截图。
+- 启动方式、环境假设或模块边界发生变化时，文档必须与代码同一轮更新。
+
+更完整的执行细则见 [`memory-bank/frontend-backend-collaboration.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/frontend-backend-collaboration.md)。

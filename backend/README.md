@@ -113,6 +113,8 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-research
 - `presentation.py` 通过 `response_model=ResponseModel[...]` 声明标准返回结构。
 - OpenAPI 文档默认使用中文 `summary` / `description`，便于产品、前端和后端共同阅读。
 
+当前仓库的前后端并行开发约定见 [`memory-bank/frontend-backend-collaboration.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/frontend-backend-collaboration.md)。如果接口字段、状态枚举或返回结构发生变化，后端需要在更新 `schemas.py` 的同时同步这份协作规范涉及的联调约定。
+
 Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `agent`, `debug_logs`, and `scheduler`.
 
 外挂工作流接口：
