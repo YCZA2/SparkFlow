@@ -63,6 +63,10 @@ class Settings(BaseSettings):
         default=None,
         description="阿里云 DashScope API Key"
     )
+    DOUYIN_COOKIE: Optional[str] = Field(
+        default=None,
+        description="抖音 Web Cookie，用于外部媒体导入时提高解析成功率"
+    )
 
     # STT 配置
     STT_PROVIDER: str = Field(

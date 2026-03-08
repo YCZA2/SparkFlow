@@ -3,7 +3,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.exceptions import AppException, ValidationError
+from core.config import settings
 from services.external_media.douyin.provider import DouyinProvider
+from services.external_media.douyin.parser import DouyinVideoParser
 from services.external_media.ffmpeg_audio import FfmpegAudioExtractor
 from services.external_media.service import ExternalMediaService
 
@@ -45,6 +47,15 @@ class DouyinProviderTestCase(unittest.IsolatedAsyncioTestCase):
         provider = DouyinProvider(parser=parser, extractor=SimpleNamespace())
         with self.assertRaises(ValidationError):
             await provider.resolve_audio(share_url="https://v.douyin.com/test")
+
+    async def test_parser_loads_cookie_from_settings(self) -> None:
+        original_cookie = settings.DOUYIN_COOKIE
+        settings.DOUYIN_COOKIE = "test_cookie=value"
+        try:
+            parser = DouyinVideoParser()
+            self.assertEqual(parser.cookie, "test_cookie=value")
+        finally:
+            settings.DOUYIN_COOKIE = original_cookie
 
 
 class FfmpegAudioExtractorTestCase(unittest.TestCase):

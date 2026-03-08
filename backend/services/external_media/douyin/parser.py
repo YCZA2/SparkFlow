@@ -7,6 +7,8 @@ import re
 import requests
 from urllib.parse import quote
 
+from core.config import settings
+
 try:
     from .abogus import ABogus
 except Exception:
@@ -29,7 +31,7 @@ class DouyinVideoParser:
 
     @staticmethod
     def _load_cookie():
-        return ""
+        return (settings.DOUYIN_COOKIE or "").lstrip("\ufeff").strip()
 
     def set_cookie(self, cookie: str):
         self.cookie = (cookie or "").lstrip("\ufeff").strip()
