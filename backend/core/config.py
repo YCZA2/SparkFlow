@@ -13,6 +13,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 FALSEY_DEBUG_VALUES = {"0", "false", "off", "no", "release", "prod", "production"}
 TRUTHY_DEBUG_VALUES = {"1", "true", "on", "yes", "debug", "dev", "development"}
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_SQLITE_PATH = os.path.join(BACKEND_DIR, "data.db")
 
 
 class Settings(BaseSettings):
@@ -44,7 +46,7 @@ class Settings(BaseSettings):
 
     # 数据库配置
     DATABASE_URL: str = Field(
-        default="sqlite:///./data.db",
+        default=f"sqlite:///{DEFAULT_SQLITE_PATH}",
         description="SQLAlchemy 数据库 URL"
     )
 
@@ -125,7 +127,7 @@ class Settings(BaseSettings):
         description="向量数据库提供商: chromadb, pinecone, qdrant"
     )
     CHROMADB_PATH: str = Field(
-        default="./chroma_data",
+        default=os.path.join(BACKEND_DIR, "chroma_data"),
         description="ChromaDB 持久化存储路径"
     )
 
