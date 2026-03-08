@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { STORAGE_KEYS, getBackendUrl, updateApiBaseUrl } from '@/constants/config';
+import { createDebugLogEntry, emitDebugLog, serializeForLog } from '@/features/debug-log/store';
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -16,6 +17,7 @@ export interface ApiResponse<T = unknown> {
 export interface RequestConfig extends RequestInit {
   headers?: Record<string, string>;
   requiresAuth?: boolean;
+  allowEmptyData?: boolean;
 }
 
 export class ApiError extends Error {
@@ -116,13 +118,25 @@ function buildHeaders(
   return headers;
 }
 
-async function parseApiResponse<T>(response: Response): Promise<T> {
+async function parseApiResponse<T>(response: Response, config: RequestConfig = {}): Promise<T> {
   if (response.status === 204) {
     return {} as T;
   }
 
   const data: ApiResponse<T> = await response.json();
   if (!data.success) {
+    emitDebugLog(
+      createDebugLogEntry({
+        level: 'error',
+        source: 'api.response',
+        message: data.error?.message || '请求失败',
+        context: {
+          code: data.error?.code || 'UNKNOWN_ERROR',
+          details: serializeForLog(data.error?.details),
+          status: response.status,
+        },
+      })
+    );
     throw new ApiError(
       data.error?.code || 'UNKNOWN_ERROR',
       data.error?.message || '请求失败',
@@ -131,6 +145,9 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
   }
 
   if (data.data === null) {
+    if (config.allowEmptyData) {
+      return null as T;
+    }
     throw new ApiError('NO_DATA', '响应数据为空');
   }
 
@@ -156,11 +173,22 @@ async function executeRequest<T>(
       const newToken = await fetchTestToken();
       const retryConfig = await buildRequest(newToken);
       const retryResponse = await fetch(url, retryConfig);
-      return await parseApiResponse<T>(retryResponse);
+      return await parseApiResponse<T>(retryResponse, requestConfig as RequestConfig);
     }
 
-    return await parseApiResponse<T>(response);
+    return await parseApiResponse<T>(response, requestConfig as RequestConfig);
   } catch (error) {
+    emitDebugLog(
+      createDebugLogEntry({
+        level: 'error',
+        source: 'api.request',
+        message: error instanceof Error ? error : '请求失败',
+        context: {
+          endpoint,
+          url,
+        },
+      })
+    );
     if (error instanceof ApiError) {
       throw error;
     }
@@ -236,7 +264,10 @@ export function patch<T = unknown>(endpoint: string, body?: unknown, config?: Re
 }
 
 export function del<T = unknown>(endpoint: string, config?: RequestConfig): Promise<T> {
-  return fetchApi<T>(endpoint, 'DELETE', undefined, config);
+  return fetchApi<T>(endpoint, 'DELETE', undefined, {
+    ...config,
+    allowEmptyData: config?.allowEmptyData ?? true,
+  });
 }
 
 export async function testConnection(): Promise<boolean> {

@@ -10,8 +10,10 @@ import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { useColorScheme } from '@/components/useColorScheme';
 import { Drawer } from '@/components/Drawer/Drawer';
 import { DrawerBackdrop } from '@/components/Drawer/DrawerBackdrop';
+import { createDebugLogEntry, emitDebugLog } from '@/features/debug-log/store';
 import { AudioCaptureProvider } from '@/features/recording/AudioCaptureProvider';
 import { AppSessionProvider, useAppSession } from '@/providers/AppSessionProvider';
+import { DebugLogProvider } from '@/providers/DebugLogProvider';
 import { DrawerProvider, useDrawer } from '@/providers/DrawerProvider';
 
 export {
@@ -34,7 +36,16 @@ export default function RootLayout() {
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
-    if (error) throw error;
+    if (error) {
+      emitDebugLog(
+        createDebugLogEntry({
+          level: 'error',
+          source: 'root-layout',
+          message: error,
+        })
+      );
+      throw error;
+    }
   }, [error]);
 
   useEffect(() => {
@@ -48,13 +59,15 @@ export default function RootLayout() {
   }
 
   return (
-    <AppSessionProvider>
-      <DrawerProvider>
-        <AudioCaptureProvider>
-          <RootLayoutNav />
-        </AudioCaptureProvider>
-      </DrawerProvider>
-    </AppSessionProvider>
+    <DebugLogProvider>
+      <AppSessionProvider>
+        <DrawerProvider>
+          <AudioCaptureProvider>
+            <RootLayoutNav />
+          </AudioCaptureProvider>
+        </DrawerProvider>
+      </AppSessionProvider>
+    </DebugLogProvider>
   );
 }
 
@@ -110,6 +123,13 @@ function RootLayoutNav() {
             options={{ title: '录音', headerShown: false, gestureEnabled: false }}
           />
           <Stack.Screen name="knowledge" options={{ title: '知识库', headerShown: true }} />
+          <Stack.Screen
+            name="debug-logs"
+            options={{
+              title: '错误日志',
+              headerShown: true,
+            }}
+          />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
           <Stack.Screen
             name="network-settings"

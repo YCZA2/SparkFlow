@@ -24,6 +24,7 @@ export const STORAGE_KEYS = {
   USER: 'user_info',
   REFRESH_TOKEN: 'refresh_token',
   BACKEND_URL: '@backend_url',
+  DEBUG_LOGS: '@debug_logs',
 } as const;
 
 // API 端点

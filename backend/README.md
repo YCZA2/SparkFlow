@@ -54,6 +54,7 @@ Default local address: `http://127.0.0.1:8000`
 - `modules/transcriptions/`: 音频上传、后台转写、转写状态查询。
 - `modules/scripts/`: 口播稿生成、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
+- `modules/debug_logs/`: 接收移动端调试日志并落盘到本地文件。
 - `modules/scheduler/`: APScheduler 装配与每日推盘调度入口。
 - `modules/shared/`: 模块共享端口、DI 容器、增强逻辑，不承载独立业务模块。
 
@@ -71,6 +72,7 @@ Default local address: `http://127.0.0.1:8000`
 - `scripts/`: 后端本地辅助脚本。
 - `uploads/`: 本地音频上传目录。
 - `chroma_data/`: 本地 ChromaDB 数据目录。
+- `runtime_logs/`: 运行时日志目录，当前包含移动端错误日志文件。
 
 ### Legacy or low-priority paths
 
@@ -96,7 +98,39 @@ Default local address: `http://127.0.0.1:8000`
 - `presentation.py` 通过 `response_model=ResponseModel[...]` 声明标准返回结构。
 - OpenAPI 文档默认使用中文 `summary` / `description`，便于产品、前端和后端共同阅读。
 
-Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `scripts`, `knowledge`, and `scheduler`.
+Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `scripts`, `knowledge`, `debug_logs`, and `scheduler`.
+
+## Frontend Debug Logs
+
+移动端错误日志现在会同时：
+
+- 保存在 App 内错误日志页中
+- 追加写入后端本地文件 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
+
+后端接收接口：
+
+- `POST /api/debug/mobile-logs`
+
+联调方式：
+
+1. 启动联调环境：
+
+```bash
+bash scripts/dev-mobile.sh
+```
+
+2. 在 App 内进入：
+
+- `创作工作台`
+- `错误日志`
+
+3. 复现问题后，Codex 可以直接读取日志文件：
+
+```bash
+tail -n 100 backend/runtime_logs/mobile-debug.log
+```
+
+这样真机/模拟器上的 JS 异常、`console.error`、接口错误就不需要手动复制给 Codex。
 
 ## Tests
 

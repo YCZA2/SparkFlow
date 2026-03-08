@@ -190,6 +190,41 @@ watchman watch-del '/Users/hujiahui/Desktop/VibeCoding/SparkFlow'
 watchman watch-project '/Users/hujiahui/Desktop/VibeCoding/SparkFlow'
 ```
 
+### 5. 让 Codex 直接读取前端报错
+
+现在移动端错误日志会同时：
+
+- 显示在 App 内的 `错误日志` 页面
+- 同步写入后端本地文件 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
+
+推荐调试方式：
+
+1. 启动联调：
+
+```bash
+bash scripts/dev-mobile.sh
+```
+
+2. 在 App 里打开：
+
+- `创作工作台`
+- `错误日志`
+
+3. 复现问题后，直接让 Codex 读取：
+
+```bash
+backend/runtime_logs/mobile-debug.log
+```
+
+这份日志会记录：
+
+- `console.error`
+- 全局 JS 异常
+- 未处理 Promise 异常（Web）
+- API 请求失败 / 响应错误
+
+这样以后真机红屏或接口报错，不需要再手动复制大段报错文本。
+
 ## 五、手动命令对照表
 
 如果你以后不想记脚本，可以对照下面理解：

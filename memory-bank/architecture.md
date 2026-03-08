@@ -166,6 +166,7 @@ flowchart TD
 - `backend/tests/`: 后端自动化测试。
 - `backend/uploads/`: 本地音频文件存储。
 - `backend/chroma_data/`: 本地向量库持久化目录。
+- `backend/runtime_logs/`: 运行时日志目录，当前包含移动端错误日志落盘文件。
 - `backend/scripts/`: 后端辅助脚本。
 - `backend/routers/`: 早期路由目录残留，当前不应再作为新增功能的主要入口。
 - `backend/schemas/`: 已废弃的旧全局 schema 目录，后续应避免继续使用或新增内容。
@@ -178,6 +179,7 @@ flowchart TD
 - `transcriptions`: 音频上传、后台转写、状态查询。
 - `scripts`: 合稿、列表、详情、更新、删除、每日推盘。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
+- `debug_logs`: 移动端调试日志接收与本地落盘。
 - `scheduler`: APScheduler 装配与启停。
 
 ### 4.5 Backend Coding Conventions
@@ -207,6 +209,7 @@ flowchart TD
 - 碎片向量 namespace: `fragments_{user_id}`
 - 知识库向量 namespace: `knowledge_{user_id}`
 - 上传音频路径: `uploads/<user_id>/...`
+- 移动端调试日志文件: `runtime_logs/mobile-debug.log`
 - 每日推盘调度时间：使用 `APP_TIMEZONE`，默认 `Asia/Shanghai`，时间点由 `DAILY_PUSH_HOUR` / `DAILY_PUSH_MINUTE` 控制
 
 ## 5. Core Flows
@@ -348,6 +351,7 @@ sequenceDiagram
 - `POST /api/knowledge/search`
 - `GET /api/knowledge/{doc_id}`
 - `DELETE /api/knowledge/{doc_id}`
+- `POST /api/debug/mobile-logs`
 
 ## 7. Key Entry Files
 

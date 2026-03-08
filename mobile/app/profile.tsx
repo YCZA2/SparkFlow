@@ -125,6 +125,13 @@ export default function ProfileScreen() {
               title="API 测试"
               subtitle="测试后端连接"
               onPress={() => router.push('/test-api')}
+              tone={theme}
+            />
+            <MenuItem
+              icon="🧯"
+              title="错误日志"
+              subtitle="查看前端运行时错误和接口异常"
+              onPress={() => router.push('/debug-logs')}
               hideBorder
               tone={theme}
             />
