@@ -20,7 +20,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFolderFragments } from '@/features/folders/hooks';
 import type { Fragment } from '@/types/fragment';
-import { QuickActionBar } from '@/components/QuickActionBar';
 
 // 返回按钮组件
 function BackButton({ onPress, color }: { onPress: () => void; color: string }) {
@@ -218,9 +217,6 @@ export default function FolderDetailScreen() {
           </Animated.View>
         </View>
       )}
-
-      {/* 悬浮底部操作栏 - 快捷按钮（非选择模式时显示） */}
-      <QuickActionBar folderId={id} visible={!screen.selection.isSelectionMode} />
     </View>
   );
 }

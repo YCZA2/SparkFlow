@@ -15,6 +15,8 @@ import { AudioCaptureProvider } from '@/features/recording/AudioCaptureProvider'
 import { AppSessionProvider, useAppSession } from '@/providers/AppSessionProvider';
 import { DebugLogProvider } from '@/providers/DebugLogProvider';
 import { DrawerProvider, useDrawer } from '@/providers/DrawerProvider';
+import { QuickActionBarProvider } from '@/providers/QuickActionBarProvider';
+import { QuickActionBar } from '@/components/QuickActionBar';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -62,9 +64,11 @@ export default function RootLayout() {
     <DebugLogProvider>
       <AppSessionProvider>
         <DrawerProvider>
-          <AudioCaptureProvider>
-            <RootLayoutNav />
-          </AudioCaptureProvider>
+          <QuickActionBarProvider>
+            <AudioCaptureProvider>
+              <RootLayoutNav />
+            </AudioCaptureProvider>
+          </QuickActionBarProvider>
         </DrawerProvider>
       </AppSessionProvider>
     </DebugLogProvider>
@@ -146,6 +150,8 @@ function RootLayoutNav() {
             }}
           />
         </Stack>
+        {/* 底部快捷操作栏 - 悬浮在页面之上 */}
+        <QuickActionBar />
         {/* 抽屉菜单 */}
         {isOpen && <DrawerBackdrop onPress={close} />}
         {isOpen && <Drawer />}

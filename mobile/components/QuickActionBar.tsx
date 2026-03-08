@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 import { useAppTheme } from '@/theme/useAppTheme';
@@ -16,22 +16,35 @@ interface QuickAction {
   onPress: () => void;
 }
 
-interface QuickActionBarProps {
-  /** 当前文件夹ID，不传表示在"全部"文件夹 */
-  folderId?: string;
-  /** 是否显示，默认为 true */
-  visible?: boolean;
-}
-
 /**
  * 底部快捷操作栏组件
- * 在文件夹列表和碎片列表页面共用
- * 根据当前所在文件夹决定新建碎片的归属
+ * 悬浮在页面之上，在主页和碎片列表页面自动显示
+ * 根据当前路由自动判断可见性和 folderId
  */
-export function QuickActionBar({ folderId, visible = true }: QuickActionBarProps) {
+export function QuickActionBar() {
   const theme = useAppTheme();
   const router = useRouter();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
+
+  // 根据当前路由判断是否在主流程页面（主页或碎片列表）
+  const isVisible = React.useMemo(() => {
+    // 主页
+    if (pathname === '/') return true;
+    // 碎片列表页面 /folder/[id]
+    if (pathname.startsWith('/folder/')) return true;
+    return false;
+  }, [pathname]);
+
+  // 根据路由提取 folderId
+  const folderId = React.useMemo(() => {
+    if (pathname.startsWith('/folder/')) {
+      // 从 /folder/xxx 提取 xxx
+      const id = pathname.replace('/folder/', '');
+      return id || undefined;
+    }
+    return undefined;
+  }, [pathname]);
 
   // 构建快捷操作配置
   const quickActions: QuickAction[] = [
@@ -73,7 +86,8 @@ export function QuickActionBar({ folderId, visible = true }: QuickActionBarProps
     },
   ];
 
-  if (!visible) {
+  // 根据当前路由控制显示/隐藏
+  if (!isVisible) {
     return null;
   }
 

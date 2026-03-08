@@ -20,7 +20,6 @@ import { useDrawer } from '@/providers/DrawerProvider';
 import { useFolders } from '@/features/folders/hooks';
 import type { FragmentFolder } from '@/types/folder';
 import { InputDialog } from '@/components/InputDialog';
-import { QuickActionBar } from '@/components/QuickActionBar';
 
 // 汉堡菜单图标组件
 function HamburgerMenu({ onPress, color }: { onPress: () => void; color: string }) {
@@ -227,9 +226,6 @@ export default function FoldersScreen() {
         style={[styles.bottomFade, { height: insets.bottom + 100 }]}
         pointerEvents="none"
       />
-
-      {/* 悬浮底部操作栏 */}
-      <QuickActionBar />
 
       {/* 新建文件夹弹窗 */}
       <InputDialog
