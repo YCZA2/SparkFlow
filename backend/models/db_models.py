@@ -54,6 +54,7 @@ class User(Base):
     scripts = relationship("Script", back_populates="user", cascade="all, delete-orphan")
     knowledge_docs = relationship("KnowledgeDoc", back_populates="user", cascade="all, delete-orphan")
     agents = relationship("Agent", back_populates="creator", cascade="all, delete-orphan")
+    agent_runs = relationship("AgentRun", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, role={self.role}, nickname={self.nickname})>"
@@ -203,3 +204,38 @@ class Agent(Base):
 
     def __repr__(self) -> str:
         return f"<Agent(id={self.id}, creator_id={self.creator_id}, name={self.name}, status={self.status})>"
+
+
+class AgentRun(Base):
+    """外挂工作流运行记录表。"""
+
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        Index("ix_agent_runs_user_id_created_at", "user_id", "created_at"),
+        Index("ix_agent_runs_status_created_at", "status", "created_at"),
+        Index("ix_agent_runs_dify_run_id", "dify_run_id"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    workflow_type = Column(String, nullable=False)
+    status = Column(String, default="queued", nullable=False)
+    mode = Column(String, nullable=False)
+    dify_workflow_id = Column(String, nullable=True)
+    dify_run_id = Column(String, nullable=True)
+    request_payload_json = Column(Text, nullable=True)
+    result_payload_json = Column(Text, nullable=True)
+    source_fragment_ids = Column(Text, nullable=True)
+    query_hint = Column(Text, nullable=True)
+    include_web_search = Column(Boolean, default=False, nullable=False)
+    script_id = Column(String, ForeignKey("scripts.id"), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", back_populates="agent_runs")
+    script = relationship("Script")
+
+    def __repr__(self) -> str:
+        return f"<AgentRun(id={self.id}, user_id={self.user_id}, workflow_type={self.workflow_type}, status={self.status})>"

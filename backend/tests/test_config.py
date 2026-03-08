@@ -28,3 +28,15 @@ class SettingsTestCase(unittest.TestCase):
                 os.environ.pop("STT_DASHSCOPE_STRATEGY", None)
             else:
                 os.environ["STT_DASHSCOPE_STRATEGY"] = original
+
+    def test_dify_base_url_is_normalized(self) -> None:
+        original = os.environ.get("DIFY_BASE_URL")
+        try:
+            os.environ["DIFY_BASE_URL"] = "https://dify.example.com/v1/"
+            settings = Settings()
+            self.assertEqual(settings.DIFY_BASE_URL, "https://dify.example.com/v1")
+        finally:
+            if original is None:
+                os.environ.pop("DIFY_BASE_URL", None)
+            else:
+                os.environ["DIFY_BASE_URL"] = original

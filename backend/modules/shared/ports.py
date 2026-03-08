@@ -105,3 +105,14 @@ class ExternalMediaProvider(Protocol):
 
 class JobRunner(Protocol):
     def schedule(self, task: Any, /, *args: Any, **kwargs: Any) -> None: ...
+
+
+@dataclass
+class WebSearchResult:
+    title: str
+    url: str
+    snippet: str
+
+
+class WebSearchProvider(Protocol):
+    async def search(self, *, query_text: str, top_k: int) -> list[WebSearchResult]: ...

@@ -15,6 +15,7 @@ flowchart LR
     DB[("SQLite<br/>SQLAlchemy")]
     FS[("uploads/<user_id><br/>本地音频文件")]
     CHROMA[("ChromaDB<br/>fragments_* / knowledge_*")]
+    DIFY["Dify Workflow<br/>外挂脚本研究编排"]
     STT["STT Provider<br/>DashScope / Aliyun"]
     LLM["LLM Provider<br/>Qwen"]
     EMB["Embedding Provider<br/>Qwen"]
@@ -26,6 +27,7 @@ flowchart LR
     API --> DB
     API --> FS
     API --> CHROMA
+    API --> DIFY
     API --> STT
     API --> LLM
     API --> EMB
@@ -181,6 +183,7 @@ flowchart TD
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接下载并转成 m4a，导入完成后直接创建 `source=voice`、`audio_source=external_link` 的碎片并接入同一条转写管线。
 - `scripts`: 合稿、列表、详情、更新、删除、每日推盘。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
+- `agent`: Dify 外挂脚本研究工作流入口、run 状态查询与 refresh。
 - `debug_logs`: 移动端调试日志接收与本地落盘。
 - `scheduler`: APScheduler 装配与启停。
 
@@ -200,6 +203,7 @@ flowchart TD
 - STT: 默认 `DashScope`，保留 Aliyun 兼容实现。
 - Embedding: 默认 `Qwen text-embedding-v2`。
 - Vector DB: 默认 `ChromaDB`。
+- Agent Workflow: 可选 `Dify`，由后端通过 HTTP API 调用。
 - Storage: 本地文件系统 `backend/uploads/<user_id>/`。
 - Database: SQLite。
 
@@ -211,6 +215,7 @@ flowchart TD
 - `fragments.audio_source` 用于区分音频来源；当前取值为 `upload` / `external_link` / `null`
 - 碎片向量 namespace: `fragments_{user_id}`
 - 知识库向量 namespace: `knowledge_{user_id}`
+- 外挂工作流运行表：`agent_runs`
 - 上传音频路径: `uploads/<user_id>/...`
 - 移动端调试日志文件: `runtime_logs/mobile-debug.log`
 - 每日推盘调度时间：使用 `APP_TIMEZONE`，默认 `Asia/Shanghai`，时间点由 `DAILY_PUSH_HOUR` / `DAILY_PUSH_MINUTE` 控制
@@ -276,7 +281,40 @@ sequenceDiagram
 - 当前接口会在保存外部音频后直接创建 fragment，并接入统一后台转写链路。
 - 对外接口按多平台抽象设计，但 v1 只有抖音 provider。
 - 导入文件统一保存到 `uploads/external_media/<user_id>/<platform>/`，输出格式固定为 `m4a`。
-### 5.3 Script Generation
+### 5.3 Dify Script Research Workflow
+
+```mermaid
+sequenceDiagram
+    participant App as Mobile
+    participant API as /api/agent/script-research-runs
+    participant DB as SQLite
+    participant VDB as VectorStore
+    participant WEB as WebSearchProvider
+    participant DIFY as Dify Workflow
+    participant SCRIPT as scripts repository
+
+    App->>API: POST fragment_ids + mode + query_hint
+    API->>DB: 校验碎片权限并创建 agent_runs(queued)
+    API->>VDB: query_knowledge_docs(...)
+    API->>WEB: optional search(...)
+    API->>DIFY: submit workflow run
+    DIFY-->>API: dify_run_id
+    API->>DB: 更新 agent_runs(running)
+    App->>API: POST /api/agent/runs/{run_id}/refresh
+    API->>DIFY: get workflow run
+    DIFY-->>API: outputs(title/outline/draft/...)
+    API->>SCRIPT: create script(content=draft)
+    API->>DB: 更新 agent_runs(succeeded, script_id, result_payload_json)
+    API-->>App: script_id + latest status
+```
+
+关键点：
+
+- Dify 只负责外挂编排和生成，不直接访问 SQLite、ChromaDB 或业务表。
+- fragments、knowledge hits 和可选 web hits 都由 SparkFlow 后端先收集。
+- `agent_runs` 是本地事实源，保存 Dify run ID、错误信息和结果摘要。
+
+### 5.4 Script Generation
 
 ```mermaid
 sequenceDiagram
@@ -300,7 +338,7 @@ sequenceDiagram
 - Prompt 模板来自 `backend/prompts/`。
 - `mode_b` 的历史风格增强仍未完全接到语义检索链路。
 
-### 5.3 Fragment Visualization
+### 5.5 Fragment Visualization
 
 ```mermaid
 sequenceDiagram
@@ -322,7 +360,7 @@ sequenceDiagram
 - 实现位于 `backend/modules/fragments/visualization.py`。
 - 首版走轻量 PCA + 聚类，不依赖重型 3D 栈。
 
-### 5.4 Daily Push
+### 5.6 Daily Push
 
 ```mermaid
 sequenceDiagram

@@ -13,6 +13,7 @@ from core.exceptions import (
     AuthenticationError,
 )
 from modules.auth.presentation import router as auth_router
+from modules.agent.presentation import router as agent_router
 from modules.debug_logs.presentation import router as debug_logs_router
 from modules.external_media.presentation import router as external_media_router
 from modules.fragment_folders.presentation import router as fragment_folders_router
@@ -37,6 +38,7 @@ def create_app() -> FastAPI:
             yield
         finally:
             scheduler_service.stop()
+            await container.dify_http_client.aclose()
 
     app = FastAPI(
         title=settings.APP_NAME,
@@ -148,6 +150,7 @@ def register_routes(app: FastAPI) -> None:
         return Response(status_code=200)
 
     app.include_router(auth_router)
+    app.include_router(agent_router)
     app.include_router(debug_logs_router)
     app.include_router(external_media_router)
     app.include_router(fragment_folders_router)
