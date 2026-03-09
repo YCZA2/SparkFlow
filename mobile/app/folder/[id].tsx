@@ -25,7 +25,7 @@ import type { Fragment } from '@/types/fragment';
 // 返回按钮组件（与全局统一组件保持一致）
 function FolderBackButton({ onPress, color }: { onPress: () => void; color: string }) {
   return (
-    <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.backButton}>
+    <TouchableOpacity onPress={onPress} hitSlop={8} activeOpacity={0.6} style={styles.backButton}>
       <SymbolView name="chevron.left" size={22} tintColor={color} />
       <Text style={[styles.backButtonText, { color }]}>返回</Text>
     </TouchableOpacity>
@@ -119,15 +119,7 @@ export default function FolderDetailScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* 顶部渐隐遮罩 */}
-      <LinearGradient
-        colors={[theme.colors.background, `${theme.colors.background}00`]}
-        locations={[0.3, 1]}
-        style={[styles.topFade, { height: insets.top + 80 }]}
-        pointerEvents="none"
-      />
-
-      {/* 悬浮顶部导航栏 */}
+      {/* 悬浮顶部导航栏 - 移到最前面确保点击事件优先 */}
       <View style={[styles.floatingHeader, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerContent}>
           <FolderBackButton onPress={handleBack} color={theme.colors.text} />
@@ -146,6 +138,14 @@ export default function FolderDetailScreen() {
           />
         </View>
       </View>
+
+      {/* 顶部渐隐遮罩 - 减小高度避免与返回按钮重叠 */}
+      <LinearGradient
+        colors={[theme.colors.background, `${theme.colors.background}00`]}
+        locations={[0.3, 1]}
+        style={[styles.topFade, { height: insets.top + 50 }]}
+        pointerEvents="none"
+      />
 
       {/* 列表内容 */}
       <SectionList

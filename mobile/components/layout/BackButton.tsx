@@ -48,6 +48,7 @@ export function BackButton({
     <TouchableOpacity
       onPress={handlePress}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      activeOpacity={0.6}
       style={styles.container}
     >
       <SymbolView name="chevron.left" size={22} tintColor={tintColor} />

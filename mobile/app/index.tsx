@@ -152,15 +152,7 @@ export default function FoldersScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* 顶部渐隐遮罩 */}
-      <LinearGradient
-        colors={[theme.colors.background, `${theme.colors.background}00`]}
-        locations={[0.3, 1]}
-        style={[styles.topFade, { height: insets.top + 80 }]}
-        pointerEvents="none"
-      />
-
-      {/* 悬浮顶部导航栏 */}
+      {/* 悬浮顶部导航栏 - 移到最前面确保点击事件优先 */}
       <View style={[styles.floatingHeader, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerContent}>
           <HamburgerMenu onPress={toggle} color={theme.colors.text} />
@@ -186,6 +178,14 @@ export default function FoldersScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* 顶部渐隐遮罩 - 减小高度避免与导航按钮重叠 */}
+      <LinearGradient
+        colors={[theme.colors.background, `${theme.colors.background}00`]}
+        locations={[0.3, 1]}
+        style={[styles.topFade, { height: insets.top + 50 }]}
+        pointerEvents="none"
+      />
 
       {/* 列表内容 */}
       <FlatList
