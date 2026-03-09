@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -8,12 +7,13 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from core.config import settings
-from core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
+from core.exceptions import NotFoundError, ValidationError
 from domains.agent_runs import repository as agent_run_repository
 from domains.fragments import repository as fragment_repository
 from domains.knowledge import repository as knowledge_repository
 from domains.scripts import repository as script_repository
 from models import AgentRun, Fragment
+from modules.shared.pipeline_runtime import PipelineExecutionContext, PipelineStepDefinition
 from modules.shared.ports import VectorStore, WebSearchProvider
 from utils.serialization import format_iso_datetime, parse_json_list
 
@@ -22,10 +22,10 @@ from .schemas import AgentRunDetail, AgentRunResult
 
 WORKFLOW_TYPE_SCRIPT_RESEARCH = "script_research"
 WORKFLOW_TYPE_SCRIPT_GENERATION = "script_generation"
-RUNNING_STATUSES = {"queued", "running"}
 SUCCESS_STATUSES = {"succeeded", "success", "completed"}
 FAILED_STATUSES = {"failed", "error", "stopped"}
 VALID_SCRIPT_MODES = {"mode_a", "mode_b"}
+PIPELINE_TYPE_SCRIPT_GENERATION = "script_generation"
 
 
 @dataclass
@@ -118,10 +118,14 @@ class ScriptWorkflowUseCase:
         dify_client: DifyClient,
         vector_store: VectorStore,
         web_search_provider: WebSearchProvider,
+        pipeline_runner,
+        pipeline_dispatcher,
     ) -> None:
         self.dify_client = dify_client
         self.vector_store = vector_store
         self.web_search_provider = web_search_provider
+        self.pipeline_runner = pipeline_runner
+        self.pipeline_dispatcher = pipeline_dispatcher
 
     async def create_run(
         self,
@@ -134,109 +138,44 @@ class ScriptWorkflowUseCase:
         include_web_search: bool,
         workflow_type: str,
     ) -> AgentRun:
-        """创建一条新的脚本工作流运行并提交到 Dify。"""
-        if mode not in VALID_SCRIPT_MODES:
-            raise ValidationError(message=f"无效的生成模式: {mode}", field_errors={"mode": "必须是 mode_a 或 mode_b"})
-        fragments = fragment_repository.get_by_ids(db=db, user_id=user_id, fragment_ids=fragment_ids)
-        found_ids = {fragment.id for fragment in fragments}
-        missing_ids = sorted(set(fragment_ids) - found_ids)
-        if missing_ids:
-            raise NotFoundError(
-                message=f"部分碎片不存在或无权访问: {', '.join(missing_ids)}",
-                resource_type="fragment",
-                resource_id=",".join(missing_ids),
-            )
-        if not any((fragment.transcript or "").strip() for fragment in fragments):
-            raise ValidationError(message="选中的碎片均无可用文本，无法发起研究", field_errors={"fragment_ids": "碎片内容为空"})
-
-        context = await self._build_context(
-            db=db,
+        """创建统一脚本流水线，并保留 agent_runs 兼容投影。"""
+        fragments = self._validate_fragments(db=db, user_id=user_id, fragment_ids=fragment_ids, mode=mode)
+        run_id = None
+        run = await self.pipeline_runner.create_run(
+            run_id=run_id,
             user_id=user_id,
-            fragments=fragments,
-            mode=mode,
-            query_hint=query_hint,
-            include_web_search=include_web_search,
+            pipeline_type=PIPELINE_TYPE_SCRIPT_GENERATION,
+            input_payload={
+                "fragment_ids": fragment_ids,
+                "mode": mode,
+                "query_hint": query_hint,
+                "include_web_search": include_web_search,
+                "workflow_type": workflow_type,
+            },
+            resource_type="agent_run",
+            resource_id=None,
         )
-        request_payload_json = json.dumps(asdict(context), ensure_ascii=False)
-        dify_inputs = _build_dify_inputs(context)
-        run = agent_run_repository.create(
-            db=db,
+        agent_run = AgentRun(
+            id=run.id,
             user_id=user_id,
             workflow_type=workflow_type,
             mode=mode,
             source_fragment_ids=json.dumps(fragment_ids, ensure_ascii=False),
             query_hint=query_hint,
             include_web_search=include_web_search,
-            request_payload_json=request_payload_json,
+            request_payload_json=json.dumps({"fragment_ids": fragment_ids}, ensure_ascii=False),
             dify_workflow_id=settings.DIFY_SCRIPT_WORKFLOW_ID,
+            status="queued",
         )
-
-        try:
-            workflow_run = await self.dify_client.submit_workflow_run(inputs=dify_inputs, user=user_id)
-        except Exception as exc:
-            agent_run_repository.mark_failed(db=db, run=run, error_message=str(exc))
-            raise
-        run = agent_run_repository.mark_submitted(db=db, run=run, dify_run_id=workflow_run.run_id)
-        if workflow_run.workflow_id:
-            agent_run_repository.update_result_payload(
-                db=db,
-                run=run,
-                result_payload_json=json.dumps({"raw_payload": workflow_run.raw_payload}, ensure_ascii=False),
-                dify_workflow_id=workflow_run.workflow_id,
-            )
-        return run
+        db.add(agent_run)
+        db.commit()
+        db.refresh(agent_run)
+        return agent_run
 
     async def refresh_run(self, *, db: Session, user_id: str, run_id: str) -> AgentRun:
-        """刷新运行状态，并在成功后回流创建脚本。"""
-        run = AgentRunQueryService().get_run(db=db, user_id=user_id, run_id=run_id)
-        if run.status == "succeeded" or run.status == "failed":
-            return run
-        if not run.dify_run_id:
-            raise ValidationError(message="工作流尚未成功提交到 Dify", field_errors={"run_id": "缺少 Dify 运行 ID"})
-
-        workflow_run = await self.dify_client.get_workflow_run(run_id=run.dify_run_id)
-        raw_payload_json = json.dumps({"raw_payload": workflow_run.raw_payload, "result": self._parse_outputs(workflow_run.outputs)}, ensure_ascii=False)
-        if workflow_run.status in FAILED_STATUSES:
-            return agent_run_repository.mark_failed(
-                db=db,
-                run=run,
-                error_message=self._resolve_failure_message(workflow_run.raw_payload),
-                result_payload_json=raw_payload_json,
-            )
-        if workflow_run.status in SUCCESS_STATUSES:
-            parsed = self._parse_outputs(workflow_run.outputs)
-            draft = (parsed.get("draft") or "").strip()
-            if not draft:
-                return agent_run_repository.mark_failed(
-                    db=db,
-                    run=run,
-                    error_message="Dify 输出缺少 draft，无法创建口播稿",
-                    result_payload_json=raw_payload_json,
-                )
-            if run.script_id:
-                return agent_run_repository.mark_succeeded(
-                    db=db,
-                    run=run,
-                    script_id=run.script_id,
-                    result_payload_json=raw_payload_json,
-                    dify_workflow_id=workflow_run.workflow_id,
-                )
-            script = script_repository.create(
-                db=db,
-                user_id=user_id,
-                content=draft,
-                mode=run.mode,
-                source_fragment_ids=run.source_fragment_ids or "[]",
-                title=parsed.get("title"),
-            )
-            return agent_run_repository.mark_succeeded(
-                db=db,
-                run=run,
-                script_id=script.id,
-                result_payload_json=raw_payload_json,
-                dify_workflow_id=workflow_run.workflow_id,
-            )
-        return agent_run_repository.mark_running(db=db, run=run, result_payload_json=raw_payload_json)
+        """唤醒 dispatcher 并返回最新兼容 agent_run 视图。"""
+        self.pipeline_dispatcher.wake_up()
+        return AgentRunQueryService().get_run(db=db, user_id=user_id, run_id=run_id)
 
     async def create_script_generation_run(
         self,
@@ -246,7 +185,7 @@ class ScriptWorkflowUseCase:
         fragment_ids: list[str],
         mode: str,
     ) -> AgentRun:
-        """创建面向统一脚本生成入口的工作流运行。"""
+        """创建面向脚本生成入口的异步流水线。"""
         return await self.create_run(
             db=db,
             user_id=user_id,
@@ -265,18 +204,10 @@ class ScriptWorkflowUseCase:
         run_id: str,
         timeout_seconds: int | None = None,
     ) -> AgentRun:
-        """在有限时间内轮询脚本生成结果，避免前端显式处理工作流状态。"""
-        timeout = max(0.1, float(timeout_seconds or settings.DIFY_POLL_TIMEOUT_SECONDS))
-        interval = max(0.05, float(settings.DIFY_POLL_INTERVAL_SECONDS))
-        deadline = asyncio.get_running_loop().time() + timeout
-
-        while True:
-            run = await self.refresh_run(db=db, user_id=user_id, run_id=run_id)
-            if run.status in {"succeeded", "failed"}:
-                return run
-            if asyncio.get_running_loop().time() >= deadline:
-                raise ServiceUnavailableError(message="生成超时，请稍后重试", service_name="dify")
-            await asyncio.sleep(interval)
+        """兼容旧同步路径，等待脚本流水线进入终态。"""
+        timeout = max(0.2, float(timeout_seconds or settings.DIFY_POLL_TIMEOUT_SECONDS))
+        await self.pipeline_dispatcher.run_until_terminal(run_id=run_id, user_id=user_id, timeout_seconds=timeout)
+        return AgentRunQueryService().get_run(db=db, user_id=user_id, run_id=run_id)
 
     async def _build_context(
         self,
@@ -287,6 +218,7 @@ class ScriptWorkflowUseCase:
         mode: str,
         query_hint: str | None,
         include_web_search: bool,
+        workflow_type: str,
     ) -> ResearchContext:
         """组装提交给 Dify 的统一脚本生成上下文。"""
         query_text = _build_query_text(fragments=fragments, query_hint=query_hint)
@@ -310,7 +242,7 @@ class ScriptWorkflowUseCase:
             web_hits=web_hits,
             user_context={},
             generation_metadata={
-                "workflow_type": WORKFLOW_TYPE_SCRIPT_RESEARCH if query_hint or include_web_search else WORKFLOW_TYPE_SCRIPT_GENERATION,
+                "workflow_type": workflow_type,
                 "query_text_preview": query_text[:120],
             },
         )
@@ -364,12 +296,194 @@ class ScriptWorkflowUseCase:
 
     def _resolve_failure_message(self, payload: dict[str, Any]) -> str:
         """提取 Dify 失败时最可读的错误信息。"""
-        return (
-            payload.get("error")
-            or payload.get("message")
-            or payload.get("status")
-            or "Dify 工作流执行失败"
+        return payload.get("error") or payload.get("message") or payload.get("status") or "Dify 工作流执行失败"
+
+    def _runtime_dify_client(self, context: PipelineExecutionContext) -> DifyClient:
+        """按当前容器状态构造 Dify 客户端，确保测试替身可生效。"""
+        return DifyClient(
+            base_url=settings.DIFY_BASE_URL,
+            api_key=settings.DIFY_API_KEY,
+            http_client=context.container.dify_http_client,
         )
+
+    def _validate_fragments(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> list[Fragment]:
+        """校验生成模式和可用碎片。"""
+        if mode not in VALID_SCRIPT_MODES:
+            raise ValidationError(message=f"无效的生成模式: {mode}", field_errors={"mode": "必须是 mode_a 或 mode_b"})
+        fragments = fragment_repository.get_by_ids(db=db, user_id=user_id, fragment_ids=fragment_ids)
+        found_ids = {fragment.id for fragment in fragments}
+        missing_ids = sorted(set(fragment_ids) - found_ids)
+        if missing_ids:
+            raise NotFoundError(
+                message=f"部分碎片不存在或无权访问: {', '.join(missing_ids)}",
+                resource_type="fragment",
+                resource_id=",".join(missing_ids),
+            )
+        if not any((fragment.transcript or "").strip() for fragment in fragments):
+            raise ValidationError(message="选中的碎片均无可用文本，无法发起研究", field_errors={"fragment_ids": "碎片内容为空"})
+        return fragments
+
+    def build_pipeline_definitions(self) -> list[PipelineStepDefinition]:
+        """返回脚本生成流水线固定步骤定义。"""
+        return [
+            PipelineStepDefinition(step_name="collect_fragments_context", executor=self.collect_fragments_context, max_attempts=1),
+            PipelineStepDefinition(step_name="collect_knowledge_hits", executor=self.collect_knowledge_hits, max_attempts=1),
+            PipelineStepDefinition(step_name="collect_web_hits", executor=self.collect_web_hits, max_attempts=1),
+            PipelineStepDefinition(step_name="submit_dify_workflow", executor=self.submit_dify_workflow, max_attempts=2),
+            PipelineStepDefinition(step_name="poll_dify_workflow", executor=self.poll_dify_workflow, max_attempts=4),
+            PipelineStepDefinition(step_name="persist_script", executor=self.persist_script, max_attempts=2),
+            PipelineStepDefinition(step_name="finalize_run", executor=self.finalize_run, max_attempts=1),
+        ]
+
+    async def collect_fragments_context(self, context: PipelineExecutionContext) -> dict[str, Any]:
+        """组装碎片上下文。"""
+        payload = context.input_payload
+        fragments = self._validate_fragments(
+            db=context.db,
+            user_id=context.run.user_id,
+            fragment_ids=payload["fragment_ids"],
+            mode=payload["mode"],
+        )
+        research_context = await self._build_context(
+            db=context.db,
+            user_id=context.run.user_id,
+            fragments=fragments,
+            mode=payload["mode"],
+            query_hint=payload.get("query_hint"),
+            include_web_search=payload.get("include_web_search", False),
+            workflow_type=payload.get("workflow_type") or WORKFLOW_TYPE_SCRIPT_GENERATION,
+        )
+        return {"research_context": asdict(research_context)}
+
+    async def collect_knowledge_hits(self, context: PipelineExecutionContext) -> dict[str, Any]:
+        """复用上一步已经组装好的知识命中。"""
+        research_context = context.get_step_output("collect_fragments_context").get("research_context") or {}
+        return {"knowledge_hits": research_context.get("knowledge_hits") or []}
+
+    async def collect_web_hits(self, context: PipelineExecutionContext) -> dict[str, Any]:
+        """复用上一步已经组装好的网页命中。"""
+        research_context = context.get_step_output("collect_fragments_context").get("research_context") or {}
+        return {"web_hits": research_context.get("web_hits") or []}
+
+    async def submit_dify_workflow(self, context: PipelineExecutionContext) -> dict[str, Any]:
+        """向 Dify 提交一次工作流运行。"""
+        research_context = context.get_step_output("collect_fragments_context").get("research_context") or {}
+        workflow_run = await self._runtime_dify_client(context).submit_workflow_run(
+            inputs=_build_dify_inputs(ResearchContext(**research_context)),
+            user=context.run.user_id,
+        )
+        agent_run = agent_run_repository.get_by_id(db=context.db, user_id=context.run.user_id, run_id=context.run.id)
+        if agent_run:
+            agent_run_repository.mark_submitted(db=context.db, run=agent_run, dify_run_id=workflow_run.run_id)
+            if workflow_run.workflow_id:
+                agent_run_repository.update_result_payload(
+                    db=context.db,
+                    run=agent_run,
+                    result_payload_json=json.dumps({"raw_payload": workflow_run.raw_payload}, ensure_ascii=False),
+                    dify_workflow_id=workflow_run.workflow_id,
+                )
+        return {
+            "dify_run_id": workflow_run.run_id,
+            "workflow_id": workflow_run.workflow_id,
+            "raw_payload": workflow_run.raw_payload,
+            "external_ref": {"dify_run_id": workflow_run.run_id},
+        }
+
+    async def poll_dify_workflow(self, context: PipelineExecutionContext) -> dict[str, Any]:
+        """查询 Dify 工作流状态。"""
+        dify_run_id = context.get_step_output("submit_dify_workflow").get("dify_run_id")
+        if not dify_run_id:
+            raise ValidationError(message="工作流尚未成功提交到 Dify", field_errors={"run_id": "缺少 Dify 运行 ID"})
+        workflow_run = await self._runtime_dify_client(context).get_workflow_run(run_id=dify_run_id)
+        parsed = self._parse_outputs(workflow_run.outputs)
+        raw_payload = {"raw_payload": workflow_run.raw_payload, "result": parsed}
+        agent_run = agent_run_repository.get_by_id(db=context.db, user_id=context.run.user_id, run_id=context.run.id)
+        if workflow_run.status in FAILED_STATUSES:
+            if agent_run:
+                agent_run_repository.mark_failed(
+                    db=context.db,
+                    run=agent_run,
+                    error_message=self._resolve_failure_message(workflow_run.raw_payload),
+                    result_payload_json=json.dumps(raw_payload, ensure_ascii=False),
+                )
+            raise RuntimeError(self._resolve_failure_message(workflow_run.raw_payload))
+        if workflow_run.status not in SUCCESS_STATUSES:
+            if agent_run:
+                agent_run_repository.mark_running(
+                    db=context.db,
+                    run=agent_run,
+                    result_payload_json=json.dumps(raw_payload, ensure_ascii=False),
+                )
+            raise RuntimeError("workflow still running")
+        if agent_run:
+            agent_run_repository.mark_running(
+                db=context.db,
+                run=agent_run,
+                result_payload_json=json.dumps(raw_payload, ensure_ascii=False),
+            )
+        return {
+            "workflow_id": workflow_run.workflow_id,
+            "result": parsed,
+            "raw_payload": workflow_run.raw_payload,
+            "external_ref": {"dify_run_id": dify_run_id},
+        }
+
+    async def persist_script(self, context: PipelineExecutionContext) -> dict[str, Any]:
+        """在 Dify 成功后回流创建本地脚本。"""
+        payload = context.input_payload
+        poll_payload = context.get_step_output("poll_dify_workflow")
+        parsed = poll_payload.get("result") or {}
+        draft = (parsed.get("draft") or "").strip()
+        if not draft:
+            raise ValidationError(message="Dify 输出缺少 draft，无法创建口播稿", field_errors={"generation": "工作流执行失败"})
+        existing = script_repository.get_by_id(db=context.db, user_id=context.run.user_id, script_id=context.run.resource_id or "")
+        if existing:
+            return {"script_id": existing.id, "result": parsed}
+        script = script_repository.create(
+            db=context.db,
+            user_id=context.run.user_id,
+            content=draft,
+            mode=payload["mode"],
+            source_fragment_ids=json.dumps(payload["fragment_ids"], ensure_ascii=False),
+            title=parsed.get("title"),
+        )
+        agent_run = agent_run_repository.get_by_id(db=context.db, user_id=context.run.user_id, run_id=context.run.id)
+        if agent_run:
+            agent_run.script_id = script.id
+            context.db.commit()
+        return {"script_id": script.id, "result": parsed}
+
+    async def finalize_run(self, context: PipelineExecutionContext) -> dict[str, Any]:
+        """结束脚本流水线并固化兼容 agent_run 投影。"""
+        payload = context.input_payload
+        poll_payload = context.get_step_output("poll_dify_workflow")
+        persist_payload = context.get_step_output("persist_script")
+        raw_payload_json = json.dumps(
+            {
+                "raw_payload": poll_payload.get("raw_payload") or {},
+                "result": persist_payload.get("result") or {},
+                "script_id": persist_payload.get("script_id"),
+            },
+            ensure_ascii=False,
+        )
+        agent_run = agent_run_repository.get_by_id(db=context.db, user_id=context.run.user_id, run_id=context.run.id)
+        if agent_run:
+            agent_run_repository.mark_succeeded(
+                db=context.db,
+                run=agent_run,
+                script_id=persist_payload["script_id"],
+                result_payload_json=raw_payload_json,
+                dify_workflow_id=poll_payload.get("workflow_id"),
+            )
+        return {
+            "resource_type": "script",
+            "resource_id": persist_payload["script_id"],
+            "run_output": {
+                "script_id": persist_payload["script_id"],
+                "result": persist_payload.get("result") or {},
+                "mode": payload["mode"],
+            },
+        }
 
 
 class ScriptResearchRunUseCase(ScriptWorkflowUseCase):
@@ -395,3 +509,18 @@ class ScriptResearchRunUseCase(ScriptWorkflowUseCase):
             include_web_search=include_web_search,
             workflow_type=WORKFLOW_TYPE_SCRIPT_RESEARCH,
         )
+
+
+def build_script_workflow_pipeline_service(container) -> ScriptWorkflowUseCase:
+    """基于容器组装脚本流水线服务。"""
+    return ScriptWorkflowUseCase(
+        dify_client=DifyClient(
+            base_url=settings.DIFY_BASE_URL,
+            api_key=settings.DIFY_API_KEY,
+            http_client=container.dify_http_client,
+        ),
+        vector_store=container.vector_store,
+        web_search_provider=container.web_search_provider,
+        pipeline_runner=container.pipeline_runner,
+        pipeline_dispatcher=container.pipeline_dispatcher,
+    )

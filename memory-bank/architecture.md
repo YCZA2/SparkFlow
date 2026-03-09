@@ -20,6 +20,7 @@ flowchart LR
     LLM["LLM Provider<br/>Qwen"]
     EMB["Embedding Provider<br/>Qwen"]
     SCH["APScheduler<br/>daily push cron"]
+    PIPE["Pipeline Dispatcher<br/>DB-backed worker"]
 
     U --> M
     M --> S
@@ -32,6 +33,7 @@ flowchart LR
     API --> LLM
     API --> EMB
     API --> SCH
+    API --> PIPE
 ```
 
 ## 2. Repository Shape
@@ -103,7 +105,7 @@ flowchart TD
 
 - `AsyncStorage`: token、用户信息、后端 base URL
 
-当前仓库虽然安装了 `expo-sqlite`，也在 `app.json` 中保留了插件，但它还不是主要业务数据通路。
+当前移动端主流程的本地持久化只使用 `AsyncStorage`，未引入 SQLite 业务存储链路。
 
 ## 4. Backend Architecture
 
@@ -152,7 +154,8 @@ flowchart TD
 - `backend/modules/shared/container.py`: DI 容器、`PromptLoader`、`AudioStorage`、`VectorStore` 适配器。
 - `backend/modules/shared/ports.py`: LLM、STT、Embedding、Vector DB、音频存储等端口抽象。
 - `backend/modules/shared/enrichment.py`: 摘要与标签增强逻辑。
-- `backend/modules/shared/audio_ingestion.py`: 统一音频碎片导入管线，负责建碎片、调度转写与可扩展 hooks。
+- `backend/modules/shared/audio_ingestion.py`: 统一音频碎片导入流水线步骤，负责媒体导入、转写、增强和向量化。
+- `backend/modules/shared/pipeline_runtime.py`: 持久化后台流水线运行时，负责步骤定义、worker 抢占、自动重试与恢复。
 - `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，而不是继续扩散到 legacy service 文件。
 
 ### 4.3 Backend Folder Map
@@ -184,6 +187,8 @@ flowchart TD
 - `scripts`: 合稿、列表、详情、更新、删除、每日推盘。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
 - `agent`: Dify 统一脚本工作流入口、run 状态查询与 refresh。
+- `pipelines`: 后台流水线详情、步骤查询与手动重跑入口。
+- `backend/dify_dsl/`: 仓库内置的 Dify DSL 模板目录，当前提供 `sparkflow_script_generation.workflow.yml` 供导入。
 - `debug_logs`: 移动端调试日志接收，并复用结构化日志链路落盘。
 - `scheduler`: APScheduler 装配与启停。
 
@@ -217,6 +222,7 @@ flowchart TD
 - 碎片向量 namespace: `fragments_{user_id}`
 - 知识库向量 namespace: `knowledge_{user_id}`
 - 外挂工作流运行表：`agent_runs`
+- 后台流水线表：`pipeline_runs` / `pipeline_step_runs`
 - 上传音频路径: `uploads/<user_id>/...`
 - 移动端调试日志文件: `runtime_logs/mobile-debug.log`
 - 每日推盘调度时间：使用 `APP_TIMEZONE`，默认 `Asia/Shanghai`，时间点由 `DAILY_PUSH_HOUR` / `DAILY_PUSH_MINUTE` 控制
@@ -239,7 +245,7 @@ sequenceDiagram
     participant API as /api/transcriptions
     participant FS as Local Audio Storage
     participant DB as PostgreSQL
-    participant BG as Background Task
+    participant PIPE as Pipeline Worker
     participant STT as STT
     participant LLM as Summary/Tags
     participant VDB as ChromaDB
@@ -247,13 +253,12 @@ sequenceDiagram
     App->>API: POST audio (+ optional folder_id)
     API->>FS: save file
     API->>API: audio_ingestion.ingest_audio(upload)
-    API->>DB: create fragment(source=voice, audio_source=upload, syncing)
-    API-->>App: fragment_id + syncing
-    API->>BG: schedule transcription
-    BG->>STT: transcribe(audio)
-    BG->>LLM: generate summary/tags
-    BG->>DB: mark synced / failed + sync fragment_tags
-    BG->>VDB: upsert fragment embedding
+    API->>DB: create fragment(syncing) + pipeline_runs + pipeline_step_runs
+    API-->>App: pipeline_run_id + fragment_id
+    PIPE->>STT: transcribe(audio)
+    PIPE->>LLM: generate summary/tags
+    PIPE->>DB: mark synced / failed + sync fragment_tags
+    PIPE->>VDB: upsert fragment embedding
 ```
 
 关键点：
@@ -319,9 +324,11 @@ sequenceDiagram
 
 关键点：
 
-- Dify 只负责外挂编排和生成，不直接访问 PostgreSQL、ChromaDB 或业务表。
+- Dify 只负责外挂生成步骤，不直接访问 PostgreSQL、ChromaDB 或业务表。
 - fragments、knowledge hits 和可选 web hits 都由 SparkFlow 后端先收集。
-- `agent_runs` 是本地事实源，保存 Dify run ID、错误信息和结果摘要。
+- 后端提交给 Dify 前，会将 `selected_fragments`、`knowledge_hits`、`web_hits`、`user_context`、`generation_metadata` 序列化为 JSON 字符串，以兼容 Dify Start 节点。
+- `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源；`agent_runs` 仅保留兼容查询与 Dify 投影。
+- 仓库内置的 DSL 模板位于 `backend/dify_dsl/sparkflow_script_generation.workflow.yml`，可直接导入本地 Dify。
 
 ### 5.4 Script Generation
 
@@ -330,22 +337,27 @@ sequenceDiagram
     participant App as Mobile
     participant API as /api/scripts/generation
     participant DB as PostgreSQL
-    participant Prompt as PromptLoader
-    participant LLM as Qwen
+    participant AGENT as ScriptWorkflowUseCase
+    participant DIFY as Dify Workflow
+    participant SCRIPT as scripts repository
 
     App->>API: fragment_ids + mode
-    API->>DB: load fragments
-    API->>Prompt: load mode prompt
-    API->>LLM: generate script
-    API->>DB: save script
+    API->>AGENT: create_script_generation_run(...)
+    AGENT->>DB: create agent_runs(queued/running)
+    AGENT->>DIFY: submit workflow run
+    AGENT->>DIFY: poll workflow status
+    DIFY-->>AGENT: outputs(title/outline/draft/...)
+    AGENT->>SCRIPT: create script(content=draft)
+    AGENT->>DB: update agent_runs(succeeded, script_id)
     API-->>App: script detail
 ```
 
 关键点：
 
 - 当前支持 `mode_a` 和 `mode_b`。
-- Prompt 模板来自 `backend/prompts/`。
-- `mode_b` 的历史风格增强仍未完全接到语义检索链路。
+- `POST /api/scripts/generation` 已统一走 Dify 工作流，不再直接调用本地 PromptLoader + Qwen 生成脚本。
+- 真实本地联调已经验证：Dify 输出 `draft` 后，SparkFlow 后端会回流创建 `scripts` 记录。
+- `mode_a` / `mode_b` 目前共享同一条 Dify 工作流，由工作流内部根据 `mode` 分支处理。
 
 ### 5.5 Fragment Visualization
 

@@ -191,6 +191,16 @@ def update_folder(db: Session, fragment: Fragment, *, folder_id: Optional[str]) 
     return fragment
 
 
+def update_audio_path(db: Session, *, fragment_id: str, user_id: str, audio_path: str) -> bool:
+    """更新碎片音频路径，供异步导入链路补写产物地址。"""
+    fragment = get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
+    if not fragment:
+        return False
+    fragment.audio_path = audio_path
+    db.commit()
+    return True
+
+
 def move_by_ids(db: Session, *, fragments: list[Fragment], folder_id: Optional[str]) -> list[Fragment]:
     for fragment in fragments:
         fragment.folder_id = folder_id

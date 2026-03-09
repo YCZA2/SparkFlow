@@ -8,6 +8,13 @@ class ScriptGenerationRequest(BaseModel):
     mode: str = Field(..., description="生成模式：mode_a (导师爆款) 或 mode_b (专属二脑)")
 
 
+class ScriptGenerationResponse(BaseModel):
+    pipeline_run_id: str
+    pipeline_type: str
+    status: str
+    script_id: str | None = None
+
+
 class ScriptUpdateRequest(BaseModel):
     status: str | None = Field(None, description="更新状态: draft, ready, filmed")
     title: str | None = Field(None, description="更新标题")

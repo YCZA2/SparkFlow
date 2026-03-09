@@ -24,11 +24,21 @@ from modules.external_media.presentation import router as external_media_router
 from modules.fragment_folders.presentation import router as fragment_folders_router
 from modules.fragments.presentation import router as fragments_router
 from modules.knowledge.presentation import router as knowledge_router
+from modules.pipelines.presentation import router as pipelines_router
 from modules.scripts.application import DailyPushUseCase
 from modules.scripts.presentation import router as scripts_router
+from modules.shared.audio_ingestion import build_media_ingestion_pipeline_service, PIPELINE_TYPE_MEDIA_INGESTION
 from modules.shared.container import ServiceContainer, build_container
+from modules.shared.pipeline_runtime import (
+    PipelineDefinitionRegistry,
+    PipelineDispatcher,
+    PipelineRecoveryService,
+    PipelineRunner,
+    StepExecutorRegistry,
+)
 from modules.transcriptions.presentation import router as transcriptions_router
 from modules.scheduler.application import SchedulerService, create_scheduler
+from modules.agent.application import build_script_workflow_pipeline_service, PIPELINE_TYPE_SCRIPT_GENERATION
 
 configure_logging()
 logger = get_logger(__name__)
@@ -45,16 +55,21 @@ def ensure_local_test_user() -> None:
 def create_app() -> FastAPI:
     """创建并装配 FastAPI 应用实例。"""
     container = build_container()
+    _configure_pipeline_runtime(container)
     scheduler_service = _build_scheduler_service(container)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         ensure_local_test_user()
         scheduler_service.start()
+        if container.pipeline_dispatcher:
+            container.pipeline_dispatcher.start()
         try:
             yield
         finally:
             scheduler_service.stop()
+            if container.pipeline_dispatcher:
+                await container.pipeline_dispatcher.stop()
             await container.dify_http_client.aclose()
 
     app = FastAPI(
@@ -191,6 +206,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(transcriptions_router)
     app.include_router(scripts_router)
     app.include_router(knowledge_router)
+    app.include_router(pipelines_router)
 
 
 def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:
@@ -207,6 +223,40 @@ def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:
             await use_case.run_daily_job(db=db)
 
     return SchedulerService(scheduler=scheduler, run_job=run_daily_push_job)
+
+
+def _configure_pipeline_runtime(container: ServiceContainer) -> None:
+    """装配持久化流水线运行时和后台 worker。"""
+    definition_registry = PipelineDefinitionRegistry()
+    executor_registry = StepExecutorRegistry()
+    dispatcher = PipelineDispatcher(
+        session_factory=container.session_factory,
+        container=container,
+        definition_registry=definition_registry,
+        executor_registry=executor_registry,
+    )
+    container.pipeline_dispatcher = dispatcher
+    container.pipeline_runner = PipelineRunner(
+        session_factory=container.session_factory,
+        definition_registry=definition_registry,
+        dispatcher=dispatcher,
+    )
+    container.pipeline_recovery_service = PipelineRecoveryService(
+        session_factory=container.session_factory,
+        dispatcher=dispatcher,
+    )
+
+    media_service = build_media_ingestion_pipeline_service(container)
+    media_definitions = media_service.build_pipeline_definitions()
+    definition_registry.register(PIPELINE_TYPE_MEDIA_INGESTION, media_definitions)
+    for definition in media_definitions:
+        executor_registry.register(PIPELINE_TYPE_MEDIA_INGESTION, definition)
+
+    script_service = build_script_workflow_pipeline_service(container)
+    script_definitions = script_service.build_pipeline_definitions()
+    definition_registry.register(PIPELINE_TYPE_SCRIPT_GENERATION, script_definitions)
+    for definition in script_definitions:
+        executor_registry.register(PIPELINE_TYPE_SCRIPT_GENERATION, definition)
 
 def build_root_health_payload() -> dict:
     """构建根路径健康检查载荷。"""

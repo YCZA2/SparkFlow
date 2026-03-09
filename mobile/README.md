@@ -148,6 +148,23 @@ http://192.168.31.157:8000
 
 ## 四、常见问题排查
 
+### 0. 新的后台任务接口怎么联调
+
+媒体导入和脚本生成现在默认是任务态：
+
+- `POST /api/transcriptions`
+- `POST /api/external-media/audio-imports`
+- `POST /api/scripts/generation`
+
+这些接口先返回 `pipeline_run_id`，不会保证请求返回时已经拿到最终 `fragment` 或 `script`。
+
+联调顺序应改为：
+
+1. 发起创建请求，拿到 `pipeline_run_id`
+2. 轮询 `GET /api/pipelines/{run_id}`
+3. 需要看步骤时，再查 `GET /api/pipelines/{run_id}/steps`
+4. 失败后可调用 `POST /api/pipelines/{run_id}/retry`
+
 ### 1. 一打开 App 就红屏，出现 `8000/index.bundle`
 
 原因：Dev Client 把后端 `8000` 错当成了 Metro 地址。
@@ -176,6 +193,12 @@ bash scripts/dev-mobile.sh
 2. 手机和电脑是否在同一 Wi‑Fi
 3. 应用网络设置中填写的是否为 `http://电脑IP:8000`
 4. 后端日志里是否能看到来自手机 IP 的请求
+
+如果接口请求成功但页面一直卡在处理中，再额外检查：
+
+1. `GET /api/pipelines/{run_id}` 是否一直停在 `queued` / `running`
+2. 后端是否已经完成 Alembic 迁移
+3. Dify、本地 STT 或外链解析依赖是否可用
 
 ### 3. 后端日志出现 `HEAD / 200 OK`
 
@@ -255,6 +278,11 @@ bash scripts/test-all.sh
 cd backend
 .venv/bin/alembic upgrade head
 ```
+
+当前后台任务流水线依赖以下新表已经存在：
+
+- `pipeline_runs`
+- `pipeline_step_runs`
 
 ## 七、前后端协作入口
 

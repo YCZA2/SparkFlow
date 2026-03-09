@@ -50,6 +50,9 @@ def test_public_api_routes_are_stable() -> None:
         ("/api/knowledge/search", frozenset({"POST"})),
         ("/api/knowledge/{doc_id}", frozenset({"GET"})),
         ("/api/knowledge/{doc_id}", frozenset({"DELETE"})),
+        ("/api/pipelines/{run_id}", frozenset({"GET"})),
+        ("/api/pipelines/{run_id}/steps", frozenset({"GET"})),
+        ("/api/pipelines/{run_id}/retry", frozenset({"POST"})),
         ("/api/transcriptions", frozenset({"POST"})),
         ("/api/transcriptions/{fragment_id}", frozenset({"GET"})),
     }

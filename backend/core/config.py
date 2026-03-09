@@ -213,17 +213,11 @@ class Settings(BaseSettings):
 
     def ensure_directories(self):
         """确保所需目录存在"""
-        sqlite_dir = None
-        if self.DATABASE_URL.startswith("sqlite:///"):
-            sqlite_path = self.DATABASE_URL.replace("sqlite:///", "", 1)
-            if sqlite_path and sqlite_path != ":memory:":
-                sqlite_dir = os.path.dirname(os.path.abspath(sqlite_path))
         directories = [
             self.UPLOAD_DIR,
             self.CHROMADB_PATH,
             self.RUNTIME_LOG_DIR,
             os.path.dirname(os.path.abspath(self.MOBILE_DEBUG_LOG_PATH)),
-            sqlite_dir,
         ]
         for directory in directories:
             if directory and not os.path.exists(directory):

@@ -47,6 +47,17 @@ DIFY_API_KEY=app-xxx
 DIFY_SCRIPT_WORKFLOW_ID=wf-script-generation
 ```
 
+如果不想在 Dify 页面里手工从零搭工作流，仓库已经提供可直接导入的 DSL 模板：
+
+```bash
+backend/dify_dsl/sparkflow_script_generation.workflow.yml
+```
+
+导入后建议检查两项：
+
+1. LLM 节点模型是否已经切到你在 Dify 中真实可用的 provider / model
+2. 导入后的应用 API Key 和 workflow 标识是否已经回填到后端 `.env`
+
 ## Backend Architecture
 
 当前后端按如下层级协作：
@@ -69,11 +80,15 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-generation
 6. `modules/shared` + `services`
    - 外部能力抽象与适配层。
    - 负责 LLM、STT、Embedding、VectorStore、AudioStorage 等端口与实现。
-   - `modules/shared/audio_ingestion.py` 提供统一音频碎片导入管线，供上传音频和外部链接导入复用。
+   - `modules/shared/audio_ingestion.py` 提供统一媒体导入流水线步骤，供上传音频和外部链接导入复用。
+   - `modules/shared/pipeline_runtime.py` 提供持久化后台流水线运行时、worker 抢占、重试与恢复。
 7. `modules/agent`
-   - Dify 工作流编排层。
-   - 负责统一脚本生成 / 研究 run 的创建、状态刷新、结果映射与脚本回流。
-8. `core/logging_config.py`
+   - Dify 工作流业务编排层。
+   - 负责脚本生成上下文准备、Dify 步骤执行与兼容 `agent_runs` 投影。
+8. `modules/pipelines`
+   - 后台任务流水线层。
+   - 负责 `pipeline_runs` / `pipeline_step_runs` 查询、步骤详情与手动重跑。
+9. `core/logging_config.py`
    - 结构化日志装配层。
    - 负责 `structlog` 配置、request-id 绑定，以及控制台输出和移动端调试日志文件输出。
 
@@ -96,6 +111,7 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-generation
 - `modules/scripts/`: 口播稿生成、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
 - `modules/agent/`: Dify 统一脚本工作流和 run 状态管理。
+- `modules/pipelines/`: 后台流水线详情、步骤和重跑 API。
 - `modules/debug_logs/`: 接收移动端调试日志，并通过结构化日志链路写入本地文件。
 - `modules/scheduler/`: APScheduler 装配与每日推盘调度入口。
 - `modules/shared/`: 模块共享端口、DI 容器、增强逻辑，不承载独立业务模块。
@@ -138,21 +154,39 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-generation
 
 当前仓库的前后端并行开发约定见 [`memory-bank/frontend-backend-collaboration.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/frontend-backend-collaboration.md)。如果接口字段、状态枚举或返回结构发生变化，后端需要在更新 `schemas.py` 的同时同步这份协作规范涉及的联调约定。
 
-Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `agent`, `debug_logs`, and `scheduler`.
+Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `agent`, `pipelines`, `debug_logs`, and `scheduler`.
 
-工作流相关接口：
+任务与工作流相关接口：
 
 - `POST /api/agent/script-research-runs`
 - `GET /api/agent/runs/{run_id}`
 - `POST /api/agent/runs/{run_id}/refresh`
 - `POST /api/scripts/generation`
+- `GET /api/pipelines/{run_id}`
+- `GET /api/pipelines/{run_id}/steps`
+- `POST /api/pipelines/{run_id}/retry`
 
 当前接入策略：
 
-- `POST /api/scripts/generation` 默认先创建 `agent_runs`，再短轮询 Dify 结果并回流 `scripts`
+- `POST /api/transcriptions` / `POST /api/external-media/audio-imports` / `POST /api/scripts/generation` 现在都会先创建 `pipeline_runs`
+- `GET /api/pipelines/{run_id}` / `GET /api/pipelines/{run_id}/steps` / `POST /api/pipelines/{run_id}/retry` 提供统一后台任务观察与补偿入口
 - SparkFlow 后端先收集 fragments、knowledge hits 和可选 web hits
+- SparkFlow 后端会在提交给 Dify 前，把 `selected_fragments`、`knowledge_hits`、`web_hits`、`user_context`、`generation_metadata` 序列化为 JSON 字符串，以兼容 Dify Start 节点
 - Dify 只消费整理后的上下文并生成结构化输出
-- 本地 `agent_runs` 记录是运行状态事实源，成功后再回流创建 `scripts`
+- `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源
+- `agent_runs` 仅保留脚本生成链路的兼容查询与 Dify 句柄投影
+
+任务态客户端约定：
+
+- `POST /api/transcriptions` 返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
+- `POST /api/external-media/audio-imports` 返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
+- `POST /api/scripts/generation` 返回 `pipeline_run_id`、`pipeline_type`、`status`
+- 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`
+
+当前仓库附带的 Dify DSL 目录：
+
+- `backend/dify_dsl/README.md`
+- `backend/dify_dsl/sparkflow_script_generation.workflow.yml`
 
 ## Frontend Debug Logs
 
@@ -232,6 +266,7 @@ bash scripts/dify-local.sh stop
 - 该脚本依赖本机已安装 `Docker Desktop`、`docker compose`、`git`、`curl`、`python3`
 - 为避免占用本机 `80` 端口，脚本会把 Dify 默认映射到 `18080`
 - 官方源码会落在 `backend/.vendor/dify/`，已加入 `.gitignore`
+- 本地联调已验证链路：SparkFlow 后端 -> 本地 Dify Workflow -> 脚本落库
 - 如果想固定官方版本，可执行：
 
 ```bash

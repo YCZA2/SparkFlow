@@ -10,17 +10,14 @@ from core import settings
 
 
 def build_engine(database_url: str | None = None) -> Engine:
-    """根据配置创建数据库引擎，并保留 SQLite 兼容分支。"""
+    """根据配置创建 PostgreSQL 数据库引擎。"""
     resolved_url = database_url or settings.DATABASE_URL
-    engine_kwargs = {
-        "echo": settings.DEBUG,
-        "future": True,
-    }
-    if resolved_url.startswith("sqlite"):
-        engine_kwargs["connect_args"] = {"check_same_thread": False}
-    else:
-        engine_kwargs["pool_pre_ping"] = True
-    return create_engine(resolved_url, **engine_kwargs)
+    return create_engine(
+        resolved_url,
+        echo=settings.DEBUG,
+        future=True,
+        pool_pre_ping=True,
+    )
 
 
 def create_session_factory(bind_engine: Engine) -> sessionmaker[Session]:

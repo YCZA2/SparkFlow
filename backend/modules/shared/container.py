@@ -336,6 +336,9 @@ class ServiceContainer:
     prompt_loader: PromptLoader
     web_search_provider: WebSearchProvider
     dify_http_client: AsyncClient
+    pipeline_runner: Any | None = None
+    pipeline_dispatcher: Any | None = None
+    pipeline_recovery_service: Any | None = None
 
 
 def build_container() -> ServiceContainer:

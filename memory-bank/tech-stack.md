@@ -20,6 +20,7 @@
 | Backend | FastAPI 0.135 + Uvicorn 0.41 | 模块化单体 |
 | ORM | SQLAlchemy 2.0 + Alembic | PostgreSQL migrations |
 | Scheduling | APScheduler 3.11 | 每日推盘 cron |
+| Async jobs | PostgreSQL task tables + in-app worker | `pipeline_runs` / `pipeline_step_runs` |
 | LLM | Qwen | 默认通过 DashScope |
 | STT | DashScope / Aliyun | 当前默认 DashScope |
 | Embedding | Qwen text-embedding-v2 | 通过 provider factory 装配 |
@@ -45,7 +46,6 @@
 - `expo-media-library ~18.2.1`
 - `expo-document-picker ~14.0.8`
 - `expo-dev-client ~6.0.20`
-- `expo-sqlite ~16.0.10`
 
 ### 2.2 Current role of each capability
 
@@ -55,7 +55,6 @@
 - `expo-media-library`: 视频写入系统相册。
 - `expo-document-picker`: 为后续知识库上传预留。
 - `AsyncStorage`: 当前真正参与主流程的本地持久化。
-- `expo-sqlite`: 已安装并保留插件，但当前主流程还没有依赖它存业务数据。
 
 ### 2.3 Current frontend architecture choice
 
@@ -99,6 +98,7 @@
 - `modules/*/presentation.py`: Router
 - `modules/*/application.py`: Use case / orchestration
 - `modules/shared/*`: container、ports、共享增强逻辑
+- `modules/shared/pipeline_runtime.py`: 持久化任务运行时、worker、恢复与重跑
 - `domains/*/repository.py`: 数据访问
 - `services/*`: 外部 provider 与工厂
 
@@ -116,6 +116,7 @@
 - 默认连接串：`postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow`
 - ORM：SQLAlchemy
 - 迁移工具：Alembic
+- 后台任务表：`pipeline_runs` / `pipeline_step_runs`
 
 ### 4.2 File storage
 

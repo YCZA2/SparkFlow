@@ -7,6 +7,8 @@
 from models.database import Base, engine, SessionLocal, get_db, init_db
 from models.db_models import (
     AgentRun,
+    PipelineRun,
+    PipelineStepRun,
     Fragment,
     Agent,
     FragmentFolder,
@@ -33,5 +35,7 @@ __all__ = [
     "KnowledgeDoc",
     "Agent",
     "AgentRun",
+    "PipelineRun",
+    "PipelineStepRun",
     "generate_uuid",
 ]

@@ -5,13 +5,11 @@ from sqlalchemy.orm import Session
 
 from core import ResponseModel, settings, success_response
 from core.auth import get_current_user
-from modules.agent.application import ScriptWorkflowUseCase
+from modules.agent.application import build_script_workflow_pipeline_service
 from modules.shared.container import ServiceContainer, get_container, get_db_session
 
-from modules.agent.dify_client import DifyClient
-
 from .application import DailyPushUseCase, ScriptCommandService, ScriptGenerationUseCase, ScriptQueryService, map_script
-from .schemas import ScriptDetail, ScriptGenerationRequest, ScriptListResponse, ScriptUpdateRequest
+from .schemas import ScriptDetail, ScriptGenerationRequest, ScriptGenerationResponse, ScriptListResponse, ScriptUpdateRequest
 
 router = APIRouter(prefix="/api/scripts", tags=["scripts"], responses={401: {"description": "未认证"}})
 
@@ -21,15 +19,7 @@ def get_script_generation_use_case(container: ServiceContainer = Depends(get_con
     return ScriptGenerationUseCase(
         llm_provider=container.llm_provider,
         prompt_loader=container.prompt_loader,
-        workflow_use_case=ScriptWorkflowUseCase(
-            dify_client=DifyClient(
-                base_url=settings.DIFY_BASE_URL,
-                api_key=settings.DIFY_API_KEY,
-                http_client=container.dify_http_client,
-            ),
-            vector_store=container.vector_store,
-            web_search_provider=container.web_search_provider,
-        ),
+        workflow_use_case=build_script_workflow_pipeline_service(container),
     )
 
 
@@ -45,9 +35,9 @@ def get_daily_push_use_case(container: ServiceContainer = Depends(get_container)
 @router.post(
     "/generation",
     status_code=status.HTTP_201_CREATED,
-    response_model=ResponseModel[ScriptDetail],
+    response_model=ResponseModel[ScriptGenerationResponse],
     summary="生成口播稿",
-    description="基于选中的碎片和生成模式，调用大模型生成一篇新的口播稿。",
+    description="基于选中的碎片和生成模式，创建一条异步脚本生成流水线。",
 )
 async def generate_script(
     data: ScriptGenerationRequest,
@@ -55,8 +45,8 @@ async def generate_script(
     db: Session = Depends(get_db_session),
     use_case: ScriptGenerationUseCase = Depends(get_script_generation_use_case),
 ):
-    script = await use_case.generate(db=db, user_id=current_user["user_id"], fragment_ids=data.fragment_ids, mode=data.mode)
-    return success_response(data=map_script(script), message="口播稿生成成功")
+    payload = await use_case.generate_async(db=db, user_id=current_user["user_id"], fragment_ids=data.fragment_ids, mode=data.mode)
+    return success_response(data=payload, message="口播稿生成任务已创建")
 
 
 @router.get(

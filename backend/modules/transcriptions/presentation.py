@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from sqlalchemy.orm import Session
 
 from core import ResponseModel, success_response
 from core.auth import get_current_user
-from modules.shared.audio_ingestion import AudioIngestionService
-from modules.shared.container import FastApiBackgroundJobRunner, ServiceContainer, get_container, get_db_session
+from modules.shared.audio_ingestion import build_media_ingestion_pipeline_service
+from modules.shared.container import ServiceContainer, get_container, get_db_session
 
 from .application import TranscriptionUseCase
 from .schemas import AudioUploadResponse, TranscriptionStatusResponse
@@ -17,11 +17,7 @@ router = APIRouter(prefix="/api/transcriptions", tags=["transcriptions"], respon
 def get_transcription_use_case(container: ServiceContainer = Depends(get_container)) -> TranscriptionUseCase:
     return TranscriptionUseCase(
         audio_storage=container.audio_storage,
-        ingestion_service=AudioIngestionService(
-            stt_provider=container.stt_provider,
-            llm_provider=container.llm_provider,
-            vector_store=container.vector_store,
-        ),
+        ingestion_service=build_media_ingestion_pipeline_service(container),
     )
 
 
@@ -33,24 +29,19 @@ def get_transcription_use_case(container: ServiceContainer = Depends(get_contain
     description="上传音频文件后立即创建碎片记录，并在后台异步执行转写与摘要增强。",
 )
 async def upload_audio(
-    background_tasks: BackgroundTasks,
     audio: UploadFile = File(..., description="音频文件"),
     folder_id: str | None = Form(None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
-    container: ServiceContainer = Depends(get_container),
     use_case: TranscriptionUseCase = Depends(get_transcription_use_case),
 ):
-    runner = FastApiBackgroundJobRunner(background_tasks)
     payload = await use_case.upload_audio(
         db=db,
         user_id=current_user["user_id"],
         audio=audio,
-        runner=runner,
-        session_factory=container.session_factory,
         folder_id=folder_id,
     )
-    return success_response(data=payload, message="音频上传成功，正在转写中")
+    return success_response(data=payload, message="音频上传成功，已创建后台流水线")
 
 
 @router.get(

@@ -46,6 +46,8 @@ If the change also updates repository conventions, development workflow, or agen
 
 - `backend/main.py`: FastAPI app entry
 - `backend/modules/*`: feature modules, route layer and application orchestration
+- `backend/modules/pipelines/`: persistent pipeline status, step query, and retry APIs
+- `backend/modules/shared/pipeline_runtime.py`: DB-backed pipeline dispatcher / worker runtime
 - `backend/domains/*`: domain repositories and persistence logic
 - `backend/services/*`: provider integrations and service implementations
 - `backend/models/`: SQLAlchemy models and DB session setup
@@ -139,11 +141,14 @@ http://<your-lan-ip>:8000
 
 - Prefer modular changes; do not collapse new logic into one large file
 - Respect current backend layering: presentation/application/domain/service responsibilities should stay separated
+- Treat `pipeline_runs` / `pipeline_step_runs` as the backend task source of truth for async media ingestion and script generation
+- Keep `Fragment.sync_status` and `agent_runs` as compatibility projections unless the task explicitly removes that compatibility
 - Reuse existing scripts and utilities before adding new entrypoints
 - Keep comments concise. For every new or modified function, add a brief Chinese comment describing its responsibility or intent; for non-obvious or project-specific logic, also explain the key constraint or reason, but avoid line-by-line restatement of the code
 - Avoid broad refactors unless they are required for the task
 - Do not introduce structural drift: follow the existing module boundaries, routing shape, and layering instead of bypassing them for convenience
 - Do not let files grow into monoliths; when logic, state, or UI keeps expanding, split it into focused modules/components/hooks before it becomes a large single file
+- Default backend storage is PostgreSQL only; do not reintroduce SQLite compatibility branches or local SQLite fallback docs
 
 ## When Updating Docs
 
@@ -152,6 +157,7 @@ Update documentation when you change:
 - startup or build commands
 - architecture or module boundaries
 - major user flows
+- async task contracts or task status semantics
 - environment assumptions for local development
 - repository conventions or agent workflow constraints
 

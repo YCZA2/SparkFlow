@@ -10,8 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | Layer | Technology |
 |---|---|
-| **Mobile** | Expo (React Native) + TypeScript + expo-router + expo-sqlite |
-| **Backend** | FastAPI (Python) + SQLAlchemy + Alembic + APScheduler + structlog |
+| **Mobile** | Expo (React Native) + TypeScript + expo-router |
+| **Backend** | FastAPI (Python) + SQLAlchemy + Alembic + APScheduler + structlog + DB-backed pipeline worker |
 | **Database** | PostgreSQL (local default) + ChromaDB (vector DB for knowledge base) |
 | **External APIs** | DashScope/Qwen (LLM / STT / Embeddings), Dify (optional workflow) |
 
@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ┌─────────────────────────────────────────────────┐
 │              Expo (React Native)                │
 │  ┌───────────┐ ┌──────────┐ ┌───────────────┐  │
-│  │ 录音/相机  │ │ 提词器 UI │ │ expo-sqlite   │  │
+│  │ 录音/相机  │ │ 提词器 UI │ │ AsyncStorage  │  │
 │  │ expo-av   │ │ Animated │ │ (本地缓存)     │  │
 │  │expo-camera│ │          │ │               │  │
 │  └───────────┘ └──────────┘ └───────────────┘  │
@@ -31,13 +31,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │           FastAPI (Python)                      │
 │  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
 │  │ 业务路由  │ │ APScheduler│ │ PostgreSQL    │  │
+│  │ Pipeline │ │ Worker     │ │ pipeline_*    │  │
 │  └────┬─────┘ └──────────┘ └────────────────┘  │
 └───────┼─────────────────────────────────────────┘
         │
 ┌───────┼─────────────────────────────────────────┐
 │    外部 API                                      │
 │  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ LLM      │ │ Whisper  │ │ Vector DB      │  │
+│  │ LLM      │ │ Dify     │ │ Vector DB      │  │
 │  └──────────┘ └──────────┘ └────────────────┘  │
 └─────────────────────────────────────────────────┘
 ```
@@ -50,13 +51,13 @@ cd backend
 python -m venv .venv && source .venv/bin/activate
 .venv/bin/pip install -r requirements.txt
 .venv/bin/alembic upgrade head
-uvicorn main:app --reload   # → http://localhost:8000
+.venv/bin/python -m uvicorn main:app --reload   # → http://localhost:8000
 ```
 
 ### Mobile Setup & Run
 ```bash
 cd mobile
-npx create-expo-app@latest --template tabs
+npm install
 npx expo start --ios        # → Launch iOS Simulator
 ```
 
@@ -68,6 +69,7 @@ backend/
 ├── modules/                # Modular feature entrypoints
 │   ├── fragments/          # Fragment APIs and orchestration
 │   ├── scripts/            # AI script generation
+│   ├── pipelines/          # Persistent pipeline APIs
 │   ├── knowledge/          # Knowledge base APIs
 │   └── transcriptions/     # Voice upload and transcription
 ├── services/
@@ -93,8 +95,8 @@ mobile/
 
 ## Core Features (User Flow)
 
-1. **Voice Capture** → Record voice → AI transcribes + summarizes → Stored in fragment library
-2. **AI Script Generation** → Select multiple fragments → Choose agent mode → Generate script
+1. **Voice Capture** → Record voice → Receive `pipeline_run_id` → Poll task → Stored in fragment library
+2. **AI Script Generation** → Select multiple fragments → Receive `pipeline_run_id` → Poll task → Generate script
    - Mode A: "导师爆款模式" - Forces golden structure (hook + pain point + value + CTA)
    - Mode B: "专属二脑模式" - Mimics user's writing style from knowledge base
 3. **Daily Auto-Aggregation** → If ≥3 related fragments recorded yesterday → AI generates script at 8 AM → Push notification
@@ -105,6 +107,8 @@ mobile/
 - `users` - User accounts (with RBAC: user/creator roles)
 - `fragments` - Voice notes (transcript, AI summary, auto-tags, source)
 - `scripts` - Generated scripts (mode, status, linked fragment IDs)
+- `pipeline_runs` - Persistent async pipeline run records
+- `pipeline_step_runs` - Step-level execution, retries, and external refs
 - `knowledge_docs` - Knowledge base docs (with vector embeddings)
 - `agents` - Creator agents (for future marketplace feature)
 
@@ -114,6 +118,7 @@ See `memory-bank/tech-stack.md` for full SQL schema.
 
 - **Minimal MVP**: No cloud video storage (saves to local photos only), pure native camera without filters
 - **PostgreSQL-default**: 本地开发默认使用 PostgreSQL，迁移和测试都与应用配置保持一致
+- **Task-source-of-truth**: `pipeline_runs` / `pipeline_step_runs` are the async workflow source of truth
 - **Scheduler over Celery**: APScheduler sufficient for daily tasks; no Redis needed
 - **Vector DB per user**: Namespace isolation by `user_id` for knowledge base embeddings
 

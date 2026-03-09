@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from domains.fragments import repository as fragment_repository
 from modules.fragments.application import map_fragment
 from modules.shared.audio_ingestion import AudioIngestionRequest, AudioIngestionService
-from modules.shared.ports import AudioStorage, JobRunner
+from modules.shared.ports import AudioStorage
 from .schemas import AudioUploadResponse, TranscriptionStatusResponse
 
 
@@ -26,8 +26,6 @@ class TranscriptionUseCase:
         db: Session,
         user_id: str,
         audio: UploadFile,
-        runner: JobRunner,
-        session_factory,
         folder_id: str | None = None,
     ) -> AudioUploadResponse:
         await self.ingestion_service.ensure_transcription_available()
@@ -40,10 +38,10 @@ class TranscriptionUseCase:
                 folder_id=folder_id,
                 audio_source="upload",
             ),
-            runner=runner,
-            session_factory=session_factory,
         )
         return AudioUploadResponse(
+            pipeline_run_id=result.pipeline_run_id,
+            pipeline_type="media_ingestion",
             fragment_id=result.fragment_id,
             audio_path=saved["file_path"],
             relative_path=saved["relative_path"],

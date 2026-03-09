@@ -18,7 +18,7 @@ from domains.scripts import repository as script_repository
 from modules.agent.application import ScriptWorkflowUseCase
 from modules.shared.container import PromptLoader
 from modules.shared.ports import TextGenerationProvider, VectorStore
-from .schemas import ScriptDetail, ScriptItem, ScriptListResponse
+from .schemas import ScriptDetail, ScriptGenerationResponse, ScriptItem, ScriptListResponse
 
 VALID_SCRIPT_MODES = {"mode_a", "mode_b"}
 VALID_SCRIPT_STATUSES = {"draft", "ready", "filmed"}
@@ -62,7 +62,7 @@ class ScriptGenerationUseCase:
         self.workflow_use_case = workflow_use_case
 
     async def generate(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> Script:
-        """生成口播稿，并统一走 Dify 工作流。"""
+        """保留旧同步入口，内部仍统一走 Dify 工作流。"""
         if mode not in VALID_SCRIPT_MODES:
             raise ValidationError(message=f"无效的生成模式: {mode}", field_errors={"mode": "必须是 mode_a 或 mode_b"})
         return await self._generate_with_dify(db=db, user_id=user_id, fragment_ids=fragment_ids, mode=mode)
@@ -82,6 +82,21 @@ class ScriptGenerationUseCase:
         if not script:
             raise NotFoundError(message="生成成功但脚本不存在", resource_type="script", resource_id=run.script_id)
         return script
+
+    async def generate_async(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> ScriptGenerationResponse:
+        """创建异步脚本生成流水线。"""
+        run = await self.workflow_use_case.create_script_generation_run(
+            db=db,
+            user_id=user_id,
+            fragment_ids=fragment_ids,
+            mode=mode,
+        )
+        return ScriptGenerationResponse(
+            pipeline_run_id=run.id,
+            pipeline_type="script_generation",
+            status=run.status,
+            script_id=run.script_id,
+        )
 
 class ScriptQueryService:
     def list_scripts(self, *, db: Session, user_id: str, limit: int, offset: int) -> ScriptListResponse:
