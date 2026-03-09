@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 import json
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
@@ -119,6 +120,7 @@ class PipelineRunner:
         input_payload: dict[str, Any] | None,
         resource_type: str | None = None,
         resource_id: str | None = None,
+        auto_wake: bool = True,
     ) -> PipelineRun:
         """创建流水线记录并尝试唤醒 worker。"""
         definitions = self.definition_registry.get(pipeline_type)
@@ -140,7 +142,7 @@ class PipelineRunner:
                     for definition in definitions
                 ],
             )
-        if self.dispatcher:
+        if self.dispatcher and auto_wake:
             self.dispatcher.wake_up()
         return run
 
@@ -179,8 +181,28 @@ class PipelineDispatcher:
         """停止后台 worker。"""
         self._stop_event.set()
         self._wake_event.set()
-        if self._task is not None:
-            await self._task
+        task = self._task
+        if task is not None:
+            try:
+                # 停机阶段最多等待当前步骤短暂收尾，超时后直接取消，由陈旧步骤恢复兜底。
+                await asyncio.wait_for(task, timeout=max(1.0, self.worker_poll_interval * 5))
+            except asyncio.TimeoutError:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+            except asyncio.CancelledError:
+                # worker 已进入取消态时，继续等待它落到最终完成状态，避免留下悬挂任务。
+                if task.done():
+                    with suppress(asyncio.CancelledError):
+                        await task
+                else:
+                    raise
+            finally:
+                if not task.done():
+                    task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await task
+                self._task = None
 
     def wake_up(self) -> None:
         """主动唤醒 worker 立即抢占任务。"""
@@ -211,7 +233,21 @@ class PipelineDispatcher:
             step = pipeline_repository.claim_next_runnable_step(db=db, worker_id=self._worker_id)
         if step is None:
             return False
-        await self._execute_step(step_id=step.id)
+        await self._execute_step(step_id=step.id, trigger_followup_wake=True)
+        return True
+
+    async def run_next_for_run(self, *, run_id: str) -> bool:
+        """仅推进指定流水线的当前步骤，避免兼容接口误触发其他 run。"""
+        with self.session_factory() as db:
+            pipeline_repository.recover_stale_steps(db=db, stale_seconds=self.stale_step_seconds)
+            step = pipeline_repository.claim_next_runnable_step(
+                db=db,
+                worker_id=self._worker_id,
+                run_id=run_id,
+        )
+        if step is None:
+            return False
+        await self._execute_step(step_id=step.id, trigger_followup_wake=False)
         return True
 
     async def run_until_terminal(self, *, run_id: str, user_id: str, timeout_seconds: float = 5.0) -> PipelineRun:
@@ -227,35 +263,67 @@ class PipelineDispatcher:
             await asyncio.sleep(0.05)
         raise TimeoutError(f"pipeline run {run_id} did not finish in time")
 
-    async def _execute_step(self, *, step_id: str) -> None:
+    async def _execute_step(self, *, step_id: str, trigger_followup_wake: bool = True) -> None:
         """执行单个步骤，并回写步骤与流水线状态。"""
-        with self.session_factory() as db:
-            step = db.query(PipelineStepRun).filter(PipelineStepRun.id == step_id).first()
-            if step is None:
-                return
-            run = db.query(PipelineRun).filter(PipelineRun.id == step.pipeline_run_id).first()
-            if run is None:
-                return
-            step_outputs = pipeline_repository.get_step_payloads(db=db, run_id=run.id)
-            context = PipelineExecutionContext(
-                db=db,
-                session_factory=self.session_factory,
-                run=run,
-                step=step,
-                container=self.container,
-                step_outputs=step_outputs,
-            )
-            executor = self.executor_registry.get(run.pipeline_type, step.step_name)
         try:
-            output = await executor(context) or {}
-            await self._handle_step_success(step_id=step_id, output=output)
+            # executor 依赖 context.db 持续可用，必须覆盖到整个执行阶段，避免泄漏重开的连接。
+            with self.session_factory() as db:
+                step = db.query(PipelineStepRun).filter(PipelineStepRun.id == step_id).first()
+                if step is None:
+                    return
+                run = db.query(PipelineRun).filter(PipelineRun.id == step.pipeline_run_id).first()
+                if run is None:
+                    return
+                step_outputs = pipeline_repository.get_step_payloads(db=db, run_id=run.id)
+                context = PipelineExecutionContext(
+                    db=db,
+                    session_factory=self.session_factory,
+                    run=run,
+                    step=step,
+                    container=self.container,
+                    step_outputs=step_outputs,
+                )
+                executor = self.executor_registry.get(run.pipeline_type, step.step_name)
+                output = await executor(context) or {}
+            await self._handle_step_success(
+                step_id=step_id,
+                output=output,
+                trigger_followup_wake=trigger_followup_wake,
+            )
+        except asyncio.CancelledError as exc:
+            # 区分停机取消与业务取消，避免把 provider 抛出的取消异常漏成悬挂步骤。
+            if self._stop_event.is_set():
+                raise
+            await self._handle_step_error(
+                step_id=step_id,
+                message=str(exc) or "step cancelled",
+                retryable=False,
+                trigger_followup_wake=trigger_followup_wake,
+            )
         except PipelineExecutionError as exc:
-            await self._handle_step_error(step_id=step_id, message=str(exc), retryable=exc.retryable)
+            await self._handle_step_error(
+                step_id=step_id,
+                message=str(exc),
+                retryable=exc.retryable,
+                trigger_followup_wake=trigger_followup_wake,
+            )
         except Exception as exc:
             logger.exception("pipeline_step_failed", step_id=step_id)
-            await self._handle_step_error(step_id=step_id, message=str(exc), retryable=True)
+            # 未分类异常默认直接失败，只有显式声明的步骤错误才进入自动重试。
+            await self._handle_step_error(
+                step_id=step_id,
+                message=str(exc),
+                retryable=False,
+                trigger_followup_wake=trigger_followup_wake,
+            )
 
-    async def _handle_step_success(self, *, step_id: str, output: dict[str, Any]) -> None:
+    async def _handle_step_success(
+        self,
+        *,
+        step_id: str,
+        output: dict[str, Any],
+        trigger_followup_wake: bool,
+    ) -> None:
         """处理步骤成功后的持久化和推进。"""
         with self.session_factory() as db:
             step = pipeline_repository.mark_step_succeeded(
@@ -283,9 +351,17 @@ class PipelineDispatcher:
             run.status = "queued"
             run.error_message = None
             db.commit()
-        self.wake_up()
+        if trigger_followup_wake:
+            self.wake_up()
 
-    async def _handle_step_error(self, *, step_id: str, message: str, retryable: bool) -> None:
+    async def _handle_step_error(
+        self,
+        *,
+        step_id: str,
+        message: str,
+        retryable: bool,
+        trigger_followup_wake: bool,
+    ) -> None:
         """处理步骤失败、等待重试或终止。"""
         with self.session_factory() as db:
             step = db.query(PipelineStepRun).filter(PipelineStepRun.id == step_id).first()
@@ -304,7 +380,8 @@ class PipelineDispatcher:
             run = db.query(PipelineRun).filter(PipelineRun.id == step.pipeline_run_id).first()
             if run is not None:
                 self._update_compatibility_projection(db=db, run_id=run.id)
-        self.wake_up()
+        if trigger_followup_wake:
+            self.wake_up()
 
     def _update_compatibility_projection(self, *, db: Session, run_id: str) -> None:
         """将流水线状态投影回旧业务实体状态字段。"""
@@ -324,14 +401,17 @@ class PipelineDispatcher:
         if run.pipeline_type == "script_generation":
             agent_run = db.query(AgentRun).filter(AgentRun.id == run.id, AgentRun.user_id == run.user_id).first()
             if agent_run:
-                agent_run.status = {
-                    "queued": "queued",
+                # 已提交到 Dify 后，pipeline 的 queued 语义代表等待下一次轮询，兼容态应继续视为 running。
+                projected_status = {
                     "running": "running",
                     "succeeded": "succeeded",
                     "failed": "failed",
-                }.get(run.status, agent_run.status)
-                if run.error_message:
-                    agent_run.error_message = run.error_message
+                }.get(run.status)
+                if run.status == "queued":
+                    projected_status = "running" if agent_run.dify_run_id else "queued"
+                if projected_status is not None:
+                    agent_run.status = projected_status
+                    agent_run.error_message = run.error_message if projected_status == "failed" else None
                 output_payload = pipeline_repository.load_json(run.output_payload_json)
                 if output_payload:
                     agent_run.result_payload_json = json.dumps(output_payload, ensure_ascii=False)

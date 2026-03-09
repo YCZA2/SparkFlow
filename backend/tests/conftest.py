@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 from pathlib import Path
@@ -138,8 +137,8 @@ def dify_http_client() -> httpx.AsyncClient:
     return client
 
 
-@pytest.fixture
-def app(
+@pytest_asyncio.fixture
+async def app(
     db_session_factory,
     tmp_path,
     vector_store,
@@ -163,7 +162,9 @@ def app(
     test_app.state.container.dify_http_client = dify_http_client
     yield test_app
     test_app.state.scheduler_service.stop()
-    asyncio.run(test_app.state.container.dify_http_client.aclose())
+    if test_app.state.container.pipeline_dispatcher:
+        await test_app.state.container.pipeline_dispatcher.stop()
+    await test_app.state.container.dify_http_client.aclose()
 
 
 @pytest_asyncio.fixture

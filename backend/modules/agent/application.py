@@ -11,9 +11,10 @@ from core.exceptions import NotFoundError, ValidationError
 from domains.agent_runs import repository as agent_run_repository
 from domains.fragments import repository as fragment_repository
 from domains.knowledge import repository as knowledge_repository
+from domains.pipelines import repository as pipeline_repository
 from domains.scripts import repository as script_repository
 from models import AgentRun, Fragment
-from modules.shared.pipeline_runtime import PipelineExecutionContext, PipelineStepDefinition
+from modules.shared.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
 from modules.shared.ports import VectorStore, WebSearchProvider
 from utils.serialization import format_iso_datetime, parse_json_list
 
@@ -137,12 +138,13 @@ class ScriptWorkflowUseCase:
         query_hint: str | None,
         include_web_search: bool,
         workflow_type: str,
+        advance_to_submitted: bool = False,
+        auto_start: bool = True,
     ) -> AgentRun:
         """创建统一脚本流水线，并保留 agent_runs 兼容投影。"""
-        fragments = self._validate_fragments(db=db, user_id=user_id, fragment_ids=fragment_ids, mode=mode)
-        run_id = None
+        self._validate_fragments(db=db, user_id=user_id, fragment_ids=fragment_ids, mode=mode)
         run = await self.pipeline_runner.create_run(
-            run_id=run_id,
+            run_id=None,
             user_id=user_id,
             pipeline_type=PIPELINE_TYPE_SCRIPT_GENERATION,
             input_payload={
@@ -154,6 +156,7 @@ class ScriptWorkflowUseCase:
             },
             resource_type="agent_run",
             resource_id=None,
+            auto_wake=False,
         )
         agent_run = AgentRun(
             id=run.id,
@@ -169,12 +172,15 @@ class ScriptWorkflowUseCase:
         )
         db.add(agent_run)
         db.commit()
-        db.refresh(agent_run)
-        return agent_run
+        if advance_to_submitted:
+            await self._advance_until_poll_step(run_id=run.id, user_id=user_id)
+        elif auto_start:
+            self.pipeline_dispatcher.wake_up()
+        return AgentRunQueryService().get_run(db=db, user_id=user_id, run_id=run.id)
 
     async def refresh_run(self, *, db: Session, user_id: str, run_id: str) -> AgentRun:
-        """唤醒 dispatcher 并返回最新兼容 agent_run 视图。"""
-        self.pipeline_dispatcher.wake_up()
+        """推进一次显式刷新周期，并返回最新兼容 agent_run 视图。"""
+        await self._advance_refresh_cycle(run_id=run_id, user_id=user_id)
         return AgentRunQueryService().get_run(db=db, user_id=user_id, run_id=run_id)
 
     async def create_script_generation_run(
@@ -194,6 +200,7 @@ class ScriptWorkflowUseCase:
             query_hint=None,
             include_web_search=False,
             workflow_type=WORKFLOW_TYPE_SCRIPT_GENERATION,
+            auto_start=True,
         )
 
     async def wait_for_script(
@@ -219,11 +226,22 @@ class ScriptWorkflowUseCase:
         query_hint: str | None,
         include_web_search: bool,
         workflow_type: str,
+        vector_store: VectorStore | None = None,
+        web_search_provider: WebSearchProvider | None = None,
     ) -> ResearchContext:
         """组装提交给 Dify 的统一脚本生成上下文。"""
         query_text = _build_query_text(fragments=fragments, query_hint=query_hint)
-        knowledge_hits = await self._search_knowledge(db=db, user_id=user_id, query_text=query_text)
-        web_hits = await self._search_web(query_text=query_text, include_web_search=include_web_search)
+        knowledge_hits = await self._search_knowledge(
+            db=db,
+            user_id=user_id,
+            query_text=query_text,
+            vector_store=vector_store,
+        )
+        web_hits = await self._search_web(
+            query_text=query_text,
+            include_web_search=include_web_search,
+            web_search_provider=web_search_provider,
+        )
         return ResearchContext(
             mode=mode,
             query_hint=query_hint,
@@ -247,11 +265,19 @@ class ScriptWorkflowUseCase:
             },
         )
 
-    async def _search_knowledge(self, *, db: Session, user_id: str, query_text: str) -> list[dict[str, Any]]:
+    async def _search_knowledge(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        query_text: str,
+        vector_store: VectorStore | None = None,
+    ) -> list[dict[str, Any]]:
         """查询与当前生成请求相关的知识库内容。"""
         if not query_text:
             return []
-        results = await self.vector_store.query_knowledge_docs(user_id=user_id, query_text=query_text, top_k=5)
+        runtime_vector_store = vector_store or self.vector_store
+        results = await runtime_vector_store.query_knowledge_docs(user_id=user_id, query_text=query_text, top_k=5)
         doc_ids = [item.get("doc_id") for item in results if item.get("doc_id")]
         docs = {
             doc.id: doc
@@ -274,11 +300,18 @@ class ScriptWorkflowUseCase:
             )
         return hits
 
-    async def _search_web(self, *, query_text: str, include_web_search: bool) -> list[dict[str, Any]]:
+    async def _search_web(
+        self,
+        *,
+        query_text: str,
+        include_web_search: bool,
+        web_search_provider: WebSearchProvider | None = None,
+    ) -> list[dict[str, Any]]:
         """按需补充网页搜索结果。"""
         if not include_web_search or not query_text.strip():
             return []
-        results = await self.web_search_provider.search(query_text=query_text, top_k=5)
+        runtime_web_search_provider = web_search_provider or self.web_search_provider
+        results = await runtime_web_search_provider.search(query_text=query_text, top_k=5)
         return [{"title": item.title, "url": item.url, "snippet": item.snippet} for item in results]
 
     def _parse_outputs(self, outputs: dict[str, Any]) -> dict[str, Any]:
@@ -305,6 +338,43 @@ class ScriptWorkflowUseCase:
             api_key=settings.DIFY_API_KEY,
             http_client=context.container.dify_http_client,
         )
+
+    def _load_pipeline_run(self, *, user_id: str, run_id: str):
+        """按用户读取流水线状态，供兼容接口精确推进指定 run。"""
+        with self.pipeline_dispatcher.session_factory() as db:
+            return pipeline_repository.get_by_id(db=db, user_id=user_id, run_id=run_id)
+
+    async def _advance_until_poll_step(self, *, run_id: str, user_id: str, max_steps: int = 8) -> None:
+        """创建后只推进到 poll 步，保持与旧刷新接口一致的时序。"""
+        for _ in range(max_steps):
+            run = self._load_pipeline_run(user_id=user_id, run_id=run_id)
+            if run is None or run.status in SUCCESS_STATUSES | FAILED_STATUSES:
+                return
+            if run.current_step == "poll_dify_workflow":
+                return
+            progressed = await self.pipeline_dispatcher.run_next_for_run(run_id=run_id)
+            if not progressed:
+                return
+        raise TimeoutError(f"pipeline run {run_id} did not reach poll step in time")
+
+    async def _advance_refresh_cycle(self, *, run_id: str, user_id: str, max_steps: int = 8) -> None:
+        """刷新时只执行一轮 poll，并在成功后继续完成后置落库步骤。"""
+        run = self._load_pipeline_run(user_id=user_id, run_id=run_id)
+        if run is None or run.status in SUCCESS_STATUSES | FAILED_STATUSES:
+            return
+        progressed = await self.pipeline_dispatcher.run_next_for_run(run_id=run_id)
+        if not progressed:
+            return
+        for _ in range(max_steps - 1):
+            run = self._load_pipeline_run(user_id=user_id, run_id=run_id)
+            if run is None or run.status in SUCCESS_STATUSES | FAILED_STATUSES:
+                return
+            if run.current_step == "poll_dify_workflow":
+                return
+            progressed = await self.pipeline_dispatcher.run_next_for_run(run_id=run_id)
+            if not progressed:
+                return
+        raise TimeoutError(f"pipeline run {run_id} did not settle after refresh")
 
     def _validate_fragments(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> list[Fragment]:
         """校验生成模式和可用碎片。"""
@@ -352,6 +422,8 @@ class ScriptWorkflowUseCase:
             query_hint=payload.get("query_hint"),
             include_web_search=payload.get("include_web_search", False),
             workflow_type=payload.get("workflow_type") or WORKFLOW_TYPE_SCRIPT_GENERATION,
+            vector_store=context.container.vector_store,
+            web_search_provider=context.container.web_search_provider,
         )
         return {"research_context": asdict(research_context)}
 
@@ -406,7 +478,7 @@ class ScriptWorkflowUseCase:
                     error_message=self._resolve_failure_message(workflow_run.raw_payload),
                     result_payload_json=json.dumps(raw_payload, ensure_ascii=False),
                 )
-            raise RuntimeError(self._resolve_failure_message(workflow_run.raw_payload))
+            raise PipelineExecutionError(self._resolve_failure_message(workflow_run.raw_payload), retryable=False)
         if workflow_run.status not in SUCCESS_STATUSES:
             if agent_run:
                 agent_run_repository.mark_running(
@@ -414,7 +486,7 @@ class ScriptWorkflowUseCase:
                     run=agent_run,
                     result_payload_json=json.dumps(raw_payload, ensure_ascii=False),
                 )
-            raise RuntimeError("workflow still running")
+            raise PipelineExecutionError("workflow still running", retryable=True)
         if agent_run:
             agent_run_repository.mark_running(
                 db=context.db,
@@ -508,6 +580,8 @@ class ScriptResearchRunUseCase(ScriptWorkflowUseCase):
             query_hint=query_hint,
             include_web_search=include_web_search,
             workflow_type=WORKFLOW_TYPE_SCRIPT_RESEARCH,
+            advance_to_submitted=True,
+            auto_start=False,
         )
 
 

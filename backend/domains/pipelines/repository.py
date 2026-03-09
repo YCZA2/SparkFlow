@@ -110,18 +110,23 @@ def claim_next_runnable_step(
     db: Session,
     *,
     worker_id: str,
+    run_id: str | None = None,
     now: datetime | None = None,
 ) -> PipelineStepRun | None:
     """抢占一条可以执行的步骤。"""
     current_time = now or _utc_now()
+    filters = [
+        PipelineRun.status.in_(["queued", "running"]),
+        PipelineRun.current_step == PipelineStepRun.step_name,
+        PipelineStepRun.status.in_(["pending", "waiting_retry"]),
+        or_(PipelineStepRun.available_at.is_(None), PipelineStepRun.available_at <= current_time),
+    ]
+    if run_id is not None:
+        filters.append(PipelineRun.id == run_id)
     step = (
         db.query(PipelineStepRun)
         .join(PipelineRun, PipelineRun.id == PipelineStepRun.pipeline_run_id)
-        .filter(
-            PipelineRun.status.in_(["queued", "running"]),
-            PipelineStepRun.status.in_(["pending", "waiting_retry"]),
-            or_(PipelineStepRun.available_at.is_(None), PipelineStepRun.available_at <= current_time),
-        )
+        .filter(*filters)
         .order_by(PipelineRun.created_at.asc(), PipelineStepRun.step_order.asc())
         .with_for_update(skip_locked=True)
         .first()
@@ -294,6 +299,7 @@ def recover_stale_steps(db: Session, *, stale_seconds: int, now: datetime | None
         if run:
             run.status = "queued" if step.status == "waiting_retry" else "failed"
             run.error_message = step.error_message
+            run.current_step = step.step_name
             run.next_retry_at = current_time if step.status == "waiting_retry" else None
     db.commit()
     return len(steps)
