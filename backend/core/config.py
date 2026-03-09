@@ -51,6 +51,10 @@ class Settings(BaseSettings):
         default=DEFAULT_POSTGRES_URL,
         description="SQLAlchemy 数据库 URL"
     )
+    SQLALCHEMY_ECHO: bool = Field(
+        default=False,
+        description="是否打印 SQLAlchemy SQL 日志"
+    )
 
     # LLM 配置
     LLM_PROVIDER: str = Field(
