@@ -195,7 +195,7 @@ watchman watch-project '/Users/hujiahui/Desktop/VibeCoding/SparkFlow'
 现在移动端错误日志会同时：
 
 - 显示在 App 内的 `错误日志` 页面
-- 同步写入后端本地文件 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
+- 同步进入后端结构化日志链路，并写入本地文件 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
 
 推荐调试方式：
 

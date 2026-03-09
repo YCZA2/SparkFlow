@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from typing import Any
 
 import structlog
 
 from .config import settings
+
+MOBILE_DEBUG_LOGGER_NAME = "sparkflow.mobile_debug"
 
 
 def _rename_logger_key(_: Any, __: str, event_dict: structlog.types.EventDict) -> structlog.types.EventDict:
@@ -19,10 +22,10 @@ def _rename_logger_key(_: Any, __: str, event_dict: structlog.types.EventDict) -
     return event_dict
 
 
-def configure_logging() -> None:
-    """初始化应用级结构化日志配置。"""
+def _build_shared_processors() -> list[structlog.types.Processor]:
+    """构建控制台和文件日志共享的处理器链。"""
     timestamper = structlog.processors.TimeStamper(fmt="iso")
-    shared_processors = [
+    return [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
@@ -31,21 +34,70 @@ def configure_logging() -> None:
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
     ]
+
+
+def _build_processor_formatter(
+    *,
+    renderer: structlog.types.Processor,
+    shared_processors: list[structlog.types.Processor],
+) -> structlog.stdlib.ProcessorFormatter:
+    """创建统一的 structlog formatter。"""
+    return structlog.stdlib.ProcessorFormatter(
+        processor=renderer,
+        foreign_pre_chain=shared_processors,
+    )
+
+
+def _reset_logger_handlers(logger: logging.Logger) -> None:
+    """替换 handler 前先关闭旧句柄，避免文件句柄泄漏。"""
+    for handler in logger.handlers:
+        handler.close()
+    logger.handlers.clear()
+
+
+def _configure_mobile_debug_logger(shared_processors: list[structlog.types.Processor]) -> None:
+    """为移动端调试日志配置专用 JSON 文件输出。"""
+    log_path = os.path.abspath(settings.MOBILE_DEBUG_LOG_PATH)
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+    file_logger = logging.getLogger(MOBILE_DEBUG_LOGGER_NAME)
+    current_path = None
+    if len(file_logger.handlers) == 1 and isinstance(file_logger.handlers[0], logging.FileHandler):
+        current_path = os.path.abspath(file_logger.handlers[0].baseFilename)
+    if current_path == log_path and file_logger.propagate is False:
+        return
+
+    _reset_logger_handlers(file_logger)
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setFormatter(
+        _build_processor_formatter(
+            renderer=structlog.processors.JSONRenderer(),
+            shared_processors=shared_processors,
+        )
+    )
+    file_logger.addHandler(file_handler)
+    file_logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
+    file_logger.propagate = False
+
+
+def configure_logging() -> None:
+    """初始化应用级结构化日志配置。"""
+    shared_processors = _build_shared_processors()
     renderer: structlog.types.Processor
     if settings.LOG_JSON:
         renderer = structlog.processors.JSONRenderer()
     else:
         renderer = structlog.dev.ConsoleRenderer()
 
-    formatter = structlog.stdlib.ProcessorFormatter(
-        processor=renderer,
-        foreign_pre_chain=shared_processors,
+    formatter = _build_processor_formatter(
+        renderer=renderer,
+        shared_processors=shared_processors,
     )
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
 
     root_logger = logging.getLogger()
-    root_logger.handlers.clear()
+    _reset_logger_handlers(root_logger)
     root_logger.addHandler(handler)
     root_logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
 
@@ -58,8 +110,15 @@ def configure_logging() -> None:
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
+    _configure_mobile_debug_logger(shared_processors)
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     """获取带 module 字段的结构化 logger。"""
     return structlog.stdlib.get_logger(name).bind(module=name)
+
+
+def get_mobile_debug_logger() -> structlog.stdlib.BoundLogger:
+    """获取落盘到移动端调试日志文件的结构化 logger。"""
+    _configure_mobile_debug_logger(_build_shared_processors())
+    return structlog.stdlib.get_logger(MOBILE_DEBUG_LOGGER_NAME).bind(module="modules.debug_logs.mobile")

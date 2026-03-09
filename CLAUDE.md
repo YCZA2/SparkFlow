@@ -65,18 +65,18 @@ npx expo start --ios        # → Launch iOS Simulator
 ```
 backend/
 ├── main.py                 # FastAPI entry point
-├── routers/
-│   ├── fragments.py        # Fragment notes CRUD
-│   ├── scripts.py          # AI script generation (dual-agent)
-│   ├── knowledge.py        # Knowledge base management
-│   └── transcribe.py       # Voice transcription
+├── modules/                # Modular feature entrypoints
+│   ├── fragments/          # Fragment APIs and orchestration
+│   ├── scripts/            # AI script generation
+│   ├── knowledge/          # Knowledge base APIs
+│   └── transcriptions/     # Voice upload and transcription
 ├── services/
-│   ├── llm_service.py      # LLM call wrapper
-│   ├── stt_service.py      # Speech-to-text API
-│   ├── vector_service.py   # Vector DB operations
-│   └── scheduler.py        # APScheduler daily aggregation
+│   ├── factory.py          # Provider factory
+│   ├── dashscope_stt.py    # Speech-to-text adapter
+│   ├── embedding_service.py# Embedding adapter
+│   └── external_media/     # External media providers
 ├── models/
-│   └── db_models.py        # SQLAlchemy models
+│   └── database.py         # Engine / session setup
 ├── prompts/
 │   ├── mode_a_boom.txt     # "导师爆款模式" prompt
 │   └── mode_b_brain.txt    # "专属二脑模式" prompt

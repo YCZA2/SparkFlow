@@ -55,7 +55,7 @@
 
 本次核对文档时确认了以下事实：
 
-- 后端主业务入口已经迁移到 `backend/modules/*`，不应再按旧 `backend/routers/*` 结构写新文档。
+- 后端主业务入口已经收敛到 `backend/modules/*`，旧路由目录已清理，不应再按历史结构写新文档。
 - 移动端当前是 stack 路由，不存在实际在用的 `(tabs)` 目录。
 - 推荐联调方式已经是仓库根目录执行 `bash scripts/dev-mobile.sh`。
 - `expo-sqlite` 已安装，但当前移动端主流程的本地持久化仍以 `AsyncStorage` 为主。

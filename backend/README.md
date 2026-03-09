@@ -52,7 +52,7 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-research
    - 负责脚本研究 run 的创建、状态刷新、结果映射与脚本回流。
 8. `core/logging_config.py`
    - 结构化日志装配层。
-   - 负责 `structlog` 配置、request-id 绑定和控制台 / JSON 输出切换。
+   - 负责 `structlog` 配置、request-id 绑定，以及控制台输出和移动端调试日志文件输出。
 
 ## Folder Guide
 
@@ -73,7 +73,7 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-research
 - `modules/scripts/`: 口播稿生成、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
 - `modules/agent/`: Dify 外挂脚本研究工作流和 run 状态管理。
-- `modules/debug_logs/`: 接收移动端调试日志并落盘到本地文件。
+- `modules/debug_logs/`: 接收移动端调试日志，并通过结构化日志链路写入本地文件。
 - `modules/scheduler/`: APScheduler 装配与每日推盘调度入口。
 - `modules/shared/`: 模块共享端口、DI 容器、增强逻辑，不承载独立业务模块。
 
@@ -94,16 +94,11 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-research
 - `chroma_data/`: 本地 ChromaDB 数据目录。
 - `runtime_logs/`: 运行时日志目录，当前包含移动端错误日志文件。
 
-### Legacy or low-priority paths
-
-- `routers/`: 早期路由组织残留，当前主业务不再继续扩展。
-- `schemas/`: 已废弃的全局 schema 目录，当前不再作为 API contract 维护目标。
-
 ## Coding Conventions
 
 - 新增业务优先放在 `modules/<module>/`，不要继续把业务逻辑扩散到 `services/`。
 - `presentation.py` 只做路由声明、依赖注入和请求/响应拼装，不写核心业务。
-- `schemas.py` 是模块 API contract 的单一事实源；不要再单独维护一套全局 schema。
+- `schemas.py` 是模块 API contract 的单一事实源；不要再回退到旧的全局 schema 组织方式。
 - `application.py` 负责业务编排，可以调用 repository、shared port、provider，但不要依赖 FastAPI 请求对象。
 - `domains/*/repository.py` 只做数据访问，不承载跨资源业务规则。
 - 所有对外接口都应显式声明 `response_model=ResponseModel[...]`，让 `/docs` 与 `/redoc` 可直接作为契约文档。
@@ -139,7 +134,7 @@ Current business modules include `auth`, `fragment_folders`, `fragments`, `trans
 移动端错误日志现在会同时：
 
 - 保存在 App 内错误日志页中
-- 追加写入后端本地文件 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
+- 通过 `structlog` 专用文件 handler 写入后端本地文件 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
 
 后端接收接口：
 

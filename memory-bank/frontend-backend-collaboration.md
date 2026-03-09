@@ -180,6 +180,6 @@ SparkFlow 当前以后端模块内 `schemas.py` 作为 API contract 单一事实
 结合 SparkFlow 当前仓库形态，建议按下面方式落地：
 
 - 前端以页面 / hook 为开发单元，优先保证用户流完整。
-- 后端以 `modules/*` 为开发单元，禁止把新增业务继续散落到 legacy `routers/` 或旧 `schemas/`。
+- 后端以 `modules/*` 为开发单元，禁止把新增业务继续写回早期的非模块化组织方式。
 - API contract 以后端 `schemas.py + response_model + /docs` 为准。
 - 联调统一走 `bash scripts/dev-mobile.sh`，避免各自手动启动导致环境不一致。

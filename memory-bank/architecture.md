@@ -171,8 +171,6 @@ flowchart TD
 - `backend/chroma_data/`: 本地向量库持久化目录。
 - `backend/runtime_logs/`: 运行时日志目录，当前包含移动端错误日志落盘文件。
 - `backend/scripts/`: 后端辅助脚本。
-- `backend/routers/`: 早期路由目录残留，当前不应再作为新增功能的主要入口。
-- `backend/schemas/`: 已废弃的旧全局 schema 目录，后续应避免继续使用或新增内容。
 
 ### 4.4 Backend Modules
 
@@ -184,7 +182,7 @@ flowchart TD
 - `scripts`: 合稿、列表、详情、更新、删除、每日推盘。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
 - `agent`: Dify 外挂脚本研究工作流入口、run 状态查询与 refresh。
-- `debug_logs`: 移动端调试日志接收与本地落盘。
+- `debug_logs`: 移动端调试日志接收，并复用结构化日志链路落盘。
 - `scheduler`: APScheduler 装配与启停。
 
 ### 4.5 Backend Coding Conventions
@@ -193,7 +191,7 @@ flowchart TD
 - `presentation.py` 只负责 HTTP 适配，不承载核心业务规则。
 - `application.py` 负责用例编排、数据校验、错误抛出和 provider 调用。
 - repository 仅负责数据读写，不承载流程级业务编排。
-- 如需跨模块复用，优先抽到 `modules/shared/`；不要回退到全局 `backend/schemas/` 模式。
+- 如需跨模块复用，优先抽到 `modules/shared/`；不要回退到早期全局 schema 组织方式。
 - 所有对外接口默认走标准响应包裹 `ResponseModel`，并补中文 `summary` / `description`。
 - 注释应简短，只解释非显然业务约束或实现原因。
 
@@ -224,6 +222,7 @@ flowchart TD
 
 - HTTP 请求入口统一绑定 `request_id`，并通过 `structlog` 输出结构化日志。
 - 关键后台链路日志字段至少包含 `event`、`request_id`、`path`、`module`，核心转写链路额外补 `fragment_id`、`user_id`、`provider`、`attempt`。
+- 移动端调试日志通过独立 file handler 写入 `runtime_logs/mobile-debug.log`，但字段格式与主日志链路保持一致。
 - 后端自动化测试已切换到 `pytest`。
 - OpenAPI 契约 smoke 校验通过 `Schemathesis` 直接消费 `/openapi.json`，不维护第二套独立契约文件。
 

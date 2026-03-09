@@ -33,8 +33,13 @@ def test_legacy_domain_service_files_are_removed() -> None:
 
 
 def test_router_layer_is_removed() -> None:
-    legacy_files = list((BACKEND_ROOT / "routers").glob("*.py"))
-    assert legacy_files == [], "legacy backend/routers python files should be removed"
+    """旧路由目录应整体删除，避免回流到历史结构。"""
+    assert not (BACKEND_ROOT / "routers").exists(), "legacy backend/routers directory should be removed"
+
+
+def test_global_schema_directory_is_removed() -> None:
+    """旧全局 schema 目录应保持不存在。"""
+    assert not (BACKEND_ROOT / "schemas").exists(), "legacy backend/schemas directory should be removed"
 
 
 def test_presentation_depends_on_application_not_inverse() -> None:

@@ -164,6 +164,14 @@ class Settings(BaseSettings):
         default="./uploads",
         description="上传音频文件的存储目录"
     )
+    RUNTIME_LOG_DIR: str = Field(
+        default=os.path.join(BACKEND_DIR, "runtime_logs"),
+        description="运行时日志目录"
+    )
+    MOBILE_DEBUG_LOG_PATH: str = Field(
+        default=os.path.join(BACKEND_DIR, "runtime_logs", "mobile-debug.log"),
+        description="移动端调试日志文件路径"
+    )
     MAX_UPLOAD_SIZE: int = Field(
         default=50 * 1024 * 1024,  # 50MB
         description="最大上传文件大小（字节）"
@@ -214,6 +222,8 @@ class Settings(BaseSettings):
         directories = [
             self.UPLOAD_DIR,
             self.CHROMADB_PATH,
+            self.RUNTIME_LOG_DIR,
+            os.path.dirname(os.path.abspath(self.MOBILE_DEBUG_LOG_PATH)),
             sqlite_dir,
         ]
         for directory in directories:
