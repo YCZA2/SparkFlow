@@ -6,7 +6,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from core.config import settings
 from core.exceptions import NotFoundError, ValidationError
 from domains.fragments import repository as fragment_repository
 from domains.knowledge import repository as knowledge_repository
@@ -68,14 +67,12 @@ class ScriptGenerationPipelineService:
         vector_store: VectorStore,
         web_search_provider: WebSearchProvider,
         pipeline_runner,
-        pipeline_dispatcher,
     ) -> None:
         """装配脚本流水线依赖。"""
         self.workflow_provider = workflow_provider
         self.vector_store = vector_store
         self.web_search_provider = web_search_provider
         self.pipeline_runner = pipeline_runner
-        self.pipeline_dispatcher = pipeline_dispatcher
 
     async def create_run(
         self,
@@ -103,22 +100,6 @@ class ScriptGenerationPipelineService:
             resource_id=None,
             auto_wake=True,
         )
-
-    async def wait_for_script(
-        self,
-        *,
-        db: Session,
-        user_id: str,
-        run_id: str,
-        timeout_seconds: int | None = None,
-    ) -> PipelineRun:
-        """等待脚本流水线进入终态，供兼容同步路径复用。"""
-        timeout = max(0.2, float(timeout_seconds or settings.DIFY_POLL_TIMEOUT_SECONDS))
-        await self.pipeline_dispatcher.run_until_terminal(run_id=run_id, user_id=user_id, timeout_seconds=timeout)
-        run = pipeline_repository.get_by_id(db=db, user_id=user_id, run_id=run_id)
-        if not run:
-            raise NotFoundError(message="脚本生成流水线不存在或无权访问", resource_type="pipeline_run", resource_id=run_id)
-        return run
 
     async def _build_context(
         self,
@@ -377,5 +358,4 @@ def build_script_generation_pipeline_service(container) -> ScriptGenerationPipel
         vector_store=container.vector_store,
         web_search_provider=container.web_search_provider,
         pipeline_runner=container.pipeline_runner,
-        pipeline_dispatcher=container.pipeline_dispatcher,
     )

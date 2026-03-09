@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.config import Settings
+from core.config import BACKEND_DIR, Settings
 
 
 def test_debug_accepts_legacy_release_value(monkeypatch) -> None:
@@ -24,3 +24,20 @@ def test_dify_base_url_is_normalized(monkeypatch) -> None:
     monkeypatch.setenv("DIFY_BASE_URL", "https://dify.example.com/v1/")
     settings = Settings()
     assert settings.DIFY_BASE_URL == "https://dify.example.com/v1"
+
+
+def test_upload_dir_is_resolved_from_backend_dir(monkeypatch) -> None:
+    """相对上传目录始终以 backend 目录为基准。"""
+    monkeypatch.setenv("UPLOAD_DIR", "./uploads")
+    settings = Settings()
+    assert settings.UPLOAD_DIR == f"{BACKEND_DIR}/uploads"
+
+
+def test_runtime_log_path_is_resolved_from_backend_dir(monkeypatch) -> None:
+    """日志路径在 .env 中使用相对值时也不受 cwd 影响。"""
+    monkeypatch.setenv("MOBILE_DEBUG_LOG_PATH", "./runtime_logs/mobile-debug.log")
+    settings = Settings()
+    assert (
+        settings.MOBILE_DEBUG_LOG_PATH
+        == f"{BACKEND_DIR}/runtime_logs/mobile-debug.log"
+    )

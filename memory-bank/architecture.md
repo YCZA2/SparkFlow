@@ -175,6 +175,7 @@ flowchart TD
 - `backend/chroma_data/`: 本地向量库持久化目录。
 - `backend/runtime_logs/`: 运行时日志目录，当前包含移动端错误日志落盘文件。
 - `backend/scripts/`: 后端辅助脚本。
+- 本地路径类配置（如 `UPLOAD_DIR` / `CHROMADB_PATH` / `RUNTIME_LOG_DIR`）即使在 `.env` 中写相对路径，也统一按 `backend/` 目录解析，避免因为启动 cwd 不同漂移到仓库根目录。
 
 ### 4.4 Backend Modules
 

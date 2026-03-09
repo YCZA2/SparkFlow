@@ -15,7 +15,6 @@ from models import Fragment, PipelineRun, PipelineStepRun
 
 logger = get_logger(__name__)
 
-PIPELINE_STATUS_TERMINAL = {"succeeded", "failed", "cancelled"}
 RETRY_STRATEGY_FROM_FAILED_STEP = "from_failed_step"
 RETRY_STRATEGY_FROM_START = "from_start"
 
@@ -233,33 +232,6 @@ class PipelineDispatcher:
             return False
         await self._execute_step(step_id=step.id, trigger_followup_wake=True)
         return True
-
-    async def run_next_for_run(self, *, run_id: str) -> bool:
-        """仅推进指定流水线的当前步骤，避免兼容接口误触发其他 run。"""
-        with self.session_factory() as db:
-            pipeline_repository.recover_stale_steps(db=db, stale_seconds=self.stale_step_seconds)
-            step = pipeline_repository.claim_next_runnable_step(
-                db=db,
-                worker_id=self._worker_id,
-                run_id=run_id,
-        )
-        if step is None:
-            return False
-        await self._execute_step(step_id=step.id, trigger_followup_wake=False)
-        return True
-
-    async def run_until_terminal(self, *, run_id: str, user_id: str, timeout_seconds: float = 5.0) -> PipelineRun:
-        """测试和兼容路径下，等待某条流水线进入终态。"""
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + timeout_seconds
-        self.wake_up()
-        while loop.time() < deadline:
-            with self.session_factory() as db:
-                run = pipeline_repository.get_by_id(db=db, user_id=user_id, run_id=run_id)
-            if run and run.status in PIPELINE_STATUS_TERMINAL:
-                return run
-            await asyncio.sleep(0.05)
-        raise TimeoutError(f"pipeline run {run_id} did not finish in time")
 
     async def _execute_step(self, *, step_id: str, trigger_followup_wake: bool = True) -> None:
         """执行单个步骤，并回写步骤与流水线状态。"""

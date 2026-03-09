@@ -14,6 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 FALSEY_DEBUG_VALUES = {"0", "false", "off", "no", "release", "prod", "production"}
 TRUTHY_DEBUG_VALUES = {"1", "true", "on", "yes", "debug", "dev", "development"}
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BACKEND_ENV_FILE = os.path.join(BACKEND_DIR, ".env")
 DEFAULT_POSTGRES_URL = "postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow"
 
 
@@ -164,7 +165,7 @@ class Settings(BaseSettings):
 
     # 存储配置
     UPLOAD_DIR: str = Field(
-        default="./uploads",
+        default=os.path.join(BACKEND_DIR, "uploads"),
         description="上传音频文件的存储目录"
     )
     RUNTIME_LOG_DIR: str = Field(
@@ -190,7 +191,7 @@ class Settings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=BACKEND_ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=True,
     )
@@ -213,6 +214,25 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             normalized = value.strip().rstrip("/")
             return normalized or None
+        return value
+
+    @field_validator(
+        "CHROMADB_PATH",
+        "UPLOAD_DIR",
+        "RUNTIME_LOG_DIR",
+        "MOBILE_DEBUG_LOG_PATH",
+        mode="before",
+    )
+    @classmethod
+    def normalize_backend_relative_path(cls, value):
+        """将本地相对路径统一锚定到 backend 目录，避免受启动 cwd 影响。"""
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not normalized:
+                return normalized
+            if os.path.isabs(normalized):
+                return normalized
+            return os.path.abspath(os.path.join(BACKEND_DIR, normalized))
         return value
 
     def ensure_directories(self):

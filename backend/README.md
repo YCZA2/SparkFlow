@@ -124,9 +124,9 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 - `alembic/`: 数据库迁移。
 - `tests/`: `pytest` + `Schemathesis` 测试。
 - `scripts/`: 后端本地辅助脚本。
-- `uploads/`: 本地音频上传目录。
+- `uploads/`: 本地音频上传目录，配置层会固定解析到 `backend/uploads/`，不依赖启动 cwd。
 - `uploads/external_media/<user_id>/<platform>/`: 外部媒体导入后的音频文件。
-- `chroma_data/`: 本地 ChromaDB 数据目录。
+- `chroma_data/`: 本地 ChromaDB 数据目录，相对路径同样固定解析到 `backend/chroma_data/`。
 - `runtime_logs/`: 运行时日志目录，当前包含移动端错误日志文件。
 
 ## Coding Conventions
