@@ -6,6 +6,7 @@ import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 import { useAppTheme } from '@/theme/useAppTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuickActionBar } from '@/providers/QuickActionBarProvider';
 
 type SymbolName = React.ComponentProps<typeof SymbolView>['name'];
 
@@ -26,15 +27,18 @@ export function QuickActionBar() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const { visible } = useQuickActionBar();
 
   // 根据当前路由判断是否在主流程页面（主页或碎片列表）
   const isVisible = React.useMemo(() => {
+    // 如果 Provider 设置为不可见，则隐藏
+    if (!visible) return false;
     // 主页
     if (pathname === '/') return true;
     // 碎片列表页面 /folder/[id]
     if (pathname.startsWith('/folder/')) return true;
     return false;
-  }, [pathname]);
+  }, [pathname, visible]);
 
   // 根据路由提取 folderId
   const folderId = React.useMemo(() => {
@@ -140,7 +144,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingVertical: 10,
     minWidth: 248,
   },
   quickActionButton: {

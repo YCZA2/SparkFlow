@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   Alert,
   RefreshControl,
@@ -19,6 +19,7 @@ import { useAppTheme } from '@/theme/useAppTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFolderFragments } from '@/features/folders/hooks';
+import { useQuickActionBar } from '@/providers/QuickActionBarProvider';
 import type { Fragment } from '@/types/fragment';
 
 // 返回按钮组件
@@ -55,6 +56,12 @@ export default function FolderDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
   const screen = useFolderFragments(id);
+  const { setVisible } = useQuickActionBar();
+
+  // 选择模式下隐藏 QuickActionBar，退出时恢复显示
+  useEffect(() => {
+    setVisible(!screen.selection.isSelectionMode);
+  }, [screen.selection.isSelectionMode, setVisible]);
 
   const handleBack = useCallback(() => {
     router.back();
