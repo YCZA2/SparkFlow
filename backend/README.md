@@ -170,6 +170,12 @@ cd backend
 .venv/bin/pytest
 ```
 
+Run the full repository test suite from root with:
+
+```bash
+bash scripts/test-all.sh
+```
+
 OpenAPI contract smoke tests are driven by `Schemathesis`:
 
 ```bash

@@ -223,6 +223,21 @@ backend/runtime_logs/mobile-debug.log
 - 未处理 Promise 异常（Web）
 - API 请求失败 / 响应错误
 
+## 五、测试
+
+移动端状态测试：
+
+```bash
+cd mobile
+npm run test:state
+```
+
+全仓测试：
+
+```bash
+bash scripts/test-all.sh
+```
+
 这样以后真机红屏或接口报错，不需要再手动复制大段报错文本。
 
 ## 五、手动命令对照表

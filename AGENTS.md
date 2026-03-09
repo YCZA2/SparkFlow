@@ -116,6 +116,12 @@ Run migrations with:
 .venv/bin/alembic upgrade head
 ```
 
+Run full repository tests from root with:
+
+```bash
+bash scripts/test-all.sh
+```
+
 ## Mobile/Backend Networking Notes
 
 - App business API address uses port `8000`

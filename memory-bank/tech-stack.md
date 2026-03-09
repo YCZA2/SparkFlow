@@ -207,6 +207,12 @@ cd mobile
 npm run test:state
 ```
 
+全仓：
+
+```bash
+bash scripts/test-all.sh
+```
+
 ## 7. Networking Conventions
 
 - App 业务接口端口：`8000`
