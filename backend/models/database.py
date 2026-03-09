@@ -1,50 +1,40 @@
-"""
-SQLAlchemy 数据库连接模块
+"""SQLAlchemy 数据库连接模块。"""
 
-提供数据库引擎、会话工厂和依赖注入函数
-"""
+from __future__ import annotations
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from core import settings
 
 
-# 根据数据库 URL 创建引擎
-# SQLite 需要特殊配置以支持多线程
-if settings.DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(
-        settings.DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        echo=settings.DEBUG,  # 调试模式下打印 SQL 语句
-    )
-else:
-    engine = create_engine(
-        settings.DATABASE_URL,
-        echo=settings.DEBUG,
-    )
+def build_engine(database_url: str | None = None) -> Engine:
+    """根据配置创建数据库引擎，并保留 SQLite 兼容分支。"""
+    resolved_url = database_url or settings.DATABASE_URL
+    engine_kwargs = {
+        "echo": settings.DEBUG,
+        "future": True,
+    }
+    if resolved_url.startswith("sqlite"):
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        engine_kwargs["pool_pre_ping"] = True
+    return create_engine(resolved_url, **engine_kwargs)
 
-# 创建会话工厂
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# 声明基类
+def create_session_factory(bind_engine: Engine) -> sessionmaker[Session]:
+    """基于引擎创建统一的 Session 工厂。"""
+    return sessionmaker(autocommit=False, autoflush=False, bind=bind_engine)
+
+
+engine = build_engine()
+SessionLocal = create_session_factory(engine)
 Base = declarative_base()
 
 
 def get_db():
-    """
-    获取数据库会话的依赖注入函数
-
-    在 FastAPI 路由中使用：
-        @app.get("/items")
-        def read_items(db: Session = Depends(get_db)):
-            ...
-
-    Yields:
-        Session: SQLAlchemy 数据库会话
-    """
+    """提供路由层使用的数据库会话依赖。"""
     db = SessionLocal()
     try:
         yield db
@@ -52,10 +42,6 @@ def get_db():
         db.close()
 
 
-def init_db():
-    """
-    初始化数据库，创建所有表
-
-    注意：生产环境建议使用 Alembic 迁移，而不是直接调用此函数
-    """
-    Base.metadata.create_all(bind=engine)
+def init_db(bind_engine: Engine | None = None) -> None:
+    """初始化数据库表，仅用于本地或测试场景。"""
+    Base.metadata.create_all(bind=bind_engine or engine)

@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol
 
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
+from core.logging_config import get_logger
 from domains.fragment_folders import repository as fragment_folder_repository
 from domains.fragments import repository as fragment_repository
 from modules.shared.enrichment import build_fallback_summary_and_tags, generate_summary_and_tags
 from modules.shared.ports import JobRunner, SpeechToTextProvider, TextGenerationProvider, VectorStore
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 ENRICHMENT_TIMEOUT_SECONDS = 45.0
 
 
@@ -98,12 +98,14 @@ class AudioIngestionService:
         vector_store: VectorStore,
         hooks: AudioIngestionHooks | None = None,
     ) -> None:
+        """初始化音频导入服务依赖。"""
         self.stt_provider = stt_provider
         self.llm_provider = llm_provider
         self.vector_store = vector_store
         self.hooks = hooks or NoopAudioIngestionHooks()
 
     async def ensure_transcription_available(self) -> None:
+        """在上传前检查转写服务是否可用。"""
         try:
             is_available = await self.stt_provider.health_check()
             if not is_available:
@@ -122,6 +124,7 @@ class AudioIngestionService:
         runner: JobRunner,
         session_factory,
     ) -> AudioIngestionResult:
+        """创建碎片并调度后台转写任务。"""
         self._validate_audio_source(request.audio_source)
         self._validate_folder_exists(db=db, user_id=request.user_id, folder_id=request.folder_id)
         await self.hooks.before_create_fragment(db=db, request=request)
@@ -151,6 +154,7 @@ class AudioIngestionService:
         )
 
     async def _generate_enrichment(self, transcript: str) -> tuple[str, list[str]]:
+        """生成摘要与标签，并在超时时落回本地策略。"""
         try:
             return await generate_summary_and_tags(
                 transcript,
@@ -158,10 +162,7 @@ class AudioIngestionService:
                 timeout_seconds=ENRICHMENT_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError:
-            logger.warning(
-                "summary/tag generation timed out for transcript length=%s, using fallback",
-                len(transcript or ""),
-            )
+            logger.warning("enrichment_timeout", transcript_length=len(transcript or ""))
             return build_fallback_summary_and_tags(transcript)
 
     async def process_transcription(
@@ -172,7 +173,13 @@ class AudioIngestionService:
         session_factory,
         max_retries: int = 2,
     ) -> dict[str, Any]:
+        """执行完整的转写、摘要和向量写入后台链路。"""
         last_error: str | None = None
+        bound_logger = logger.bind(
+            fragment_id=fragment_id,
+            user_id=request.user_id,
+            provider=type(self.stt_provider).__name__,
+        )
         try:
             for attempt in range(max_retries + 1):
                 try:
@@ -211,16 +218,16 @@ class AudioIngestionService:
                                 tags=tags,
                             )
                         except Exception:
-                            logger.warning("vectorization failed for fragment %s", fragment_id, exc_info=True)
+                            bound_logger.warning("vectorization_failed", attempt=attempt, exc_info=True)
                     return {"success": True, "fragment_id": fragment_id, "transcript": transcript}
                 except Exception as exc:
                     last_error = str(exc)
-                    logger.error("transcription attempt failed for fragment %s: %s", fragment_id, last_error)
+                    bound_logger.error("transcription_attempt_failed", attempt=attempt, error=last_error)
                     if attempt < max_retries:
                         await asyncio.sleep((2 ** (attempt + 1)) - 1)
         except asyncio.CancelledError:
             last_error = "transcription job cancelled"
-            logger.warning("transcription job cancelled for fragment %s", fragment_id)
+            bound_logger.warning("transcription_job_cancelled")
 
         with session_factory() as db:
             fragment_repository.mark_failed(db=db, fragment_id=fragment_id, user_id=request.user_id)
@@ -234,6 +241,7 @@ class AudioIngestionService:
 
     @staticmethod
     def _normalize_speaker_segments(speaker_segments: list[Any]) -> list[dict[str, Any]]:
+        """将供应商分段结构归一化为可持久化字典。"""
         normalized_segments = []
         for segment in speaker_segments:
             if isinstance(segment, dict):
@@ -260,6 +268,7 @@ class AudioIngestionService:
 
     @staticmethod
     def _validate_audio_source(audio_source: str) -> None:
+        """校验允许的音频来源枚举。"""
         if audio_source not in {"upload", "external_link"}:
             raise ValidationError(
                 message="无效的 audio_source 值",
@@ -268,6 +277,7 @@ class AudioIngestionService:
 
     @staticmethod
     def _validate_folder_exists(db: Session, user_id: str, folder_id: Optional[str]) -> None:
+        """校验目标文件夹存在且属于当前用户。"""
         if folder_id is None:
             return
         folder = fragment_folder_repository.get_by_id(db=db, user_id=user_id, folder_id=folder_id)

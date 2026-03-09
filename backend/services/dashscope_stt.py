@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 import tempfile
 from typing import Optional
 
 from core.config import settings
+from core.logging_config import get_logger
 from services.base import (
     AudioFormat,
     BaseSTTService,
@@ -28,7 +28,7 @@ from services.dashscope.strategies import (
     DashScopeTranscriptionStrategy,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DashScopeSTTService(BaseSTTService):
@@ -43,6 +43,7 @@ class DashScopeSTTService(BaseSTTService):
         model: Optional[str] = None,
         **kwargs,
     ):
+        """初始化 DashScope STT 服务和策略集合。"""
         super().__init__(**kwargs)
 
         self.api_key = api_key or settings.DASHSCOPE_API_KEY
@@ -82,15 +83,16 @@ class DashScopeSTTService(BaseSTTService):
         }
 
         logger.info(
-            "[DashScope STT] initialized model=%s strategy=%s diarization=%s speaker_count=%s file_url_mode=%s",
-            self.model,
-            self.strategy_name,
-            self.diarization_enabled,
-            self.speaker_count,
-            self.file_url_mode,
+            "dashscope_stt_initialized",
+            provider="dashscope",
+            strategy=self.strategy_name,
+            diarization=self.diarization_enabled,
+            speaker_count=self.speaker_count,
+            file_url_mode=self.file_url_mode,
         )
 
     def _get_strategy(self) -> DashScopeTranscriptionStrategy:
+        """获取当前配置对应的识别策略。"""
         strategy = self._strategies.get(self.strategy_name)
         if strategy is None:
             supported = ", ".join(sorted(self._strategies))
@@ -104,6 +106,7 @@ class DashScopeSTTService(BaseSTTService):
         language_hint: Optional[str] = "zh-CN",
         **kwargs,
     ) -> TranscriptionResult:
+        """执行单文件转写，并记录策略结果。"""
         if not os.path.exists(audio_path):
             raise STTFileError(f"音频文件不存在: {audio_path}")
 
@@ -136,7 +139,7 @@ class DashScopeSTTService(BaseSTTService):
                 format_str=format_str,
                 language=language,
             )
-            logger.info("[DashScope STT] strategy=%s succeeded", strategy.name)
+            logger.info("dashscope_stt_succeeded", provider="dashscope", strategy=strategy.name)
             return result
         except STTError:
             raise
@@ -152,6 +155,7 @@ class DashScopeSTTService(BaseSTTService):
         language_hint: Optional[str] = "zh-CN",
         **kwargs,
     ) -> TranscriptionResult:
+        """将字节音频写入临时文件后复用文件转写逻辑。"""
         if not audio_data:
             raise STTFileError("音频数据为空")
 
@@ -178,15 +182,19 @@ class DashScopeSTTService(BaseSTTService):
 
     # Compatibility methods retained for existing strategy tests.
     def _recognize_file(self, audio_path: str, format_str: str, language: str) -> TranscriptionResult:
+        """兼容旧策略测试的实时识别入口。"""
         return self._realtime_recognizer.recognize_file(audio_path=audio_path, format_str=format_str, language=language)
 
     def _transcribe_recorded_file(self, audio_path: str, language: str) -> TranscriptionResult:
+        """兼容旧策略测试的录音文件识别入口。"""
         return self._file_transcriber.transcribe_recorded_file(audio_path=audio_path, language=language)
 
     async def health_check(self) -> bool:
+        """以 API Key 是否存在作为轻量健康检查。"""
         return bool(self.api_key)
 
     async def close(self):
+        """保留统一关闭接口，当前无额外资源需要释放。"""
         pass
 
 

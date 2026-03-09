@@ -1,17 +1,19 @@
 """SparkFlow backend application entrypoint."""
-import logging
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable
+from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+import structlog
 
 from core import settings, AppException, success_response
 from core.exceptions import (
     AuthenticationError,
 )
+from core.logging_config import configure_logging, get_logger
 from modules.auth.presentation import router as auth_router
 from modules.agent.presentation import router as agent_router
 from modules.debug_logs.presentation import router as debug_logs_router
@@ -25,9 +27,11 @@ from modules.shared.container import ServiceContainer, build_container
 from modules.transcriptions.presentation import router as transcriptions_router
 from modules.scheduler.application import SchedulerService, create_scheduler
 
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = get_logger(__name__)
 
 def create_app() -> FastAPI:
+    """创建并装配 FastAPI 应用实例。"""
     container = build_container()
     scheduler_service = _build_scheduler_service(container)
 
@@ -52,6 +56,20 @@ def create_app() -> FastAPI:
     app.state.container = container
     app.state.scheduler_service = scheduler_service
 
+    @app.middleware("http")
+    async def bind_request_context(request: Request, call_next):
+        """为每个请求绑定 request_id 和路径上下文。"""
+        request_id = request.headers.get("x-request-id") or uuid4().hex
+        request.state.request_id = request_id
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(request_id=request_id, path=request.url.path)
+        try:
+            response = await call_next(request)
+            response.headers["X-Request-Id"] = request_id
+            return response
+        finally:
+            structlog.contextvars.clear_contextvars()
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -67,6 +85,7 @@ def create_app() -> FastAPI:
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    """注册统一异常处理器。"""
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):
         return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
@@ -93,7 +112,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
-        logger.exception("Unhandled exception while handling request %s", request.url.path)
+        logger.exception("unhandled_exception", path=request.url.path)
         return JSONResponse(
             status_code=500,
             content={
@@ -110,6 +129,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 
 def register_routes(app: FastAPI) -> None:
+    """注册应用公开路由。"""
     @app.get("/")
     async def root():
         return build_root_health_payload()
@@ -161,6 +181,7 @@ def register_routes(app: FastAPI) -> None:
 
 
 def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:
+    """构建带每日推盘任务的调度服务。"""
     scheduler = create_scheduler()
 
     async def run_daily_push_job() -> None:

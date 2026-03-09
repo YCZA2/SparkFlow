@@ -14,7 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 FALSEY_DEBUG_VALUES = {"0", "false", "off", "no", "release", "prod", "production"}
 TRUTHY_DEBUG_VALUES = {"1", "true", "on", "yes", "debug", "dev", "development"}
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_SQLITE_PATH = os.path.join(BACKEND_DIR, "data.db")
+DEFAULT_POSTGRES_URL = "postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow"
 
 
 class Settings(BaseSettings):
@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     APP_VERSION: str = Field(default="0.1.0", description="应用版本")
     DEBUG: bool = Field(default=False, description="调试模式")
     APP_TIMEZONE: str = Field(default="Asia/Shanghai", description="应用业务时区")
+    LOG_LEVEL: str = Field(default="INFO", description="日志级别")
+    LOG_JSON: bool = Field(default=False, description="是否输出 JSON 结构化日志")
 
     # 服务器配置
     HOST: str = Field(default="0.0.0.0", description="服务器主机")
@@ -46,7 +48,7 @@ class Settings(BaseSettings):
 
     # 数据库配置
     DATABASE_URL: str = Field(
-        default=f"sqlite:///{DEFAULT_SQLITE_PATH}",
+        default=DEFAULT_POSTGRES_URL,
         description="SQLAlchemy 数据库 URL"
     )
 
@@ -204,12 +206,15 @@ class Settings(BaseSettings):
 
     def ensure_directories(self):
         """确保所需目录存在"""
+        sqlite_dir = None
+        if self.DATABASE_URL.startswith("sqlite:///"):
+            sqlite_path = self.DATABASE_URL.replace("sqlite:///", "", 1)
+            if sqlite_path and sqlite_path != ":memory:":
+                sqlite_dir = os.path.dirname(os.path.abspath(sqlite_path))
         directories = [
             self.UPLOAD_DIR,
             self.CHROMADB_PATH,
-            os.path.dirname(self.DATABASE_URL.replace("sqlite:///", ""))
-            if self.DATABASE_URL.startswith("sqlite:///.")
-            else None,
+            sqlite_dir,
         ]
         for directory in directories:
             if directory and not os.path.exists(directory):

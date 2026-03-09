@@ -1,14 +1,16 @@
 # SparkFlow Backend
 
-SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以本地 SQLite + ChromaDB + 本地文件存储联调。
+SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以本地 PostgreSQL + ChromaDB + 本地文件存储联调。
 
 ## Quick Start
 
 1. Create venv and install dependencies.
-2. Configure `.env` (see `.env.example`).
-3. Start server:
+2. Start PostgreSQL and create a local database such as `sparkflow`.
+3. Configure `.env` (see `.env.example`).
+4. Run migrations and start server:
 
 ```bash
+.venv/bin/alembic upgrade head
 uvicorn main:app --reload
 ```
 
@@ -48,13 +50,16 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-research
 7. `modules/agent`
    - Dify 外挂工作流层。
    - 负责脚本研究 run 的创建、状态刷新、结果映射与脚本回流。
+8. `core/logging_config.py`
+   - 结构化日志装配层。
+   - 负责 `structlog` 配置、request-id 绑定和控制台 / JSON 输出切换。
 
 ## Folder Guide
 
 ### Core entry and infra
 
-- `main.py`: FastAPI 应用入口，负责装配中间件、异常处理、路由和 lifespan。
-- `core/`: 通用基础设施，包括配置、认证、标准响应、异常定义。
+- `main.py`: FastAPI 应用入口，负责装配 request-id 中间件、异常处理、路由和 lifespan。
+- `core/`: 通用基础设施，包括配置、认证、标准响应、异常定义和结构化日志。
 - `constants/`: 共享常量。
 - `utils/`: 序列化、时间处理等通用工具函数。
 
@@ -82,7 +87,7 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-research
 ### Runtime data and maintenance
 
 - `alembic/`: 数据库迁移。
-- `tests/`: `unittest` 测试。
+- `tests/`: `pytest` + `Schemathesis` 测试。
 - `scripts/`: 后端本地辅助脚本。
 - `uploads/`: 本地音频上传目录。
 - `uploads/external_media/<user_id>/<platform>/`: 外部媒体导入后的音频文件。
@@ -163,11 +168,18 @@ tail -n 100 backend/runtime_logs/mobile-debug.log
 
 ## Tests
 
-Current tests are runnable with `unittest`:
+Current tests are runnable with `pytest`:
 
 ```bash
 cd backend
-.venv/bin/python -m unittest discover -s tests -p 'test*.py'
+.venv/bin/pytest
+```
+
+OpenAPI contract smoke tests are driven by `Schemathesis`:
+
+```bash
+cd backend
+.venv/bin/pytest tests/test_openapi_contracts.py
 ```
 
 ## API Docs

@@ -1,6 +1,6 @@
 # SparkFlow — 当前技术栈
 
-> 最后更新：2026-03-08
+> 最后更新：2026-03-09
 
 本文档描述当前仓库实际在用的技术栈、关键依赖和本地开发方式，不再保留早期“推荐但未落地”的方案描述。
 
@@ -18,13 +18,14 @@
 | Network | fetch + 自建 API client | 统一 token、错误处理 |
 | Local persistence | AsyncStorage | token / user / backend base URL |
 | Backend | FastAPI 0.135 + Uvicorn 0.41 | 模块化单体 |
-| ORM | SQLAlchemy 2.0 + Alembic | SQLite migrations |
+| ORM | SQLAlchemy 2.0 + Alembic | PostgreSQL migrations |
 | Scheduling | APScheduler 3.11 | 每日推盘 cron |
 | LLM | Qwen | 默认通过 DashScope |
 | STT | DashScope / Aliyun | 当前默认 DashScope |
 | Embedding | Qwen text-embedding-v2 | 通过 provider factory 装配 |
 | Vector DB | ChromaDB 0.6 | 本地持久化 |
-| Test | `unittest` + Node `--test` | 后端 API / 移动端少量状态测试 |
+| Logging | structlog | request-id 贯穿的结构化日志 |
+| Test | `pytest` + `Schemathesis` + Node `--test` | 后端 API、契约测试 / 移动端少量状态测试 |
 
 ## 2. Mobile
 
@@ -85,6 +86,11 @@
 - `python-docx==1.1.2`
 - `PyJWT==2.10.1`
 - `APScheduler==3.11.0`
+- `structlog==25.4.0`
+- `psycopg[binary]==3.2.10`
+- `pytest==8.3.5`
+- `pytest-asyncio==0.26.0`
+- `schemathesis==3.39.16`
 
 ### 3.2 Backend structure choice
 
@@ -106,8 +112,8 @@
 
 ### 4.1 Database
 
-- 主数据库：SQLite
-- 默认连接串：`sqlite:///./data.db`
+- 主数据库：PostgreSQL
+- 默认连接串：`postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow`
 - ORM：SQLAlchemy
 - 迁移工具：Alembic
 
@@ -191,7 +197,7 @@ cd backend
 
 ```bash
 cd backend
-.venv/bin/python -m unittest discover -s tests -p 'test*.py'
+.venv/bin/pytest
 ```
 
 移动端：

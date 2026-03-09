@@ -2,7 +2,7 @@
 
 > 最后更新：2026-03-09
 
-本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行。
+本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为 PostgreSQL。
 
 ## 1. Overall
 
@@ -12,7 +12,7 @@ flowchart LR
     M["Mobile App<br/>Expo Router + React Native"]
     S["AsyncStorage<br/>token / user / backend base url"]
     API["FastAPI API<br/>模块化单体"]
-    DB[("SQLite<br/>SQLAlchemy")]
+    DB[("PostgreSQL<br/>SQLAlchemy")]
     FS[("uploads/<user_id><br/>本地音频文件")]
     CHROMA[("ChromaDB<br/>fragments_* / knowledge_*")]
     DIFY["Dify Workflow<br/>外挂脚本研究编排"]
@@ -119,7 +119,7 @@ flowchart TD
     REPO["domains/*/repository.py<br/>SQLAlchemy access"]
     MODEL["models/*<br/>ORM + session factory"]
     PROVIDER["services/*<br/>provider adapters / factory"]
-    DB[("SQLite")]
+    DB[("PostgreSQL")]
     UP[("uploads/")]
     VDB[("ChromaDB")]
 
@@ -136,7 +136,7 @@ flowchart TD
 
 ### 4.2 Actual Boundaries
 
-- [`backend/main.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py): 创建 FastAPI app、注册中间件、异常处理器、静态文件、路由和 scheduler 生命周期。
+- [`backend/main.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py): 创建 FastAPI app、注册 request-id 中间件、异常处理器、静态文件、路由和 scheduler 生命周期。
 - `backend/modules/*/presentation.py`: 对外 HTTP 入口。
 - `backend/modules/*/schemas.py`: 当前模块自有的 API request/response DTO，避免跨目录重复定义 contract。
 - `backend/modules/*/application.py`: 业务编排与用例。
@@ -156,7 +156,7 @@ flowchart TD
 
 ### 4.3 Backend Folder Map
 
-- `backend/core/`: 配置、认证、统一响应模型、异常体系。
+- `backend/core/`: 配置、认证、统一响应模型、异常体系和结构化日志配置。
 - `backend/constants/`: 共享常量定义。
 - `backend/utils/`: 时间、序列化等通用工具。
 - `backend/modules/`: 当前后端主业务入口，按业务模块拆分。
@@ -205,7 +205,7 @@ flowchart TD
 - Vector DB: 默认 `ChromaDB`。
 - Agent Workflow: 可选 `Dify`，由后端通过 HTTP API 调用。
 - Storage: 本地文件系统 `backend/uploads/<user_id>/`。
-- Database: SQLite。
+- Database: PostgreSQL（本地开发默认）。
 
 ### 4.7 Namespaces and Storage Conventions
 
@@ -220,6 +220,13 @@ flowchart TD
 - 移动端调试日志文件: `runtime_logs/mobile-debug.log`
 - 每日推盘调度时间：使用 `APP_TIMEZONE`，默认 `Asia/Shanghai`，时间点由 `DAILY_PUSH_HOUR` / `DAILY_PUSH_MINUTE` 控制
 
+### 4.8 Logging and Test Baseline
+
+- HTTP 请求入口统一绑定 `request_id`，并通过 `structlog` 输出结构化日志。
+- 关键后台链路日志字段至少包含 `event`、`request_id`、`path`、`module`，核心转写链路额外补 `fragment_id`、`user_id`、`provider`、`attempt`。
+- 后端自动化测试已切换到 `pytest`。
+- OpenAPI 契约 smoke 校验通过 `Schemathesis` 直接消费 `/openapi.json`，不维护第二套独立契约文件。
+
 ## 5. Core Flows
 
 ### 5.1 Audio Upload and Async Transcription
@@ -229,7 +236,7 @@ sequenceDiagram
     participant App as Mobile
     participant API as /api/transcriptions
     participant FS as Local Audio Storage
-    participant DB as SQLite
+    participant DB as PostgreSQL
     participant BG as Background Task
     participant STT as STT
     participant LLM as Summary/Tags
@@ -262,7 +269,7 @@ sequenceDiagram
     participant Provider as ExternalMediaProvider
     participant FF as ffmpeg
     participant FS as uploads/external_media
-    participant DB as SQLite
+    participant DB as PostgreSQL
     participant BG as Background Task
 
     App->>API: POST share_url + platform
@@ -287,7 +294,7 @@ sequenceDiagram
 sequenceDiagram
     participant App as Mobile
     participant API as /api/agent/script-research-runs
-    participant DB as SQLite
+    participant DB as PostgreSQL
     participant VDB as VectorStore
     participant WEB as WebSearchProvider
     participant DIFY as Dify Workflow
@@ -310,7 +317,7 @@ sequenceDiagram
 
 关键点：
 
-- Dify 只负责外挂编排和生成，不直接访问 SQLite、ChromaDB 或业务表。
+- Dify 只负责外挂编排和生成，不直接访问 PostgreSQL、ChromaDB 或业务表。
 - fragments、knowledge hits 和可选 web hits 都由 SparkFlow 后端先收集。
 - `agent_runs` 是本地事实源，保存 Dify run ID、错误信息和结果摘要。
 
@@ -320,7 +327,7 @@ sequenceDiagram
 sequenceDiagram
     participant App as Mobile
     participant API as /api/scripts/generation
-    participant DB as SQLite
+    participant DB as PostgreSQL
     participant Prompt as PromptLoader
     participant LLM as Qwen
 
@@ -345,7 +352,7 @@ sequenceDiagram
     participant App as Mobile
     participant API as /api/fragments/visualization
     participant VDB as VectorStore
-    participant DB as SQLite
+    participant DB as PostgreSQL
     participant Math as visualization_math
 
     App->>API: GET visualization
@@ -366,7 +373,7 @@ sequenceDiagram
 sequenceDiagram
     participant Scheduler as APScheduler
     participant UseCase as DailyPushUseCase
-    participant DB as SQLite
+    participant DB as PostgreSQL
     participant VDB as VectorStore
     participant LLM as Qwen
 

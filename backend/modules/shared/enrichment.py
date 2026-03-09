@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import re
 
+from core.logging_config import get_logger
 from modules.shared.ports import TextGenerationProvider
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 SUMMARY_SYSTEM_PROMPT = """你是一个专业的内容摘要助手。你的任务是根据用户提供的口述内容，生成一句简短的中文摘要，描述核心主题。
 
@@ -36,6 +36,7 @@ TAGS_USER_PROMPT_TEMPLATE = """请为以下内容生成标签关键词：
 
 
 def build_fallback_summary_and_tags(transcript: str) -> tuple[str, list[str]]:
+    """为异常场景提供本地可用的摘要和标签降级结果。"""
     return (_generate_fallback_summary(transcript), _generate_fallback_tags(transcript))
 
 
@@ -45,6 +46,7 @@ async def generate_summary_and_tags(
     llm_provider: TextGenerationProvider,
     timeout_seconds: float | None = None,
 ) -> tuple[str, list[str]]:
+    """生成摘要和标签，并支持超时控制。"""
     if timeout_seconds is not None:
         return await asyncio.wait_for(
             _generate_summary_and_tags(transcript, llm_provider=llm_provider),
@@ -58,8 +60,9 @@ async def _generate_summary_and_tags(
     *,
     llm_provider: TextGenerationProvider,
 ) -> tuple[str, list[str]]:
+    """执行摘要和标签增强流程。"""
     if not transcript or not transcript.strip():
-        logger.warning("[Enrichment] transcript is empty, using fallback content")
+        logger.warning("enrichment_empty_transcript")
         return ("空内容", ["其他"])
 
     summary = await _generate_summary(transcript, llm_provider=llm_provider)
@@ -68,6 +71,7 @@ async def _generate_summary_and_tags(
 
 
 async def _generate_summary(transcript: str, *, llm_provider: TextGenerationProvider) -> str:
+    """调用 LLM 生成摘要，并在失败时回退。"""
     user_message = SUMMARY_USER_PROMPT_TEMPLATE.format(transcript=transcript)
     try:
         summary = await llm_provider.generate(
@@ -81,11 +85,12 @@ async def _generate_summary(transcript: str, *, llm_provider: TextGenerationProv
             summary = summary[:20]
         return summary or _generate_fallback_summary(transcript)
     except Exception:
-        logger.warning("[Enrichment] summary generation failed, using fallback", exc_info=True)
+        logger.warning("summary_generation_failed", exc_info=True)
         return _generate_fallback_summary(transcript)
 
 
 async def _generate_tags(transcript: str, *, llm_provider: TextGenerationProvider) -> list[str]:
+    """调用 LLM 生成标签，并在失败时回退。"""
     user_message = TAGS_USER_PROMPT_TEMPLATE.format(transcript=transcript)
     try:
         response = await llm_provider.generate(
@@ -101,11 +106,12 @@ async def _generate_tags(transcript: str, *, llm_provider: TextGenerationProvide
             tags = tags[:4]
         return tags
     except Exception:
-        logger.warning("[Enrichment] tag generation failed, using fallback", exc_info=True)
+        logger.warning("tag_generation_failed", exc_info=True)
         return _generate_fallback_tags(transcript)
 
 
 def _parse_tags_response(response: str) -> list[str]:
+    """解析模型返回的标签列表或回退到文本分割。"""
     response = response.strip()
     json_match = re.search(r"\[.*?\]", response, re.DOTALL)
     if json_match:
@@ -114,7 +120,7 @@ def _parse_tags_response(response: str) -> list[str]:
             if isinstance(tags, list):
                 return [str(tag).strip().strip('"\'""\'') for tag in tags if tag]
         except json.JSONDecodeError:
-            logger.warning("[Enrichment] failed to parse tags JSON: %s", json_match.group())
+            logger.warning("tag_json_parse_failed", raw_tags=json_match.group())
 
     response = re.sub(r"^[\d\-\*\.]+\s*", "", response, flags=re.MULTILINE)
     parts = re.split(r"[,，、\n]+", response)
@@ -123,6 +129,7 @@ def _parse_tags_response(response: str) -> list[str]:
 
 
 def _generate_fallback_summary(transcript: str) -> str:
+    """生成无模型依赖的兜底摘要。"""
     normalized = transcript.strip()
     if not normalized:
         return "空内容"
@@ -132,6 +139,7 @@ def _generate_fallback_summary(transcript: str) -> str:
 
 
 def _generate_fallback_tags(transcript: str) -> list[str]:
+    """根据关键词生成无模型依赖的兜底标签。"""
     keyword_tags = {
         "定位": ["定位", "品牌"],
         "营销": ["营销", "策略"],

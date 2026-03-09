@@ -11,9 +11,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Layer | Technology |
 |---|---|
 | **Mobile** | Expo (React Native) + TypeScript + expo-router + expo-sqlite |
-| **Backend** | FastAPI (Python) + SQLAlchemy + APScheduler |
-| **Database** | SQLite (local) + Pinecone/Qdrant (vector DB for knowledge base) |
-| **External APIs** | OpenAI/Claude (LLM), Whisper (STT), OpenAI Embeddings |
+| **Backend** | FastAPI (Python) + SQLAlchemy + Alembic + APScheduler + structlog |
+| **Database** | PostgreSQL (local default) + ChromaDB (vector DB for knowledge base) |
+| **External APIs** | DashScope/Qwen (LLM / STT / Embeddings), Dify (optional workflow) |
 
 ## Architecture
 
@@ -30,7 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ┌─────────────────────┼───────────────────────────┐
 │           FastAPI (Python)                      │
 │  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ 业务路由  │ │ APScheduler│ │ SQLite (主库) │  │
+│  │ 业务路由  │ │ APScheduler│ │ PostgreSQL    │  │
 │  └────┬─────┘ └──────────┘ └────────────────┘  │
 └───────┼─────────────────────────────────────────┘
         │
@@ -48,7 +48,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
-pip install fastapi uvicorn sqlalchemy alembic openai pinecone-client apscheduler python-multipart
+.venv/bin/pip install -r requirements.txt
+.venv/bin/alembic upgrade head
 uvicorn main:app --reload   # → http://localhost:8000
 ```
 
@@ -80,7 +81,8 @@ backend/
 │   ├── mode_a_boom.txt     # "导师爆款模式" prompt
 │   └── mode_b_brain.txt    # "专属二脑模式" prompt
 ├── alembic/                # Database migrations
-└── data.db                 # SQLite database (gitignored)
+├── runtime_logs/           # Runtime logs
+└── uploads/                # Local uploaded media
 
 mobile/
 ├── app/                    # expo-router file-based routing
@@ -111,7 +113,7 @@ See `memory-bank/tech-stack.md` for full SQL schema.
 ## Key Design Principles
 
 - **Minimal MVP**: No cloud video storage (saves to local photos only), pure native camera without filters
-- **SQLite-first**: Zero-install database; can migrate to PostgreSQL by changing connection string
+- **PostgreSQL-default**: 本地开发默认使用 PostgreSQL，迁移和测试都与应用配置保持一致
 - **Scheduler over Celery**: APScheduler sufficient for daily tasks; no Redis needed
 - **Vector DB per user**: Namespace isolation by `user_id` for knowledge base embeddings
 
