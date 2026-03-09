@@ -22,11 +22,12 @@ import { useFolderFragments } from '@/features/folders/hooks';
 import { useQuickActionBar } from '@/providers/QuickActionBarProvider';
 import type { Fragment } from '@/types/fragment';
 
-// 返回按钮组件
-function BackButton({ onPress, color }: { onPress: () => void; color: string }) {
+// 返回按钮组件（与全局统一组件保持一致）
+function FolderBackButton({ onPress, color }: { onPress: () => void; color: string }) {
   return (
     <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.backButton}>
-      <SymbolView name="chevron.left" size={28} tintColor={color} />
+      <SymbolView name="chevron.left" size={22} tintColor={color} />
+      <Text style={[styles.backButtonText, { color }]}>返回</Text>
     </TouchableOpacity>
   );
 }
@@ -129,7 +130,7 @@ export default function FolderDetailScreen() {
       {/* 悬浮顶部导航栏 */}
       <View style={[styles.floatingHeader, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerContent}>
-          <BackButton onPress={handleBack} color={theme.colors.text} />
+          <FolderBackButton onPress={handleBack} color={theme.colors.text} />
           <View style={styles.headerTitleContainer}>
             <Text style={[styles.headerTitle, { color: theme.colors.text }]} numberOfLines={1}>
               {name || '文件夹'}
@@ -264,8 +265,17 @@ const styles = StyleSheet.create({
   },
   // 返回按钮样式
   backButton: {
-    padding: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingRight: 8,
     minWidth: 44,
+    minHeight: 44,
+  },
+  backButtonText: {
+    fontSize: 17,
+    fontWeight: '400',
+    marginLeft: 2,
   },
   // 选择按钮样式
   selectButton: {

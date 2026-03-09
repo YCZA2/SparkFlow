@@ -67,12 +67,7 @@ export default function NetworkSettingsScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: '网络设置',
-          headerShown: true,
-        }}
-      />
+      <Stack.Screen options={{ title: '网络设置' }} />
       <ScrollView
         style={[styles.container, { backgroundColor: theme.colors.background }]}
         contentContainerStyle={styles.content}

@@ -8,6 +8,7 @@ import { PaperProvider } from 'react-native-paper';
 
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { useColorScheme } from '@/components/useColorScheme';
+import { BackButton } from '@/components/layout/BackButton';
 import { Drawer } from '@/components/Drawer/Drawer';
 import { DrawerBackdrop } from '@/components/Drawer/DrawerBackdrop';
 import { createDebugLogEntry, emitDebugLog } from '@/features/debug-log/store';
@@ -102,6 +103,7 @@ function RootLayoutNav() {
         <Stack
           screenOptions={{
             headerBackTitle: '返回',
+            headerLeft: () => <BackButton />,
           }}
         >
           <Stack.Screen
@@ -146,6 +148,13 @@ function RootLayoutNav() {
             name="network-settings"
             options={{
               title: '网络设置',
+              headerShown: true,
+            }}
+          />
+          <Stack.Screen
+            name="test-api"
+            options={{
+              title: 'API 测试',
               headerShown: true,
             }}
           />

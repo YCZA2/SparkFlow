@@ -1,11 +1,11 @@
 import React, { useCallback } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 
 import { ScriptCard } from '@/components/ScriptCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ScreenHeader } from '@/components/layout/ScreenHeader';
+import { BackButton } from '@/components/layout/BackButton';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
 import { useScripts } from '@/features/scripts/hooks';
@@ -62,11 +62,7 @@ export default function ScriptsScreen() {
             <ScreenHeader
               title="我的口播稿"
               subtitle="查看已经生成的稿件，继续修改、拍摄或回看。"
-              leading={
-                <Pressable onPress={() => router.back()}>
-                  <SymbolView name="chevron.left" size={24} tintColor={theme.colors.primary} />
-                </Pressable>
-              }
+              leading={<BackButton color={theme.colors.primary} />}
             />
             {items.length > 0 ? (
               <Text style={[styles.headerText, { color: theme.colors.textSubtle }]}>

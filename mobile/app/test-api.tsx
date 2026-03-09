@@ -1,5 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Stack } from 'expo-router';
 
 import { Text } from '@/components/Themed';
 import { TestResultCard } from '@/components/TestResultCard';
@@ -11,7 +12,9 @@ export default function ApiTestScreen() {
   const { backendUrl, tests, isRunningAll, runAllTests, actions } = useApiTestSuite();
 
   return (
-    <ScrollView
+    <>
+      <Stack.Screen options={{ title: 'API 测试' }} />
+      <ScrollView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       contentContainerStyle={styles.content}
     >
@@ -61,6 +64,7 @@ export default function ApiTestScreen() {
         ))}
       </View>
     </ScrollView>
+    </>
   );
 }
 
