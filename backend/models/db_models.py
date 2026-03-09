@@ -53,8 +53,6 @@ class User(Base):
     fragment_tags = relationship("FragmentTag", back_populates="user", cascade="all, delete-orphan")
     scripts = relationship("Script", back_populates="user", cascade="all, delete-orphan")
     knowledge_docs = relationship("KnowledgeDoc", back_populates="user", cascade="all, delete-orphan")
-    agents = relationship("Agent", back_populates="creator", cascade="all, delete-orphan")
-
     def __repr__(self) -> str:
         return f"<User(id={self.id}, role={self.role}, nickname={self.nickname})>"
 
@@ -101,7 +99,6 @@ class Fragment(Base):
     tags = Column(String, nullable=True)  # JSON数组字符串，AI自动标签
     source = Column(String, default="voice", nullable=False)  # 'voice'|'manual'|'video_parse'
     audio_source = Column(String, nullable=True)  # 'upload'|'external_link'|None
-    sync_status = Column(String, default="pending", nullable=False)  # 'pending'|'syncing'|'synced'|'failed'
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     # 关联关系
@@ -181,29 +178,6 @@ class KnowledgeDoc(Base):
 
     def __repr__(self) -> str:
         return f"<KnowledgeDoc(id={self.id}, user_id={self.user_id}, title={self.title})>"
-
-
-class Agent(Base):
-    """
-    Agent 预留表
-
-    为未来创作者市场功能预留，支持发布和订阅 Agent 模型
-    """
-    __tablename__ = "agents"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    creator_id = Column(String, ForeignKey("users.id"), nullable=False)
-    name = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    status = Column(String, default="private", nullable=False)  # 'private'|'pending'|'published'
-    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
-
-    # 关联关系
-    creator = relationship("User", back_populates="agents")
-
-    def __repr__(self) -> str:
-        return f"<Agent(id={self.id}, creator_id={self.creator_id}, name={self.name}, status={self.status})>"
-
 
 class PipelineRun(Base):
     """持久化整条后台流水线运行状态。"""

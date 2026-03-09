@@ -46,7 +46,6 @@ class FragmentItem(BaseModel):
     tags: list[str] | None = None
     source: str
     audio_source: str | None = None
-    sync_status: str
     created_at: str | None = None
     audio_path: str | None = None
     folder_id: str | None = None
@@ -96,7 +95,6 @@ class FragmentVisualizationPoint(BaseModel):
     summary: str | None = None
     tags: list[str] | None = None
     source: str
-    sync_status: str
     created_at: str | None = None
     cluster_id: int | None = None
     is_noise: bool = False

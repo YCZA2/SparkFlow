@@ -9,7 +9,6 @@ from uuid import uuid4
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.logging_config import get_logger
-from domains.fragments import repository as fragment_repository
 from domains.pipelines import repository as pipeline_repository
 from models import Fragment, PipelineRun, PipelineStepRun
 
@@ -315,7 +314,6 @@ class PipelineDispatcher:
                     resource_type=output.get("resource_type"),
                     resource_id=output.get("resource_id"),
                 )
-                self._update_compatibility_projection(db=db, run_id=run.id)
                 return
             run.current_step = next_step.step_name
             run.status = "queued"
@@ -347,29 +345,8 @@ class PipelineDispatcher:
                 )
             else:
                 pipeline_repository.mark_step_failed(db=db, step_id=step_id, error_message=message)
-            run = db.query(PipelineRun).filter(PipelineRun.id == step.pipeline_run_id).first()
-            if run is not None:
-                self._update_compatibility_projection(db=db, run_id=run.id)
         if trigger_followup_wake:
             self.wake_up()
-
-    def _update_compatibility_projection(self, *, db: Session, run_id: str) -> None:
-        """将流水线状态投影回仍保留的兼容业务字段。"""
-        run = db.query(PipelineRun).filter(PipelineRun.id == run_id).first()
-        if run is None:
-            return
-        if run.pipeline_type == "media_ingestion" and run.resource_type == "fragment" and run.resource_id:
-            fragment = fragment_repository.get_by_id(db=db, user_id=run.user_id, fragment_id=run.resource_id)
-            if fragment:
-                projected_status = {
-                    "queued": "syncing",
-                    "running": "syncing",
-                    "succeeded": "synced",
-                    "failed": "failed",
-                }.get(run.status)
-                if projected_status and fragment.sync_status != "synced":
-                    fragment.sync_status = projected_status
-                db.commit()
 
 
 class PipelineRecoveryService:

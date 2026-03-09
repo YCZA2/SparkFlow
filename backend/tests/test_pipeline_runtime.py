@@ -240,34 +240,6 @@ def test_retry_run_supports_from_failed_step_and_from_start(db_session_factory) 
         assert steps[1].output_payload_json is None
         assert steps[1].attempt_count == 0
 
-
-def test_media_sync_projection_does_not_regress_synced_fragment(db_session_factory) -> None:
-    """媒体投影在 fragment 已 synced 后不应再回退到 syncing。"""
-    dispatcher = _build_dispatcher(db_session_factory, lambda context: asyncio.sleep(0))
-    with db_session_factory() as db:
-        fragment = Fragment(user_id="test-user-001", transcript="已同步碎片", source="voice", sync_status="synced")
-        db.add(fragment)
-        db.commit()
-        db.refresh(fragment)
-        pipeline_repository.create_run(
-            db=db,
-            run_id="media-run-001",
-            user_id="test-user-001",
-            pipeline_type="media_ingestion",
-            input_payload={},
-            resource_type="fragment",
-            resource_id=fragment.id,
-            steps=[{"step_name": "ingest", "max_attempts": 1, "input_payload": None}],
-        )
-        run = db.query(PipelineRun).filter_by(id="media-run-001").first()
-        assert run is not None
-        run.status = "queued"
-        db.commit()
-        dispatcher._update_compatibility_projection(db=db, run_id="media-run-001")
-        db.refresh(fragment)
-        assert fragment.sync_status == "synced"
-
-
 @pytest.mark.asyncio
 async def test_dispatcher_stop_handles_shutdown_cancellation(db_session_factory) -> None:
     """停机时取消长任务不应把取消异常继续抛给调用方。"""

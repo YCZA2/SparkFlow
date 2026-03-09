@@ -196,7 +196,6 @@ def build_visualization_payload(items: list[tuple[Fragment, list[float]]], used_
                 "summary": fragment.summary,
                 "tags": parse_json_list(fragment.tags, allow_csv_fallback=True),
                 "source": fragment.source,
-                "sync_status": fragment.sync_status,
                 "created_at": format_iso_datetime(fragment.created_at),
                 "cluster_id": cluster_id,
                 "is_noise": cluster_id is None,

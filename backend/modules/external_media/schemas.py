@@ -14,7 +14,6 @@ class ExternalAudioImportResponse(BaseModel):
     pipeline_run_id: str
     pipeline_type: str
     fragment_id: str | None = None
-    sync_status: str
     source: str
     audio_source: str
     platform: str | None = None

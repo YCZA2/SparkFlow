@@ -409,7 +409,3 @@ class ChromaVectorDBService(BaseVectorDBService):
             return True
         except Exception:
             return False
-
-
-# 为向后兼容，保留旧名称
-VectorService = ChromaVectorDBService

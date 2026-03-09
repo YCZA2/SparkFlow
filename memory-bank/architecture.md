@@ -208,7 +208,7 @@ flowchart TD
 - STT: 默认 `DashScope`，保留 Aliyun 兼容实现。
 - Embedding: 默认 `Qwen text-embedding-v2`。
 - Vector DB: 默认 `ChromaDB`。
-- Agent Workflow: 当前通过通用 `workflow_provider` 端口接入，默认实现为 `DifyWorkflowProvider`。
+- Workflow Provider: 当前通过通用 `workflow_provider` 端口接入，默认实现为 `DifyWorkflowProvider`。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 本地文件系统 `backend/uploads/<user_id>/`。
 - Database: PostgreSQL（本地开发默认）。
@@ -284,9 +284,9 @@ sequenceDiagram
     FF-->>Provider: temp m4a path
     API->>FS: save imported audio
     API->>API: audio_ingestion.ingest_audio(external_link)
-    API->>DB: create fragment(source=voice, audio_source=external_link, syncing)
+    API->>DB: create fragment(source=voice, audio_source=external_link)
     API->>BG: schedule transcription
-    API-->>App: fragment_id + sync_status + media metadata
+    API-->>App: pipeline_run_id + fragment_id + media metadata
 ```
 
 关键点：

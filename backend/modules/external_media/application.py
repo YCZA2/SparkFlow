@@ -36,7 +36,6 @@ class ExternalMediaUseCase:
             pipeline_run_id=ingestion_result.pipeline_run_id,
             pipeline_type="media_ingestion",
             fragment_id=ingestion_result.fragment_id,
-            sync_status=ingestion_result.sync_status,
             source=ingestion_result.source,
             audio_source=ingestion_result.audio_source,
             platform=platform,

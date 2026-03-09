@@ -80,7 +80,6 @@ def list_vectorizable_by_user(db: Session, user_id: str) -> list[Fragment]:
         db.query(Fragment)
         .filter(
             Fragment.user_id == user_id,
-            Fragment.sync_status == "synced",
             Fragment.transcript.isnot(None),
         )
         .order_by(Fragment.created_at.asc())
@@ -88,17 +87,17 @@ def list_vectorizable_by_user(db: Session, user_id: str) -> list[Fragment]:
     )
 
 
-def list_synced_in_range(
+def list_content_ready_in_range(
     db: Session,
     user_id: str,
     start_at: datetime,
     end_at: datetime,
 ) -> list[Fragment]:
+    """查询指定时间窗内已有可用文本内容的碎片。"""
     return (
         db.query(Fragment)
         .filter(
             Fragment.user_id == user_id,
-            Fragment.sync_status == "synced",
             Fragment.transcript.isnot(None),
             Fragment.created_at >= start_at,
             Fragment.created_at < end_at,
@@ -115,7 +114,6 @@ def create(
     source: str,
     audio_source: Optional[str],
     audio_path: Optional[str],
-    sync_status: str,
     *,
     folder_id: Optional[str] = None,
     tags_json: Optional[str] = None,
@@ -129,7 +127,6 @@ def create(
         tags=tags_json,
         source=source,
         audio_source=audio_source,
-        sync_status=sync_status,
     )
     db.add(fragment)
     db.flush()
@@ -149,14 +146,7 @@ def delete(db: Session, fragment: Fragment) -> None:
     db.commit()
 
 
-def mark_failed(db: Session, fragment_id: str, user_id: str) -> None:
-    fragment = get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
-    if fragment:
-        fragment.sync_status = "failed"
-        db.commit()
-
-
-def mark_synced(
+def save_transcription_result(
     db: Session,
     fragment_id: str,
     user_id: str,
@@ -165,6 +155,7 @@ def mark_synced(
     tags_json: Optional[str],
     speaker_segments_json: Optional[str],
 ) -> bool:
+    """落库转写、摘要、标签和说话人分段结果。"""
     fragment = get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
     if not fragment:
         return False
@@ -173,7 +164,6 @@ def mark_synced(
     fragment.speaker_segments = speaker_segments_json
     fragment.summary = summary
     fragment.tags = tags_json
-    fragment.sync_status = "synced"
     fragment_tag_repository.replace_for_fragment(
         db=db,
         user_id=user_id,

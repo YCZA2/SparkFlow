@@ -142,7 +142,7 @@ http://<your-lan-ip>:8000
 - Prefer modular changes; do not collapse new logic into one large file
 - Respect current backend layering: presentation/application/domain/service responsibilities should stay separated
 - Treat `pipeline_runs` / `pipeline_step_runs` as the backend task source of truth for async media ingestion and script generation
-- Keep `Fragment.sync_status` as the remaining compatibility projection; `agent_runs` has been removed and should not be reintroduced
+- Do not reintroduce fragment-level task state compatibility fields or `agent_runs`; task progress must stay on `pipeline_runs` / `pipeline_step_runs`
 - Reuse existing scripts and utilities before adding new entrypoints
 - Keep comments concise. For every new or modified function, add a brief Chinese comment describing its responsibility or intent; for non-obvious or project-specific logic, also explain the key constraint or reason, but avoid line-by-line restatement of the code
 - Avoid broad refactors unless they are required for the task

@@ -30,16 +30,6 @@ function getSourceLabel(source: string): string {
   return labels[source] || source;
 }
 
-function getSyncStatusLabel(theme: ReturnType<typeof useAppTheme>, status: string) {
-  const statusMap: Record<string, { text: string; color: string }> = {
-    pending: { text: '待同步', color: theme.colors.warning },
-    syncing: { text: '同步中', color: theme.colors.primary },
-    synced: { text: '已同步', color: theme.colors.success },
-    failed: { text: '同步失败', color: theme.colors.danger },
-  };
-  return statusMap[status] || { text: status, color: theme.colors.textSubtle };
-}
-
 export default function FragmentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -141,7 +131,6 @@ export default function FragmentDetailScreen() {
     );
   }
 
-  const syncStatus = getSyncStatusLabel(theme, fragment.sync_status);
   const tags = normalizeFragmentTags(fragment.tags);
   const hasAudio = Boolean(fragment.audio_path);
 
@@ -170,13 +159,15 @@ export default function FragmentDetailScreen() {
         contentContainerStyle={styles.contentContainer}
       >
         <View style={[styles.headerCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}> 
-            <View style={styles.statusRow}>
-              <View style={[styles.statusBadge, { backgroundColor: `${syncStatus.color}20` }]}> 
-                <Text style={[styles.statusText, { color: syncStatus.color }]}>{syncStatus.text}</Text>
-              </View>
+            <View style={styles.metaRow}>
               <Text style={[styles.sourceText, { color: theme.colors.textSubtle }]}>
                 {getSourceLabel(fragment.source)}
               </Text>
+              {fragment.audio_source ? (
+                <Text style={[styles.sourceText, { color: theme.colors.textSubtle }]}>
+                  {fragment.audio_source === 'external_link' ? '外链导入' : '本地上传'}
+                </Text>
+              ) : null}
             </View>
             <Text style={[styles.timeText, { color: theme.colors.textSubtle }]}>
               {formatDate(fragment.created_at)}
@@ -272,20 +263,11 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
   },
-  statusRow: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 10,
     marginBottom: 12,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   sourceText: {
     fontSize: 14,

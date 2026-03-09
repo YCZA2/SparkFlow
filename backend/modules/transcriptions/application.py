@@ -47,7 +47,6 @@ class TranscriptionUseCase:
             relative_path=saved["relative_path"],
             file_size=saved["file_size"],
             duration=None,
-            sync_status=result.sync_status,
         )
 
     def get_status(self, *, db: Session, user_id: str, fragment_id: str) -> TranscriptionStatusResponse:

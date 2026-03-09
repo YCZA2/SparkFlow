@@ -199,7 +199,7 @@ export function useApiTestSuite() {
       }
       const firstFragment = fragments.items[0];
       const data = await getTranscribeStatus(firstFragment.id);
-      updateTest(6, 'success', `状态: ${data.sync_status}`, data);
+      updateTest(6, 'success', data.transcript ? '已返回转写内容' : '已返回碎片详情', data);
       return true;
     } catch (err) {
       if (err instanceof ApiError) {
@@ -239,8 +239,8 @@ export function useApiTestSuite() {
       updateTest(
         8,
         'success',
-        `状态: ${data.sync_status}${data.transcript ? ', 转写完成' : ''}`,
-        { transcript: data.transcript?.substring(0, 50), sync_status: data.sync_status }
+        data.transcript ? '已拿到转写结果' : '任务尚未写入转写文本',
+        { transcript: data.transcript?.substring(0, 50) }
       );
       return true;
     } catch (err) {

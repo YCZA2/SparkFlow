@@ -27,6 +27,7 @@ def test_legacy_domain_service_files_are_removed() -> None:
         BACKEND_ROOT / "domains" / "transcription" / "tasks.py",
         BACKEND_ROOT / "domains" / "transcription" / "workflow.py",
         BACKEND_ROOT / "services" / "scheduler.py",
+        BACKEND_ROOT / "services" / "stt_service.py",
     ]
     for path in legacy_files:
         assert not path.exists(), f"legacy file should be removed: {path}"

@@ -2,16 +2,17 @@ import { API_ENDPOINTS } from '@/constants/config';
 import { fetchApi, sendForm } from '@/features/core/api/client';
 
 export interface UploadAudioResponse {
-  fragment_id: string;
-  audio_path: string;
-  relative_path: string;
+  pipeline_run_id: string;
+  pipeline_type: 'media_ingestion';
+  fragment_id: string | null;
+  audio_path: string | null;
+  relative_path: string | null;
   file_size: number;
-  message: string;
+  duration: number | null;
 }
 
 export interface TranscribeStatusResponse {
   fragment_id: string;
-  sync_status: string;
   transcript: string | null;
   summary: string | null;
   tags: string[] | null;
@@ -19,7 +20,7 @@ export interface TranscribeStatusResponse {
   created_at: string;
 }
 
-export async function uploadAudio<T = UploadAudioResponse>(uri: string, folderId?: string): Promise<T> {
+export async function uploadAudio(uri: string, folderId?: string): Promise<UploadAudioResponse> {
   const filename = uri.split('/').pop() || 'recording.m4a';
   const formData = new FormData();
   formData.append('audio', {
@@ -33,7 +34,7 @@ export async function uploadAudio<T = UploadAudioResponse>(uri: string, folderId
     formData.append('folder_id', folderId);
   }
 
-  return sendForm<T>(API_ENDPOINTS.TRANSCRIPTIONS, 'POST', formData);
+  return sendForm<UploadAudioResponse>(API_ENDPOINTS.TRANSCRIPTIONS, 'POST', formData);
 }
 
 export async function getTranscribeStatus(fragmentId: string): Promise<TranscribeStatusResponse> {

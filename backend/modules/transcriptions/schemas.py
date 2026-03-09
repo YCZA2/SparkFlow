@@ -13,7 +13,6 @@ class AudioUploadResponse(BaseModel):
     relative_path: str | None = None
     file_size: int
     duration: float | None = None
-    sync_status: str
 
 
 class TranscriptionStatusResponse(FragmentItem):

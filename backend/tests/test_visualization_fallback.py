@@ -34,7 +34,6 @@ async def test_falls_back_to_text_features_when_vector_store_has_no_embeddings(d
             source="manual",
             audio_source=None,
             audio_path=None,
-            sync_status="synced",
         )
         store = _FakeVectorStore()
         payload = await build_fragment_visualization(db=db, user_id="test-user-001", vector_store=store)
@@ -55,7 +54,6 @@ async def test_uses_vector_store_when_embeddings_exist(db_session_factory) -> No
             source="manual",
             audio_source=None,
             audio_path=None,
-            sync_status="synced",
         )
         store = _FakeVectorStore()
         store._docs = [SimpleNamespace(id=fragment.id, embedding=[0.1, 0.2, 0.3])]

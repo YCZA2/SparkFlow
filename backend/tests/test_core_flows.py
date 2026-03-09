@@ -209,7 +209,6 @@ async def test_fragments_collection_detail_similarity_and_visualization(async_cl
                 "summary": None,
                 "tags": ["定位"],
                 "source": "manual",
-                "sync_status": "synced",
                 "created_at": "2026-03-07T00:00:00+08:00",
                 "cluster_id": 1,
                 "is_noise": False,
@@ -275,7 +274,6 @@ async def test_import_external_audio_returns_saved_url(async_client, auth_header
     assert payload["pipeline_type"] == "media_ingestion"
     assert payload["source"] == "voice"
     assert payload["audio_source"] == "external_link"
-    assert payload["sync_status"] == "syncing"
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
     assert pipeline["status"] == "succeeded"
     assert pipeline["resource"]["resource_id"] == payload["fragment_id"]
@@ -298,7 +296,7 @@ async def test_import_external_audio_returns_saved_url(async_client, auth_header
         assert fragment is not None
         assert fragment.source == "voice"
         assert fragment.audio_source == "external_link"
-        assert fragment.sync_status == "synced"
+        assert fragment.transcript == "转写完成"
 
 
 @pytest.mark.asyncio
@@ -601,7 +599,6 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
     )
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert payload["sync_status"] == "syncing"
     assert payload["pipeline_type"] == "media_ingestion"
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
     assert pipeline["status"] == "succeeded"
@@ -617,7 +614,6 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
         fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
         assert fragment is not None
         assert fragment.audio_source == "upload"
-        assert fragment.sync_status == "synced"
         assert fragment.transcript == "转写完成"
         assert fragment.folder_id == folder_id
         fragment_tags = db.query(FragmentTag).filter(FragmentTag.fragment_id == fragment.id).all()
@@ -635,7 +631,7 @@ async def test_get_transcription_status_returns_not_found_for_missing_fragment(a
 
 @pytest.mark.asyncio
 async def test_upload_audio_marks_failed_when_stt_crashes(async_client, auth_headers_factory, app, db_session_factory) -> None:
-    """STT 异常时应把碎片标记为失败。"""
+    """STT 异常时应让 pipeline 失败，并保留未完成碎片供排障。"""
     app.state.container.stt_provider = SimpleNamespace(
         transcribe=AsyncMock(side_effect=RuntimeError("stt boom")),
         health_check=AsyncMock(return_value=True),
@@ -652,7 +648,7 @@ async def test_upload_audio_marks_failed_when_stt_crashes(async_client, auth_hea
     with db_session_factory() as db:
         fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
         assert fragment.audio_source == "upload"
-        assert fragment.sync_status == "failed"
+        assert fragment.transcript is None
 
 
 @pytest.mark.asyncio
@@ -677,14 +673,13 @@ async def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(async_
     with db_session_factory() as db:
         fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
         assert fragment is not None
-        assert fragment.sync_status == "synced"
         assert fragment.summary
         assert fragment.tags
 
 
 @pytest.mark.asyncio
 async def test_upload_audio_marks_failed_when_transcription_is_cancelled(async_client, auth_headers_factory, app, db_session_factory) -> None:
-    """取消异常也应被归一化为失败状态。"""
+    """取消异常也应让 pipeline 进入失败终态。"""
     app.state.container.stt_provider = SimpleNamespace(
         transcribe=AsyncMock(side_effect=asyncio.CancelledError()),
         health_check=AsyncMock(return_value=True),
@@ -701,7 +696,7 @@ async def test_upload_audio_marks_failed_when_transcription_is_cancelled(async_c
     with db_session_factory() as db:
         fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
         assert fragment is not None
-        assert fragment.sync_status == "failed"
+        assert fragment.transcript is None
 
 
 @pytest.mark.asyncio
@@ -721,7 +716,6 @@ async def test_delete_fragment_removes_audio_file(async_client, auth_headers_fac
             audio_path=relative_audio_path,
             source="voice",
             audio_source="upload",
-            sync_status="synced",
         )
         db.add(fragment)
         db.commit()
@@ -743,7 +737,6 @@ async def test_scripts_daily_push_trigger_get_force_trigger_and_idempotency(asyn
     with db_session_factory() as db:
         fragments = db.query(Fragment).filter(Fragment.id.in_(fragment_ids)).all()
         for fragment in fragments:
-            fragment.sync_status = "synced"
             _seed_fragment_vector(app, fragment.id, fragment.transcript, source=fragment.source)
         db.commit()
 

@@ -42,7 +42,6 @@ class AudioIngestionResult:
     pipeline_run_id: str
     fragment_id: str | None
     audio_path: str | None
-    sync_status: str
     source: str
     audio_source: str
 
@@ -94,7 +93,6 @@ class AudioIngestionService:
             source="voice",
             audio_source=request.audio_source,
             audio_path=request.audio_path,
-            sync_status="syncing",
             folder_id=request.folder_id,
         )
         run = await self.pipeline_runner.create_run(
@@ -115,7 +113,6 @@ class AudioIngestionService:
             pipeline_run_id=run.id,
             fragment_id=fragment.id,
             audio_path=request.audio_path,
-            sync_status="syncing",
             source="voice",
             audio_source=request.audio_source,
         )
@@ -138,7 +135,6 @@ class AudioIngestionService:
             source="voice",
             audio_source="external_link",
             audio_path=None,
-            sync_status="syncing",
             folder_id=folder_id,
         )
         run = await self.pipeline_runner.create_run(
@@ -159,7 +155,6 @@ class AudioIngestionService:
             pipeline_run_id=run.id,
             fragment_id=fragment.id,
             audio_path=None,
-            sync_status="syncing",
             source="voice",
             audio_source="external_link",
         )
@@ -303,7 +298,7 @@ class AudioIngestionService:
         enrichment_payload = context.get_step_output("enrich_fragment")
         audio_payload = context.get_step_output("download_media")
         fragment_id = context.input_payload["fragment_id"]
-        fragment_repository.mark_synced(
+        fragment_repository.save_transcription_result(
             db=context.db,
             fragment_id=fragment_id,
             user_id=context.run.user_id,

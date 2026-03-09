@@ -145,7 +145,7 @@ class DailyPushUseCase:
         if existing:
             return existing
 
-        recent_fragments = fragment_repository.list_synced_in_range(db=db, user_id=user_id, start_at=today_start, end_at=today_end)
+        recent_fragments = fragment_repository.list_content_ready_in_range(db=db, user_id=user_id, start_at=today_start, end_at=today_end)
         if len(recent_fragments) < settings.DAILY_PUSH_MIN_FRAGMENTS:
             raise ValidationError(
                 message=f"今天至少需要 {settings.DAILY_PUSH_MIN_FRAGMENTS} 条已转写碎片，才能立即生成灵感卡片",
@@ -188,7 +188,7 @@ class DailyPushUseCase:
             if script_repository.get_latest_daily_push_for_window(db=db, user_id=user_id, start_at=today_start, end_at=today_end):
                 skipped_users += 1
                 continue
-            recent_fragments = fragment_repository.list_synced_in_range(db=db, user_id=user_id, start_at=yesterday_start, end_at=yesterday_end)
+            recent_fragments = fragment_repository.list_content_ready_in_range(db=db, user_id=user_id, start_at=yesterday_start, end_at=yesterday_end)
             if len(recent_fragments) < settings.DAILY_PUSH_MIN_FRAGMENTS:
                 skipped_users += 1
                 continue

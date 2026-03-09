@@ -3,7 +3,7 @@
  */
 
 export type FragmentSource = 'voice' | 'manual' | 'video_parse';
-export type FragmentSyncStatus = 'pending' | 'syncing' | 'synced' | 'failed';
+export type FragmentAudioSource = 'upload' | 'external_link';
 
 export interface SpeakerSegment {
   speaker_id: string;
@@ -30,8 +30,8 @@ export interface Fragment {
   tags: string[] | null;
   /** 来源: voice | manual | video_parse */
   source: FragmentSource;
-  /** 同步状态: pending | syncing | synced | failed */
-  sync_status: FragmentSyncStatus;
+  /** 音频来源: upload | external_link */
+  audio_source?: FragmentAudioSource | null;
   /** 创建时间 */
   created_at: string;
 }
@@ -75,7 +75,6 @@ export interface FragmentVisualizationPoint {
   summary: string | null;
   tags: string[] | null;
   source: FragmentSource;
-  sync_status: FragmentSyncStatus;
   created_at: string | null;
   cluster_id: number | null;
   is_noise: boolean;

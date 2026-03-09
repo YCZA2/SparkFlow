@@ -82,6 +82,7 @@ SparkFlow 当前以后端模块内 `schemas.py` 作为 API contract 单一事实
 
 - 媒体导入与脚本生成等后台链路，创建接口默认返回 `pipeline_run_id`
 - 任务真实状态以后端 `pipeline_runs` / `pipeline_step_runs` 为准
+- `fragments` 列表 / 详情与 `GET /api/transcriptions/{fragment_id}` 不再暴露 `sync_status` 一类兼容字段
 - 前端通过 `GET /api/pipelines/{run_id}` 观察整体状态
 - 需要展示细分节点时，通过 `GET /api/pipelines/{run_id}/steps`
 - 失败补偿统一走 `POST /api/pipelines/{run_id}/retry`

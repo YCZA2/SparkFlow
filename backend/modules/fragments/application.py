@@ -67,7 +67,6 @@ def map_fragment(fragment: Fragment) -> FragmentItem:
         tags=parse_json_list(fragment.tags, allow_csv_fallback=True),
         source=fragment.source,
         audio_source=fragment.audio_source,
-        sync_status=fragment.sync_status,
         created_at=format_iso_datetime(fragment.created_at),
         audio_path=fragment.audio_path,
         folder_id=fragment.folder_id,
@@ -108,7 +107,6 @@ class FragmentCommandService:
             source=source,
             audio_source=audio_source,
             audio_path=audio_path,
-            sync_status="synced" if transcript else "pending",
             folder_id=folder_id,
         )
 

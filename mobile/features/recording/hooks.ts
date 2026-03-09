@@ -22,8 +22,9 @@ function formatDuration(seconds: number): string {
 }
 
 interface UploadResult {
+  pipeline_run_id: string;
   fragment_id: string;
-  audio_path: string;
+  audio_path: string | null;
   message: string;
 }
 
@@ -207,17 +208,15 @@ export function useAudioUpload() {
       setStatus('loading');
       setError(null);
       setResult(null);
-      const response = await uploadAudio<{
-        fragment_id: string;
-        audio_path: string;
-        relative_path: string;
-        file_size: number;
-        message: string;
-      }>(uri, folderId);
+      const response = await uploadAudio(uri, folderId);
+      if (!response.fragment_id) {
+        throw new Error('上传成功，但未返回 fragment_id');
+      }
       const nextResult = {
+        pipeline_run_id: response.pipeline_run_id,
         fragment_id: response.fragment_id,
         audio_path: response.audio_path,
-        message: response.message,
+        message: '已创建后台转写任务，可在任务状态中继续观察进度。',
       };
       setResult(nextResult);
       setStatus('success');
