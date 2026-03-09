@@ -1,0 +1,558 @@
+app:
+  description: "SparkFlow 口播稿生成工作流。输入灵感碎片、知识库命中和可选网页搜索结果，输出结构化的脚本结果。"
+  icon: "🧠"
+  icon_background: "#FFEAD5"
+  mode: "workflow"
+  name: "SparkFlow Script Generation"
+  use_icon_as_answer_icon: false
+dependencies:
+  - current_identifier: null
+    type: "marketplace"
+    value:
+      marketplace_plugin_unique_identifier: "langgenius/openai:0.2.3@5a7f82fa86e28332ad51941d0b491c1e8a38ead539656442f7bf4c6129cd15fa"
+kind: "app"
+version: "0.3.0"
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+      allowed_file_extensions: []
+      allowed_file_types: []
+      allowed_file_upload_methods: []
+      fileUploadConfig:
+        audio_file_size_limit: 0
+        batch_count_limit: 0
+        file_size_limit: 0
+        image_file_size_limit: 0
+        video_file_size_limit: 0
+        workflow_file_upload_limit: 0
+      image:
+        enabled: false
+        number_limits: 0
+        transfer_methods: []
+      number_limits: 0
+    opening_statement: ""
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ""
+      voice: ""
+  graph:
+    edges:
+      - id: "start_to_prepare"
+        source: "start_node"
+        sourceHandle: "source"
+        target: "prepare_context_node"
+        targetHandle: "target"
+        type: "custom"
+        data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: "start"
+          targetType: "code"
+      - id: "prepare_to_llm"
+        source: "prepare_context_node"
+        sourceHandle: "source"
+        target: "llm_generate_node"
+        targetHandle: "target"
+        type: "custom"
+        data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: "code"
+          targetType: "llm"
+      - id: "llm_to_parse"
+        source: "llm_generate_node"
+        sourceHandle: "source"
+        target: "parse_result_node"
+        targetHandle: "target"
+        type: "custom"
+        data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: "llm"
+          targetType: "code"
+      - id: "parse_to_end"
+        source: "parse_result_node"
+        sourceHandle: "source"
+        target: "end_node"
+        targetHandle: "target"
+        type: "custom"
+        data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: "code"
+          targetType: "end"
+    nodes:
+      - id: "start_node"
+        type: "custom"
+        position:
+          x: 80
+          y: 240
+        positionAbsolute:
+          x: 80
+          y: 240
+        width: 244
+        height: 350
+        sourcePosition: "right"
+        targetPosition: "left"
+        selected: false
+        data:
+          type: "start"
+          title: "开始"
+          desc: "接收 SparkFlow 后端整理后的脚本生成上下文。"
+          variables:
+            - label: "模式"
+              variable: "mode"
+              type: "text-input"
+              required: true
+              max_length: 32
+              options: []
+            - label: "写作目标"
+              variable: "query_hint"
+              type: "paragraph"
+              required: false
+              max_length: 2000
+              options: []
+            - label: "碎片 JSON"
+              variable: "selected_fragments"
+              type: "paragraph"
+              required: true
+              max_length: 120000
+              options: []
+            - label: "知识库命中 JSON"
+              variable: "knowledge_hits"
+              type: "paragraph"
+              required: false
+              max_length: 120000
+              options: []
+            - label: "网页搜索命中 JSON"
+              variable: "web_hits"
+              type: "paragraph"
+              required: false
+              max_length: 120000
+              options: []
+            - label: "用户上下文 JSON"
+              variable: "user_context"
+              type: "paragraph"
+              required: false
+              max_length: 120000
+              options: []
+            - label: "生成元信息 JSON"
+              variable: "generation_metadata"
+              type: "paragraph"
+              required: false
+              max_length: 120000
+              options: []
+      - id: "prepare_context_node"
+        type: "custom"
+        position:
+          x: 380
+          y: 240
+        positionAbsolute:
+          x: 380
+          y: 240
+        width: 244
+        height: 54
+        sourcePosition: "right"
+        targetPosition: "left"
+        selected: false
+        data:
+          type: "code"
+          title: "整理上下文"
+          desc: "把后端输入统一转换成 LLM 可消费的提示词。"
+          code_language: "python3"
+          code: |
+            import json
+
+            def _normalize_to_list(value):
+                if value is None:
+                    return []
+                if isinstance(value, list):
+                    return value
+                if isinstance(value, str):
+                    text = value.strip()
+                    if not text:
+                        return []
+                    try:
+                        loaded = json.loads(text)
+                        return loaded if isinstance(loaded, list) else []
+                    except Exception:
+                        return []
+                return []
+
+            def _normalize_to_object(value):
+                if value is None:
+                    return {}
+                if isinstance(value, dict):
+                    return value
+                if isinstance(value, str):
+                    text = value.strip()
+                    if not text:
+                        return {}
+                    try:
+                        loaded = json.loads(text)
+                        return loaded if isinstance(loaded, dict) else {}
+                    except Exception:
+                        return {}
+                return {}
+
+            def _fragment_block(item):
+                tags = item.get("tags") or []
+                tags_text = ", ".join(str(tag) for tag in tags if str(tag).strip()) if isinstance(tags, list) else ""
+                return "\n".join(
+                    [
+                        f"- id: {item.get('id', '')}",
+                        f"  summary: {item.get('summary', '')}",
+                        f"  transcript: {item.get('transcript', '')}",
+                        f"  tags: {tags_text}",
+                        f"  source: {item.get('source', '')}",
+                        f"  created_at: {item.get('created_at', '')}",
+                    ]
+                )
+
+            def _knowledge_block(item):
+                return "\n".join(
+                    [
+                        f"- title: {item.get('title', '')}",
+                        f"  doc_type: {item.get('doc_type', '')}",
+                        f"  score: {item.get('score', '')}",
+                        f"  content: {item.get('content', '')}",
+                    ]
+                )
+
+            def _web_block(item):
+                return "\n".join(
+                    [
+                        f"- title: {item.get('title', '')}",
+                        f"  url: {item.get('url', '')}",
+                        f"  snippet: {item.get('snippet', '')}",
+                    ]
+                )
+
+            def main(
+                mode: str,
+                query_hint: str = "",
+                selected_fragments: str = "[]",
+                knowledge_hits: str = "[]",
+                web_hits: str = "[]",
+                user_context: str = "{}",
+                generation_metadata: str = "{}",
+            ) -> dict:
+                fragments = _normalize_to_list(selected_fragments)
+                knowledge = _normalize_to_list(knowledge_hits)
+                web = _normalize_to_list(web_hits)
+                user_ctx = _normalize_to_object(user_context)
+                metadata = _normalize_to_object(generation_metadata)
+
+                fragments_section = "\n\n".join(_fragment_block(item) for item in fragments if isinstance(item, dict)) or "无"
+                knowledge_section = "\n\n".join(_knowledge_block(item) for item in knowledge if isinstance(item, dict)) or "无"
+                web_section = "\n\n".join(_web_block(item) for item in web if isinstance(item, dict)) or "无"
+
+                prompt = f"""
+            你是 SparkFlow 的短视频口播编导助手。你的任务是根据用户提供的灵感碎片、知识库参考和可选的网页搜索信息，输出一份可直接进入拍摄流程的中文口播稿。
+
+            目标：
+            1. 产出适合知识内容创作者拍摄的口播脚本。
+            2. 优先保留用户碎片里的真实表达、观点张力和细节。
+            3. 避免空泛套话，强调结构清晰、可讲述、可上镜。
+
+            生成模式：
+            - mode_a: 结构更强、起承转合更明显、适合直接拍摄。
+            - mode_b: 更自然、更像创作者本人表达、语言更顺。
+
+            当前模式：{mode}
+            写作目标：{query_hint or "未额外指定，请根据碎片主题自行归纳"}
+
+            碎片素材：
+            {fragments_section}
+
+            知识库参考：
+            {knowledge_section}
+
+            网页搜索参考：
+            {web_section}
+
+            用户上下文：
+            {json.dumps(user_ctx, ensure_ascii=False)}
+
+            生成元信息：
+            {json.dumps(metadata, ensure_ascii=False)}
+
+            输出要求：
+            - 仅输出一个 JSON 对象，不要输出 Markdown，不要加 ```json。
+            - JSON 结构固定为：
+              {{
+                "title": "脚本标题",
+                "outline": "用 3-6 条简短要点组成的提纲，使用换行或编号均可",
+                "draft": "完整中文口播稿，适合直接念出来",
+                "used_sources": [
+                  {{"type": "fragment|knowledge|web", "title": "来源标题或摘要"}}
+                ],
+                "review_notes": "简短自检说明，说明稿件角度、节奏或风险点",
+                "model_metadata": {{
+                  "provider": "dify",
+                  "workflow": "sparkflow_script_generation",
+                  "mode": "{mode}"
+                }}
+              }}
+            - draft 必须是非空字符串。
+            - title、outline、review_notes 都必须是非空字符串。
+            - used_sources 至少列出 1 个实际使用过的来源；如果无法确定标题，可概括描述。
+            - 如果素材不足，也要尽量给出最可用版本，不要拒答。
+                """.strip()
+
+                return {"prompt": prompt}
+          outputs:
+            prompt:
+              children: null
+              type: "string"
+          variables:
+            - variable: "mode"
+              value_selector:
+                - "start_node"
+                - "mode"
+            - variable: "query_hint"
+              value_selector:
+                - "start_node"
+                - "query_hint"
+            - variable: "selected_fragments"
+              value_selector:
+                - "start_node"
+                - "selected_fragments"
+            - variable: "knowledge_hits"
+              value_selector:
+                - "start_node"
+                - "knowledge_hits"
+            - variable: "web_hits"
+              value_selector:
+                - "start_node"
+                - "web_hits"
+            - variable: "user_context"
+              value_selector:
+                - "start_node"
+                - "user_context"
+            - variable: "generation_metadata"
+              value_selector:
+                - "start_node"
+                - "generation_metadata"
+          x-outputs:
+            - name: "prompt"
+              type: "string"
+      - id: "llm_generate_node"
+        type: "custom"
+        position:
+          x: 680
+          y: 240
+        positionAbsolute:
+          x: 680
+          y: 240
+        width: 244
+        height: 118
+        sourcePosition: "right"
+        targetPosition: "left"
+        selected: false
+        data:
+          type: "llm"
+          title: "生成脚本"
+          desc: "基于整理后的上下文输出结构化 JSON 结果。"
+          context:
+            enabled: false
+            variable_selector: []
+          memory:
+            role_prefix:
+              assistant: ""
+              user: ""
+            window:
+              enabled: false
+              size: 50
+          model:
+            completion_params:
+              temperature: 0.7
+            mode: "chat"
+            name: "gpt-4o-mini"
+            provider: "langgenius/openai/openai"
+          prompt_template:
+            - id: "system_prompt"
+              role: "system"
+              text: "你是 SparkFlow 的脚本生成引擎。严格遵守用户提示词中的 JSON 输出要求。"
+            - id: "user_prompt"
+              role: "user"
+              text: "{{#prepare_context_node.prompt#}}"
+          selected: false
+          variables: []
+          vision:
+            enabled: false
+          x-outputs:
+            - name: "text"
+              type: "string"
+          x-io-contracts:
+            fixed_outputs:
+              - name: "text"
+                type: "string"
+      - id: "parse_result_node"
+        type: "custom"
+        position:
+          x: 980
+          y: 240
+        positionAbsolute:
+          x: 980
+          y: 240
+        width: 244
+        height: 54
+        sourcePosition: "right"
+        targetPosition: "left"
+        selected: false
+        data:
+          type: "code"
+          title: "解析结果"
+          desc: "把 LLM 的 JSON 文本解析成后端需要的输出结构。"
+          code_language: "python3"
+          code: |
+            import json
+
+            def _strip_fence(text: str) -> str:
+                content = (text or "").strip()
+                if content.startswith("```"):
+                    lines = content.splitlines()
+                    if len(lines) >= 3:
+                        return "\n".join(lines[1:-1]).strip()
+                return content
+
+            def _safe_json(text: str):
+                cleaned = _strip_fence(text)
+                try:
+                    return json.loads(cleaned)
+                except Exception:
+                    return {
+                        "title": "AI 生成脚本",
+                        "outline": "1. 先抛出问题\n2. 给出观点\n3. 结合碎片展开\n4. 收束成结论",
+                        "draft": cleaned,
+                        "used_sources": [],
+                        "review_notes": "模型未按 JSON 返回，已使用全文兜底。",
+                        "model_metadata": {"provider": "dify", "fallback": True},
+                    }
+
+            def main(text: str) -> dict:
+                payload = _safe_json(text)
+                title = str(payload.get("title") or "AI 生成脚本").strip()
+                outline = str(payload.get("outline") or "").strip()
+                draft = str(payload.get("draft") or "").strip()
+                review_notes = str(payload.get("review_notes") or "").strip()
+                used_sources = payload.get("used_sources") if isinstance(payload.get("used_sources"), list) else []
+                model_metadata = payload.get("model_metadata") if isinstance(payload.get("model_metadata"), dict) else {"provider": "dify"}
+
+                return {
+                    "title": title,
+                    "outline": outline,
+                    "draft": draft,
+                    "used_sources": used_sources,
+                    "review_notes": review_notes,
+                    "model_metadata": model_metadata,
+                }
+          outputs:
+            title:
+              children: null
+              type: "string"
+            outline:
+              children: null
+              type: "string"
+            draft:
+              children: null
+              type: "string"
+            used_sources:
+              children: null
+              type: "array[object]"
+            review_notes:
+              children: null
+              type: "string"
+            model_metadata:
+              children: null
+              type: "object"
+          variables:
+            - variable: "text"
+              value_selector:
+                - "llm_generate_node"
+                - "text"
+          x-outputs:
+            - name: "title"
+              type: "string"
+            - name: "outline"
+              type: "string"
+            - name: "draft"
+              type: "string"
+            - name: "used_sources"
+              type: "array[object]"
+            - name: "review_notes"
+              type: "string"
+            - name: "model_metadata"
+              type: "object"
+      - id: "end_node"
+        type: "custom"
+        position:
+          x: 1280
+          y: 240
+        positionAbsolute:
+          x: 1280
+          y: 240
+        width: 244
+        height: 190
+        sourcePosition: "right"
+        targetPosition: "left"
+        selected: false
+        data:
+          type: "end"
+          title: "结束"
+          desc: "输出 SparkFlow 后端可直接消费的结构化脚本结果。"
+          outputs:
+            - variable: "title"
+              value_selector:
+                - "parse_result_node"
+                - "title"
+            - variable: "outline"
+              value_selector:
+                - "parse_result_node"
+                - "outline"
+            - variable: "draft"
+              value_selector:
+                - "parse_result_node"
+                - "draft"
+            - variable: "used_sources"
+              value_selector:
+                - "parse_result_node"
+                - "used_sources"
+            - variable: "review_notes"
+              value_selector:
+                - "parse_result_node"
+                - "review_notes"
+            - variable: "model_metadata"
+              value_selector:
+                - "parse_result_node"
+                - "model_metadata"
+          x-outputs:
+            - name: "title"
+              type: "string"
+            - name: "outline"
+              type: "string"
+            - name: "draft"
+              type: "string"
+            - name: "used_sources"
+              type: "array[object]"
+            - name: "review_notes"
+              type: "string"
+            - name: "model_metadata"
+              type: "object"
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.75

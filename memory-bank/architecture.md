@@ -39,6 +39,7 @@ flowchart LR
 - `mobile/`: Expo 移动端，当前采用 stack 路由，不是 tab 路由。
 - `backend/`: FastAPI 后端，业务入口已经收敛到 `modules/*`。
 - `scripts/dev-mobile.sh`: 推荐本地联调入口，同时启动后端与 Expo。
+- `scripts/dify-local.sh`: 本地自托管 Dify 启停脚本，会拉取官方 release 并在 `backend/.vendor/dify` 下准备 Docker 部署目录。
 - `memory-bank/`: 产品、架构、进度与实施记录。
 
 ## 3. Mobile Architecture
@@ -203,6 +204,7 @@ flowchart TD
 - Embedding: 默认 `Qwen text-embedding-v2`。
 - Vector DB: 默认 `ChromaDB`。
 - Agent Workflow: 可选 `Dify`，由后端通过 HTTP API 调用。
+- Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 本地文件系统 `backend/uploads/<user_id>/`。
 - Database: PostgreSQL（本地开发默认）。
 

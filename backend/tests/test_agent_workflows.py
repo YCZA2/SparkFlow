@@ -27,6 +27,14 @@ def dify_http_client():
         if request.method == "POST" and request.url.path.endswith("/workflows/run"):
             payload = json.loads(request.content.decode("utf-8"))
             assert "selected_fragments" in payload["inputs"]
+            assert isinstance(payload["inputs"]["selected_fragments"], str)
+            assert isinstance(payload["inputs"]["knowledge_hits"], str)
+            assert isinstance(payload["inputs"]["web_hits"], str)
+            assert isinstance(payload["inputs"]["generation_metadata"], str)
+            selected_fragments = json.loads(payload["inputs"]["selected_fragments"])
+            assert isinstance(selected_fragments, list)
+            assert selected_fragments
+            assert selected_fragments[0]["transcript"]
             run_id = "dify-run-001"
             state["submitted_runs"].append(run_id)
             return httpx.Response(200, json={"data": {"id": run_id, "workflow_id": "wf-script-001", "status": "running", "outputs": {}}})

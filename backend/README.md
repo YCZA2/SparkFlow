@@ -26,6 +26,27 @@ DIFY_API_KEY=app-xxx
 DIFY_SCRIPT_WORKFLOW_ID=wf-script-generation
 ```
 
+如果要在本地自托管 Dify，可在仓库根目录执行：
+
+```bash
+bash scripts/dify-local.sh start
+```
+
+这个脚本会：
+
+1. 从官方 `langgenius/dify` 仓库拉取最新 release（或使用 `DIFY_VERSION` 指定版本）
+2. 在 `backend/.vendor/dify` 下准备官方 Docker 部署目录
+3. 自动生成 `docker/.env`
+4. 以 `postgresql` profile 启动 Dify，并默认暴露到 `http://127.0.0.1:18080`
+
+随后把后端 `.env` 中的 Dify 配置改为类似：
+
+```bash
+DIFY_BASE_URL=http://127.0.0.1:18080/v1
+DIFY_API_KEY=app-xxx
+DIFY_SCRIPT_WORKFLOW_ID=wf-script-generation
+```
+
 ## Backend Architecture
 
 当前后端按如下层级协作：
@@ -193,3 +214,26 @@ When `DEBUG=true`:
 
 - Swagger UI: `/docs`
 - ReDoc: `/redoc`
+
+## Local Dify Operations
+
+仓库已内置 Dify 本地部署脚本：
+
+```bash
+bash scripts/dify-local.sh install
+bash scripts/dify-local.sh start
+bash scripts/dify-local.sh status
+bash scripts/dify-local.sh logs
+bash scripts/dify-local.sh stop
+```
+
+补充说明：
+
+- 该脚本依赖本机已安装 `Docker Desktop`、`docker compose`、`git`、`curl`、`python3`
+- 为避免占用本机 `80` 端口，脚本会把 Dify 默认映射到 `18080`
+- 官方源码会落在 `backend/.vendor/dify/`，已加入 `.gitignore`
+- 如果想固定官方版本，可执行：
+
+```bash
+DIFY_VERSION=v1.11.2 bash scripts/dify-local.sh start
+```

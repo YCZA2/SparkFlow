@@ -16,6 +16,10 @@
     "dev:mobile:start": "bash scripts/dev-mobile.sh start",
     "dev:mobile:simulator": "bash scripts/dev-mobile.sh simulator", 
     "dev:mobile:build": "bash scripts/dev-mobile.sh build",
+    "dev:dify": "bash scripts/dify-local.sh start",
+    "dev:dify:install": "bash scripts/dify-local.sh install",
+    "dev:dify:stop": "bash scripts/dify-local.sh stop",
+    "dev:dify:status": "bash scripts/dify-local.sh status",
     "test:all": "bash scripts/test-all.sh"
   }
 }

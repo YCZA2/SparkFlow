@@ -68,6 +68,19 @@ def _map_result_payload(payload_json: str | None) -> AgentRunResult | None:
     )
 
 
+def _build_dify_inputs(context: ResearchContext) -> dict[str, Any]:
+    """将复杂上下文字段序列化为 JSON 字符串，兼容 Dify Start 节点。"""
+    return {
+        "mode": context.mode,
+        "query_hint": context.query_hint or "",
+        "selected_fragments": json.dumps(context.selected_fragments, ensure_ascii=False),
+        "knowledge_hits": json.dumps(context.knowledge_hits, ensure_ascii=False),
+        "web_hits": json.dumps(context.web_hits, ensure_ascii=False),
+        "user_context": json.dumps(context.user_context, ensure_ascii=False),
+        "generation_metadata": json.dumps(context.generation_metadata, ensure_ascii=False),
+    }
+
+
 def map_agent_run(run: AgentRun) -> AgentRunDetail:
     """将工作流运行记录转换为 API 响应。"""
     return AgentRunDetail(
@@ -145,6 +158,7 @@ class ScriptWorkflowUseCase:
             include_web_search=include_web_search,
         )
         request_payload_json = json.dumps(asdict(context), ensure_ascii=False)
+        dify_inputs = _build_dify_inputs(context)
         run = agent_run_repository.create(
             db=db,
             user_id=user_id,
@@ -158,7 +172,7 @@ class ScriptWorkflowUseCase:
         )
 
         try:
-            workflow_run = await self.dify_client.submit_workflow_run(inputs=asdict(context), user=user_id)
+            workflow_run = await self.dify_client.submit_workflow_run(inputs=dify_inputs, user=user_id)
         except Exception as exc:
             agent_run_repository.mark_failed(db=db, run=run, error_message=str(exc))
             raise

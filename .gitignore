@@ -34,6 +34,7 @@ data.db
 .env
 .env.local
 .env.*.local
+backend/.vendor/
 
 # IDE
 .idea/
