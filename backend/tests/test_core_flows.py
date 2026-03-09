@@ -10,7 +10,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from core.exceptions import AppException, ValidationError
 from domains.fragment_tags import repository as fragment_tag_repository
 from models import Fragment, FragmentFolder, FragmentTag, KnowledgeDoc, User
@@ -464,6 +463,36 @@ async def test_generate_script_success_and_failures(async_client, auth_headers_f
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert empty_response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_generate_script_mode_b_uses_same_dify_flow(async_client, auth_headers_factory) -> None:
+    """mode_b 应复用统一的 Dify 工作流并成功回流脚本。"""
+    fragment_id = (await _create_fragment(async_client, auth_headers_factory, {"transcript": "一条更自然表达的碎片", "source": "manual"}))["id"]
+
+    response = await async_client.post(
+        "/api/scripts/generation",
+        json={"fragment_ids": [fragment_id], "mode": "mode_b"},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert response.status_code == 201
+    assert response.json()["data"]["mode"] == "mode_b"
+    assert response.json()["data"]["content"] == "生成后的口播稿"
+
+
+@pytest.mark.asyncio
+async def test_generate_script_fails_when_dify_output_has_no_draft(async_client, auth_headers_factory, app) -> None:
+    """Dify 缺少 draft 时应按失败处理。"""
+    fragment_id = (await _create_fragment(async_client, auth_headers_factory, {"transcript": "一条缺稿测试碎片", "source": "manual"}))["id"]
+    app.state.container.dify_http_client.test_state["draft"] = ""  # type: ignore[attr-defined]
+
+    response = await async_client.post(
+        "/api/scripts/generation",
+        json={"fragment_ids": [fragment_id], "mode": "mode_a"},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION"
 
 
 @pytest.mark.asyncio

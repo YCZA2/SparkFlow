@@ -23,6 +23,8 @@ os.environ.setdefault("DASHSCOPE_API_KEY", "test-dashscope-key")
 os.environ.setdefault("DIFY_BASE_URL", "https://dify.example.com/v1")
 os.environ.setdefault("DIFY_API_KEY", "test-key")
 os.environ.setdefault("DIFY_SCRIPT_WORKFLOW_ID", "wf-script-001")
+os.environ.setdefault("DIFY_POLL_INTERVAL_SECONDS", "0")
+os.environ.setdefault("DIFY_POLL_TIMEOUT_SECONDS", "1")
 os.environ.setdefault("DATABASE_URL", os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL))
 
 from main import create_app
@@ -102,10 +104,33 @@ def stt_provider():
 @pytest.fixture
 def dify_http_client() -> httpx.AsyncClient:
     """提供默认不会出网的 Dify HTTP 客户端。"""
-    def _raise_unexpected_request(request: httpx.Request) -> httpx.Response:
+    state = {"next_status": "succeeded", "draft": "生成后的口播稿"}
+
+    def _handle_request(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path.endswith("/workflows/run"):
+            return httpx.Response(
+                200,
+                json={"data": {"id": "dify-run-default", "workflow_id": "wf-script-001", "status": "running", "outputs": {}}},
+            )
+        if request.method == "GET" and request.url.path.endswith("/workflows/run/dify-run-default"):
+            status = state["next_status"]
+            outputs = {
+                "title": "一条新脚本",
+                "outline": "提纲",
+                "draft": state["draft"],
+                "used_sources": [],
+                "review_notes": "已检查",
+                "model_metadata": {"provider": "dify"},
+            }
+            return httpx.Response(
+                200,
+                json={"data": {"id": "dify-run-default", "workflow_id": "wf-script-001", "status": status, "outputs": outputs}},
+            )
         raise AssertionError(f"Unexpected Dify request: {request.method} {request.url}")
 
-    return httpx.AsyncClient(transport=httpx.MockTransport(_raise_unexpected_request))
+    client = httpx.AsyncClient(transport=httpx.MockTransport(_handle_request))
+    client.test_state = state  # type: ignore[attr-defined]
+    return client
 
 
 @pytest.fixture

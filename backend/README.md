@@ -18,12 +18,12 @@ Default local address: `http://127.0.0.1:8000`
 
 本地联调默认测试账号 `test-user-001` 会在应用启动和 `POST /api/auth/token` 时自动补齐到数据库，避免切库后出现外键错误。
 
-如果启用 Dify 外挂工作流，还需要配置：
+如果启用 Dify 统一脚本生成工作流，还需要配置：
 
 ```bash
 DIFY_BASE_URL=https://your-dify.example.com/v1
 DIFY_API_KEY=app-xxx
-DIFY_SCRIPT_WORKFLOW_ID=wf-script-research
+DIFY_SCRIPT_WORKFLOW_ID=wf-script-generation
 ```
 
 ## Backend Architecture
@@ -50,8 +50,8 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-research
    - 负责 LLM、STT、Embedding、VectorStore、AudioStorage 等端口与实现。
    - `modules/shared/audio_ingestion.py` 提供统一音频碎片导入管线，供上传音频和外部链接导入复用。
 7. `modules/agent`
-   - Dify 外挂工作流层。
-   - 负责脚本研究 run 的创建、状态刷新、结果映射与脚本回流。
+   - Dify 工作流编排层。
+   - 负责统一脚本生成 / 研究 run 的创建、状态刷新、结果映射与脚本回流。
 8. `core/logging_config.py`
    - 结构化日志装配层。
    - 负责 `structlog` 配置、request-id 绑定，以及控制台输出和移动端调试日志文件输出。
@@ -74,7 +74,7 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-research
 - `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接转 m4a，并直接创建碎片进入统一转写流程。
 - `modules/scripts/`: 口播稿生成、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
-- `modules/agent/`: Dify 外挂脚本研究工作流和 run 状态管理。
+- `modules/agent/`: Dify 统一脚本工作流和 run 状态管理。
 - `modules/debug_logs/`: 接收移动端调试日志，并通过结构化日志链路写入本地文件。
 - `modules/scheduler/`: APScheduler 装配与每日推盘调度入口。
 - `modules/shared/`: 模块共享端口、DI 容器、增强逻辑，不承载独立业务模块。
@@ -119,14 +119,16 @@ DIFY_SCRIPT_WORKFLOW_ID=wf-script-research
 
 Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `agent`, `debug_logs`, and `scheduler`.
 
-外挂工作流接口：
+工作流相关接口：
 
 - `POST /api/agent/script-research-runs`
 - `GET /api/agent/runs/{run_id}`
 - `POST /api/agent/runs/{run_id}/refresh`
+- `POST /api/scripts/generation`
 
 当前接入策略：
 
+- `POST /api/scripts/generation` 默认先创建 `agent_runs`，再短轮询 Dify 结果并回流 `scripts`
 - SparkFlow 后端先收集 fragments、knowledge hits 和可选 web hits
 - Dify 只消费整理后的上下文并生成结构化输出
 - 本地 `agent_runs` 记录是运行状态事实源，成功后再回流创建 `scripts`

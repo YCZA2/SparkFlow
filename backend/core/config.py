@@ -91,7 +91,6 @@ class Settings(BaseSettings):
         default=120,
         description="等待 Dify 运行完成的超时时间"
     )
-
     # STT 配置
     STT_PROVIDER: str = Field(
         default="dashscope",

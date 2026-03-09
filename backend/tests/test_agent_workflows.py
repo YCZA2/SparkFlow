@@ -128,6 +128,23 @@ async def test_refresh_failed_run_returns_error(async_client, auth_headers_facto
 
 
 @pytest.mark.asyncio
+async def test_create_run_can_remain_running(async_client, auth_headers_factory, app, dify_http_client) -> None:
+    """工作流未完成时应继续保持 running。"""
+    fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于持续轮询的一条碎片")
+    create_response = await async_client.post(
+        "/api/agent/script-research-runs",
+        json={"fragment_ids": [fragment_id], "mode": "mode_a"},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    run_id = create_response.json()["data"]["id"]
+
+    dify_http_client.test_state["next_status"] = "running"  # type: ignore[attr-defined]
+    refresh_response = await async_client.post(f"/api/agent/runs/{run_id}/refresh", headers=await _auth_headers(async_client, auth_headers_factory))
+    assert refresh_response.status_code == 200
+    assert refresh_response.json()["data"]["status"] == "running"
+
+
+@pytest.mark.asyncio
 async def test_other_user_cannot_read_run(async_client, auth_headers_factory) -> None:
     """其他用户不应读取当前用户的工作流记录。"""
     fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于表达方式的一条碎片")

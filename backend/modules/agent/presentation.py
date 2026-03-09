@@ -7,7 +7,7 @@ from core import ResponseModel, success_response
 from core.auth import get_current_user
 from modules.shared.container import ServiceContainer, get_container, get_db_session
 
-from .application import AgentRunQueryService, ScriptResearchRunUseCase, map_agent_run
+from .application import AgentRunQueryService, ScriptResearchRunUseCase, ScriptWorkflowUseCase, map_agent_run
 from .dify_client import DifyClient
 from .schemas import AgentRunDetail, ScriptResearchRunCreateRequest
 
@@ -28,7 +28,20 @@ def get_script_research_use_case(
     container: ServiceContainer = Depends(get_container),
     dify_client: DifyClient = Depends(get_dify_client),
 ) -> ScriptResearchRunUseCase:
+    """构建研究型脚本工作流用例。"""
     return ScriptResearchRunUseCase(
+        dify_client=dify_client,
+        vector_store=container.vector_store,
+        web_search_provider=container.web_search_provider,
+    )
+
+
+def get_script_workflow_use_case(
+    container: ServiceContainer = Depends(get_container),
+    dify_client: DifyClient = Depends(get_dify_client),
+) -> ScriptWorkflowUseCase:
+    """构建统一脚本生成工作流用例。"""
+    return ScriptWorkflowUseCase(
         dify_client=dify_client,
         vector_store=container.vector_store,
         web_search_provider=container.web_search_provider,

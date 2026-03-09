@@ -7,6 +7,6 @@ from __future__ import annotations
 refresh / cron / webhook fallback 逻辑散落回 presentation 或 application。
 """
 
-from modules.agent.application import ScriptResearchRunUseCase
+from modules.agent.application import ScriptResearchRunUseCase, ScriptWorkflowUseCase
 
-__all__ = ["ScriptResearchRunUseCase"]
+__all__ = ["ScriptResearchRunUseCase", "ScriptWorkflowUseCase"]

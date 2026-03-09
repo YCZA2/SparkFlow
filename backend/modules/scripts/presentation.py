@@ -3,20 +3,38 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from core import ResponseModel, success_response
+from core import ResponseModel, settings, success_response
 from core.auth import get_current_user
+from modules.agent.application import ScriptWorkflowUseCase
 from modules.shared.container import ServiceContainer, get_container, get_db_session
+
+from modules.agent.dify_client import DifyClient
 
 from .application import DailyPushUseCase, ScriptCommandService, ScriptGenerationUseCase, ScriptQueryService, map_script
 from .schemas import ScriptDetail, ScriptGenerationRequest, ScriptListResponse, ScriptUpdateRequest
 
 router = APIRouter(prefix="/api/scripts", tags=["scripts"], responses={401: {"description": "未认证"}})
 
+
 def get_script_generation_use_case(container: ServiceContainer = Depends(get_container)) -> ScriptGenerationUseCase:
-    return ScriptGenerationUseCase(llm_provider=container.llm_provider, prompt_loader=container.prompt_loader)
+    """构建统一脚本生成用例。"""
+    return ScriptGenerationUseCase(
+        llm_provider=container.llm_provider,
+        prompt_loader=container.prompt_loader,
+        workflow_use_case=ScriptWorkflowUseCase(
+            dify_client=DifyClient(
+                base_url=settings.DIFY_BASE_URL,
+                api_key=settings.DIFY_API_KEY,
+                http_client=container.dify_http_client,
+            ),
+            vector_store=container.vector_store,
+            web_search_provider=container.web_search_provider,
+        ),
+    )
 
 
 def get_daily_push_use_case(container: ServiceContainer = Depends(get_container)) -> DailyPushUseCase:
+    """构建每日推盘用例。"""
     return DailyPushUseCase(
         llm_provider=container.llm_provider,
         prompt_loader=container.prompt_loader,

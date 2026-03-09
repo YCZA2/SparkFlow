@@ -15,7 +15,7 @@ flowchart LR
     DB[("PostgreSQL<br/>SQLAlchemy")]
     FS[("uploads/<user_id><br/>本地音频文件")]
     CHROMA[("ChromaDB<br/>fragments_* / knowledge_*")]
-    DIFY["Dify Workflow<br/>外挂脚本研究编排"]
+    DIFY["Dify Workflow<br/>统一脚本生成编排"]
     STT["STT Provider<br/>DashScope / Aliyun"]
     LLM["LLM Provider<br/>Qwen"]
     EMB["Embedding Provider<br/>Qwen"]
@@ -182,7 +182,7 @@ flowchart TD
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接下载并转成 m4a，导入完成后直接创建 `source=voice`、`audio_source=external_link` 的碎片并接入同一条转写管线。
 - `scripts`: 合稿、列表、详情、更新、删除、每日推盘。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
-- `agent`: Dify 外挂脚本研究工作流入口、run 状态查询与 refresh。
+- `agent`: Dify 统一脚本工作流入口、run 状态查询与 refresh。
 - `debug_logs`: 移动端调试日志接收，并复用结构化日志链路落盘。
 - `scheduler`: APScheduler 装配与启停。
 

@@ -15,6 +15,7 @@ from utils.time import get_app_timezone, get_local_day_bounds
 
 from domains.fragments import repository as fragment_repository
 from domains.scripts import repository as script_repository
+from modules.agent.application import ScriptWorkflowUseCase
 from modules.shared.container import PromptLoader
 from modules.shared.ports import TextGenerationProvider, VectorStore
 from .schemas import ScriptDetail, ScriptItem, ScriptListResponse
@@ -24,6 +25,7 @@ VALID_SCRIPT_STATUSES = {"draft", "ready", "filmed"}
 
 
 def map_script(script: Script) -> ScriptDetail:
+    """将脚本模型映射为对外响应结构。"""
     source_fragment_ids = parse_json_list(script.source_fragment_ids, allow_csv_fallback=False)
     return ScriptDetail(
         id=script.id,
@@ -39,6 +41,7 @@ def map_script(script: Script) -> ScriptDetail:
 
 
 def build_fragments_text(fragments: list[Fragment]) -> str:
+    """拼接脚本生成所需的碎片文本。"""
     parts = [fragment.transcript for fragment in fragments if fragment.transcript]
     if not parts:
         raise ValidationError(message="选中的碎片均无转写内容，无法生成口播稿", field_errors={"fragment_ids": "碎片内容为空"})
@@ -46,40 +49,43 @@ def build_fragments_text(fragments: list[Fragment]) -> str:
 
 
 class ScriptGenerationUseCase:
-    def __init__(self, *, llm_provider: TextGenerationProvider, prompt_loader: PromptLoader) -> None:
+    def __init__(
+        self,
+        *,
+        llm_provider: TextGenerationProvider,
+        prompt_loader: PromptLoader,
+        workflow_use_case: ScriptWorkflowUseCase,
+    ) -> None:
+        """装配统一的 Dify 脚本生成依赖。"""
         self.llm_provider = llm_provider
         self.prompt_loader = prompt_loader
+        self.workflow_use_case = workflow_use_case
 
     async def generate(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> Script:
+        """生成口播稿，并统一走 Dify 工作流。"""
         if mode not in VALID_SCRIPT_MODES:
             raise ValidationError(message=f"无效的生成模式: {mode}", field_errors={"mode": "必须是 mode_a 或 mode_b"})
-        fragments = script_repository.get_fragments_for_user(db=db, user_id=user_id, fragment_ids=fragment_ids)
-        found_ids = {fragment.id for fragment in fragments}
-        missing_ids = sorted(set(fragment_ids) - found_ids)
-        if missing_ids:
-            raise NotFoundError(
-                message=f"部分碎片不存在或无权访问: {', '.join(missing_ids)}",
-                resource_type="fragment",
-                resource_id=",".join(missing_ids),
-            )
-        prompt = self.prompt_loader.load_script_prompt(mode)
-        content = await self.llm_provider.generate(
-            system_prompt=prompt.replace("{fragments_text}", build_fragments_text(fragments)),
-            user_message="",
-            temperature=0.7,
-            max_tokens=1500,
-        )
-        return script_repository.create(
+        return await self._generate_with_dify(db=db, user_id=user_id, fragment_ids=fragment_ids, mode=mode)
+
+    async def _generate_with_dify(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> Script:
+        """通过 Dify 工作流生成并回流脚本。"""
+        run = await self.workflow_use_case.create_script_generation_run(
             db=db,
             user_id=user_id,
-            content=content,
+            fragment_ids=fragment_ids,
             mode=mode,
-            source_fragment_ids=json.dumps(fragment_ids, ensure_ascii=False),
         )
-
+        run = await self.workflow_use_case.wait_for_script(db=db, user_id=user_id, run_id=run.id)
+        if run.status != "succeeded" or not run.script_id:
+            raise ValidationError(message=run.error_message or "生成失败", field_errors={"generation": "工作流执行失败"})
+        script = script_repository.get_by_id(db=db, user_id=user_id, script_id=run.script_id)
+        if not script:
+            raise NotFoundError(message="生成成功但脚本不存在", resource_type="script", resource_id=run.script_id)
+        return script
 
 class ScriptQueryService:
     def list_scripts(self, *, db: Session, user_id: str, limit: int, offset: int) -> ScriptListResponse:
+        """分页返回当前用户的口播稿列表。"""
         items = script_repository.list_by_user(db=db, user_id=user_id, limit=limit, offset=offset)
         total = script_repository.count_by_user(db=db, user_id=user_id)
         return ScriptListResponse(
@@ -90,12 +96,14 @@ class ScriptQueryService:
         )
 
     def get_script(self, *, db: Session, user_id: str, script_id: str) -> Script:
+        """读取单篇口播稿详情。"""
         script = script_repository.get_by_id(db=db, user_id=user_id, script_id=script_id)
         if not script:
             raise NotFoundError(message="口播稿不存在或无权访问", resource_type="script", resource_id=script_id)
         return script
 
     def get_today_daily_push(self, *, db: Session, user_id: str) -> Script:
+        """读取当天的每日推盘稿件。"""
         start_at, end_at = get_local_day_bounds()
         script = script_repository.get_latest_daily_push_for_window(db=db, user_id=user_id, start_at=start_at, end_at=end_at)
         if not script:
@@ -105,19 +113,23 @@ class ScriptQueryService:
 
 class ScriptCommandService:
     def update_script(self, *, db: Session, user_id: str, script_id: str, status_value: Optional[str], title: Optional[str]) -> Script:
+        """更新稿件标题或状态。"""
         script = ScriptQueryService().get_script(db=db, user_id=user_id, script_id=script_id)
         if status_value is not None and status_value not in VALID_SCRIPT_STATUSES:
             raise ValidationError(message=f"无效的状态值: {status_value}", field_errors={"status": "必须是 draft、ready、filmed 之一"})
         return script_repository.update(db=db, script=script, status_value=status_value, title=title)
 
     def delete_script(self, *, db: Session, user_id: str, script_id: str) -> None:
+        """删除指定稿件。"""
         script = ScriptQueryService().get_script(db=db, user_id=user_id, script_id=script_id)
         script_repository.delete(db=db, script=script)
 
 
 class DailyPushUseCase:
     def __init__(self, *, llm_provider: TextGenerationProvider, prompt_loader: PromptLoader, vector_store: VectorStore) -> None:
-        self.generator = ScriptGenerationUseCase(llm_provider=llm_provider, prompt_loader=prompt_loader)
+        """装配每日推盘依赖。"""
+        self.llm_provider = llm_provider
+        self.prompt_loader = prompt_loader
         self.vector_store = vector_store
 
     async def trigger_for_user(
@@ -145,8 +157,8 @@ class DailyPushUseCase:
         if len(selected) < settings.DAILY_PUSH_MIN_FRAGMENTS:
             raise ValidationError(message="今天的碎片主题还不够集中，暂时无法生成灵感卡片", field_errors={"fragments": "语义关联不足"})
 
-        content = await self.generator.llm_provider.generate(
-            system_prompt=self.generator.prompt_loader.load_script_prompt("mode_a").replace("{fragments_text}", build_fragments_text(selected)),
+        content = await self.llm_provider.generate(
+            system_prompt=self.prompt_loader.load_script_prompt("mode_a").replace("{fragments_text}", build_fragments_text(selected)),
             user_message="",
             temperature=0.7,
             max_tokens=1500,
@@ -185,8 +197,8 @@ class DailyPushUseCase:
             if len(selected) < settings.DAILY_PUSH_MIN_FRAGMENTS:
                 skipped_users += 1
                 continue
-            content = await self.generator.llm_provider.generate(
-                system_prompt=self.generator.prompt_loader.load_script_prompt("mode_a").replace("{fragments_text}", build_fragments_text(selected)),
+            content = await self.llm_provider.generate(
+                system_prompt=self.prompt_loader.load_script_prompt("mode_a").replace("{fragments_text}", build_fragments_text(selected)),
                 user_message="",
                 temperature=0.7,
                 max_tokens=1500,

@@ -18,11 +18,12 @@ class AgentRunResult(BaseModel):
     draft: str | None = None
     used_sources: list[dict[str, Any]] = Field(default_factory=list)
     review_notes: str | None = None
+    model_metadata: dict[str, Any] | None = None
 
 
 class AgentRunDetail(BaseModel):
     id: str
-    workflow_type: Literal["script_research"]
+    workflow_type: Literal["script_research", "script_generation"]
     status: Literal["queued", "running", "succeeded", "failed"]
     mode: str
     query_hint: str | None = None
@@ -36,4 +37,3 @@ class AgentRunDetail(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     finished_at: str | None = None
-
