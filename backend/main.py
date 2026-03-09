@@ -244,17 +244,32 @@ def _configure_pipeline_runtime(container: ServiceContainer) -> None:
         dispatcher=dispatcher,
     )
 
-    media_service = build_media_ingestion_pipeline_service(container)
-    media_definitions = media_service.build_pipeline_definitions()
-    definition_registry.register(PIPELINE_TYPE_MEDIA_INGESTION, media_definitions)
-    for definition in media_definitions:
-        executor_registry.register(PIPELINE_TYPE_MEDIA_INGESTION, definition)
+    _register_pipeline(
+        definition_registry=definition_registry,
+        executor_registry=executor_registry,
+        pipeline_type=PIPELINE_TYPE_MEDIA_INGESTION,
+        definitions=build_media_ingestion_pipeline_service(container).build_pipeline_definitions(),
+    )
+    _register_pipeline(
+        definition_registry=definition_registry,
+        executor_registry=executor_registry,
+        pipeline_type=PIPELINE_TYPE_SCRIPT_GENERATION,
+        definitions=build_script_generation_pipeline_service(container).build_pipeline_definitions(),
+    )
 
-    script_service = build_script_generation_pipeline_service(container)
-    script_definitions = script_service.build_pipeline_definitions()
-    definition_registry.register(PIPELINE_TYPE_SCRIPT_GENERATION, script_definitions)
-    for definition in script_definitions:
-        executor_registry.register(PIPELINE_TYPE_SCRIPT_GENERATION, definition)
+
+def _register_pipeline(
+    *,
+    definition_registry: PipelineDefinitionRegistry,
+    executor_registry: StepExecutorRegistry,
+    pipeline_type: str,
+    definitions,
+) -> None:
+    """统一注册某类流水线的步骤定义和执行器。"""
+    definition_registry.register(pipeline_type, definitions)
+    for definition in definitions:
+        executor_registry.register(pipeline_type, definition)
+
 
 def build_root_health_payload() -> dict:
     """构建根路径健康检查载荷。"""

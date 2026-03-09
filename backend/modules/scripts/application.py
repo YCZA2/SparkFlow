@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from math import ceil
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
@@ -15,12 +14,12 @@ from utils.time import get_app_timezone, get_local_day_bounds
 
 from domains.fragments import repository as fragment_repository
 from domains.scripts import repository as script_repository
-from modules.shared.container import PromptLoader
 from modules.shared.ports import TextGenerationProvider, VectorStore
+from modules.shared.infrastructure import PromptLoader
+from .daily_push import DailyPushFragmentSelector, build_fragments_text
 from .pipeline import ScriptGenerationPipelineService
 from .schemas import ScriptDetail, ScriptGenerationResponse, ScriptItem, ScriptListResponse
 
-VALID_SCRIPT_MODES = {"mode_a", "mode_b"}
 VALID_SCRIPT_STATUSES = {"draft", "ready", "filmed"}
 
 
@@ -40,15 +39,9 @@ def map_script(script: Script) -> ScriptDetail:
     )
 
 
-def build_fragments_text(fragments: list[Fragment]) -> str:
-    """拼接脚本生成所需的碎片文本。"""
-    parts = [fragment.transcript for fragment in fragments if fragment.transcript]
-    if not parts:
-        raise ValidationError(message="选中的碎片均无转写内容，无法生成口播稿", field_errors={"fragment_ids": "碎片内容为空"})
-    return "\n\n---\n\n".join(parts)
-
-
 class ScriptGenerationUseCase:
+    """封装脚本生成任务创建入口。"""
+
     def __init__(
         self,
         *,
@@ -83,6 +76,8 @@ class ScriptGenerationUseCase:
         )
 
 class ScriptQueryService:
+    """提供稿件查询能力。"""
+
     def list_scripts(self, *, db: Session, user_id: str, limit: int, offset: int) -> ScriptListResponse:
         """分页返回当前用户的口播稿列表。"""
         items = script_repository.list_by_user(db=db, user_id=user_id, limit=limit, offset=offset)
@@ -111,6 +106,8 @@ class ScriptQueryService:
 
 
 class ScriptCommandService:
+    """提供稿件写操作能力。"""
+
     def update_script(self, *, db: Session, user_id: str, script_id: str, status_value: Optional[str], title: Optional[str]) -> Script:
         """更新稿件标题或状态。"""
         script = ScriptQueryService().get_script(db=db, user_id=user_id, script_id=script_id)
@@ -125,11 +122,20 @@ class ScriptCommandService:
 
 
 class DailyPushUseCase:
-    def __init__(self, *, llm_provider: TextGenerationProvider, prompt_loader: PromptLoader, vector_store: VectorStore) -> None:
+    """编排每日推盘任务。"""
+
+    def __init__(
+        self,
+        *,
+        llm_provider: TextGenerationProvider,
+        prompt_loader: PromptLoader,
+        vector_store: VectorStore,
+        fragment_selector: DailyPushFragmentSelector | None = None,
+    ) -> None:
         """装配每日推盘依赖。"""
         self.llm_provider = llm_provider
         self.prompt_loader = prompt_loader
-        self.vector_store = vector_store
+        self.fragment_selector = fragment_selector or DailyPushFragmentSelector(vector_store=vector_store)
 
     async def trigger_for_user(
         self,
@@ -139,6 +145,7 @@ class DailyPushUseCase:
         reference_time: datetime | None = None,
         force: bool = False,
     ) -> Script:
+        """按当天碎片即时生成每日推盘。"""
         target_time = reference_time or datetime.now(timezone.utc)
         today_start, today_end = get_local_day_bounds(target_time, day_offset=0)
         existing = script_repository.get_latest_daily_push_for_window(db=db, user_id=user_id, start_at=today_start, end_at=today_end)
@@ -152,7 +159,7 @@ class DailyPushUseCase:
                 field_errors={"fragments": "今日碎片数量不足"},
             )
 
-        selected = recent_fragments if force else await self._select_related_fragments(user_id=user_id, fragments=recent_fragments)
+        selected = recent_fragments if force else await self.fragment_selector.select_related_fragments(user_id=user_id, fragments=recent_fragments)
         if len(selected) < settings.DAILY_PUSH_MIN_FRAGMENTS:
             raise ValidationError(message="今天的碎片主题还不够集中，暂时无法生成灵感卡片", field_errors={"fragments": "语义关联不足"})
 
@@ -175,6 +182,7 @@ class DailyPushUseCase:
         )
 
     async def run_daily_job(self, *, db: Session, reference_time: datetime | None = None) -> dict[str, Any]:
+        """为所有用户执行每日推盘调度任务。"""
         target_time = reference_time or datetime.now(timezone.utc)
         yesterday_start, yesterday_end = get_local_day_bounds(target_time, day_offset=-1)
         today_start, today_end = get_local_day_bounds(target_time, day_offset=0)
@@ -192,7 +200,7 @@ class DailyPushUseCase:
             if len(recent_fragments) < settings.DAILY_PUSH_MIN_FRAGMENTS:
                 skipped_users += 1
                 continue
-            selected = await self._select_related_fragments(user_id=user_id, fragments=recent_fragments)
+            selected = await self.fragment_selector.select_related_fragments(user_id=user_id, fragments=recent_fragments)
             if len(selected) < settings.DAILY_PUSH_MIN_FRAGMENTS:
                 skipped_users += 1
                 continue
@@ -222,53 +230,3 @@ class DailyPushUseCase:
             "window_start": yesterday_start.isoformat(),
             "window_end": yesterday_end.isoformat(),
         }
-
-    async def _select_related_fragments(self, *, user_id: str, fragments: list[Fragment]) -> list[Fragment]:
-        candidate_ids = {fragment.id for fragment in fragments if fragment.transcript}
-        if len(candidate_ids) < settings.DAILY_PUSH_MIN_FRAGMENTS:
-            return []
-        adjacency: dict[str, set[str]] = {fragment.id: set() for fragment in fragments}
-        top_k = max(5, ceil(len(fragments) * 1.5))
-        for fragment in fragments:
-            query_text = fragment.transcript or fragment.summary or ""
-            if not query_text.strip():
-                continue
-            try:
-                matches = await self.vector_store.query_fragments(
-                    user_id=user_id,
-                    query_text=query_text,
-                    top_k=top_k,
-                    exclude_ids=[fragment.id],
-                )
-            except Exception:
-                continue
-            for match in matches:
-                matched_id = match.get("fragment_id")
-                score = float(match.get("score") or 0.0)
-                if matched_id in candidate_ids and score >= settings.DAILY_PUSH_SIMILARITY_THRESHOLD:
-                    adjacency.setdefault(fragment.id, set()).add(matched_id)
-                    adjacency.setdefault(matched_id, set()).add(fragment.id)
-        largest_component = _largest_connected_component(adjacency=adjacency, fragment_ids=candidate_ids)
-        fragment_map = {fragment.id: fragment for fragment in fragments}
-        selected = [fragment_map[fragment_id] for fragment_id in largest_component if fragment_id in fragment_map]
-        return sorted(selected, key=lambda fragment: fragment.created_at)
-
-
-def _largest_connected_component(*, adjacency: dict[str, set[str]], fragment_ids: set[str]) -> list[str]:
-    visited: set[str] = set()
-    best_component: list[str] = []
-    for fragment_id in fragment_ids:
-        if fragment_id in visited:
-            continue
-        stack = [fragment_id]
-        component: list[str] = []
-        while stack:
-            current = stack.pop()
-            if current in visited:
-                continue
-            visited.add(current)
-            component.append(current)
-            stack.extend(neighbor for neighbor in adjacency.get(current, set()) if neighbor not in visited)
-        if len(component) > len(best_component):
-            best_component = component
-    return best_component

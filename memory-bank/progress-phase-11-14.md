@@ -50,7 +50,8 @@
 
 ### 当前实现位置
 
-- Vector adapter: [`backend/modules/shared/container.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/container.py)
+- Vector adapter: [`backend/modules/shared/infrastructure.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/infrastructure.py)
+- Container entry: [`backend/modules/shared/container.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/container.py)
 - Fragment query/use case: [`backend/modules/fragments/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/application.py)
 - Visualization: [`backend/modules/fragments/visualization.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/visualization.py)
 - Chroma provider: `backend/services/chroma_vector_db.py`
@@ -81,6 +82,7 @@
 ### 当前实现位置
 
 - Use case: [`backend/modules/scripts/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/application.py)
+- Selector rules: [`backend/modules/scripts/daily_push.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/daily_push.py)
 - Router: [`backend/modules/scripts/presentation.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/presentation.py)
 - Scheduler: [`backend/modules/scheduler/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scheduler/application.py)
 - App bootstrap: [`backend/main.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py)

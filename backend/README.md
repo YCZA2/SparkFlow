@@ -80,6 +80,8 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 6. `modules/shared` + `services`
    - 外部能力抽象与适配层。
    - 负责 LLM、STT、Embedding、VectorStore、AudioStorage、WorkflowProvider 等端口与实现。
+   - `modules/shared/container.py` 只负责 `ServiceContainer` 和默认依赖装配。
+   - `modules/shared/infrastructure.py` 集中放本地存储、向量存储适配、PromptLoader 和 provider 构造辅助。
    - `modules/shared/audio_ingestion.py` 提供统一媒体导入流水线步骤，供上传音频和外部链接导入复用。
    - `modules/shared/pipeline_runtime.py` 提供持久化后台流水线运行时、worker 抢占、重试与恢复。
 7. `modules/pipelines`
@@ -105,12 +107,20 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 - `modules/fragments/`: 碎片列表、详情、移动、标签、相似检索、可视化。
 - `modules/transcriptions/`: 音频上传、后台转写、转写状态查询。
 - `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接转 m4a，并直接创建碎片进入统一转写流程。
-- `modules/scripts/`: 口播稿生成、脚本生成 pipeline 定义、列表、详情、更新、删除、每日推盘。
+- `modules/scripts/`: 口播稿生成、脚本生成 pipeline 定义、上下文构建、结果回流、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
 - `modules/pipelines/`: 后台流水线详情、步骤和重跑 API。
 - `modules/debug_logs/`: 接收移动端调试日志，并通过结构化日志链路写入本地文件。
 - `modules/scheduler/`: APScheduler 装配与每日推盘调度入口。
 - `modules/shared/`: 模块共享端口、DI 容器、增强逻辑，不承载独立业务模块。
+
+当前 `modules/scripts/` 内部约定：
+
+- `application.py` 只保留查询、命令和每日推盘编排入口。
+- `pipeline.py` 只负责 `script_generation` 步骤定义与协调。
+- `context_builder.py` 负责脚本生成的输入校验和研究上下文构建。
+- `persistence.py` 负责 workflow 输出解析与脚本幂等落库。
+- `daily_push.py` 负责每日推盘的碎片拼接和相似度筛选规则。
 
 ### Persistence and providers
 

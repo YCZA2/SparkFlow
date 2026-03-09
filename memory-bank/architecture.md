@@ -118,7 +118,7 @@ flowchart TD
     MAIN["main.py<br/>app assembly + lifespan + routes"]
     PRE["modules/*/presentation.py<br/>FastAPI Router"]
     APP["modules/*/application.py<br/>use case / orchestration"]
-    SHARED["modules/shared/*<br/>container / ports / enrichment / audio_ingestion"]
+    SHARED["modules/shared/*<br/>container / infrastructure / ports / enrichment / audio_ingestion"]
     REPO["domains/*/repository.py<br/>SQLAlchemy access"]
     MODEL["models/*<br/>ORM + session factory"]
     PROVIDER["services/*<br/>provider adapters / factory"]
@@ -151,12 +151,21 @@ flowchart TD
 - 模块内 `schemas.py` 是后端 API contract 的单一事实源。
 - `presentation.py` 应显式声明 `response_model=ResponseModel[...]`，让 OpenAPI 可直接作为前后端并行开发的契约。
 - 删除接口统一返回 `200 + ResponseModel[None]`，成功时 `data` 为 `null`。
-- `backend/modules/shared/container.py`: DI 容器、`PromptLoader`、`AudioStorage`、`VectorStore`、`workflow_provider` 装配边界。
+- `backend/modules/shared/container.py`: DI 容器入口，只负责 `ServiceContainer`、默认依赖装配和 FastAPI 依赖读取。
+- `backend/modules/shared/infrastructure.py`: `PromptLoader`、本地音频存储、向量存储适配、默认空网页搜索与 workflow/provider 构造辅助。
 - `backend/modules/shared/ports.py`: LLM、STT、Embedding、Vector DB、音频存储、外挂工作流等端口抽象。
 - `backend/modules/shared/enrichment.py`: 摘要与标签增强逻辑。
 - `backend/modules/shared/audio_ingestion.py`: 统一音频碎片导入流水线步骤，负责媒体导入、转写、增强和向量化。
 - `backend/modules/shared/pipeline_runtime.py`: 持久化后台流水线运行时，负责步骤定义、worker 抢占、自动重试与恢复。
 - `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，而不是继续扩散到 legacy service 文件。
+
+当前 `scripts` 模块内部进一步拆分为：
+
+- `application.py`: 脚本查询、写操作与每日推盘编排入口。
+- `pipeline.py`: `script_generation` 流水线步骤定义与协调。
+- `context_builder.py`: fragment 校验、query 构造、knowledge/web hits 聚合。
+- `persistence.py`: workflow 输出解析、失败消息提取、脚本幂等落库。
+- `daily_push.py`: 每日推盘的碎片文本拼接与相似度筛选规则。
 
 ### 4.3 Backend Folder Map
 
@@ -185,7 +194,7 @@ flowchart TD
 - `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化。
 - `transcriptions`: 音频上传、后台转写、状态查询，上传入口会创建 `source=voice`、`audio_source=upload` 的碎片。
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接下载并转成 m4a，导入完成后直接创建 `source=voice`、`audio_source=external_link` 的碎片并接入同一条转写管线。
-- `scripts`: 合稿、脚本生成 pipeline 定义、列表、详情、更新、删除、每日推盘。
+- `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
 - `pipelines`: 后台流水线详情、步骤查询与手动重跑入口。
 - `backend/dify_dsl/`: 仓库内置的 Dify DSL 模板目录，当前提供 `sparkflow_script_generation.workflow.yml` 供导入。
@@ -451,11 +460,14 @@ sequenceDiagram
 - API client: [`mobile/features/core/api/client.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/core/api/client.ts)
 - Backend entry: [`backend/main.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py)
 - Service container: [`backend/modules/shared/container.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/container.py)
+- Shared infrastructure: [`backend/modules/shared/infrastructure.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/infrastructure.py)
 - Fragments module: [`backend/modules/fragments/presentation.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/presentation.py)
 - Fragment folders module: [`backend/modules/fragment_folders/presentation.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragment_folders/presentation.py)
 - Fragment visualization: [`backend/modules/fragments/visualization.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/visualization.py)
 - Transcriptions module: [`backend/modules/transcriptions/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/transcriptions/application.py)
-- Scripts module: [`backend/modules/scripts/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/application.py)
+- Scripts application: [`backend/modules/scripts/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/application.py)
+- Scripts pipeline: [`backend/modules/scripts/pipeline.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/pipeline.py)
+- Scripts context builder: [`backend/modules/scripts/context_builder.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/context_builder.py)
 - Knowledge module: [`backend/modules/knowledge/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/knowledge/application.py)
 - Scheduler module: [`backend/modules/scheduler/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scheduler/application.py)
 

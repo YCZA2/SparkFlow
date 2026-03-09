@@ -28,7 +28,7 @@ os.environ.setdefault("DATABASE_URL", os.environ.get("TEST_DATABASE_URL", DEFAUL
 from main import create_app
 from models import Base, User
 from modules.auth.application import TEST_USER_ID
-from modules.shared.container import LocalAudioStorage, LocalImportedAudioStorage, PromptLoader
+from modules.shared.infrastructure import LocalAudioStorage, LocalImportedAudioStorage, PromptLoader
 from tests.support import FakeExternalMediaProvider, FakeVectorStore, FakeWebSearchProvider, FakeWorkflowProvider
 
 
