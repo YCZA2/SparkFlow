@@ -3,12 +3,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from core import ResponseModel, settings, success_response
+from core import ResponseModel, success_response
 from core.auth import get_current_user
-from modules.agent.application import build_script_workflow_pipeline_service
 from modules.shared.container import ServiceContainer, get_container, get_db_session
 
 from .application import DailyPushUseCase, ScriptCommandService, ScriptGenerationUseCase, ScriptQueryService, map_script
+from .pipeline import build_script_generation_pipeline_service
 from .schemas import ScriptDetail, ScriptGenerationRequest, ScriptGenerationResponse, ScriptListResponse, ScriptUpdateRequest
 
 router = APIRouter(prefix="/api/scripts", tags=["scripts"], responses={401: {"description": "未认证"}})
@@ -17,9 +17,7 @@ router = APIRouter(prefix="/api/scripts", tags=["scripts"], responses={401: {"de
 def get_script_generation_use_case(container: ServiceContainer = Depends(get_container)) -> ScriptGenerationUseCase:
     """构建统一脚本生成用例。"""
     return ScriptGenerationUseCase(
-        llm_provider=container.llm_provider,
-        prompt_loader=container.prompt_loader,
-        workflow_use_case=build_script_workflow_pipeline_service(container),
+        pipeline_service=build_script_generation_pipeline_service(container),
     )
 
 
@@ -45,7 +43,14 @@ async def generate_script(
     db: Session = Depends(get_db_session),
     use_case: ScriptGenerationUseCase = Depends(get_script_generation_use_case),
 ):
-    payload = await use_case.generate_async(db=db, user_id=current_user["user_id"], fragment_ids=data.fragment_ids, mode=data.mode)
+    payload = await use_case.generate_async(
+        db=db,
+        user_id=current_user["user_id"],
+        fragment_ids=data.fragment_ids,
+        mode=data.mode,
+        query_hint=data.query_hint,
+        include_web_search=data.include_web_search,
+    )
     return success_response(data=payload, message="口播稿生成任务已创建")
 
 

@@ -15,9 +15,9 @@ from utils.time import get_app_timezone, get_local_day_bounds
 
 from domains.fragments import repository as fragment_repository
 from domains.scripts import repository as script_repository
-from modules.agent.application import ScriptWorkflowUseCase
 from modules.shared.container import PromptLoader
 from modules.shared.ports import TextGenerationProvider, VectorStore
+from .pipeline import ScriptGenerationPipelineService
 from .schemas import ScriptDetail, ScriptGenerationResponse, ScriptItem, ScriptListResponse
 
 VALID_SCRIPT_MODES = {"mode_a", "mode_b"}
@@ -52,50 +52,83 @@ class ScriptGenerationUseCase:
     def __init__(
         self,
         *,
-        llm_provider: TextGenerationProvider,
-        prompt_loader: PromptLoader,
-        workflow_use_case: ScriptWorkflowUseCase,
+        pipeline_service: ScriptGenerationPipelineService,
     ) -> None:
-        """装配统一的外挂工作流脚本生成依赖。"""
-        self.llm_provider = llm_provider
-        self.prompt_loader = prompt_loader
-        self.workflow_use_case = workflow_use_case
+        """装配脚本生成任务态依赖。"""
+        self.pipeline_service = pipeline_service
 
-    async def generate(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> Script:
-        """保留旧同步入口，内部仍统一走外挂工作流。"""
+    async def generate(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        fragment_ids: list[str],
+        mode: str,
+        query_hint: str | None = None,
+        include_web_search: bool = False,
+    ) -> Script:
+        """保留同步入口，但内部统一等待 pipeline 终态。"""
         if mode not in VALID_SCRIPT_MODES:
             raise ValidationError(message=f"无效的生成模式: {mode}", field_errors={"mode": "必须是 mode_a 或 mode_b"})
-        return await self._generate_with_workflow(db=db, user_id=user_id, fragment_ids=fragment_ids, mode=mode)
-
-    async def _generate_with_workflow(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> Script:
-        """通过外挂工作流生成并回流脚本。"""
-        run = await self.workflow_use_case.create_script_generation_run(
+        return await self._generate_with_pipeline(
             db=db,
             user_id=user_id,
             fragment_ids=fragment_ids,
             mode=mode,
+            query_hint=query_hint,
+            include_web_search=include_web_search,
         )
-        run = await self.workflow_use_case.wait_for_script(db=db, user_id=user_id, run_id=run.id)
-        if run.status != "succeeded" or not run.script_id:
+
+    async def _generate_with_pipeline(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        fragment_ids: list[str],
+        mode: str,
+        query_hint: str | None,
+        include_web_search: bool,
+    ) -> Script:
+        """通过脚本 pipeline 生成并读取回流脚本。"""
+        run = await self.pipeline_service.create_run(
+            db=db,
+            user_id=user_id,
+            fragment_ids=fragment_ids,
+            mode=mode,
+            query_hint=query_hint,
+            include_web_search=include_web_search,
+        )
+        run = await self.pipeline_service.wait_for_script(db=db, user_id=user_id, run_id=run.id)
+        if run.status != "succeeded" or run.resource_type != "script" or not run.resource_id:
             raise ValidationError(message=run.error_message or "生成失败", field_errors={"generation": "工作流执行失败"})
-        script = script_repository.get_by_id(db=db, user_id=user_id, script_id=run.script_id)
+        script = script_repository.get_by_id(db=db, user_id=user_id, script_id=run.resource_id)
         if not script:
-            raise NotFoundError(message="生成成功但脚本不存在", resource_type="script", resource_id=run.script_id)
+            raise NotFoundError(message="生成成功但脚本不存在", resource_type="script", resource_id=run.resource_id)
         return script
 
-    async def generate_async(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> ScriptGenerationResponse:
+    async def generate_async(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        fragment_ids: list[str],
+        mode: str,
+        query_hint: str | None,
+        include_web_search: bool,
+    ) -> ScriptGenerationResponse:
         """创建异步脚本生成流水线。"""
-        run = await self.workflow_use_case.create_script_generation_run(
+        run = await self.pipeline_service.create_run(
             db=db,
             user_id=user_id,
             fragment_ids=fragment_ids,
             mode=mode,
+            query_hint=query_hint,
+            include_web_search=include_web_search,
         )
         return ScriptGenerationResponse(
             pipeline_run_id=run.id,
             pipeline_type="script_generation",
             status=run.status,
-            script_id=run.script_id,
         )
 
 class ScriptQueryService:

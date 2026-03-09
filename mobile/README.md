@@ -165,6 +165,11 @@ http://192.168.31.157:8000
 3. 需要看步骤时，再查 `GET /api/pipelines/{run_id}/steps`
 4. 失败后可调用 `POST /api/pipelines/{run_id}/retry`
 
+当前补齐范围：
+
+- 脚本生成页已经按上述任务态接入，会在成功后再跳转脚本详情
+- 媒体上传和外链导入的客户端统一任务态展示仍属于后续阶段
+
 ### 1. 一打开 App 就红屏，出现 `8000/index.bundle`
 
 原因：Dev Client 把后端 `8000` 错当成了 Metro 地址。

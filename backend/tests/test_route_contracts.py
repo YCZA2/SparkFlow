@@ -19,9 +19,6 @@ def test_public_api_routes_are_stable() -> None:
         ("/api/auth/token", frozenset({"POST"})),
         ("/api/auth/me", frozenset({"GET"})),
         ("/api/auth/refresh", frozenset({"POST"})),
-        ("/api/agent/script-research-runs", frozenset({"POST"})),
-        ("/api/agent/runs/{run_id}", frozenset({"GET"})),
-        ("/api/agent/runs/{run_id}/refresh", frozenset({"POST"})),
         ("/api/external-media/audio-imports", frozenset({"POST"})),
         ("/api/fragment-folders", frozenset({"GET"})),
         ("/api/fragment-folders", frozenset({"POST"})),
@@ -67,8 +64,9 @@ def test_public_api_routes_are_stable() -> None:
         assert item in normalized_routes
 
 
-def test_legacy_transcribe_path_not_registered() -> None:
-    """历史遗留的转写路径不应再暴露。"""
+def test_legacy_paths_not_registered() -> None:
+    """历史遗留路径不应继续暴露。"""
     app = create_app()
     paths = {route.path for route in app.routes}
     assert "/api/transcribe" not in paths
+    assert not any(path.startswith("/api/agent") for path in paths)

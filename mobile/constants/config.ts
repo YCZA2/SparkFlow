@@ -51,6 +51,11 @@ export const API_ENDPOINTS = {
     FORCE_TRIGGER_DAILY_PUSH: '/api/scripts/daily-push/force-trigger',
     DETAIL: (id: string) => `/api/scripts/${id}`,
   },
+  PIPELINES: {
+    DETAIL: (id: string) => `/api/pipelines/${id}`,
+    STEPS: (id: string) => `/api/pipelines/${id}/steps`,
+    RETRY: (id: string) => `/api/pipelines/${id}/retry`,
+  },
   KNOWLEDGE: '/api/knowledge',
   FOLDERS: {
     LIST: '/api/fragment-folders',

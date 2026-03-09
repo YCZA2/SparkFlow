@@ -82,13 +82,10 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
    - 负责 LLM、STT、Embedding、VectorStore、AudioStorage、WorkflowProvider 等端口与实现。
    - `modules/shared/audio_ingestion.py` 提供统一媒体导入流水线步骤，供上传音频和外部链接导入复用。
    - `modules/shared/pipeline_runtime.py` 提供持久化后台流水线运行时、worker 抢占、重试与恢复。
-7. `modules/agent`
-   - 外挂工作流业务编排层。
-   - 负责脚本生成上下文准备、调用通用 `workflow_provider`、结果校验与兼容 `agent_runs` 投影。
-8. `modules/pipelines`
+7. `modules/pipelines`
    - 后台任务流水线层。
    - 负责 `pipeline_runs` / `pipeline_step_runs` 查询、步骤详情与手动重跑。
-9. `core/logging_config.py`
+8. `core/logging_config.py`
    - 结构化日志装配层。
    - 负责 `structlog` 配置、request-id 绑定，以及控制台输出和移动端调试日志文件输出。
 
@@ -108,9 +105,8 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 - `modules/fragments/`: 碎片列表、详情、移动、标签、相似检索、可视化。
 - `modules/transcriptions/`: 音频上传、后台转写、转写状态查询。
 - `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接转 m4a，并直接创建碎片进入统一转写流程。
-- `modules/scripts/`: 口播稿生成、列表、详情、更新、删除、每日推盘。
+- `modules/scripts/`: 口播稿生成、脚本生成 pipeline 定义、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
-- `modules/agent/`: 外挂工作流脚本编排和 run 状态管理。
 - `modules/pipelines/`: 后台流水线详情、步骤和重跑 API。
 - `modules/debug_logs/`: 接收移动端调试日志，并通过结构化日志链路写入本地文件。
 - `modules/scheduler/`: APScheduler 装配与每日推盘调度入口。
@@ -154,13 +150,10 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 
 当前仓库的前后端并行开发约定见 [`memory-bank/frontend-backend-collaboration.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/frontend-backend-collaboration.md)。如果接口字段、状态枚举或返回结构发生变化，后端需要在更新 `schemas.py` 的同时同步这份协作规范涉及的联调约定。
 
-Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `agent`, `pipelines`, `debug_logs`, and `scheduler`.
+Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `pipelines`, `debug_logs`, and `scheduler`.
 
 任务与工作流相关接口：
 
-- `POST /api/agent/script-research-runs`
-- `GET /api/agent/runs/{run_id}`
-- `POST /api/agent/runs/{run_id}/refresh`
 - `POST /api/scripts/generation`
 - `GET /api/pipelines/{run_id}`
 - `GET /api/pipelines/{run_id}/steps`
@@ -175,7 +168,7 @@ Current business modules include `auth`, `fragment_folders`, `fragments`, `trans
 - 当前 Dify adapter 会在适配层把 `selected_fragments`、`knowledge_hits`、`web_hits`、`user_context`、`generation_metadata` 序列化为 JSON 字符串，以兼容 Dify Start 节点
 - 外挂工作流 provider 只消费整理后的上下文并返回结构化输出
 - `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源
-- `agent_runs` 仅保留脚本生成链路的兼容查询与 Dify 句柄投影
+- `agent_runs` 与 `/api/agent/*` 已移除，脚本生成公开链路完全收口到 `scripts + pipelines`
 
 任务态客户端约定：
 
@@ -183,6 +176,7 @@ Current business modules include `auth`, `fragment_folders`, `fragments`, `trans
 - `POST /api/external-media/audio-imports` 返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
 - `POST /api/scripts/generation` 返回 `pipeline_run_id`、`pipeline_type`、`status`
 - 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`
+- 当前移动端已切脚本生成任务态；媒体上传和外链导入的客户端统一任务态展示仍作为后续阶段继续补齐
 
 当前仓库附带的 Dify DSL 目录：
 

@@ -18,7 +18,6 @@ from core.logging_config import configure_logging, get_logger
 from models import SessionLocal
 from modules.auth.application import AuthUseCase
 from modules.auth.presentation import router as auth_router
-from modules.agent.presentation import router as agent_router
 from modules.debug_logs.presentation import router as debug_logs_router
 from modules.external_media.presentation import router as external_media_router
 from modules.fragment_folders.presentation import router as fragment_folders_router
@@ -26,6 +25,7 @@ from modules.fragments.presentation import router as fragments_router
 from modules.knowledge.presentation import router as knowledge_router
 from modules.pipelines.presentation import router as pipelines_router
 from modules.scripts.application import DailyPushUseCase
+from modules.scripts.pipeline import build_script_generation_pipeline_service, PIPELINE_TYPE_SCRIPT_GENERATION
 from modules.scripts.presentation import router as scripts_router
 from modules.shared.audio_ingestion import build_media_ingestion_pipeline_service, PIPELINE_TYPE_MEDIA_INGESTION
 from modules.shared.container import ServiceContainer, build_container
@@ -38,7 +38,6 @@ from modules.shared.pipeline_runtime import (
 )
 from modules.transcriptions.presentation import router as transcriptions_router
 from modules.scheduler.application import SchedulerService, create_scheduler
-from modules.agent.application import build_script_workflow_pipeline_service, PIPELINE_TYPE_SCRIPT_GENERATION
 
 configure_logging()
 logger = get_logger(__name__)
@@ -198,7 +197,6 @@ def register_routes(app: FastAPI) -> None:
         return Response(status_code=200)
 
     app.include_router(auth_router)
-    app.include_router(agent_router)
     app.include_router(debug_logs_router)
     app.include_router(external_media_router)
     app.include_router(fragment_folders_router)
@@ -252,7 +250,7 @@ def _configure_pipeline_runtime(container: ServiceContainer) -> None:
     for definition in media_definitions:
         executor_registry.register(PIPELINE_TYPE_MEDIA_INGESTION, definition)
 
-    script_service = build_script_workflow_pipeline_service(container)
+    script_service = build_script_generation_pipeline_service(container)
     script_definitions = script_service.build_pipeline_definitions()
     definition_registry.register(PIPELINE_TYPE_SCRIPT_GENERATION, script_definitions)
     for definition in script_definitions:

@@ -36,6 +36,9 @@ export function useGenerateScreen(): GenerateScreenState {
   const [mode, setMode] = useState<ScriptMode>('mode_a');
   const generator = useGenerateScript();
 
+  /**
+   * 中文注释：提交脚本生成任务，并在 pipeline 成功后跳转详情页。
+   */
   const generate = useCallback(async () => {
     if (ids.length === 0) {
       Alert.alert('无法生成', '未接收到选中的碎片');
@@ -43,8 +46,8 @@ export function useGenerateScreen(): GenerateScreenState {
     }
 
     try {
-      const script = await generator.run(ids, mode);
-      router.replace(`/script/${script.id}`);
+      const scriptId = await generator.run(ids, mode);
+      router.replace(`/script/${scriptId}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : '生成失败';
       Alert.alert('生成失败', message);

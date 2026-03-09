@@ -87,13 +87,16 @@ def get_by_id(db: Session, *, user_id: str, run_id: str) -> PipelineRun | None:
 
 def get_by_id_for_update(db: Session, *, run_id: str) -> PipelineRun | None:
     """读取并锁定一条流水线。"""
-    return (
+    run = (
         db.query(PipelineRun)
-        .options(joinedload(PipelineRun.steps))
         .filter(PipelineRun.id == run_id)
         .with_for_update()
         .first()
     )
+    if run is not None:
+        # 中文注释：PostgreSQL 不允许在 nullable outer join 结果上直接 FOR UPDATE，步骤改为二次查询预加载。
+        run.steps  # noqa: B018
+    return run
 
 
 def list_steps(db: Session, *, run_id: str) -> list[PipelineStepRun]:

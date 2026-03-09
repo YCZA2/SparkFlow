@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
-import json
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 from uuid import uuid4
@@ -11,9 +10,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from core.logging_config import get_logger
 from domains.fragments import repository as fragment_repository
-from domains.agent_runs import repository as agent_run_repository
 from domains.pipelines import repository as pipeline_repository
-from models import AgentRun, Fragment, PipelineRun, PipelineStepRun
+from models import Fragment, PipelineRun, PipelineStepRun
 
 logger = get_logger(__name__)
 
@@ -384,39 +382,21 @@ class PipelineDispatcher:
             self.wake_up()
 
     def _update_compatibility_projection(self, *, db: Session, run_id: str) -> None:
-        """将流水线状态投影回旧业务实体状态字段。"""
+        """将流水线状态投影回仍保留的兼容业务字段。"""
         run = db.query(PipelineRun).filter(PipelineRun.id == run_id).first()
         if run is None:
             return
         if run.pipeline_type == "media_ingestion" and run.resource_type == "fragment" and run.resource_id:
             fragment = fragment_repository.get_by_id(db=db, user_id=run.user_id, fragment_id=run.resource_id)
             if fragment:
-                fragment.sync_status = {
+                projected_status = {
                     "queued": "syncing",
                     "running": "syncing",
                     "succeeded": "synced",
                     "failed": "failed",
-                }.get(run.status, fragment.sync_status)
-                db.commit()
-        if run.pipeline_type == "script_generation":
-            agent_run = db.query(AgentRun).filter(AgentRun.id == run.id, AgentRun.user_id == run.user_id).first()
-            if agent_run:
-                # 已提交到 Dify 后，pipeline 的 queued 语义代表等待下一次轮询，兼容态应继续视为 running。
-                projected_status = {
-                    "running": "running",
-                    "succeeded": "succeeded",
-                    "failed": "failed",
                 }.get(run.status)
-                if run.status == "queued":
-                    projected_status = "running" if agent_run.dify_run_id else "queued"
-                if projected_status is not None:
-                    agent_run.status = projected_status
-                    agent_run.error_message = run.error_message if projected_status == "failed" else None
-                output_payload = pipeline_repository.load_json(run.output_payload_json)
-                if output_payload:
-                    agent_run.result_payload_json = json.dumps(output_payload, ensure_ascii=False)
-                    if output_payload.get("script_id"):
-                        agent_run.script_id = output_payload["script_id"]
+                if projected_status and fragment.sync_status != "synced":
+                    fragment.sync_status = projected_status
                 db.commit()
 
 

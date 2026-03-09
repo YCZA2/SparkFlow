@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import AgentRun, Fragment, Script
+from models import Fragment, Script
 
 
 def list_by_user(db: Session, user_id: str, limit: int, offset: int) -> list[Script]:
@@ -61,8 +61,7 @@ def create(
 
 
 def delete(db: Session, script: Script) -> None:
-    """删除稿件前先解除工作流运行记录的外键引用。"""
-    db.query(AgentRun).filter(AgentRun.script_id == script.id).update({"script_id": None})
+    """删除指定稿件。"""
     db.delete(script)
     db.commit()
 

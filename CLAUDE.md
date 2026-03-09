@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-灵感编导 AI (Inspiration Director) - A mobile app for knowledge content creators that captures voice fragments, generates scripts via AI agents, and provides a teleprompter for recording.
+灵感编导 AI (Inspiration Director) - A mobile app for knowledge content creators that captures voice fragments, generates scripts via backend-managed pipeline workflows, and provides a teleprompter for recording.
 
 ## Tech Stack
 
@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | **Mobile** | Expo (React Native) + TypeScript + expo-router |
 | **Backend** | FastAPI (Python) + SQLAlchemy + Alembic + APScheduler + structlog + DB-backed pipeline worker |
 | **Database** | PostgreSQL (local default) + ChromaDB (vector DB for knowledge base) |
-| **External APIs** | DashScope/Qwen (LLM / STT / Embeddings), Dify (optional workflow) |
+| **External APIs** | DashScope/Qwen (LLM / STT / Embeddings), Workflow provider (current adapter: Dify) |
 
 ## Architecture
 
@@ -37,9 +37,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
         │
 ┌───────┼─────────────────────────────────────────┐
 │    外部 API                                      │
-│  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ LLM      │ │ Dify     │ │ Vector DB      │  │
-│  └──────────┘ └──────────┘ └────────────────┘  │
+│  ┌──────────┐ ┌──────────────────┐ ┌──────────┐  │
+│  │ LLM      │ │ Workflow Provider│ │ Vector DB│  │
+│  │          │ │ (current: Dify)  │ │          │  │
+│  └──────────┘ └──────────────────┘ └──────────┘  │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -68,12 +69,13 @@ backend/
 ├── main.py                 # FastAPI entry point
 ├── modules/                # Modular feature entrypoints
 │   ├── fragments/          # Fragment APIs and orchestration
-│   ├── scripts/            # AI script generation
+│   ├── scripts/            # Script generation and script pipeline definitions
 │   ├── pipelines/          # Persistent pipeline APIs
 │   ├── knowledge/          # Knowledge base APIs
 │   └── transcriptions/     # Voice upload and transcription
 ├── services/
 │   ├── factory.py          # Provider factory
+│   ├── dify_workflow_provider.py # Current workflow provider adapter
 │   ├── dashscope_stt.py    # Speech-to-text adapter
 │   ├── embedding_service.py# Embedding adapter
 │   └── external_media/     # External media providers
@@ -97,6 +99,9 @@ mobile/
 
 1. **Voice Capture** → Record voice → Receive `pipeline_run_id` → Poll task → Stored in fragment library
 2. **AI Script Generation** → Select multiple fragments → Receive `pipeline_run_id` → Poll task → Generate script
+   - Backend assembles structured context, then calls the workflow provider through a shared port
+   - Current provider adapter is Dify; script generation is publicly exposed through `/api/scripts/generation` + `/api/pipelines/{run_id}`
+   - Script domain no longer depends on any Dify-specific client code directly
    - Mode A: "导师爆款模式" - Forces golden structure (hook + pain point + value + CTA)
    - Mode B: "专属二脑模式" - Mimics user's writing style from knowledge base
 3. **Daily Auto-Aggregation** → If ≥3 related fragments recorded yesterday → AI generates script at 8 AM → Push notification
@@ -119,6 +124,7 @@ See `memory-bank/tech-stack.md` for full SQL schema.
 - **Minimal MVP**: No cloud video storage (saves to local photos only), pure native camera without filters
 - **PostgreSQL-default**: 本地开发默认使用 PostgreSQL，迁移和测试都与应用配置保持一致
 - **Task-source-of-truth**: `pipeline_runs` / `pipeline_step_runs` are the async workflow source of truth
+- **Workflow boundary**: backend keeps permissions, retrieval, context assembly, and output validation; workflow provider only handles remote execution
 - **Scheduler over Celery**: APScheduler sufficient for daily tasks; no Redis needed
 - **Vector DB per user**: Namespace isolation by `user_id` for knowledge base embeddings
 

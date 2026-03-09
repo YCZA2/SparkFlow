@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 
+import { waitForPipelineTerminal } from '@/features/pipelines/api';
 import {
   fetchDailyPush,
   fetchScripts,
@@ -14,16 +15,27 @@ export function useGenerateScript() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  const run = async (fragmentIds: string[], mode: ScriptMode) => {
+  /**
+   * 中文注释：创建脚本任务后轮询 pipeline，成功时返回最终脚本 ID。
+   */
+  const run = async (fragmentIds: string[], mode: ScriptMode): Promise<string> => {
     try {
       setStatus('loading');
       setError(null);
-      const script = await generateScript({
+      const task = await generateScript({
         fragment_ids: fragmentIds,
         mode,
       });
+      const pipeline = await waitForPipelineTerminal(task.pipeline_run_id);
+      const scriptId =
+        pipeline.status === 'succeeded' && pipeline.resource.resource_type === 'script'
+          ? pipeline.resource.resource_id
+          : null;
+      if (!scriptId) {
+        throw new Error(pipeline.error_message || '生成失败');
+      }
       setStatus('success');
-      return script;
+      return scriptId;
     } catch (err) {
       setStatus('error');
       setError(err instanceof Error ? err.message : '生成失败');
@@ -39,6 +51,9 @@ export function useGenerateScript() {
 }
 
 export function useScripts() {
+  /**
+   * 中文注释：拉取脚本列表并适配给通用异步列表状态。
+   */
   const loadScripts = useCallback(async (): Promise<Script[]> => {
     const response = await fetchScripts();
     return response.items || [];
@@ -52,6 +67,9 @@ export function useTodayDailyPush() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * 中文注释：重新加载今日推盘脚本。
+   */
   const reload = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -77,6 +95,9 @@ export function useDailyPushTrigger() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * 中文注释：触发一次今日推盘生成。
+   */
   const run = useCallback(async () => {
     try {
       setStatus('loading');
@@ -102,6 +123,9 @@ export function useForceDailyPushTrigger() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * 中文注释：强制触发今日推盘生成。
+   */
   const run = useCallback(async () => {
     try {
       setStatus('loading');

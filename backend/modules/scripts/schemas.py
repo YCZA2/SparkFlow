@@ -6,13 +6,14 @@ from pydantic import BaseModel, Field
 class ScriptGenerationRequest(BaseModel):
     fragment_ids: list[str] = Field(..., description="选中的碎片 ID 列表", min_length=1, max_length=20)
     mode: str = Field(..., description="生成模式：mode_a (导师爆款) 或 mode_b (专属二脑)")
+    query_hint: str | None = Field(None, description="可选的生成提示词或研究问题")
+    include_web_search: bool = Field(False, description="是否额外补充网页搜索结果")
 
 
 class ScriptGenerationResponse(BaseModel):
     pipeline_run_id: str
     pipeline_type: str
     status: str
-    script_id: str | None = None
 
 
 class ScriptUpdateRequest(BaseModel):
