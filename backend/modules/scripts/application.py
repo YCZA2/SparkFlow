@@ -56,19 +56,19 @@ class ScriptGenerationUseCase:
         prompt_loader: PromptLoader,
         workflow_use_case: ScriptWorkflowUseCase,
     ) -> None:
-        """装配统一的 Dify 脚本生成依赖。"""
+        """装配统一的外挂工作流脚本生成依赖。"""
         self.llm_provider = llm_provider
         self.prompt_loader = prompt_loader
         self.workflow_use_case = workflow_use_case
 
     async def generate(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> Script:
-        """保留旧同步入口，内部仍统一走 Dify 工作流。"""
+        """保留旧同步入口，内部仍统一走外挂工作流。"""
         if mode not in VALID_SCRIPT_MODES:
             raise ValidationError(message=f"无效的生成模式: {mode}", field_errors={"mode": "必须是 mode_a 或 mode_b"})
-        return await self._generate_with_dify(db=db, user_id=user_id, fragment_ids=fragment_ids, mode=mode)
+        return await self._generate_with_workflow(db=db, user_id=user_id, fragment_ids=fragment_ids, mode=mode)
 
-    async def _generate_with_dify(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> Script:
-        """通过 Dify 工作流生成并回流脚本。"""
+    async def _generate_with_workflow(self, *, db: Session, user_id: str, fragment_ids: list[str], mode: str) -> Script:
+        """通过外挂工作流生成并回流脚本。"""
         run = await self.workflow_use_case.create_script_generation_run(
             db=db,
             user_id=user_id,

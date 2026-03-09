@@ -15,7 +15,7 @@ flowchart LR
     DB[("PostgreSQL<br/>SQLAlchemy")]
     FS[("uploads/<user_id><br/>本地音频文件")]
     CHROMA[("ChromaDB<br/>fragments_* / knowledge_*")]
-    DIFY["Dify Workflow<br/>统一脚本生成编排"]
+    WFP["Workflow Provider<br/>当前为 Dify adapter"]
     STT["STT Provider<br/>DashScope / Aliyun"]
     LLM["LLM Provider<br/>Qwen"]
     EMB["Embedding Provider<br/>Qwen"]
@@ -28,7 +28,7 @@ flowchart LR
     API --> DB
     API --> FS
     API --> CHROMA
-    API --> DIFY
+    API --> WFP
     API --> STT
     API --> LLM
     API --> EMB
@@ -151,8 +151,8 @@ flowchart TD
 - 模块内 `schemas.py` 是后端 API contract 的单一事实源。
 - `presentation.py` 应显式声明 `response_model=ResponseModel[...]`，让 OpenAPI 可直接作为前后端并行开发的契约。
 - 删除接口统一返回 `200 + ResponseModel[None]`，成功时 `data` 为 `null`。
-- `backend/modules/shared/container.py`: DI 容器、`PromptLoader`、`AudioStorage`、`VectorStore` 适配器。
-- `backend/modules/shared/ports.py`: LLM、STT、Embedding、Vector DB、音频存储等端口抽象。
+- `backend/modules/shared/container.py`: DI 容器、`PromptLoader`、`AudioStorage`、`VectorStore`、`workflow_provider` 装配边界。
+- `backend/modules/shared/ports.py`: LLM、STT、Embedding、Vector DB、音频存储、外挂工作流等端口抽象。
 - `backend/modules/shared/enrichment.py`: 摘要与标签增强逻辑。
 - `backend/modules/shared/audio_ingestion.py`: 统一音频碎片导入流水线步骤，负责媒体导入、转写、增强和向量化。
 - `backend/modules/shared/pipeline_runtime.py`: 持久化后台流水线运行时，负责步骤定义、worker 抢占、自动重试与恢复。
@@ -186,7 +186,7 @@ flowchart TD
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接下载并转成 m4a，导入完成后直接创建 `source=voice`、`audio_source=external_link` 的碎片并接入同一条转写管线。
 - `scripts`: 合稿、列表、详情、更新、删除、每日推盘。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
-- `agent`: Dify 统一脚本工作流入口、run 状态查询与 refresh。
+- `agent`: 外挂工作流脚本编排入口、run 状态查询与 refresh；继续负责上下文准备、结果校验与 `agent_runs` 兼容投影。
 - `pipelines`: 后台流水线详情、步骤查询与手动重跑入口。
 - `backend/dify_dsl/`: 仓库内置的 Dify DSL 模板目录，当前提供 `sparkflow_script_generation.workflow.yml` 供导入。
 - `debug_logs`: 移动端调试日志接收，并复用结构化日志链路落盘。
@@ -208,7 +208,7 @@ flowchart TD
 - STT: 默认 `DashScope`，保留 Aliyun 兼容实现。
 - Embedding: 默认 `Qwen text-embedding-v2`。
 - Vector DB: 默认 `ChromaDB`。
-- Agent Workflow: 可选 `Dify`，由后端通过 HTTP API 调用。
+- Agent Workflow: 当前通过通用 `workflow_provider` 端口接入，默认实现为 `DifyWorkflowProvider`。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 本地文件系统 `backend/uploads/<user_id>/`。
 - Database: PostgreSQL（本地开发默认）。
@@ -295,7 +295,7 @@ sequenceDiagram
 - 当前接口会在保存外部音频后直接创建 fragment，并接入统一后台转写链路。
 - 对外接口按多平台抽象设计，但 v1 只有抖音 provider。
 - 导入文件统一保存到 `uploads/external_media/<user_id>/<platform>/`，输出格式固定为 `m4a`。
-### 5.3 Dify Script Research Workflow
+### 5.3 Workflow Provider Script Research Workflow
 
 ```mermaid
 sequenceDiagram
@@ -304,19 +304,19 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant VDB as VectorStore
     participant WEB as WebSearchProvider
-    participant DIFY as Dify Workflow
+    participant WFP as Workflow Provider
     participant SCRIPT as scripts repository
 
     App->>API: POST fragment_ids + mode + query_hint
     API->>DB: 校验碎片权限并创建 agent_runs(queued)
     API->>VDB: query_knowledge_docs(...)
     API->>WEB: optional search(...)
-    API->>DIFY: submit workflow run
-    DIFY-->>API: dify_run_id
+    API->>WFP: submit workflow run
+    WFP-->>API: provider_run_id
     API->>DB: 更新 agent_runs(running)
     App->>API: POST /api/agent/runs/{run_id}/refresh
-    API->>DIFY: get workflow run
-    DIFY-->>API: outputs(title/outline/draft/...)
+    API->>WFP: get workflow run
+    WFP-->>API: outputs(title/outline/draft/...)
     API->>SCRIPT: create script(content=draft)
     API->>DB: 更新 agent_runs(succeeded, script_id, result_payload_json)
     API-->>App: script_id + latest status
@@ -324,10 +324,10 @@ sequenceDiagram
 
 关键点：
 
-- Dify 只负责外挂生成步骤，不直接访问 PostgreSQL、ChromaDB 或业务表。
+- 外挂工作流 provider 只负责远程执行步骤，不直接访问 PostgreSQL、ChromaDB 或业务表。
 - fragments、knowledge hits 和可选 web hits 都由 SparkFlow 后端先收集。
-- 后端提交给 Dify 前，会将 `selected_fragments`、`knowledge_hits`、`web_hits`、`user_context`、`generation_metadata` 序列化为 JSON 字符串，以兼容 Dify Start 节点。
-- `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源；`agent_runs` 仅保留兼容查询与 Dify 投影。
+- SparkFlow 后端向 provider 传递结构化上下文；当前 Dify adapter 会在适配层把复杂字段序列化为 JSON 字符串，以兼容 Dify Start 节点。
+- `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源；`agent_runs` 仅保留兼容查询与 Dify 句柄投影。
 - 仓库内置的 DSL 模板位于 `backend/dify_dsl/sparkflow_script_generation.workflow.yml`，可直接导入本地 Dify。
 
 ### 5.4 Script Generation
@@ -338,15 +338,15 @@ sequenceDiagram
     participant API as /api/scripts/generation
     participant DB as PostgreSQL
     participant AGENT as ScriptWorkflowUseCase
-    participant DIFY as Dify Workflow
+    participant WFP as Workflow Provider
     participant SCRIPT as scripts repository
 
     App->>API: fragment_ids + mode
     API->>AGENT: create_script_generation_run(...)
     AGENT->>DB: create agent_runs(queued/running)
-    AGENT->>DIFY: submit workflow run
-    AGENT->>DIFY: poll workflow status
-    DIFY-->>AGENT: outputs(title/outline/draft/...)
+    AGENT->>WFP: submit workflow run
+    AGENT->>WFP: poll workflow status
+    WFP-->>AGENT: outputs(title/outline/draft/...)
     AGENT->>SCRIPT: create script(content=draft)
     AGENT->>DB: update agent_runs(succeeded, script_id)
     API-->>App: script detail
@@ -355,9 +355,9 @@ sequenceDiagram
 关键点：
 
 - 当前支持 `mode_a` 和 `mode_b`。
-- `POST /api/scripts/generation` 已统一走 Dify 工作流，不再直接调用本地 PromptLoader + Qwen 生成脚本。
-- 真实本地联调已经验证：Dify 输出 `draft` 后，SparkFlow 后端会回流创建 `scripts` 记录。
-- `mode_a` / `mode_b` 目前共享同一条 Dify 工作流，由工作流内部根据 `mode` 分支处理。
+- `POST /api/scripts/generation` 已统一走外挂工作流 provider，不再直接调用本地 PromptLoader + Qwen 生成脚本。
+- 真实本地联调已经验证：当前 Dify adapter 输出 `draft` 后，SparkFlow 后端会回流创建 `scripts` 记录。
+- `mode_a` / `mode_b` 目前共享同一条 Dify 工作流，但脚本域只依赖通用 provider 端口。
 
 ### 5.5 Fragment Visualization
 

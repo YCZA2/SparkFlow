@@ -18,7 +18,7 @@ Default local address: `http://127.0.0.1:8000`
 
 本地联调默认测试账号 `test-user-001` 会在应用启动和 `POST /api/auth/token` 时自动补齐到数据库，避免切库后出现外键错误。
 
-如果启用 Dify 统一脚本生成工作流，还需要配置：
+如果启用当前默认的 Dify workflow provider adapter，还需要配置：
 
 ```bash
 DIFY_BASE_URL=https://your-dify.example.com/v1
@@ -79,12 +79,12 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
    - 负责数据库连接、Session、表模型。
 6. `modules/shared` + `services`
    - 外部能力抽象与适配层。
-   - 负责 LLM、STT、Embedding、VectorStore、AudioStorage 等端口与实现。
+   - 负责 LLM、STT、Embedding、VectorStore、AudioStorage、WorkflowProvider 等端口与实现。
    - `modules/shared/audio_ingestion.py` 提供统一媒体导入流水线步骤，供上传音频和外部链接导入复用。
    - `modules/shared/pipeline_runtime.py` 提供持久化后台流水线运行时、worker 抢占、重试与恢复。
 7. `modules/agent`
-   - Dify 工作流业务编排层。
-   - 负责脚本生成上下文准备、Dify 步骤执行与兼容 `agent_runs` 投影。
+   - 外挂工作流业务编排层。
+   - 负责脚本生成上下文准备、调用通用 `workflow_provider`、结果校验与兼容 `agent_runs` 投影。
 8. `modules/pipelines`
    - 后台任务流水线层。
    - 负责 `pipeline_runs` / `pipeline_step_runs` 查询、步骤详情与手动重跑。
@@ -110,7 +110,7 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 - `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接转 m4a，并直接创建碎片进入统一转写流程。
 - `modules/scripts/`: 口播稿生成、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
-- `modules/agent/`: Dify 统一脚本工作流和 run 状态管理。
+- `modules/agent/`: 外挂工作流脚本编排和 run 状态管理。
 - `modules/pipelines/`: 后台流水线详情、步骤和重跑 API。
 - `modules/debug_logs/`: 接收移动端调试日志，并通过结构化日志链路写入本地文件。
 - `modules/scheduler/`: APScheduler 装配与每日推盘调度入口。
@@ -120,7 +120,7 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 
 - `domains/`: 各业务领域仓储，按聚合拆分 repository。
 - `models/`: SQLAlchemy ORM 模型和数据库 session 工厂。
-- `services/`: 外部 provider 适配器与工厂，主要是 LLM / STT / Embedding 集成。
+- `services/`: 外部 provider 适配器与工厂，当前包含 LLM / STT / Embedding 和 `DifyWorkflowProvider`。
 - `prompts/`: Prompt 模板文件。
 
 ### Runtime data and maintenance
@@ -171,8 +171,9 @@ Current business modules include `auth`, `fragment_folders`, `fragments`, `trans
 - `POST /api/transcriptions` / `POST /api/external-media/audio-imports` / `POST /api/scripts/generation` 现在都会先创建 `pipeline_runs`
 - `GET /api/pipelines/{run_id}` / `GET /api/pipelines/{run_id}/steps` / `POST /api/pipelines/{run_id}/retry` 提供统一后台任务观察与补偿入口
 - SparkFlow 后端先收集 fragments、knowledge hits 和可选 web hits
-- SparkFlow 后端会在提交给 Dify 前，把 `selected_fragments`、`knowledge_hits`、`web_hits`、`user_context`、`generation_metadata` 序列化为 JSON 字符串，以兼容 Dify Start 节点
-- Dify 只消费整理后的上下文并生成结构化输出
+- SparkFlow 后端先把这些内容组装为结构化上下文，再交给通用 `workflow_provider`
+- 当前 Dify adapter 会在适配层把 `selected_fragments`、`knowledge_hits`、`web_hits`、`user_context`、`generation_metadata` 序列化为 JSON 字符串，以兼容 Dify Start 节点
+- 外挂工作流 provider 只消费整理后的上下文并返回结构化输出
 - `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源
 - `agent_runs` 仅保留脚本生成链路的兼容查询与 Dify 句柄投影
 

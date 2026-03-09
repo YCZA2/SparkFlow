@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modules.shared.ports import ExternalMediaResolvedAudio, WebSearchResult
+from modules.shared.ports import ExternalMediaResolvedAudio, WebSearchResult, WorkflowProviderRun, WorkflowRunStatus
 
 
 class FakeVectorStore:
@@ -96,3 +96,59 @@ class FakeWebSearchProvider:
     async def search(self, *, query_text: str, top_k: int):
         self.calls.append(query_text)
         return [WebSearchResult(title="A", url="https://example.com", snippet="snippet")][:top_k]
+
+
+class FakeWorkflowProvider:
+    """提供可观察调用参数的外挂工作流 provider 替身。"""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+        self.next_status: WorkflowRunStatus = "succeeded"
+        self.next_draft = "生成后的口播稿"
+        self.next_error_message = "workflow failed"
+        self.provider_run_id = "provider-run-default"
+        self.provider_workflow_id = "wf-script-001"
+        self.last_submitted_run_id: str | None = None
+
+    async def submit_run(self, *, inputs, user_id: str) -> WorkflowProviderRun:
+        """记录提交入参，并返回统一运行结构。"""
+        self.calls.append({"type": "submit", "inputs": inputs, "user_id": user_id})
+        self.last_submitted_run_id = self.provider_run_id
+        return WorkflowProviderRun(
+            run_id=self.provider_run_id,
+            status="running",
+            outputs={},
+            raw_payload={"id": self.provider_run_id, "workflow_id": self.provider_workflow_id, "status": "running", "outputs": {}},
+            provider_run_id=self.provider_run_id,
+            provider_workflow_id=self.provider_workflow_id,
+        )
+
+    async def get_run(self, *, run_id: str) -> WorkflowProviderRun:
+        """按测试状态返回运行查询结果。"""
+        # 中文注释：强制测试使用 submit 返回的远端 run_id，避免轮询链路被假阳性掩盖。
+        assert run_id == self.last_submitted_run_id, f"unexpected provider run id: {run_id}"
+        self.calls.append({"type": "get", "run_id": run_id})
+        outputs = {
+            "title": "一条新脚本",
+            "outline": "提纲",
+            "draft": self.next_draft,
+            "used_sources": [],
+            "review_notes": "已检查",
+            "model_metadata": {"provider": "fake"},
+        }
+        raw_payload = {"id": run_id, "workflow_id": self.provider_workflow_id, "status": self.next_status, "outputs": outputs}
+        if self.next_status == "failed":
+            raw_payload["error"] = self.next_error_message
+            outputs = {}
+        return WorkflowProviderRun(
+            run_id=run_id,
+            status=self.next_status,
+            outputs=outputs,
+            raw_payload=raw_payload,
+            provider_run_id=run_id,
+            provider_workflow_id=self.provider_workflow_id,
+        )
+
+    async def aclose(self) -> None:
+        """测试替身无需执行额外清理。"""
+        return None

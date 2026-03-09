@@ -70,7 +70,7 @@ def create_app() -> FastAPI:
             scheduler_service.stop()
             if container.pipeline_dispatcher:
                 await container.pipeline_dispatcher.stop()
-            await container.dify_http_client.aclose()
+            await container.workflow_provider.aclose()
 
     app = FastAPI(
         title=settings.APP_NAME,

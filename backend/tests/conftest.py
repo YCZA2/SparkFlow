@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -31,7 +29,7 @@ from main import create_app
 from models import Base, User
 from modules.auth.application import TEST_USER_ID
 from modules.shared.container import LocalAudioStorage, LocalImportedAudioStorage, PromptLoader
-from tests.support import FakeExternalMediaProvider, FakeVectorStore, FakeWebSearchProvider
+from tests.support import FakeExternalMediaProvider, FakeVectorStore, FakeWebSearchProvider, FakeWorkflowProvider
 
 
 @pytest.fixture(scope="session")
@@ -102,39 +100,9 @@ def stt_provider():
 
 
 @pytest.fixture
-def dify_http_client() -> httpx.AsyncClient:
-    """提供默认不会出网的 Dify HTTP 客户端。"""
-    state = {"next_status": "succeeded", "draft": "生成后的口播稿"}
-
-    def _handle_request(request: httpx.Request) -> httpx.Response:
-        if request.method == "POST" and request.url.path.endswith("/workflows/run"):
-            payload = json.loads(request.content.decode("utf-8"))
-            assert isinstance(payload["inputs"]["selected_fragments"], str)
-            assert isinstance(payload["inputs"]["knowledge_hits"], str)
-            assert isinstance(payload["inputs"]["web_hits"], str)
-            return httpx.Response(
-                200,
-                json={"data": {"id": "dify-run-default", "workflow_id": "wf-script-001", "status": "running", "outputs": {}}},
-            )
-        if request.method == "GET" and request.url.path.endswith("/workflows/run/dify-run-default"):
-            status = state["next_status"]
-            outputs = {
-                "title": "一条新脚本",
-                "outline": "提纲",
-                "draft": state["draft"],
-                "used_sources": [],
-                "review_notes": "已检查",
-                "model_metadata": {"provider": "dify"},
-            }
-            return httpx.Response(
-                200,
-                json={"data": {"id": "dify-run-default", "workflow_id": "wf-script-001", "status": status, "outputs": outputs}},
-            )
-        raise AssertionError(f"Unexpected Dify request: {request.method} {request.url}")
-
-    client = httpx.AsyncClient(transport=httpx.MockTransport(_handle_request))
-    client.test_state = state  # type: ignore[attr-defined]
-    return client
+def workflow_provider() -> FakeWorkflowProvider:
+    """提供默认不会出网的外挂工作流 provider。"""
+    return FakeWorkflowProvider()
 
 
 @pytest_asyncio.fixture
@@ -146,7 +114,7 @@ async def app(
     web_search_provider,
     llm_provider,
     stt_provider,
-    dify_http_client,
+    workflow_provider,
 ):
     """创建挂载测试依赖的 FastAPI 应用。"""
     test_app = create_app()
@@ -159,12 +127,12 @@ async def app(
     test_app.state.container.prompt_loader = PromptLoader(Path(__file__).resolve().parents[1] / "prompts")
     test_app.state.container.llm_provider = llm_provider
     test_app.state.container.stt_provider = stt_provider
-    test_app.state.container.dify_http_client = dify_http_client
+    test_app.state.container.workflow_provider = workflow_provider
     yield test_app
     test_app.state.scheduler_service.stop()
     if test_app.state.container.pipeline_dispatcher:
         await test_app.state.container.pipeline_dispatcher.stop()
-    await test_app.state.container.dify_http_client.aclose()
+    await test_app.state.container.workflow_provider.aclose()
 
 
 @pytest_asyncio.fixture

@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import json
-
-import httpx
 import pytest
 
 from core.auth import create_access_token
 from models import AgentRun, Script
-from tests.support import FakeWebSearchProvider
+from tests.support import FakeWebSearchProvider, FakeWorkflowProvider
 
 
 @pytest.fixture
@@ -19,42 +16,11 @@ def web_search_provider() -> FakeWebSearchProvider:
 
 
 @pytest.fixture
-def dify_http_client():
-    """提供可控的 Dify MockTransport 客户端。"""
-    state = {"next_status": "succeeded", "submitted_runs": []}
-
-    def _handle_request(request: httpx.Request) -> httpx.Response:
-        if request.method == "POST" and request.url.path.endswith("/workflows/run"):
-            payload = json.loads(request.content.decode("utf-8"))
-            assert "selected_fragments" in payload["inputs"]
-            assert isinstance(payload["inputs"]["selected_fragments"], str)
-            assert isinstance(payload["inputs"]["knowledge_hits"], str)
-            assert isinstance(payload["inputs"]["web_hits"], str)
-            assert isinstance(payload["inputs"]["generation_metadata"], str)
-            selected_fragments = json.loads(payload["inputs"]["selected_fragments"])
-            assert isinstance(selected_fragments, list)
-            assert selected_fragments
-            assert selected_fragments[0]["transcript"]
-            run_id = "dify-run-001"
-            state["submitted_runs"].append(run_id)
-            return httpx.Response(200, json={"data": {"id": run_id, "workflow_id": "wf-script-001", "status": "running", "outputs": {}}})
-        if request.method == "GET" and request.url.path.endswith("/workflows/run/dify-run-001"):
-            status = state["next_status"]
-            outputs = {
-                "title": "一条新脚本",
-                "outline": "提纲",
-                "draft": "这是 Dify 生成的口播稿",
-                "used_sources": [{"type": "knowledge", "title": "定位文档"}],
-                "review_notes": "已自检",
-            }
-            if status == "failed":
-                return httpx.Response(200, json={"data": {"id": "dify-run-001", "workflow_id": "wf-script-001", "status": status, "error": "workflow failed", "outputs": {}}})
-            return httpx.Response(200, json={"data": {"id": "dify-run-001", "workflow_id": "wf-script-001", "status": status, "outputs": outputs}})
-        raise AssertionError(f"Unexpected request: {request.method} {request.url}")
-
-    client = httpx.AsyncClient(transport=httpx.MockTransport(_handle_request))
-    client.test_state = state  # type: ignore[attr-defined]
-    return client
+def workflow_provider() -> FakeWorkflowProvider:
+    """提供可观察结构化上下文的 provider 替身。"""
+    provider = FakeWorkflowProvider()
+    provider.next_draft = "这是 Dify 生成的口播稿"
+    return provider
 
 
 async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
@@ -85,7 +51,7 @@ async def _create_knowledge_doc(async_client, auth_headers_factory, *, title: st
 
 
 @pytest.mark.asyncio
-async def test_create_run_and_refresh_to_script(async_client, auth_headers_factory, app, db_session_factory, web_search_provider) -> None:
+async def test_create_run_and_refresh_to_script(async_client, auth_headers_factory, app, db_session_factory, web_search_provider, workflow_provider) -> None:
     """工作流刷新成功后应回流生成脚本记录。"""
     fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于定位的一条碎片")
     knowledge_doc_id = await _create_knowledge_doc(async_client, auth_headers_factory, title="定位文档", content="关于定位的经验")
@@ -107,6 +73,14 @@ async def test_create_run_and_refresh_to_script(async_client, auth_headers_facto
     assert payload["script_id"]
     assert payload["result"]["draft"] == "这是 Dify 生成的口播稿"
     assert len(web_search_provider.calls) == 1
+    submit_call = next(call for call in workflow_provider.calls if call["type"] == "submit")
+    inputs = submit_call["inputs"]
+    assert isinstance(inputs["selected_fragments"], list)
+    assert inputs["selected_fragments"][0]["transcript"] == "关于定位的一条碎片"
+    assert isinstance(inputs["knowledge_hits"], list)
+    assert inputs["knowledge_hits"][0]["title"] == "定位文档"
+    assert isinstance(inputs["web_hits"], list)
+    assert inputs["query_hint"] == "写一篇关于定位的口播稿"
 
     with db_session_factory() as db:
         run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
@@ -118,7 +92,7 @@ async def test_create_run_and_refresh_to_script(async_client, auth_headers_facto
 
 
 @pytest.mark.asyncio
-async def test_refresh_failed_run_returns_error(async_client, auth_headers_factory, app, dify_http_client) -> None:
+async def test_refresh_failed_run_returns_error(async_client, auth_headers_factory, app, workflow_provider) -> None:
     """工作流失败时应返回失败状态和错误信息。"""
     fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于选题的一条碎片")
     create_response = await async_client.post(
@@ -128,7 +102,7 @@ async def test_refresh_failed_run_returns_error(async_client, auth_headers_facto
     )
     run_id = create_response.json()["data"]["id"]
 
-    dify_http_client.test_state["next_status"] = "failed"  # type: ignore[attr-defined]
+    workflow_provider.next_status = "failed"
     refresh_response = await async_client.post(f"/api/agent/runs/{run_id}/refresh", headers=await _auth_headers(async_client, auth_headers_factory))
     assert refresh_response.status_code == 200
     assert refresh_response.json()["data"]["status"] == "failed"
@@ -136,7 +110,7 @@ async def test_refresh_failed_run_returns_error(async_client, auth_headers_facto
 
 
 @pytest.mark.asyncio
-async def test_create_run_can_remain_running(async_client, auth_headers_factory, app, dify_http_client) -> None:
+async def test_create_run_can_remain_running(async_client, auth_headers_factory, app, workflow_provider) -> None:
     """工作流未完成时应继续保持 running。"""
     fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于持续轮询的一条碎片")
     create_response = await async_client.post(
@@ -146,7 +120,7 @@ async def test_create_run_can_remain_running(async_client, auth_headers_factory,
     )
     run_id = create_response.json()["data"]["id"]
 
-    dify_http_client.test_state["next_status"] = "running"  # type: ignore[attr-defined]
+    workflow_provider.next_status = "running"
     refresh_response = await async_client.post(f"/api/agent/runs/{run_id}/refresh", headers=await _auth_headers(async_client, auth_headers_factory))
     assert refresh_response.status_code == 200
     assert refresh_response.json()["data"]["status"] == "running"

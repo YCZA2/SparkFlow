@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Protocol
+from typing import Any, Literal, Optional, Protocol
 
 from fastapi import UploadFile
+
+from core.exceptions import ServiceUnavailableError, ValidationError
 
 
 class SpeechToTextProvider(Protocol):
@@ -116,3 +118,51 @@ class WebSearchResult:
 
 class WebSearchProvider(Protocol):
     async def search(self, *, query_text: str, top_k: int) -> list[WebSearchResult]: ...
+
+
+WorkflowRunStatus = Literal["queued", "running", "succeeded", "failed"]
+
+
+@dataclass
+class WorkflowProviderRun:
+    run_id: str
+    status: WorkflowRunStatus
+    outputs: dict[str, Any]
+    raw_payload: dict[str, Any]
+    provider_run_id: str | None = None
+    provider_workflow_id: str | None = None
+
+
+class WorkflowProviderRequestError(ValidationError):
+    """标记外挂工作流请求参数或调用方式错误。"""
+
+    def __init__(self, *, provider_name: str, message: str, field_errors: Optional[dict[str, str]] = None) -> None:
+        # 中文注释：对外仍复用 422 语义，便于业务层按请求错误处理。
+        super().__init__(message=message, field_errors=field_errors or {provider_name: message})
+
+
+class WorkflowProviderUpstreamError(ServiceUnavailableError):
+    """标记外挂工作流上游服务失败。"""
+
+    def __init__(self, *, provider_name: str, message: str) -> None:
+        super().__init__(message=message, service_name=provider_name)
+
+
+class WorkflowProviderTimeoutError(ServiceUnavailableError):
+    """标记外挂工作流请求超时或暂时不可用。"""
+
+    def __init__(self, *, provider_name: str, message: str) -> None:
+        super().__init__(message=message, service_name=provider_name)
+
+
+class WorkflowProviderInvalidResponseError(ServiceUnavailableError):
+    """标记外挂工作流返回了无效结构。"""
+
+    def __init__(self, *, provider_name: str, message: str) -> None:
+        super().__init__(message=message, service_name=provider_name)
+
+
+class WorkflowProvider(Protocol):
+    async def submit_run(self, *, inputs: dict[str, Any], user_id: str) -> WorkflowProviderRun: ...
+    async def get_run(self, *, run_id: str) -> WorkflowProviderRun: ...
+    async def aclose(self) -> None: ...

@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import BackgroundTasks, Request, UploadFile
-from httpx import AsyncClient, Timeout
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.config import Settings, settings
 from core.exceptions import ServiceUnavailableError, ValidationError
 from models.database import SessionLocal
+from services.dify_workflow_provider import DifyWorkflowProvider
 from services.base import VectorDocument
 from services.factory import (
     create_embedding_service,
@@ -33,6 +33,7 @@ from .ports import (
     VectorStore,
     WebSearchProvider,
     WebSearchResult,
+    WorkflowProvider,
 )
 
 FRAGMENT_NAMESPACE_PREFIX = "fragments"
@@ -335,7 +336,7 @@ class ServiceContainer:
     external_media_provider: ExternalMediaProvider
     prompt_loader: PromptLoader
     web_search_provider: WebSearchProvider
-    dify_http_client: AsyncClient
+    workflow_provider: WorkflowProvider
     pipeline_runner: Any | None = None
     pipeline_dispatcher: Any | None = None
     pipeline_recovery_service: Any | None = None
@@ -358,7 +359,10 @@ def build_container() -> ServiceContainer:
         external_media_provider=ExternalMediaService(),
         prompt_loader=PromptLoader(Path(__file__).resolve().parents[2] / "prompts"),
         web_search_provider=EmptyWebSearchProvider(),
-        dify_http_client=AsyncClient(timeout=Timeout(connect=10.0, read=60.0, write=60.0, pool=60.0)),
+        workflow_provider=DifyWorkflowProvider(
+            base_url=settings.DIFY_BASE_URL,
+            api_key=settings.DIFY_API_KEY,
+        ),
     )
 
 

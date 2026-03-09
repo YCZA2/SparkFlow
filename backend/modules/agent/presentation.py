@@ -31,7 +31,7 @@ def get_script_workflow_use_case(
     status_code=status.HTTP_201_CREATED,
     response_model=ResponseModel[AgentRunDetail],
     summary="创建脚本研究工作流运行",
-    description="基于选中的碎片与知识上下文，向 Dify 发起一次外挂脚本研究工作流。",
+    description="基于选中的碎片与知识上下文，向外挂工作流 provider 发起一次脚本研究任务。",
 )
 async def create_script_research_run(
     data: ScriptResearchRunCreateRequest,
@@ -69,7 +69,7 @@ async def get_agent_run(
     "/runs/{run_id}/refresh",
     response_model=ResponseModel[AgentRunDetail],
     summary="刷新工作流运行状态",
-    description="主动向 Dify 查询最新执行状态，并在成功后创建本地口播稿。",
+    description="主动向外挂工作流 provider 查询最新执行状态，并在成功后创建本地口播稿。",
 )
 async def refresh_agent_run(
     run_id: str,

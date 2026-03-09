@@ -513,10 +513,10 @@ async def test_generate_script_mode_b_uses_same_dify_flow(async_client, auth_hea
 
 
 @pytest.mark.asyncio
-async def test_generate_script_fails_when_dify_output_has_no_draft(async_client, auth_headers_factory, app) -> None:
-    """Dify 缺少 draft 时应按失败处理。"""
+async def test_generate_script_fails_when_workflow_output_has_no_draft(async_client, auth_headers_factory, app) -> None:
+    """外挂工作流缺少 draft 时应按失败处理。"""
     fragment_id = (await _create_fragment(async_client, auth_headers_factory, {"transcript": "一条缺稿测试碎片", "source": "manual"}))["id"]
-    app.state.container.dify_http_client.test_state["draft"] = ""  # type: ignore[attr-defined]
+    app.state.container.workflow_provider.next_draft = ""  # type: ignore[attr-defined]
 
     response = await async_client.post(
         "/api/scripts/generation",
