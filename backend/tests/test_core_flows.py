@@ -13,7 +13,8 @@ import pytest
 
 from core.exceptions import AppException, ValidationError
 from domains.fragment_tags import repository as fragment_tag_repository
-from models import Fragment, FragmentFolder, FragmentTag, KnowledgeDoc
+from models import Fragment, FragmentFolder, FragmentTag, KnowledgeDoc, User
+from main import ensure_local_test_user
 from modules.auth.application import TEST_USER_ID
 from modules.shared.ports import ExternalMediaResolvedAudio
 
@@ -126,6 +127,38 @@ async def test_auth_token_me_and_refresh(async_client, auth_headers_factory) -> 
     refreshed = refresh_response.json()["data"]
     assert refreshed["token_type"] == "bearer"
     assert refreshed["access_token"]
+
+
+@pytest.mark.asyncio
+async def test_auth_token_recreates_missing_test_user(async_client, db_session_factory) -> None:
+    """签发测试令牌时应自动补齐缺失的测试用户。"""
+    with db_session_factory() as db:
+        db.query(User).filter(User.id == TEST_USER_ID).delete()
+        db.commit()
+
+    token_response = await async_client.post("/api/auth/token", json={})
+    assert token_response.status_code == 200
+
+    with db_session_factory() as db:
+        test_user = db.query(User).filter(User.id == TEST_USER_ID).first()
+        assert test_user is not None
+        assert test_user.nickname == "测试博主"
+        assert test_user.role == "user"
+
+
+def test_startup_hook_recreates_missing_test_user(db_session_factory, monkeypatch) -> None:
+    """启动阶段应补齐测试用户，兼容旧 token 直接恢复场景。"""
+    with db_session_factory() as db:
+        db.query(User).filter(User.id == TEST_USER_ID).delete()
+        db.commit()
+
+    monkeypatch.setattr("main.SessionLocal", db_session_factory)
+    ensure_local_test_user()
+
+    with db_session_factory() as db:
+        test_user = db.query(User).filter(User.id == TEST_USER_ID).first()
+        assert test_user is not None
+        assert test_user.nickname == "测试博主"
 
 
 @pytest.mark.asyncio

@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import inspect
 import structlog
 
 from core import settings, AppException, success_response
@@ -14,6 +15,8 @@ from core.exceptions import (
     AuthenticationError,
 )
 from core.logging_config import configure_logging, get_logger
+from models import SessionLocal
+from modules.auth.application import AuthUseCase
 from modules.auth.presentation import router as auth_router
 from modules.agent.presentation import router as agent_router
 from modules.debug_logs.presentation import router as debug_logs_router
@@ -30,6 +33,15 @@ from modules.scheduler.application import SchedulerService, create_scheduler
 configure_logging()
 logger = get_logger(__name__)
 
+
+def ensure_local_test_user() -> None:
+    """在本地启动阶段补齐默认测试用户，避免联调请求触发外键错误。"""
+    with SessionLocal() as db:
+        if not inspect(db.bind).has_table("users"):
+            return
+        AuthUseCase().ensure_test_user(db=db)
+
+
 def create_app() -> FastAPI:
     """创建并装配 FastAPI 应用实例。"""
     container = build_container()
@@ -37,6 +49,7 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        ensure_local_test_user()
         scheduler_service.start()
         try:
             yield

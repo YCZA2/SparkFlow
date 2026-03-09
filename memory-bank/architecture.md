@@ -175,6 +175,7 @@ flowchart TD
 ### 4.4 Backend Modules
 
 - `auth`: 测试 token 签发、当前用户信息、refresh。
+- 本地联调会确保默认测试用户 `test-user-001` 在数据库中存在，避免恢复旧 token 时触发用户外键错误。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
 - `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化。
 - `transcriptions`: 音频上传、后台转写、状态查询，上传入口会创建 `source=voice`、`audio_source=upload` 的碎片。

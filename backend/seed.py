@@ -8,12 +8,7 @@ import sys
 from sqlalchemy.orm import Session
 
 from models import SessionLocal, User
-
-
-# 测试用户配置
-TEST_USER_ID = "test-user-001"
-TEST_USER_NICKNAME = "测试博主"
-TEST_USER_ROLE = "user"
+from modules.auth.application import AuthUseCase
 
 
 def create_test_user(db: Session) -> User:
@@ -26,23 +21,8 @@ def create_test_user(db: Session) -> User:
     Returns:
         User: 测试用户对象（新建或已存在）
     """
-    # 检查是否已存在
-    existing_user = db.query(User).filter(User.id == TEST_USER_ID).first()
-    if existing_user:
-        print(f"✓ 测试用户已存在: {TEST_USER_ID} ({existing_user.nickname})")
-        return existing_user
-
-    # 创建新用户
-    test_user = User(
-        id=TEST_USER_ID,
-        nickname=TEST_USER_NICKNAME,
-        role=TEST_USER_ROLE,
-    )
-    db.add(test_user)
-    db.commit()
-    db.refresh(test_user)
-
-    print(f"✓ 测试用户创建成功: {TEST_USER_ID} ({TEST_USER_NICKNAME})")
+    test_user = AuthUseCase().ensure_test_user(db=db)
+    print(f"✓ 测试用户已就绪: {test_user.id} ({test_user.nickname})")
     return test_user
 
 

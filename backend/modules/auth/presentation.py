@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 from core import ResponseModel, success_response
 from core.auth import get_current_user
+from modules.shared.container import get_db_session
 
 from .application import AuthUseCase
 from .schemas import CurrentUserResponse, TokenPayload, TokenRequest
@@ -17,8 +19,11 @@ use_case = AuthUseCase()
     summary="签发测试令牌",
     description="为本地开发和联调场景签发测试用户令牌。",
 )
-async def create_token(_: TokenRequest | None = None):
-    return success_response(data=use_case.issue_test_token(), message="测试用户令牌创建成功")
+async def create_token(
+    _: TokenRequest | None = None,
+    db: Session = Depends(get_db_session),
+):
+    return success_response(data=use_case.issue_test_token(db=db), message="测试用户令牌创建成功")
 
 
 @router.get(

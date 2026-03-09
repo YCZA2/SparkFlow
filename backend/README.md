@@ -16,6 +16,8 @@ uvicorn main:app --reload
 
 Default local address: `http://127.0.0.1:8000`
 
+本地联调默认测试账号 `test-user-001` 会在应用启动和 `POST /api/auth/token` 时自动补齐到数据库，避免切库后出现外键错误。
+
 如果启用 Dify 外挂工作流，还需要配置：
 
 ```bash
