@@ -153,7 +153,7 @@ class ScriptGenerationContextBuilder:
                 {
                     "doc_id": doc.id,
                     "title": doc.title,
-                    "content": doc.body_markdown or doc.content,
+                    "body_markdown": doc.body_markdown,
                     "doc_type": doc.doc_type,
                     "score": float(item.get("score") or 0.0),
                 }

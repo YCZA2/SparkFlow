@@ -37,8 +37,7 @@ def get_by_id(db: Session, user_id: str, script_id: str) -> Optional[Script]:
 def create(
     db: Session,
     user_id: str,
-    content: str,
-    body_markdown: str | None,
+    body_markdown: str,
     mode: str,
     source_fragment_ids: str,
     *,
@@ -49,7 +48,6 @@ def create(
     script = Script(
         user_id=user_id,
         title=title,
-        content=content,
         body_markdown=body_markdown,
         mode=mode,
         source_fragment_ids=source_fragment_ids,
@@ -82,7 +80,6 @@ def update(
         script.title = title
     if body_markdown is not None:
         script.body_markdown = body_markdown
-        script.content = body_markdown
     db.commit()
     db.refresh(script)
     return script

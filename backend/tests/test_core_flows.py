@@ -761,7 +761,7 @@ async def test_knowledge_doc_create_upload_list_get_search_and_delete(async_clie
     """知识库文档应支持创建、上传、查询和删除。"""
     create_response = await async_client.post(
         "/api/knowledge",
-        json={"title": "高赞案例", "content": "定位方法论与爆款选题", "doc_type": "high_likes"},
+        json={"title": "高赞案例", "body_markdown": "定位方法论与爆款选题", "doc_type": "high_likes"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     doc_id = create_response.json()["data"]["id"]

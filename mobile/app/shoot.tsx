@@ -25,9 +25,9 @@ const FALLBACK_TEXT =
 export default function ShootScreen() {
   const router = useRouter();
   const theme = useAppTheme();
-  const { script_id, content } = useLocalSearchParams<{
+  const { script_id, body_markdown } = useLocalSearchParams<{
     script_id?: string;
-    content?: string;
+    body_markdown?: string;
   }>();
   const [permission, requestPermission] = useCameraPermissions();
   const recorder = useVideoRecorder(script_id);
@@ -100,7 +100,7 @@ export default function ShootScreen() {
         mirror={recorder.facing === 'front'}
       >
         <View style={styles.teleprompterWrapper}>
-          <TeleprompterOverlay text={content?.trim() ? content : FALLBACK_TEXT} />
+          <TeleprompterOverlay text={body_markdown?.trim() ? body_markdown : FALLBACK_TEXT} />
         </View>
 
         <View style={styles.topControls}>

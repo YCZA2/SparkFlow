@@ -118,7 +118,6 @@ class DailyPushPersistenceService:
         script = script_repository.create(
             db=db,
             user_id=run.user_id,
-            content=draft,
             body_markdown=draft,
             mode="mode_a",
             source_fragment_ids=json.dumps(input_payload["fragment_ids"], ensure_ascii=False),

@@ -188,6 +188,12 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 
 Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `media_assets`, `exports`, `pipelines`, `debug_logs`, and `scheduler`.
 
+内容字段约定：
+
+- `scripts` 对外接口只暴露 `body_markdown` 作为正文。
+- `scripts` 数据库层也只保留 `body_markdown`，不再保留历史 `content` 镜像列。
+- `knowledge` 对外接口只接收和返回 `body_markdown`；数据库中的 `content` 仅保留为 Markdown 派生的纯文本索引载荷。
+
 文件存储相关配置：
 
 ```bash

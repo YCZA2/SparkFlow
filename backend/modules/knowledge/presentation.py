@@ -27,7 +27,7 @@ def get_knowledge_use_case(container: ServiceContainer = Depends(get_container))
     "",
     response_model=ResponseModel[KnowledgeDocItem],
     summary="创建知识库文档",
-    description="通过标题、内容和文档类型直接创建一条知识库文档。",
+    description="通过标题、Markdown 正文和文档类型直接创建一条知识库文档。",
 )
 async def create_knowledge_doc(
     data: KnowledgeDocCreateRequest,
@@ -39,7 +39,6 @@ async def create_knowledge_doc(
         db=db,
         user_id=current_user["user_id"],
         title=data.title,
-        content=data.content,
         body_markdown=data.body_markdown,
         doc_type=data.doc_type,
     )
@@ -65,7 +64,6 @@ async def upload_knowledge_doc(
         db=db,
         user_id=current_user["user_id"],
         title=title,
-        content=content,
         body_markdown=content,
         doc_type=doc_type,
     )

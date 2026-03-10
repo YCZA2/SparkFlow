@@ -197,8 +197,8 @@ flowchart TD
 - `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；内容层已新增 `capture_text + fragment_blocks`。
 - `transcriptions`: 音频上传、后台转写、状态查询，上传入口会创建 `source=voice`、`audio_source=upload` 的碎片。
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接下载并转成 m4a，导入完成后直接创建 `source=voice`、`audio_source=external_link` 的碎片并接入同一条转写管线。
-- `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文已统一到 `body_markdown`。
-- `knowledge`: 文档创建、上传、列表、搜索、详情、删除；正文已统一到 `body_markdown`。
+- `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_markdown`。
+- `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段只保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷。
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
 - `exports`: 单条 Markdown 导出与批量 zip 导出。
 - `pipelines`: 后台流水线详情、步骤查询与手动重跑入口。
@@ -334,7 +334,7 @@ sequenceDiagram
     PIPE->>WFP: submit workflow run
     PIPE->>WFP: poll workflow run
     WFP-->>PIPE: outputs(title/outline/draft/...)
-    PIPE->>SCRIPT: create script(content=draft)
+    PIPE->>SCRIPT: create script(body_markdown=draft)
     PIPE->>DB: mark pipeline succeeded + resource(script_id)
     App->>API: GET /api/pipelines/{run_id}
     API-->>App: script_id + latest status

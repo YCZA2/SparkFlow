@@ -27,11 +27,11 @@ async def _create_fragment(async_client, auth_headers_factory, transcript: str) 
     return response.json()["data"]["id"]
 
 
-async def _create_knowledge_doc(async_client, auth_headers_factory, *, title: str, content: str) -> str:
+async def _create_knowledge_doc(async_client, auth_headers_factory, *, title: str, body_markdown: str) -> str:
     """创建知识库文档并返回其 ID。"""
     response = await async_client.post(
         "/api/knowledge",
-        json={"title": title, "content": content, "doc_type": "high_likes"},
+        json={"title": title, "body_markdown": body_markdown, "doc_type": "high_likes"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 200
@@ -75,7 +75,7 @@ async def test_script_generation_pipeline_collects_context_and_persists_script(
 ) -> None:
     """脚本生成应把结构化上下文传给 provider，并在成功后暴露 script 资源。"""
     fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于定位的一条碎片")
-    knowledge_doc_id = await _create_knowledge_doc(async_client, auth_headers_factory, title="定位文档", content="关于定位的经验")
+    knowledge_doc_id = await _create_knowledge_doc(async_client, auth_headers_factory, title="定位文档", body_markdown="关于定位的经验")
     app.state.container.vector_store.knowledge_results = [{"doc_id": knowledge_doc_id, "score": 0.91}]
 
     create_response = await async_client.post(
@@ -102,7 +102,7 @@ async def test_script_generation_pipeline_collects_context_and_persists_script(
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert detail_response.status_code == 200
-    assert detail_response.json()["data"]["content"] == "这是 pipeline 生成的口播稿"
+    assert detail_response.json()["data"]["body_markdown"] == "这是 pipeline 生成的口播稿"
 
     assert len(web_search_provider.calls) == 1
     inputs = workflow_provider.last_submitted_inputs()

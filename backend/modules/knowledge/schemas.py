@@ -5,8 +5,7 @@ from pydantic import BaseModel, Field
 
 class KnowledgeDocCreateRequest(BaseModel):
     title: str = Field(..., description="文档标题")
-    content: str = Field(..., description="文档内容")
-    body_markdown: str | None = Field(None, description="Markdown 正文")
+    body_markdown: str = Field(..., description="Markdown 正文")
     doc_type: str = Field(..., description="文档类型：high_likes 或 language_habit")
 
 
@@ -23,7 +22,6 @@ class KnowledgeSearchRequest(BaseModel):
 class KnowledgeDocItem(BaseModel):
     id: str
     title: str
-    content: str
     body_markdown: str | None = None
     doc_type: str
     vector_ref_id: str | None = None

@@ -49,7 +49,6 @@ class ScriptGenerationPersistenceService:
         script = script_repository.create(
             db=db,
             user_id=run.user_id,
-            content=draft,
             body_markdown=draft,
             mode=input_payload["mode"],
             source_fragment_ids=json.dumps(input_payload["fragment_ids"], ensure_ascii=False),

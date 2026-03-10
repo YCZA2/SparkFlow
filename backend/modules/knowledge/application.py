@@ -22,8 +22,7 @@ def map_knowledge_doc(doc: KnowledgeDoc) -> KnowledgeDocItem:
     return KnowledgeDocItem(
         id=doc.id,
         title=doc.title,
-        content=doc.content,
-        body_markdown=doc.body_markdown or doc.content,
+        body_markdown=doc.body_markdown,
         doc_type=doc.doc_type,
         vector_ref_id=doc.vector_ref_id,
         created_at=format_iso_datetime(doc.created_at),
@@ -67,14 +66,14 @@ class KnowledgeUseCase:
         db: Session,
         user_id: str,
         title: str,
-        content: str,
-        body_markdown: str | None,
+        body_markdown: str,
         doc_type: str,
     ) -> KnowledgeDoc:
+        """创建知识库文档并同步写入向量索引。"""
         if doc_type not in VALID_DOC_TYPES:
             raise ValidationError(message="文档类型无效", field_errors={"doc_type": f"必须是以下之一: {', '.join(sorted(VALID_DOC_TYPES))}"})
-        normalized_markdown = (body_markdown or content).strip()
-        plain_text = extract_plain_text(normalized_markdown) or content.strip()
+        normalized_markdown = body_markdown.strip()
+        plain_text = extract_plain_text(normalized_markdown) or normalized_markdown
         doc = knowledge_repository.create(
             db=db,
             user_id=user_id,
@@ -101,7 +100,7 @@ class KnowledgeUseCase:
     async def update_doc(self, *, db: Session, user_id: str, doc_id: str, title: str | None, body_markdown: str | None) -> KnowledgeDoc:
         """更新知识库文档正文并刷新向量索引。"""
         doc = self.get_doc(db=db, user_id=user_id, doc_id=doc_id)
-        normalized_markdown = body_markdown.strip() if body_markdown is not None else (doc.body_markdown or doc.content)
+        normalized_markdown = body_markdown.strip() if body_markdown is not None else (doc.body_markdown or "")
         plain_text = extract_plain_text(normalized_markdown) or doc.content
         updated = knowledge_repository.update(
             db=db,

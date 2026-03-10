@@ -176,8 +176,7 @@ class Script(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=True)
-    content = Column(Text, nullable=True)  # 成稿内容
-    body_markdown = Column(Text, nullable=True)  # Markdown 正文
+    body_markdown = Column(Text, nullable=False)  # Markdown 正文
     mode = Column(String, nullable=False)  # 'mode_a' | 'mode_b'
     source_fragment_ids = Column(String, nullable=True)  # JSON数组字符串，关联碎片ID
     status = Column(String, default="draft", nullable=False)  # 'draft'|'ready'|'filmed'
@@ -202,8 +201,8 @@ class KnowledgeDoc(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=False)
-    content = Column(Text, nullable=False)
-    body_markdown = Column(Text, nullable=True)  # Markdown 正文
+    content = Column(Text, nullable=False)  # 由 Markdown 派生的纯文本索引载荷
+    body_markdown = Column(Text, nullable=False)  # Markdown 正文
     doc_type = Column(String, nullable=False)  # 'high_likes'|'language_habit'
     vector_ref_id = Column(String, nullable=True)  # 向量库中的引用ID，格式：docs_{user_id}:{doc_id}
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)

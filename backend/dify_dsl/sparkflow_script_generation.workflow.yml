@@ -227,7 +227,7 @@ workflow:
                         f"- title: {item.get('title', '')}",
                         f"  doc_type: {item.get('doc_type', '')}",
                         f"  score: {item.get('score', '')}",
-                        f"  content: {item.get('content', '')}",
+                        f"  body_markdown: {item.get('body_markdown', '')}",
                     ]
                 )
 

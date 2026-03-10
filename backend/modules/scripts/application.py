@@ -23,8 +23,7 @@ def map_script(script: Script) -> ScriptDetail:
     return ScriptDetail(
         id=script.id,
         title=script.title,
-        content=script.content,
-        body_markdown=script.body_markdown or script.content,
+        body_markdown=script.body_markdown,
         mode=script.mode,
         source_fragment_ids=source_fragment_ids,
         source_fragment_count=len(source_fragment_ids),

@@ -64,7 +64,7 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
   const theme = useAppTheme();
 
   // 显示标题或内容前50字
-  const displayTitle = script.title || script.content?.slice(0, 50) || '无标题口播稿';
+  const displayTitle = script.title || script.body_markdown?.slice(0, 50) || '无标题口播稿';
   const modeLabel = getModeLabel(script.mode);
   const statusLabel = getStatusLabel(script.status);
   const statusColor =

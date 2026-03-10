@@ -58,7 +58,7 @@ class MarkdownExportUseCase:
             "created_at": payload.created_at,
             "source_fragment_ids": payload.source_fragment_ids,
         }
-        body = self._append_media_section(payload.body_markdown or payload.content or "", media_assets)
+        body = self._append_media_section(payload.body_markdown or "", media_assets)
         filename = f"script-{sanitize_export_stem(payload.title or payload.id, fallback=payload.id)}.md"
         return MarkdownExportFile(filename=filename, content=render_markdown_document(metadata=metadata, body_markdown=body)), self._asset_files(media_assets, db=db, user_id=user_id, content_type="script", content_id=script_id)
 
@@ -75,7 +75,7 @@ class MarkdownExportUseCase:
             "doc_type": doc.doc_type,
             "created_at": doc.created_at.isoformat() if doc.created_at else None,
         }
-        body = self._append_media_section(doc.body_markdown or doc.content or "", media_assets)
+        body = self._append_media_section(doc.body_markdown or "", media_assets)
         filename = f"knowledge-{sanitize_export_stem(doc.title, fallback=doc.id)}.md"
         return MarkdownExportFile(filename=filename, content=render_markdown_document(metadata=metadata, body_markdown=body)), self._asset_files(media_assets, db=db, user_id=user_id, content_type="knowledge", content_id=doc.id)
 

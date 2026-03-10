@@ -33,7 +33,6 @@ class ScriptItem(BaseModel):
 
 
 class ScriptDetail(ScriptItem):
-    content: str | None = None
     body_markdown: str | None = None
     source_fragment_ids: list[str] = Field(default_factory=list)
 
