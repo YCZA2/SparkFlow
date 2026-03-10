@@ -76,6 +76,50 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 1. LLM 节点模型是否已经切到你在 Dify 中真实可用的 provider / model
 2. 导入后的应用 API Key 和 workflow 标识是否已经回填到后端 `.env`
 
+当前脚本生成 workflow 的输入约定已经收敛为少量文本字段：
+
+- `mode`
+- `query_hint`
+- `fragments_text`
+- `knowledge_context`
+- `web_context`
+
+其中提示词模板本身保留在 Dify workflow 内部，SparkFlow 后端只负责把碎片和检索结果整理成可读文本，不再把大段 JSON 上下文直接塞给 Start 节点。
+
+当前推荐把脚本生成 Dify app 的标识也持久化到后端环境变量：
+
+- `DIFY_SCRIPT_APP_ID`
+
+这样导入脚本在后续再次执行时会默认原地更新同一个 Dify app，而不是新建一份同名副本。
+
+如果想把“导入 DSL + 读取 workflow id + 创建/复用 app API key + 回填 `backend/.env`”串起来，可以直接运行：
+
+```bash
+cd backend
+.venv/bin/python scripts/import_dify_workflow.py \
+  --console-email your-email@example.com \
+  --console-password 'your-password'
+```
+
+脚本默认会：
+
+- 导入 `backend/dify_dsl/sparkflow_script_generation.workflow.yml`
+- 调用 Dify `console/api` 导入应用；若存在 `DIFY_SCRIPT_APP_ID`，则优先更新该 app
+- 读取应用详情中的 `workflow.id`
+- 复用已有 app API key，没有则自动创建
+- 把 `DIFY_BASE_URL`、`DIFY_SCRIPT_APP_ID`、`DIFY_API_KEY`、`DIFY_SCRIPT_WORKFLOW_ID` 写回 `backend/.env`
+
+脚本后续默认会优先读取 `DIFY_SCRIPT_APP_ID`，因此同一套配置下再次执行时会优先原地更新现有 Dify app，而不是新建。
+
+如果你已经手里有 console token，也可以改用：
+
+```bash
+cd backend
+.venv/bin/python scripts/import_dify_workflow.py \
+  --console-access-token <token> \
+  --console-csrf-token <csrf-token>
+```
+
 当前 Dify adapter 的运行方式：
 
 1. `submit_run` 使用 Dify streaming 首包建单，只拿 `workflow_run_id` / `task_id`
@@ -242,7 +286,7 @@ bash scripts/postgres-local.sh stop
 - `POST /api/external-media/audio-imports` 不再同步解析或下载媒体；`resolve_external_media` / `download_media` 也属于 `media_ingestion` pipeline 步骤
 - SparkFlow 后端先收集 fragments、knowledge hits 和可选 web hits
 - SparkFlow 后端先把这些内容组装为结构化上下文，再交给通用 `workflow_provider`
-- 当前 Dify adapter 会在适配层把 `selected_fragments`、`knowledge_hits`、`web_hits`、`user_context`、`generation_metadata` 序列化为 JSON 字符串，以兼容 Dify Start 节点
+- 当前脚本生成 workflow 只接收 `mode`、`query_hint`、`fragments_text`、`knowledge_context`、`web_context` 五个字段
 - Dify 提交阶段只会拿到 `workflow_run_id` / `task_id`，最终 `draft` 等结果统一在后续轮询步骤获取
 - 外挂工作流 provider 只消费整理后的上下文并返回结构化输出
 - `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源

@@ -80,6 +80,10 @@ class Settings(BaseSettings):
         default=None,
         description="Dify API 基础地址，例如 https://dify.example.com/v1"
     )
+    DIFY_SCRIPT_APP_ID: Optional[str] = Field(
+        default=None,
+        description="脚本生成工作流所属的 Dify 应用标识，用于后续原地更新"
+    )
     DIFY_API_KEY: Optional[str] = Field(
         default=None,
         description="Dify 应用 API Key"

@@ -62,7 +62,7 @@ async def test_submit_run_success_reads_streaming_started_event() -> None:
     )
 
     result = await provider.submit_run(
-        inputs={"mode": "mode_a", "selected_fragments": [{"id": "f1"}], "query_hint": None},
+        inputs={"mode": "mode_a", "fragments_text": "碎片正文", "query_hint": None},
         user_id="u1",
     )
 
@@ -71,7 +71,7 @@ async def test_submit_run_success_reads_streaming_started_event() -> None:
     assert stream_call["url"] == "https://dify.example.com/v1/workflows/run"
     payload = stream_call["kwargs"]["json"]
     assert payload["response_mode"] == "streaming"
-    assert payload["inputs"]["selected_fragments"] == '[{"id": "f1"}]'
+    assert payload["inputs"]["fragments_text"] == "碎片正文"
     assert payload["inputs"]["query_hint"] == ""
     assert result.run_id == "run-1"
     assert result.status == "running"

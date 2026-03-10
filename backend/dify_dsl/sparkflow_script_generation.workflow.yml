@@ -1,5 +1,5 @@
 app:
-  description: "SparkFlow 口播稿生成工作流。输入灵感碎片、知识库命中和可选网页搜索结果，输出结构化的脚本结果。"
+  description: "SparkFlow 口播稿生成工作流。输入精简后的碎片素材和参考上下文，输出结构化的脚本结果。"
   icon: "🧠"
   icon_background: "#FFEAD5"
   mode: "workflow"
@@ -110,7 +110,7 @@ workflow:
         data:
           type: "start"
           title: "开始"
-          desc: "接收 SparkFlow 后端整理后的脚本生成上下文。"
+          desc: "接收 SparkFlow 后端整理后的精简脚本生成上下文。"
           variables:
             - label: "模式"
               variable: "mode"
@@ -124,32 +124,20 @@ workflow:
               required: false
               max_length: 2000
               options: []
-            - label: "碎片 JSON"
-              variable: "selected_fragments"
+            - label: "碎片素材"
+              variable: "fragments_text"
               type: "paragraph"
               required: true
               max_length: 120000
               options: []
-            - label: "知识库命中 JSON"
-              variable: "knowledge_hits"
+            - label: "知识库参考"
+              variable: "knowledge_context"
               type: "paragraph"
               required: false
               max_length: 120000
               options: []
-            - label: "网页搜索命中 JSON"
-              variable: "web_hits"
-              type: "paragraph"
-              required: false
-              max_length: 120000
-              options: []
-            - label: "用户上下文 JSON"
-              variable: "user_context"
-              type: "paragraph"
-              required: false
-              max_length: 120000
-              options: []
-            - label: "生成元信息 JSON"
-              variable: "generation_metadata"
+            - label: "网页参考"
+              variable: "web_context"
               type: "paragraph"
               required: false
               max_length: 120000
@@ -170,95 +158,16 @@ workflow:
         data:
           type: "code"
           title: "整理上下文"
-          desc: "把后端输入统一转换成 LLM 可消费的提示词。"
+          desc: "把精简输入拼装为 LLM 可消费的提示词。"
           code_language: "python3"
           code: |
-            import json
-
-            def _normalize_to_list(value):
-                if value is None:
-                    return []
-                if isinstance(value, list):
-                    return value
-                if isinstance(value, str):
-                    text = value.strip()
-                    if not text:
-                        return []
-                    try:
-                        loaded = json.loads(text)
-                        return loaded if isinstance(loaded, list) else []
-                    except Exception:
-                        return []
-                return []
-
-            def _normalize_to_object(value):
-                if value is None:
-                    return {}
-                if isinstance(value, dict):
-                    return value
-                if isinstance(value, str):
-                    text = value.strip()
-                    if not text:
-                        return {}
-                    try:
-                        loaded = json.loads(text)
-                        return loaded if isinstance(loaded, dict) else {}
-                    except Exception:
-                        return {}
-                return {}
-
-            def _fragment_block(item):
-                tags = item.get("tags") or []
-                tags_text = ", ".join(str(tag) for tag in tags if str(tag).strip()) if isinstance(tags, list) else ""
-                return "\n".join(
-                    [
-                        f"- id: {item.get('id', '')}",
-                        f"  summary: {item.get('summary', '')}",
-                        f"  transcript: {item.get('transcript', '')}",
-                        f"  tags: {tags_text}",
-                        f"  source: {item.get('source', '')}",
-                        f"  created_at: {item.get('created_at', '')}",
-                    ]
-                )
-
-            def _knowledge_block(item):
-                return "\n".join(
-                    [
-                        f"- title: {item.get('title', '')}",
-                        f"  doc_type: {item.get('doc_type', '')}",
-                        f"  score: {item.get('score', '')}",
-                        f"  body_markdown: {item.get('body_markdown', '')}",
-                    ]
-                )
-
-            def _web_block(item):
-                return "\n".join(
-                    [
-                        f"- title: {item.get('title', '')}",
-                        f"  url: {item.get('url', '')}",
-                        f"  snippet: {item.get('snippet', '')}",
-                    ]
-                )
-
             def main(
                 mode: str,
                 query_hint: str = "",
-                selected_fragments: str = "[]",
-                knowledge_hits: str = "[]",
-                web_hits: str = "[]",
-                user_context: str = "{}",
-                generation_metadata: str = "{}",
+                fragments_text: str = "",
+                knowledge_context: str = "",
+                web_context: str = "",
             ) -> dict:
-                fragments = _normalize_to_list(selected_fragments)
-                knowledge = _normalize_to_list(knowledge_hits)
-                web = _normalize_to_list(web_hits)
-                user_ctx = _normalize_to_object(user_context)
-                metadata = _normalize_to_object(generation_metadata)
-
-                fragments_section = "\n\n".join(_fragment_block(item) for item in fragments if isinstance(item, dict)) or "无"
-                knowledge_section = "\n\n".join(_knowledge_block(item) for item in knowledge if isinstance(item, dict)) or "无"
-                web_section = "\n\n".join(_web_block(item) for item in web if isinstance(item, dict)) or "无"
-
                 prompt = f"""
             你是 SparkFlow 的短视频口播编导助手。你的任务是根据用户提供的灵感碎片、知识库参考和可选的网页搜索信息，输出一份可直接进入拍摄流程的中文口播稿。
 
@@ -275,19 +184,13 @@ workflow:
             写作目标：{query_hint or "未额外指定，请根据碎片主题自行归纳"}
 
             碎片素材：
-            {fragments_section}
+            {fragments_text or "无"}
 
             知识库参考：
-            {knowledge_section}
+            {knowledge_context or "无"}
 
             网页搜索参考：
-            {web_section}
-
-            用户上下文：
-            {json.dumps(user_ctx, ensure_ascii=False)}
-
-            生成元信息：
-            {json.dumps(metadata, ensure_ascii=False)}
+            {web_context or "无"}
 
             输出要求：
             - 仅输出一个 JSON 对象，不要输出 Markdown，不要加 ```json。
@@ -326,26 +229,18 @@ workflow:
               value_selector:
                 - "start_node"
                 - "query_hint"
-            - variable: "selected_fragments"
+            - variable: "fragments_text"
               value_selector:
                 - "start_node"
-                - "selected_fragments"
-            - variable: "knowledge_hits"
+                - "fragments_text"
+            - variable: "knowledge_context"
               value_selector:
                 - "start_node"
-                - "knowledge_hits"
-            - variable: "web_hits"
+                - "knowledge_context"
+            - variable: "web_context"
               value_selector:
                 - "start_node"
-                - "web_hits"
-            - variable: "user_context"
-              value_selector:
-                - "start_node"
-                - "user_context"
-            - variable: "generation_metadata"
-              value_selector:
-                - "start_node"
-                - "generation_metadata"
+                - "web_context"
           x-outputs:
             - name: "prompt"
               type: "string"

@@ -223,6 +223,8 @@ flowchart TD
 - Embedding: 默认 `Qwen text-embedding-v2`。
 - Vector DB: 默认 `ChromaDB`。
 - Workflow Provider: 当前通过通用 `workflow_provider` 端口接入，默认实现为 `DifyWorkflowProvider`；脚本生成与每日推盘均走 Dify。
+- 脚本生成 workflow 入参已收敛为 `mode`、`query_hint`、`fragments_text`、`knowledge_context`、`web_context`，提示词模板保留在 Dify DSL 内部，后端不再把整包 JSON 研究上下文直接暴露给 Start 节点。
+- 仓库内置 `backend/scripts/import_dify_workflow.py` 用于导入或更新脚本生成 DSL，并把 `DIFY_SCRIPT_APP_ID`、`DIFY_API_KEY`、`DIFY_SCRIPT_WORKFLOW_ID` 回填到 `backend/.env`；脚本后续默认优先按 `DIFY_SCRIPT_APP_ID` 对现有 Dify app 执行原地更新。
 - Dify adapter 当前采用“streaming 首包建单 + 后续轮询终态”的异步模式：提交时只拿 `workflow_run_id` / `task_id`，最终输出统一在 pipeline 轮询步骤读取。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 统一 `FileStorage` 端口；本地开发默认 `local` provider，线上默认私有阿里云 OSS，通过签名 URL 暴露文件访问。

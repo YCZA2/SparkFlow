@@ -180,13 +180,65 @@ class ScriptGenerationContextBuilder:
 
 
 def build_workflow_inputs(context: ResearchContext) -> dict[str, Any]:
-    """保持统一结构化输入，由 provider 自行适配上游格式。"""
+    """将研究上下文压缩为工作流真正需要的文本输入。"""
     return {
         "mode": context.mode,
-        "query_hint": context.query_hint,
-        "selected_fragments": context.selected_fragments,
-        "knowledge_hits": context.knowledge_hits,
-        "web_hits": context.web_hits,
-        "user_context": context.user_context,
-        "generation_metadata": context.generation_metadata,
+        "query_hint": (context.query_hint or "").strip(),
+        "fragments_text": _build_fragments_text(context.selected_fragments),
+        "knowledge_context": _build_knowledge_context(context.knowledge_hits),
+        "web_context": _build_web_context(context.web_hits),
     }
+
+
+def _build_fragments_text(fragments: list[dict[str, Any]]) -> str:
+    """把碎片列表格式化为工作流直接可用的素材正文。"""
+    blocks: list[str] = []
+    for index, item in enumerate(fragments, start=1):
+        if not isinstance(item, dict):
+            continue
+        tags = item.get("tags") or []
+        tags_text = ", ".join(str(tag).strip() for tag in tags if str(tag).strip()) if isinstance(tags, list) else ""
+        lines = [
+            f"碎片 {index}",
+            f"id: {item.get('id', '')}",
+            f"正文: {item.get('transcript', '')}",
+            f"摘要: {item.get('summary', '')}",
+            f"标签: {tags_text or '无'}",
+            f"来源: {item.get('source', '')}",
+            f"创建时间: {item.get('created_at', '')}",
+        ]
+        blocks.append("\n".join(lines).strip())
+    return "\n\n".join(blocks).strip() or "无可用碎片素材"
+
+
+def _build_knowledge_context(knowledge_hits: list[dict[str, Any]]) -> str:
+    """把知识库命中压缩为引用说明文本，避免把整包 JSON 传入工作流。"""
+    blocks: list[str] = []
+    for index, item in enumerate(knowledge_hits, start=1):
+        if not isinstance(item, dict):
+            continue
+        lines = [
+            f"参考 {index}",
+            f"标题: {item.get('title', '')}",
+            f"类型: {item.get('doc_type', '')}",
+            f"相关度: {item.get('score', '')}",
+            f"内容: {item.get('body_markdown', '')}",
+        ]
+        blocks.append("\n".join(lines).strip())
+    return "\n\n".join(blocks).strip() or "无额外知识库参考"
+
+
+def _build_web_context(web_hits: list[dict[str, Any]]) -> str:
+    """把网页搜索命中整理为精简文本，减少 Dify Start 节点噪音。"""
+    blocks: list[str] = []
+    for index, item in enumerate(web_hits, start=1):
+        if not isinstance(item, dict):
+            continue
+        lines = [
+            f"网页 {index}",
+            f"标题: {item.get('title', '')}",
+            f"链接: {item.get('url', '')}",
+            f"摘要: {item.get('snippet', '')}",
+        ]
+        blocks.append("\n".join(lines).strip())
+    return "\n\n".join(blocks).strip() or "无网页搜索参考"

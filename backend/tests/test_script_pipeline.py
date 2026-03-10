@@ -120,11 +120,9 @@ async def test_script_generation_pipeline_collects_context_and_persists_script(
 
     assert len(web_search_provider.calls) == 1
     inputs = workflow_provider.last_submitted_inputs()
-    assert isinstance(inputs["selected_fragments"], list)
-    assert inputs["selected_fragments"][0]["transcript"] == "关于定位的一条碎片"
-    assert isinstance(inputs["knowledge_hits"], list)
-    assert inputs["knowledge_hits"][0]["title"] == "定位文档"
-    assert isinstance(inputs["web_hits"], list)
+    assert "关于定位的一条碎片" in inputs["fragments_text"]
+    assert "定位文档" in inputs["knowledge_context"]
+    assert "https://example.com" in inputs["web_context"]
     assert inputs["query_hint"] == "写一篇关于定位的口播稿"
 
 
