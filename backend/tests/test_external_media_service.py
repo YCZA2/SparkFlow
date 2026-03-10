@@ -62,6 +62,19 @@ async def test_resolve_audio_rejects_non_video_content() -> None:
         await provider.resolve_audio(share_url="https://v.douyin.com/test")
 
 
+@pytest.mark.asyncio
+async def test_resolve_audio_logs_when_parse_fails(capsys) -> None:
+    """解析失败时应输出可排障日志。"""
+    parser = SimpleNamespace(parse_video=lambda share_url: None)
+    provider = DouyinProvider(parser=parser, extractor=SimpleNamespace())
+
+    with pytest.raises(AppException):
+        await provider.resolve_audio(share_url="https://v.douyin.com/test")
+
+    captured = capsys.readouterr()
+    assert "douyin_parse_video_failed" in captured.out
+
+
 def test_parser_loads_cookie_from_settings() -> None:
     """抖音解析器应从全局设置读取 cookie。"""
     original_cookie = settings.DOUYIN_COOKIE

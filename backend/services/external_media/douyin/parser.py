@@ -8,6 +8,7 @@ import requests
 from urllib.parse import quote
 
 from core.config import settings
+from core.logging_config import get_logger
 
 try:
     from .abogus import ABogus
@@ -18,6 +19,8 @@ try:
     from .xbogus import XBogus
 except Exception:
     XBogus = None
+
+logger = get_logger(__name__)
 
 
 class DouyinVideoParser:
@@ -73,6 +76,7 @@ class DouyinVideoParser:
         for pattern in patterns:
             match = re.search(pattern, extracted_url)
             if match:
+                logger.info("douyin_video_id_extracted_from_url", share_url=share_url, extracted_url=extracted_url, video_id=match.group(1))
                 return match.group(1)
         
         # Method 2: 尝试访问并获取重定向后的URL
@@ -89,6 +93,7 @@ class DouyinVideoParser:
             for pattern in patterns:
                 match = re.search(pattern, real_url)
                 if match:
+                    logger.info("douyin_video_id_extracted_from_redirect", share_url=share_url, real_url=real_url, video_id=match.group(1))
                     return match.group(1)
             
             # Method 3: 从页面HTML内容中提取视频ID
@@ -112,15 +117,18 @@ class DouyinVideoParser:
                     video_id = match.group(1)
                     # 验证ID是否为纯数字且长度合理（通常19位）
                     if video_id.isdigit() and len(video_id) >= 15:
+                        logger.info("douyin_video_id_extracted_from_html", share_url=share_url, real_url=real_url, video_id=video_id)
                         return video_id
             
+            logger.warning("douyin_video_id_not_found", share_url=share_url, extracted_url=extracted_url, real_url=real_url, status_code=resp.status_code)
             return None
         except Exception as e:
-            # 如果请求失败，返回None
+            logger.warning("douyin_video_id_lookup_failed", share_url=share_url, extracted_url=extracted_url, error=str(e))
             return None
 
     def get_aweme_detail(self, video_id: str, original_url: str = None) -> dict | None:
         if ABogus is None:
+            logger.warning("douyin_abogus_missing", video_id=video_id)
             return None
 
         params = {
@@ -148,7 +156,8 @@ class DouyinVideoParser:
         try:
             a_bogus = ABogus().get_value(params)
             params["a_bogus"] = quote(a_bogus, safe="")
-        except Exception:
+        except Exception as exc:
+            logger.warning("douyin_abogus_generation_failed", video_id=video_id, error=str(exc))
             return None
 
         # Determine referer: check if original_url contains /note/ or try both
@@ -175,20 +184,25 @@ class DouyinVideoParser:
         if not result and not is_note:
             headers["Referer"] = f"https://www.douyin.com/note/{video_id}"
             result = self._request_json(api_url, params, headers)
+        if not result:
+            logger.warning("douyin_aweme_detail_fetch_failed", video_id=video_id, referer=headers.get("Referer"))
         
         return result
 
     def _request_json(self, api_url: str, params: dict, headers: dict) -> dict | None:
+        """依次尝试 a_bogus 与 X-Bogus 请求抖音详情接口。"""
         # 先试 a_bogus
         try:
             resp = requests.get(api_url, params=params, headers=headers, timeout=10)
             if resp.status_code == 200 and resp.content:
                 return resp.json()
-        except Exception:
-            pass
+            logger.warning("douyin_aweme_detail_non_200", mode="a_bogus", status_code=resp.status_code)
+        except Exception as exc:
+            logger.warning("douyin_aweme_detail_request_failed", mode="a_bogus", error=str(exc))
 
         # 再试 X-Bogus
         if XBogus is None:
+            logger.warning("douyin_xbogus_missing")
             return None
         try:
             param_str = "&".join([f"{k}={v}" for k, v in params.items()])
@@ -197,7 +211,9 @@ class DouyinVideoParser:
             resp = requests.get(xb_url, headers=headers, timeout=10)
             if resp.status_code == 200 and resp.content:
                 return resp.json()
-        except Exception:
+            logger.warning("douyin_aweme_detail_non_200", mode="x_bogus", status_code=resp.status_code)
+        except Exception as exc:
+            logger.warning("douyin_aweme_detail_request_failed", mode="x_bogus", error=str(exc))
             return None
 
         return None
@@ -583,10 +599,12 @@ class DouyinVideoParser:
         """返回完整解析结果（无水印地址 + 基本信息 + 所有质量选项/图集数据）"""
         video_id = self.get_video_id(share_url)
         if not video_id:
+            logger.warning("douyin_parse_video_missing_video_id", share_url=share_url)
             return None
         
         data = self.get_aweme_detail(video_id, original_url=share_url)
         if not data:
+            logger.warning("douyin_parse_video_missing_aweme_detail", share_url=share_url, video_id=video_id)
             return None
         
         meta = self.extract_video_meta(data)
@@ -602,6 +620,7 @@ class DouyinVideoParser:
             result["qualities"] = qualities
             # If no video data found, return None
             if not nwm_url and not qualities:
+                logger.warning("douyin_parse_video_missing_streams", share_url=share_url, video_id=video_id)
                 return None
         elif content_type == "image":
             # Album: return image_data
@@ -616,6 +635,13 @@ class DouyinVideoParser:
                 # If identified as image but no image data found, return None
                 # But first try to see if we can extract from other structures
                 # Some live albums might have different structure
+                logger.warning(
+                    "douyin_parse_video_image_payload_missing",
+                    share_url=share_url,
+                    video_id=video_id,
+                    aweme_type=aweme_type,
+                    has_images=has_images,
+                )
                 return None
         
         return result
