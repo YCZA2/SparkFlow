@@ -8,7 +8,7 @@ MOBILE_DIR="${ROOT_DIR}/mobile"
 POSTGRES_SCRIPT="${ROOT_DIR}/scripts/postgres-local.sh"
 
 DEFAULT_TEST_DATABASE_URL="postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow_test"
-TEST_DATABASE_URL="${TEST_DATABASE_URL:-${DATABASE_URL:-${DEFAULT_TEST_DATABASE_URL}}}"
+TEST_DATABASE_URL="${TEST_DATABASE_URL:-${DEFAULT_TEST_DATABASE_URL}}"
 
 
 print_header() {

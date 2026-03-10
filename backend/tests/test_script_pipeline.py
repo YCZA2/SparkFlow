@@ -59,7 +59,7 @@ def web_search_provider() -> FakeWebSearchProvider:
 def workflow_provider() -> FakeWorkflowProvider:
     """提供可观察结构化上下文的 workflow provider 替身。"""
     provider = FakeWorkflowProvider()
-    provider.next_draft = "这是 pipeline 生成的口播稿"
+    provider.queue_success(draft="这是 pipeline 生成的口播稿")
     return provider
 
 
@@ -103,8 +103,7 @@ async def test_script_generation_pipeline_collects_context_and_persists_script(
     assert detail_response.json()["data"]["content"] == "这是 pipeline 生成的口播稿"
 
     assert len(web_search_provider.calls) == 1
-    submit_call = next(call for call in workflow_provider.calls if call["type"] == "submit")
-    inputs = submit_call["inputs"]
+    inputs = workflow_provider.last_submitted_inputs()
     assert isinstance(inputs["selected_fragments"], list)
     assert inputs["selected_fragments"][0]["transcript"] == "关于定位的一条碎片"
     assert isinstance(inputs["knowledge_hits"], list)
@@ -121,7 +120,7 @@ async def test_script_generation_pipeline_marks_failed_when_provider_fails(
 ) -> None:
     """provider 失败时应把 pipeline 标记为失败并回写错误信息。"""
     fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于选题的一条碎片")
-    workflow_provider.next_status = "failed"
+    workflow_provider.queue_failure()
 
     create_response = await async_client.post(
         "/api/scripts/generation",

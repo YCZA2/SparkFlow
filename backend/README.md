@@ -212,7 +212,7 @@ bash scripts/postgres-local.sh stop
 
 - `bash scripts/dev-mobile.sh` 会在 Alembic 之前自动确保本地 Docker PostgreSQL 可用
 - `bash scripts/test-all.sh` 会在 pytest 之前自动确保 `sparkflow_test` 可用
-- 若 `DATABASE_URL` / `TEST_DATABASE_URL` 被 shell 环境变量或 `backend/.env` 显式改成非默认值，数据库脚本会跳过本地 Docker 启动
+- 开发库是否跳过本地 Docker 由 `DATABASE_URL` 控制；测试库是否跳过本地 Docker 只由 `TEST_DATABASE_URL` 控制
 
 任务与工作流相关接口：
 

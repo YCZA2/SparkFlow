@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -31,7 +29,14 @@ from main import create_app
 from models import Base, User
 from modules.auth.application import TEST_USER_ID
 from modules.shared.infrastructure import LocalFileStorage, PromptLoader
-from tests.support import FakeExternalMediaProvider, FakeVectorStore, FakeWebSearchProvider, FakeWorkflowProvider
+from tests.support import (
+    FakeExternalMediaProvider,
+    FakeLLMProvider,
+    FakeSTTProvider,
+    FakeVectorStore,
+    FakeWebSearchProvider,
+    FakeWorkflowProvider,
+)
 
 
 @pytest.fixture(scope="session")
@@ -84,27 +89,31 @@ def web_search_provider() -> FakeWebSearchProvider:
 
 
 @pytest.fixture
-def llm_provider():
+def llm_provider() -> FakeLLMProvider:
     """提供默认可成功返回文案的 LLM 替身。"""
-    return SimpleNamespace(
-        generate=AsyncMock(return_value="生成后的口播稿"),
-        health_check=AsyncMock(return_value=True),
-    )
+    return FakeLLMProvider()
 
 
 @pytest.fixture
-def stt_provider():
+def stt_provider() -> FakeSTTProvider:
     """提供默认可成功返回转写文本的 STT 替身。"""
-    return SimpleNamespace(
-        transcribe=AsyncMock(return_value=SimpleNamespace(text="转写完成")),
-        health_check=AsyncMock(return_value=True),
-    )
+    return FakeSTTProvider()
 
 
 @pytest.fixture
 def workflow_provider() -> FakeWorkflowProvider:
     """提供默认不会出网的外挂工作流 provider。"""
-    return FakeWorkflowProvider()
+    provider = FakeWorkflowProvider()
+    provider.queue_success(draft="生成后的口播稿")
+    return provider
+
+
+@pytest.fixture
+def daily_push_workflow_provider() -> FakeWorkflowProvider:
+    """提供每日推盘专用的 workflow provider 替身。"""
+    provider = FakeWorkflowProvider()
+    provider.queue_success(draft="生成后的口播稿")
+    return provider
 
 
 @pytest_asyncio.fixture
@@ -117,6 +126,7 @@ async def app(
     llm_provider,
     stt_provider,
     workflow_provider,
+    daily_push_workflow_provider,
 ):
     """创建挂载测试依赖的 FastAPI 应用。"""
     test_app = create_app()
@@ -129,7 +139,7 @@ async def app(
     test_app.state.container.llm_provider = llm_provider
     test_app.state.container.stt_provider = stt_provider
     test_app.state.container.workflow_provider = workflow_provider
-    test_app.state.container.daily_push_workflow_provider = workflow_provider
+    test_app.state.container.daily_push_workflow_provider = daily_push_workflow_provider
     yield test_app
     test_app.state.scheduler_service.stop()
     if test_app.state.container.pipeline_dispatcher:

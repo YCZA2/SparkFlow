@@ -71,13 +71,6 @@ resolve_db_url() {
       value="${TEST_DATABASE_URL}"
     else
       value="$(read_env_file_value TEST_DATABASE_URL)"
-      if [[ -z "${value}" ]]; then
-        if [[ -n "${DATABASE_URL+x}" ]]; then
-          value="${DATABASE_URL}"
-        else
-          value="$(read_env_file_value DATABASE_URL)"
-        fi
-      fi
     fi
   else
     if [[ -n "${DATABASE_URL+x}" ]]; then

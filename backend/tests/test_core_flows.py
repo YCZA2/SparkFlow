@@ -253,15 +253,17 @@ async def test_import_external_audio_returns_saved_url(async_client, auth_header
     """外部媒体导入成功后应通过流水线创建碎片并保存音频文件。"""
     temp_audio = tmp_path / "incoming.m4a"
     temp_audio.write_bytes(b"fake-m4a-audio")
-    external_media_provider.next_result = ExternalMediaResolvedAudio(
-        platform="douyin",
-        share_url="https://v.douyin.com/demo",
-        media_id="7614713222814088953",
-        title="别说了 拿大力胶吧",
-        author="老薯的薯",
-        cover_url="https://example.com/cover.jpg",
-        content_type="video",
-        local_audio_path=str(temp_audio),
+    external_media_provider.queue_success(
+        ExternalMediaResolvedAudio(
+            platform="douyin",
+            share_url="https://v.douyin.com/demo",
+            media_id="7614713222814088953",
+            title="别说了 拿大力胶吧",
+            author="老薯的薯",
+            cover_url="https://example.com/cover.jpg",
+            content_type="video",
+            local_audio_path=str(temp_audio),
+        )
     )
 
     response = await async_client.post(
@@ -308,9 +310,11 @@ async def test_import_external_audio_returns_saved_url(async_client, auth_header
 @pytest.mark.asyncio
 async def test_import_external_audio_rejects_invalid_link(async_client, auth_headers_factory, external_media_provider) -> None:
     """不支持的链接应在请求阶段直接返回校验错误。"""
-    external_media_provider.next_error = ValidationError(
-        message="无法识别外部媒体链接",
-        field_errors={"share_url": "当前仅支持抖音分享链接"},
+    external_media_provider.queue_error(
+        ValidationError(
+            message="无法识别外部媒体链接",
+            field_errors={"share_url": "当前仅支持抖音分享链接"},
+        )
     )
     response = await async_client.post(
         "/api/external-media/audio-imports",
@@ -324,7 +328,9 @@ async def test_import_external_audio_rejects_invalid_link(async_client, auth_hea
 @pytest.mark.asyncio
 async def test_import_external_audio_returns_error_when_provider_fails(async_client, auth_headers_factory, external_media_provider) -> None:
     """上游解析失败时应在请求阶段直接透传错误。"""
-    external_media_provider.next_error = AppException(message="抖音内容解析失败", code="EXTERNAL_MEDIA_IMPORT_FAILED", status_code=502)
+    external_media_provider.queue_error(
+        AppException(message="抖音内容解析失败", code="EXTERNAL_MEDIA_IMPORT_FAILED", status_code=502)
+    )
     response = await async_client.post(
         "/api/external-media/audio-imports",
         json={"share_url": "https://v.douyin.com/demo", "platform": "douyin"},
@@ -516,7 +522,7 @@ async def test_generate_script_mode_b_uses_same_dify_flow(async_client, auth_hea
 async def test_generate_script_fails_when_workflow_output_has_no_draft(async_client, auth_headers_factory, app) -> None:
     """外挂工作流缺少 draft 时应按失败处理。"""
     fragment_id = (await _create_fragment(async_client, auth_headers_factory, {"transcript": "一条缺稿测试碎片", "source": "manual"}))["id"]
-    app.state.container.workflow_provider.next_draft = ""  # type: ignore[attr-defined]
+    app.state.container.workflow_provider.queue_success(draft="")  # type: ignore[attr-defined]
 
     response = await async_client.post(
         "/api/scripts/generation",

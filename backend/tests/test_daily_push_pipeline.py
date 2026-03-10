@@ -39,7 +39,12 @@ async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, att
 
 
 @pytest.mark.asyncio
-async def test_daily_push_pipeline_creates_script_and_reuses_same_run(async_client, auth_headers_factory, app, workflow_provider) -> None:
+async def test_daily_push_pipeline_creates_script_and_reuses_same_run(
+    async_client,
+    auth_headers_factory,
+    app,
+    daily_push_workflow_provider,
+) -> None:
     """每日推盘应走异步 workflow，并在同一天复用同一条结果。"""
     fragment_ids = [
         await _create_fragment(async_client, auth_headers_factory, f"同主题每日推盘碎片 {index}")
@@ -73,8 +78,7 @@ async def test_daily_push_pipeline_creates_script_and_reuses_same_run(async_clie
     assert get_response.status_code == 200
     assert get_response.json()["data"]["id"] == pipeline["resource"]["resource_id"]
 
-    submit_call = next(call for call in workflow_provider.calls if call["type"] == "submit")
-    inputs = submit_call["inputs"]
+    inputs = daily_push_workflow_provider.last_submitted_inputs()
     assert inputs["trigger_kind"] == "manual"
     assert len(inputs["selected_fragments"]) == 3
     assert inputs["fragments_text"]
@@ -107,7 +111,12 @@ async def test_daily_push_pipeline_force_trigger_reuses_existing_result(async_cl
 
 
 @pytest.mark.asyncio
-async def test_daily_push_pipeline_marks_failed_when_provider_fails(async_client, auth_headers_factory, app, workflow_provider) -> None:
+async def test_daily_push_pipeline_marks_failed_when_provider_fails(
+    async_client,
+    auth_headers_factory,
+    app,
+    daily_push_workflow_provider,
+) -> None:
     """每日推盘 provider 失败时应把 pipeline 标记为失败。"""
     fragment_ids = [
         await _create_fragment(async_client, auth_headers_factory, f"失败测试碎片 {index}")
@@ -122,7 +131,7 @@ async def test_daily_push_pipeline_marks_failed_when_provider_fails(async_client
             "summary": None,
             "tags": [],
         }
-    workflow_provider.next_status = "failed"
+    daily_push_workflow_provider.queue_failure()
 
     response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
     assert response.status_code == 200
