@@ -39,3 +39,9 @@ test('selectVisibleIds and clearVisibleIds manage visible selections', () => {
 test('countVisibleSelected counts intersection', () => {
   assert.equal(countVisibleSelected(points, ['a', 'x', 'c']), 2);
 });
+
+test('selection helpers keep uniqueness and handle empty inputs', () => {
+  assert.deepEqual(selectVisibleIds(['a'], points).sort(), ['a', 'b', 'c']);
+  assert.deepEqual(clearVisibleIds(['x'], []), ['x']);
+  assert.equal(countVisibleSelected([], ['a', 'b']), 0);
+});

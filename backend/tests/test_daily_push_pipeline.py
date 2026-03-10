@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from models import Fragment
 
+pytestmark = pytest.mark.integration
+
 
 async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
     """生成每日推盘测试使用的鉴权请求头。"""

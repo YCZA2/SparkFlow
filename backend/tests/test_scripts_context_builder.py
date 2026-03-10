@@ -11,6 +11,8 @@ from modules.auth.application import TEST_USER_ID
 from modules.scripts.context_builder import ScriptGenerationContextBuilder
 from tests.support import FakeVectorStore, FakeWebSearchProvider
 
+pytestmark = pytest.mark.integration
+
 
 def _create_fragment(db, transcript: str):
     """创建供上下文构建测试使用的碎片。"""

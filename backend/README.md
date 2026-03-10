@@ -289,6 +289,21 @@ cd backend
 .venv/bin/pytest
 ```
 
+Run the lightweight backend suite that does not require PostgreSQL:
+
+```bash
+cd backend
+.venv/bin/pytest -m "not integration"
+```
+
+Run the PostgreSQL-backed integration baseline:
+
+```bash
+bash scripts/postgres-local.sh start test
+cd backend
+.venv/bin/pytest
+```
+
 Run the full repository test suite from root with:
 
 ```bash
@@ -301,6 +316,8 @@ OpenAPI contract smoke tests are driven by `Schemathesis`:
 cd backend
 .venv/bin/pytest tests/test_openapi_contracts.py
 ```
+
+Tests marked with `integration` depend on PostgreSQL or application startup side effects. The recommended local workflow is to run `pytest -m "not integration"` first for fast feedback, then run the full suite with PostgreSQL available.
 
 ## API Docs
 

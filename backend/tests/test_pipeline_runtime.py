@@ -17,6 +17,8 @@ from modules.shared.pipeline_runtime import (
     StepExecutorRegistry,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def _build_dispatcher(
     db_session_factory,

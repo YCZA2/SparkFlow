@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from core import settings
 from modules.auth.application import TEST_USER_ID
+
+pytestmark = pytest.mark.integration
 
 
 async def test_mobile_debug_logs_use_structured_logging(

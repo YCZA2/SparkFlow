@@ -8,6 +8,8 @@ import pytest
 
 from tests.support import FakeWebSearchProvider, FakeWorkflowProvider
 
+pytestmark = pytest.mark.integration
+
 
 async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
     """生成脚本 pipeline 测试使用的鉴权请求头。"""

@@ -9,6 +9,8 @@ import pytest
 from domains.fragments import repository as fragment_repository
 from modules.fragments.visualization import build_fragment_visualization
 
+pytestmark = pytest.mark.integration
+
 
 class _FakeVectorStore:
     """提供可控 embedding 列表的向量库替身。"""

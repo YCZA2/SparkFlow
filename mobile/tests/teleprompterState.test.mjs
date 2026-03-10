@@ -32,3 +32,10 @@ test('gesture helpers model pause-resume drag rules', () => {
   assert.equal(isTapAfterPan(false, 0), true);
   assert.equal(isTapAfterPan(true, 1), false);
 });
+
+test('gesture helpers respect threshold boundaries', () => {
+  assert.equal(shouldStartPan(true, 5), false);
+  assert.equal(shouldStartPan(true, -6), true);
+  assert.equal(isTapAfterPan(false, 5), false);
+  assert.equal(isTapAfterPan(false, -4), true);
+});

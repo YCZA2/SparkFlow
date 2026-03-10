@@ -128,6 +128,12 @@ Run tests with:
 .venv/bin/pytest
 ```
 
+Run the lightweight backend suite without PostgreSQL with:
+
+```bash
+.venv/bin/pytest -m "not integration"
+```
+
 Run migrations with:
 
 ```bash
@@ -162,6 +168,7 @@ http://<your-lan-ip>:8000
 - Treat `pipeline_runs` / `pipeline_step_runs` as the backend task source of truth for async media ingestion and script generation
 - Do not reintroduce fragment-level task state compatibility fields or `agent_runs`; task progress must stay on `pipeline_runs` / `pipeline_step_runs`
 - Reuse existing scripts and utilities before adding new entrypoints
+- 后端测试需要分层：不依赖数据库或启动副作用的 smoke / contract 测试默认不要连接 PostgreSQL，依赖 `db_session_factory`、`app`、`async_client` 或真实 lifespan 的测试统一标记为 `integration`
 - Keep comments concise. For every new or modified function, add a brief Chinese comment describing its responsibility or intent; for non-obvious or project-specific logic, also explain the key constraint or reason, but avoid line-by-line restatement of the code
 - Avoid broad refactors unless they are required for the task
 - Do not introduce structural drift: follow the existing module boundaries, routing shape, and layering instead of bypassing them for convenience

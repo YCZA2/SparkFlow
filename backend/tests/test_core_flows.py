@@ -17,6 +17,8 @@ from main import ensure_local_test_user
 from modules.auth.application import TEST_USER_ID
 from modules.shared.ports import ExternalMediaResolvedAudio
 
+pytestmark = pytest.mark.integration
+
 
 async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
     """生成带 Bearer Token 的请求头。"""
@@ -79,23 +81,6 @@ def _seed_fragment_vector(app, fragment_id: str, transcript: str, *, source: str
         "summary": None,
         "tags": [],
     }
-
-
-@pytest.mark.asyncio
-async def test_root_and_head_health_endpoints(async_client) -> None:
-    """根路径和健康检查应返回成功状态与 request id。"""
-    root_response = await async_client.get("/")
-    assert root_response.status_code == 200
-    assert root_response.json()["data"]["status"] == "ok"
-    assert root_response.headers["X-Request-Id"]
-
-    root_head_response = await async_client.head("/")
-    assert root_head_response.status_code == 200
-    assert root_head_response.text == ""
-
-    health_head_response = await async_client.head("/health")
-    assert health_head_response.status_code == 200
-    assert health_head_response.text == ""
 
 
 @pytest.mark.asyncio
@@ -839,15 +824,3 @@ async def test_knowledge_upload_rejects_invalid_file_and_search_validates_top_k(
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert invalid_search_response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_dependency_wiring_smoke(async_client) -> None:
-    """健康检查应暴露关键 provider 的可用状态。"""
-    response = await async_client.get("/health")
-    payload = response.json()["data"]
-    assert response.status_code == 200
-    assert payload["status"] == "ok"
-    assert payload["services"]["llm"] == "available"
-    assert payload["services"]["stt"] == "available"
-    assert payload["services"]["vector_db"] == "available"

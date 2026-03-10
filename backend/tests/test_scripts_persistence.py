@@ -51,6 +51,7 @@ def test_persistence_service_parse_outputs_normalizes_fields() -> None:
     }
 
 
+@pytest.mark.integration
 def test_persistence_service_rejects_missing_draft(db_session_factory) -> None:
     """缺少 draft 时应拒绝落库脚本。"""
     service = ScriptGenerationPersistenceService()
@@ -69,6 +70,7 @@ def test_persistence_service_rejects_missing_draft(db_session_factory) -> None:
     assert "缺少 draft" in str(exc_info.value)
 
 
+@pytest.mark.integration
 def test_persistence_service_persists_script_idempotently(db_session_factory) -> None:
     """重复持久化同一 run 时应复用已创建脚本。"""
     service = ScriptGenerationPersistenceService()

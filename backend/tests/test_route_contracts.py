@@ -7,18 +7,20 @@ from main import create_app
 
 def test_public_api_routes_are_stable() -> None:
     """公开 API 路由集合应保持稳定。"""
-    app = create_app()
+    app = create_app(enable_runtime_side_effects=False)
     routes = {
         (route.path, frozenset(getattr(route, "methods", set()) or []))
         for route in app.routes
         if hasattr(route, "path")
     }
     expected = {
+        ("/openapi.json", frozenset({"GET"})),
         ("/", frozenset({"GET"})),
         ("/health", frozenset({"GET"})),
         ("/api/auth/token", frozenset({"POST"})),
         ("/api/auth/me", frozenset({"GET"})),
         ("/api/auth/refresh", frozenset({"POST"})),
+        ("/api/debug/mobile-logs", frozenset({"POST"})),
         ("/api/external-media/audio-imports", frozenset({"POST"})),
         ("/api/exports/markdown/{content_type}/{content_id}", frozenset({"GET"})),
         ("/api/exports/markdown/batch", frozenset({"POST"})),
@@ -67,13 +69,12 @@ def test_public_api_routes_are_stable() -> None:
     }
     normalized_routes = {item for item in normalized_routes if item[1]}
 
-    for item in expected:
-        assert item in normalized_routes
+    assert normalized_routes == expected
 
 
 def test_legacy_paths_not_registered() -> None:
     """历史遗留路径不应继续暴露。"""
-    app = create_app()
+    app = create_app(enable_runtime_side_effects=False)
     paths = {route.path for route in app.routes}
     assert "/api/transcribe" not in paths
     assert not any(path.startswith("/api/agent") for path in paths)

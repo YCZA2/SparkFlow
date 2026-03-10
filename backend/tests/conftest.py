@@ -149,9 +149,28 @@ async def app(
 
 
 @pytest_asyncio.fixture
+async def stateless_app():
+    """创建关闭启动副作用的 FastAPI 应用。"""
+    test_app = create_app(enable_runtime_side_effects=False)
+    yield test_app
+    test_app.state.scheduler_service.stop()
+    if test_app.state.container.pipeline_dispatcher:
+        await test_app.state.container.pipeline_dispatcher.stop()
+    await test_app.state.container.workflow_provider.aclose()
+    await test_app.state.container.daily_push_workflow_provider.aclose()
+
+
+@pytest_asyncio.fixture
 async def async_client(app):
     """提供基于 ASGITransport 的异步测试客户端。"""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def stateless_client(stateless_app):
+    """提供用于无数据库 smoke 的异步测试客户端。"""
+    async with AsyncClient(transport=ASGITransport(app=stateless_app), base_url="http://testserver") as client:
         yield client
 
 

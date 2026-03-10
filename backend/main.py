@@ -57,7 +57,7 @@ def ensure_local_test_user() -> None:
         AuthUseCase().ensure_test_user(db=db)
 
 
-def create_app() -> FastAPI:
+def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
     """创建并装配 FastAPI 应用实例。"""
     container = build_container()
     _configure_pipeline_runtime(container)
@@ -65,10 +65,12 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        ensure_local_test_user()
-        scheduler_service.start()
-        if container.pipeline_dispatcher:
-            container.pipeline_dispatcher.start()
+        # 中文注释：测试 smoke/contract 可关闭启动副作用，避免数据库和调度器耦合。
+        if enable_runtime_side_effects:
+            ensure_local_test_user()
+            scheduler_service.start()
+            if container.pipeline_dispatcher:
+                container.pipeline_dispatcher.start()
         try:
             yield
         finally:

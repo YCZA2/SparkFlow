@@ -45,6 +45,7 @@ class StubVectorStore:
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_daily_push_selector_returns_largest_component(db_session_factory) -> None:
     """碎片筛选应返回最大连通分量对应的碎片集合。"""
     with db_session_factory() as db:
@@ -75,6 +76,7 @@ async def test_daily_push_selector_returns_largest_component(db_session_factory)
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_daily_push_selector_returns_empty_when_candidates_below_minimum(db_session_factory) -> None:
     """候选碎片不足最小阈值时应直接返回空集合。"""
     with db_session_factory() as db:
