@@ -7,6 +7,7 @@ from collections import Counter, defaultdict
 from typing import Any, Optional
 
 from models import Fragment
+from modules.fragments.content import read_fragment_effective_text
 from utils.serialization import format_iso_datetime, parse_json_list
 
 from .visualization_math import cluster_embeddings, project_embeddings_to_coordinates
@@ -131,7 +132,7 @@ def build_text_feature_embedding(fragment: Fragment, dimensions: int = 24) -> li
             weighted_terms.append((normalized, 3.0))
     for term in _summary_terms(fragment.summary):
         weighted_terms.append((term, 2.0))
-    for term in _summary_terms((fragment.transcript or "").strip()):
+    for term in _summary_terms(read_fragment_effective_text(fragment)):
         weighted_terms.append((term, 1.0))
     if not weighted_terms:
         weighted_terms.append((fragment.id, 1.0))
@@ -192,7 +193,7 @@ def build_visualization_payload(items: list[tuple[Fragment, list[float]]], used_
                 "x": _round_coordinate(x),
                 "y": _round_coordinate(y),
                 "z": _round_coordinate(z),
-                "transcript": fragment.transcript,
+                "transcript": read_fragment_effective_text(fragment) or fragment.transcript,
                 "summary": fragment.summary,
                 "tags": parse_json_list(fragment.tags, allow_csv_fallback=True),
                 "source": fragment.source,

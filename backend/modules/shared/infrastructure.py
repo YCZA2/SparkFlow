@@ -421,6 +421,13 @@ class AppVectorStore(VectorStore):
             documents=[VectorDocument(id=fragment_id, text=normalized_text, embedding=embedding_result.embedding, metadata=metadata)],
         )
 
+    async def delete_fragment(self, *, user_id: str, fragment_id: str) -> bool:
+        """从向量库删除指定碎片文档。"""
+        return await self.vector_db_provider.delete(
+            namespace=_fragment_namespace(user_id),
+            document_ids=[fragment_id],
+        )
+
     async def query_fragments(
         self,
         *,

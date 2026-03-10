@@ -8,7 +8,9 @@ import type { Fragment } from '@/types/fragment';
 import type { ScriptMode } from '@/types/script';
 
 function displayFragmentText(fragment: Fragment): string {
+  /** 中文注释：生成页摘要优先显示正文，其次回退到转写原文。 */
   if (fragment.summary) return fragment.summary;
+  if (fragment.compiled_markdown) return fragment.compiled_markdown.slice(0, 80);
   if (fragment.transcript) return fragment.transcript.slice(0, 80);
   return '无内容';
 }

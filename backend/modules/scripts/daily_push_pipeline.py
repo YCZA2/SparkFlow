@@ -47,7 +47,6 @@ def _build_fragment_payload(fragment: Fragment) -> dict[str, Any]:
     return {
         "id": fragment.id,
         "transcript": _fragment_content(fragment),
-        "capture_text": fragment.capture_text,
         "summary": fragment.summary,
         "tags": parse_json_list(fragment.tags),
         "source": fragment.source,

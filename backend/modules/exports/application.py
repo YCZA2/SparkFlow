@@ -8,8 +8,7 @@ from sqlalchemy.orm import Session
 from core.exceptions import NotFoundError, ValidationError
 from domains.knowledge import repository as knowledge_repository
 from domains.media_assets import repository as media_asset_repository
-from modules.fragments.application import FragmentCommandService
-from modules.fragments.application import _build_media_asset_file, map_media_asset
+from modules.fragments.application import FragmentCommandService, _build_media_asset_file, map_media_asset
 from modules.scripts.application import ScriptQueryService, map_script
 from modules.shared.content_markdown import (
     MarkdownExportFile,
@@ -23,9 +22,13 @@ from .schemas import MarkdownBatchExportRequest
 class MarkdownExportUseCase:
     """封装 Markdown 单条导出和批量 zip 导出。"""
 
-    def __init__(self, *, file_storage: FileStorage) -> None:
+    def __init__(self, *, file_storage: FileStorage, vector_store, llm_provider) -> None:
         """装配内容导出所需的文件存储能力。"""
-        self.fragment_service = FragmentCommandService(file_storage=file_storage)
+        self.fragment_service = FragmentCommandService(
+            file_storage=file_storage,
+            vector_store=vector_store,
+            llm_provider=llm_provider,
+        )
         self.file_storage = file_storage
 
     def export_fragment(self, *, db: Session, user_id: str, fragment_id: str) -> tuple[MarkdownExportFile, list[tuple[str, bytes]]]:

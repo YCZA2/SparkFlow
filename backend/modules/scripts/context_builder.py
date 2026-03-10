@@ -9,7 +9,7 @@ from core.exceptions import NotFoundError, ValidationError
 from domains.fragments import repository as fragment_repository
 from domains.knowledge import repository as knowledge_repository
 from models import Fragment
-from modules.shared.content_markdown import compile_fragment_markdown, extract_plain_text
+from modules.fragments.content import read_fragment_effective_text
 from modules.shared.ports import VectorStore, WebSearchProvider
 from utils.serialization import format_iso_datetime, parse_json_list
 
@@ -102,7 +102,6 @@ class ScriptGenerationContextBuilder:
                 {
                     "id": fragment.id,
                     "transcript": self._fragment_content(fragment),
-                    "capture_text": fragment.capture_text,
                     "summary": fragment.summary,
                     "tags": parse_json_list(fragment.tags),
                     "source": fragment.source,
@@ -177,12 +176,7 @@ class ScriptGenerationContextBuilder:
     @staticmethod
     def _fragment_content(fragment: Fragment) -> str:
         """统一读取碎片在脚本生成中的正式内容。"""
-        if fragment.blocks:
-            markdown = compile_fragment_markdown(
-                block_payloads=[block.payload_json for block in sorted(fragment.blocks, key=lambda item: item.order_index)],
-            )
-            return extract_plain_text(markdown)
-        return ""
+        return read_fragment_effective_text(fragment)
 
 
 def build_workflow_inputs(context: ResearchContext) -> dict[str, Any]:

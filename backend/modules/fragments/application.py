@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Optional
 
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ValidationError
 from models import Fragment, MediaAsset
+from modules.shared.enrichment import build_fallback_summary_and_tags, generate_summary_and_tags
 from utils.serialization import format_iso_datetime, parse_json_list, parse_json_object_list
 
 from domains.fragment_blocks import repository as fragment_block_repository
@@ -17,12 +19,15 @@ from domains.media_assets import repository as media_asset_repository
 from modules.shared.content_markdown import (
     MARKDOWN_BLOCK_TYPE,
     build_markdown_block_payload,
-    compile_fragment_markdown,
-    extract_plain_text,
     parse_markdown_block_payload,
 )
 from modules.shared.content_schemas import FragmentBlockInput, FragmentBlockItem, MediaAssetItem
-from modules.shared.ports import FileStorage, StoredFile, VectorStore
+from modules.shared.ports import FileStorage, StoredFile, TextGenerationProvider, VectorStore
+from .content import (
+    compile_fragment_body_markdown,
+    read_fragment_effective_text,
+    resolve_fragment_content_state,
+)
 from .schemas import (
     FragmentBatchMoveResponse,
     FragmentFolderInfo,
@@ -40,6 +45,8 @@ from .visualization import build_fragment_visualization
 VALID_FRAGMENT_SOURCES = {"voice", "manual", "video_parse"}
 VALID_AUDIO_SOURCES = {"upload", "external_link"}
 VALID_FRAGMENT_BLOCK_TYPES = {MARKDOWN_BLOCK_TYPE}
+SUMMARY_REFRESH_MIN_ABS_DELTA = 50
+SUMMARY_REFRESH_MIN_RATIO = 0.2
 
 
 def _map_speaker_segments(raw: Optional[str]) -> Optional[list[SpeakerSegmentItem]]:
@@ -129,22 +136,13 @@ def _map_blocks(fragment: Fragment) -> list[FragmentBlockItem]:
     return blocks
 
 
-def _resolve_content_state(*, blocks: list[FragmentBlockItem]) -> str:
-    """根据当前内容层状态给出稳定枚举。"""
-    if blocks:
-        return "blocks_present"
-    return "empty"
-
-
 def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = None, file_storage: FileStorage | None = None) -> FragmentItem:
     """将碎片模型映射为含 Markdown 内容层的响应结构。"""
     folder = None
     if fragment.folder:
         folder = FragmentFolderInfo(id=fragment.folder.id, name=fragment.folder.name)
     blocks = _map_blocks(fragment)
-    compiled_markdown = compile_fragment_markdown(
-        block_payloads=[block.payload_json for block in sorted(fragment.blocks, key=lambda item: item.order_index)],
-    )
+    compiled_markdown = compile_fragment_body_markdown(fragment)
     audio_access = None
     if file_storage is not None:
         audio_file = _build_fragment_audio_file(fragment)
@@ -160,7 +158,6 @@ def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = 
         mapped_media_assets.append(MediaAssetItem(**payload.model_dump(), file_url=access.url, expires_at=access.expires_at))
     return FragmentItem(
         id=fragment.id,
-        capture_text=fragment.capture_text,
         transcript=fragment.transcript,
         speaker_segments=_map_speaker_segments(fragment.speaker_segments),
         summary=fragment.summary,
@@ -174,15 +171,17 @@ def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = 
         folder=folder,
         blocks=blocks,
         compiled_markdown=compiled_markdown or None,
-        content_state=_resolve_content_state(blocks=blocks),
+        content_state=resolve_fragment_content_state(fragment),
         media_assets=mapped_media_assets,
     )
 
 
 class FragmentCommandService:
-    def __init__(self, *, file_storage: FileStorage) -> None:
+    def __init__(self, *, file_storage: FileStorage, vector_store: VectorStore, llm_provider: TextGenerationProvider) -> None:
         """装配碎片写操作依赖。"""
         self.file_storage = file_storage
+        self.vector_store = vector_store
+        self.llm_provider = llm_provider
 
     def create_fragment(
         self,
@@ -190,7 +189,6 @@ class FragmentCommandService:
         db: Session,
         user_id: str,
         transcript: Optional[str],
-        capture_text: Optional[str],
         body_markdown: Optional[str],
         source: str,
         audio_source: Optional[str],
@@ -211,16 +209,19 @@ class FragmentCommandService:
             )
         self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
         normalized_body = (body_markdown or "").strip() or None
-        normalized_capture_source = capture_text or transcript or extract_plain_text(normalized_body)
-        normalized_capture = normalized_capture_source.strip() if normalized_capture_source else None
-        if normalized_capture == "":
-            normalized_capture = None
-        normalized_transcript = (transcript or normalized_capture or "").strip() or None
+        normalized_transcript = self._normalize_transcript(
+            transcript=transcript,
+            source=source,
+        )
+        if source != "voice" and not normalized_body:
+            raise ValidationError(
+                message="正文不能为空",
+                field_errors={"body_markdown": "非语音碎片必须提供正文"},
+            )
         fragment = fragment_repository.create(
             db=db,
             user_id=user_id,
             transcript=normalized_transcript,
-            capture_text=normalized_capture,
             source=source,
             audio_source=audio_source,
             audio_storage_provider=audio_file.storage_provider if audio_file else None,
@@ -242,6 +243,13 @@ class FragmentCommandService:
                 content_id=fragment.id,
                 media_asset_ids=media_asset_ids,
             )
+        if normalized_body:
+            fragment_block_repository.create_markdown_block(
+                db=db,
+                fragment_id=fragment.id,
+                order_index=0,
+                payload_json=build_markdown_block_payload(normalized_body),
+            )
         return fragment
 
     def create_fragment_with_content(
@@ -250,7 +258,6 @@ class FragmentCommandService:
         db: Session,
         user_id: str,
         transcript: Optional[str],
-        capture_text: Optional[str],
         body_markdown: Optional[str],
         source: str,
         audio_source: Optional[str],
@@ -263,7 +270,6 @@ class FragmentCommandService:
             db=db,
             user_id=user_id,
             transcript=transcript,
-            capture_text=capture_text,
             body_markdown=body_markdown,
             source=source,
             audio_source=audio_source,
@@ -271,23 +277,6 @@ class FragmentCommandService:
             folder_id=folder_id,
             media_asset_ids=media_asset_ids,
         )
-        normalized_body = (body_markdown or "").strip()
-        if normalized_body:
-            fragment_block_repository.create_markdown_block(
-                db=db,
-                fragment_id=fragment.id,
-                order_index=0,
-                payload_json=build_markdown_block_payload(normalized_body),
-            )
-            fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment.id)
-        if media_asset_ids:
-            self._attach_media_assets(
-                db=db,
-                user_id=user_id,
-                content_type="fragment",
-                content_id=fragment.id,
-                media_asset_ids=media_asset_ids,
-            )
         return self.get_fragment(db=db, user_id=user_id, fragment_id=fragment.id)
 
     def delete_fragment(self, *, db: Session, user_id: str, fragment_id: str) -> None:
@@ -302,7 +291,7 @@ class FragmentCommandService:
         self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
         return fragment_repository.update_folder(db=db, fragment=fragment, folder_id=folder_id)
 
-    def update_fragment(
+    async def update_fragment(
         self,
         *,
         db: Session,
@@ -316,6 +305,7 @@ class FragmentCommandService:
     ) -> Fragment:
         """更新碎片内容块、文件夹和素材绑定。"""
         fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
+        previous_effective_text = read_fragment_effective_text(fragment)
         if folder_id_provided:
             self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
             fragment = fragment_repository.update_folder(db=db, fragment=fragment, folder_id=folder_id)
@@ -337,7 +327,16 @@ class FragmentCommandService:
                 content_id=fragment.id,
                 media_asset_ids=media_asset_ids,
             )
-        return self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
+        updated_fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
+        if body_markdown is not None or blocks is not None:
+            await self._refresh_fragment_derivatives(
+                db=db,
+                user_id=user_id,
+                fragment=updated_fragment,
+                previous_effective_text=previous_effective_text,
+            )
+            updated_fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
+        return updated_fragment
 
     def move_fragments(self, *, db: Session, user_id: str, fragment_ids: list[str], folder_id: Optional[str]) -> FragmentBatchMoveResponse:
         """批量移动碎片到目标文件夹。"""
@@ -409,8 +408,94 @@ class FragmentCommandService:
             return markdown_contents
         if body_markdown is not None:
             normalized = body_markdown.strip()
-            return [normalized]
+            return [normalized] if normalized else []
         return []
+
+    @staticmethod
+    def _normalize_transcript(*, transcript: Optional[str], source: str) -> str | None:
+        """根据来源约束是否保留转写原文。"""
+        normalized_transcript = (transcript or "").strip() or None
+        if source != "voice":
+            return None
+        return normalized_transcript
+
+
+    async def _refresh_fragment_derivatives(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        fragment: Fragment,
+        previous_effective_text: str,
+    ) -> None:
+        """在正文更新后同步刷新向量与必要的衍生字段。"""
+        current_effective_text = read_fragment_effective_text(fragment)
+        if not current_effective_text:
+            await self.vector_store.delete_fragment(user_id=user_id, fragment_id=fragment.id)
+        if not self._should_refresh_enrichment(
+            previous_effective_text=previous_effective_text,
+            current_effective_text=current_effective_text,
+        ):
+            if current_effective_text:
+                await self.vector_store.upsert_fragment(
+                    user_id=user_id,
+                    fragment_id=fragment.id,
+                    text=current_effective_text,
+                    source=fragment.source,
+                    summary=fragment.summary,
+                    tags=parse_json_list(fragment.tags, allow_csv_fallback=True),
+                )
+            return
+        summary, tags = await self._generate_fragment_enrichment(current_effective_text)
+        fragment.summary = summary
+        fragment.tags = self._serialize_tags(tags)
+        fragment_tag_repository.replace_for_fragment(
+            db=db,
+            user_id=user_id,
+            fragment_id=fragment.id,
+            tags=tags,
+        )
+        db.commit()
+        if current_effective_text:
+            await self.vector_store.upsert_fragment(
+                user_id=user_id,
+                fragment_id=fragment.id,
+                text=current_effective_text,
+                source=fragment.source,
+                summary=summary,
+                tags=tags,
+            )
+
+    @staticmethod
+    def _should_refresh_enrichment(*, previous_effective_text: str, current_effective_text: str) -> bool:
+        """根据改动量决定是否重算摘要与标签。"""
+        if not current_effective_text.strip():
+            return True
+        previous_length = len(previous_effective_text.strip())
+        current_length = len(current_effective_text.strip())
+        if previous_length == 0:
+            return True
+        absolute_delta = abs(current_length - previous_length)
+        ratio_delta = absolute_delta / max(previous_length, 1)
+        return absolute_delta >= SUMMARY_REFRESH_MIN_ABS_DELTA or ratio_delta >= SUMMARY_REFRESH_MIN_RATIO
+
+    async def _generate_fragment_enrichment(self, effective_text: str) -> tuple[str | None, list[str]]:
+        """基于正文生成或清空摘要与标签。"""
+        normalized_text = effective_text.strip()
+        if not normalized_text:
+            return (None, [])
+        try:
+            return await generate_summary_and_tags(normalized_text, llm_provider=self.llm_provider, timeout_seconds=45.0)
+        except Exception:
+            return build_fallback_summary_and_tags(normalized_text)
+
+    @staticmethod
+    def _serialize_tags(tags: list[str]) -> str | None:
+        """把标签列表转换为稳定 JSON 字符串。"""
+        normalized_tags = [tag.strip() for tag in tags if tag and tag.strip()]
+        if not normalized_tags:
+            return None
+        return json.dumps(normalized_tags, ensure_ascii=False)
 
     @staticmethod
     def _attach_media_assets(

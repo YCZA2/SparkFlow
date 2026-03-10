@@ -194,7 +194,7 @@ flowchart TD
 - `auth`: 测试 token 签发、当前用户信息、refresh。
 - 本地联调会确保默认测试用户 `test-user-001` 在数据库中存在，避免恢复旧 token 时触发用户外键错误。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
-- `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；正式正文只存于 `fragment_blocks`，`capture_text` 仅保留采集文本。
+- `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；`transcript` 只保留语音机器转写原文，正式正文只存于 `fragment_blocks`。
 - `transcriptions`: 音频上传、后台转写、状态查询，上传入口会创建 `source=voice`、`audio_source=upload` 的碎片。
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接下载并转成 m4a，导入完成后直接创建 `source=voice`、`audio_source=external_link` 的碎片并接入同一条转写管线。
 - `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_markdown`。
@@ -233,7 +233,8 @@ flowchart TD
 - 碎片归一化标签表：`fragment_tags`
 - `fragments.folder_id` 指向真实文件夹；“全部”只是前端系统视图，不落库。
 - `fragments.audio_source` 用于区分音频来源；当前取值为 `upload` / `external_link` / `null`
-- `fragments.capture_text` 保存原始采集文本，`fragment_blocks` 保存唯一正式正文；没有 block 的碎片不再回退为正文
+- `fragments.transcript` 保存机器转写原文，`fragment_blocks` 保存唯一正式正文；正文读取按 `fragment_blocks -> transcript` 回退
+- 非语音碎片必须直接写入 `fragment_blocks`，不再把 `transcript` 作为兼容正文来源
 - `scripts.body_markdown` / `knowledge_docs.body_markdown` 保存统一 Markdown 正文
 - 媒体资源表：`media_assets` / `content_media_links`，对象元数据保存 `storage_provider` / `bucket` / `object_key`
 - 碎片向量 namespace: `fragments_{user_id}`

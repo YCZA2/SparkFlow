@@ -12,9 +12,11 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/Themed';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { FragmentAudioPlayer } from '@/features/fragments/components/FragmentAudioPlayer';
+import { FragmentBodyEditor } from '@/features/fragments/components/FragmentBodyEditor';
 import { TranscriptSection } from '@/features/fragments/components/TranscriptSection';
 import { deleteFragment, fetchFragmentDetail } from '@/features/fragments/api';
 import { useFragmentAudioPlayer } from '@/features/fragments/hooks/useFragmentAudioPlayer';
+import { useFragmentBodyEditor } from '@/features/fragments/hooks/useFragmentBodyEditor';
 import { getActiveSegmentIndex } from '@/features/fragments/presenters/speakerSegments';
 import { normalizeFragmentTags } from '@/features/fragments/utils';
 import { useAppTheme } from '@/theme/useAppTheme';
@@ -70,6 +72,10 @@ export default function FragmentDetailScreen() {
     }
     return getActiveSegmentIndex(segments, player.positionMs);
   }, [fragment?.speaker_segments, player.positionMs]);
+  const bodyEditor = useFragmentBodyEditor({
+    fragment,
+    onFragmentChange: setFragment,
+  });
 
   const confirmDelete = async () => {
     if (!id) return;
@@ -181,12 +187,11 @@ export default function FragmentDetailScreen() {
             </View>
           ) : null}
 
-          {fragment.compiled_markdown ? (
-            <View style={[styles.card, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textSubtle }]}>Markdown 正文</Text>
-              <Text style={[styles.summaryText, { color: theme.colors.text }]}>{fragment.compiled_markdown}</Text>
-            </View>
-          ) : null}
+          <FragmentBodyEditor
+            value={bodyEditor.text}
+            statusLabel={bodyEditor.statusLabel}
+            onChangeText={bodyEditor.onChangeText}
+          />
 
           <TranscriptSection
             transcript={fragment.transcript}

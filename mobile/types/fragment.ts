@@ -47,8 +47,6 @@ export interface Fragment {
   audio_file_expires_at?: string | null;
   /** 转写文本 */
   transcript: string | null;
-  /** 原始采集文本 */
-  capture_text?: string | null;
   /** 说话人分段 */
   speaker_segments: SpeakerSegment[] | null;
   /** AI一句话摘要 */
@@ -64,7 +62,7 @@ export interface Fragment {
   /** 正式 Markdown 内容 */
   compiled_markdown?: string | null;
   /** 内容状态 */
-  content_state?: 'empty' | 'blocks_present';
+  content_state?: 'empty' | 'transcript_only' | 'body_present';
   /** 内容块 */
   blocks?: FragmentBlock[];
   /** 关联素材 */
@@ -91,8 +89,6 @@ export interface FragmentListResponse {
 export interface CreateFragmentRequest {
   /** 转写文本 */
   transcript?: string;
-  /** 原始采集文本 */
-  capture_text?: string;
   /** Markdown 正文 */
   body_markdown?: string;
   /** AI摘要 */

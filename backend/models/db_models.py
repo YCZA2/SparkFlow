@@ -101,7 +101,6 @@ class Fragment(Base):
     audio_mime_type = Column(String, nullable=True)
     audio_file_size = Column(Integer, nullable=True)
     audio_checksum = Column(String, nullable=True)
-    capture_text = Column(Text, nullable=True)  # 原始采集文本
     transcript = Column(Text, nullable=True)  # 转写文本
     speaker_segments = Column(Text, nullable=True)  # JSON数组字符串，说话人分段
     summary = Column(Text, nullable=True)  # AI一句话摘要

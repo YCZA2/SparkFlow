@@ -20,7 +20,6 @@ def _create_fragment(db, transcript: str):
         db=db,
         user_id=TEST_USER_ID,
         transcript=transcript,
-        capture_text=transcript,
         source="manual",
         audio_source=None,
         audio_storage_provider=None,
@@ -104,4 +103,4 @@ async def test_daily_push_selector_returns_empty_when_candidates_below_minimum(d
 def test_build_fragments_text_requires_available_content() -> None:
     """文本拼接应拒绝没有正文块的输入。"""
     with pytest.raises(ValidationError):
-        build_fragments_text([SimpleNamespace(transcript=None, capture_text=None, blocks=[])])
+        build_fragments_text([SimpleNamespace(transcript=None, blocks=[])])

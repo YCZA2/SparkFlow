@@ -5,7 +5,7 @@
 ## 当前已落地
 
 - 数据库继续作为事实源。
-- `fragments` 新增 `capture_text`，并通过 `fragment_blocks` 支持块式内容。
+- `fragments` 已移除 `capture_text`，正文统一收敛到 `fragment_blocks`。
 - `scripts`、`knowledge_docs` 新增 `body_markdown`。
 - 新增统一 `media_assets` / `content_media_links`，用于图片、录音和通用素材引用。
 - 新增 Markdown 导出接口，支持单条 `.md` 和批量 zip。
@@ -19,7 +19,7 @@
 
 ## 下一步建议
 
-1. 给移动端碎片详情页补真正的 Markdown 编辑与保存。
+1. 把碎片详情页的单正文自动保存编辑继续演进成完整 block 编辑器。
 2. 为 `media_assets` 增加图片尺寸、音频时长等元信息提取。
 3. 将知识库页面从占位入口升级为 Markdown + 素材管理页。
 4. 评估脚本页是否也升级到 block 编辑器容器。

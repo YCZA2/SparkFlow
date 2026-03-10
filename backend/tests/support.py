@@ -28,6 +28,11 @@ class FakeVectorStore:
         }
         return True
 
+    async def delete_fragment(self, *, user_id: str, fragment_id: str):
+        """删除内存中的碎片向量文档。"""
+        self.fragment_docs.pop(fragment_id, None)
+        return True
+
     async def query_fragments(self, *, user_id: str, query_text: str, top_k: int, exclude_ids=None):
         excluded = set(exclude_ids or [])
         items = [

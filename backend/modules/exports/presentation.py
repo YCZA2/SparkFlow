@@ -15,7 +15,11 @@ router = APIRouter(prefix="/api/exports", tags=["exports"], responses={401: {"de
 
 def get_export_use_case(container: ServiceContainer = Depends(get_container)) -> MarkdownExportUseCase:
     """构建 Markdown 导出用例。"""
-    return MarkdownExportUseCase(file_storage=container.file_storage)
+    return MarkdownExportUseCase(
+        file_storage=container.file_storage,
+        vector_store=container.vector_store,
+        llm_provider=container.llm_provider,
+    )
 
 
 @router.get(

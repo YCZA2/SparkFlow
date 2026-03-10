@@ -20,7 +20,7 @@ async def _create_fragment(async_client, auth_headers_factory, transcript: str) 
     """创建手动碎片并返回其 ID。"""
     response = await async_client.post(
         "/api/fragments/content",
-        json={"transcript": transcript, "body_markdown": transcript, "source": "manual"},
+        json={"body_markdown": transcript, "source": "manual"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 201

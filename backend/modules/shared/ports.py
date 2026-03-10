@@ -42,6 +42,7 @@ class VectorStore(Protocol):
         summary: Optional[str],
         tags: Optional[list[str]],
     ) -> bool: ...
+    async def delete_fragment(self, *, user_id: str, fragment_id: str) -> bool: ...
     async def query_fragments(
         self,
         *,

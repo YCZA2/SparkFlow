@@ -19,7 +19,6 @@ class SpeakerSegmentItem(BaseModel):
 
 class FragmentCreateRequest(BaseModel):
     transcript: str | None = Field(None, description="转写文本")
-    capture_text: str | None = Field(None, description="原始采集文本")
     body_markdown: str | None = Field(None, description="Markdown 正文")
     source: str = Field("voice", description="来源：voice, manual, video_parse")
     audio_source: str | None = Field(None, description="音频来源：upload, external_link")
@@ -47,7 +46,6 @@ class SimilarityQueryRequest(BaseModel):
 
 class FragmentItem(BaseModel):
     id: str
-    capture_text: str | None = None
     transcript: str | None = None
     speaker_segments: list[SpeakerSegmentItem] | None = None
     summary: str | None = None

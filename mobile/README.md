@@ -15,9 +15,10 @@ SparkFlow 的 Expo / React Native 移动端工程。
 ## 当前移动端已接入的内容能力
 
 - 手动文本碎片会直接走 Markdown 内容创建接口 `POST /api/fragments/content`。
-- 碎片详情页只展示后端返回的 `compiled_markdown`。
+- 手动文本碎片必须提供 `body_markdown`，不再写 `transcript`。
+- 碎片详情页同时展示只读 `transcript` 和可编辑 `compiled_markdown`，正文无保存按钮，改动会自动保存。
 - 脚本详情页只展示 `body_markdown`，后端负责迁移旧数据。
-- 移动端尚未提供真正的块式编辑器；当前是“手动创建支持 + 详情展示优先读 Markdown”。
+- 移动端尚未提供真正的块式编辑器；当前正文编辑仍是单个 Markdown 文本区。
 - 知识库移动端仍是占位入口，还没有完整的 Markdown 编辑和素材管理 UI。
 
 ## 一、推荐用法：统一走 `scripts/dev-mobile.sh`
@@ -223,8 +224,8 @@ http://192.168.31.157:8000
 
 当前返回和展示约定：
 
-- 碎片详情优先读取 `compiled_markdown`
-- 只有存在 Markdown blocks 的碎片才会返回 `compiled_markdown`
+- 碎片详情正文优先读取 `compiled_markdown`，没有正文时回退 `transcript`
+- `transcript` 表示机器转写原文，不参与正文编辑
 - 脚本详情只读取 `body_markdown`
 - 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
 - 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`

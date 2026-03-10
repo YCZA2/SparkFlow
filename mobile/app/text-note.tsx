@@ -39,7 +39,6 @@ export default function TextNoteScreen() {
       const fragment = await createFragment(
         {
           body_markdown: trimmedContent,
-          capture_text: trimmedContent,
           source: 'manual',
         },
         params.folderId

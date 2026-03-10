@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from domains.fragments import repository as fragment_repository
+from modules.fragments.content import read_fragment_effective_text
 from modules.shared.ports import VectorStore
 from utils.serialization import parse_json_list
 
@@ -25,15 +26,15 @@ async def _backfill_missing_fragment_vectors(
     candidates = fragment_repository.list_vectorizable_by_user(db=db, user_id=user_id)
     created_count = 0
     for fragment in candidates:
-        transcript = (fragment.transcript or "").strip()
-        if not transcript or fragment.id in existing_vector_ids:
+        effective_text = read_fragment_effective_text(fragment)
+        if not effective_text or fragment.id in existing_vector_ids:
             continue
 
         try:
             await vector_store.upsert_fragment(
                 user_id=user_id,
                 fragment_id=fragment.id,
-                text=transcript,
+                text=effective_text,
                 source=fragment.source,
                 summary=fragment.summary,
                 tags=parse_json_list(fragment.tags, allow_csv_fallback=True),
@@ -73,7 +74,7 @@ async def build_fragment_visualization(
         fallback_items = [
             (fragment, build_text_feature_embedding(fragment))
             for fragment in fallback_fragments
-            if (fragment.transcript or "").strip()
+            if read_fragment_effective_text(fragment)
         ]
         return build_visualization_payload(items=fallback_items, used_vector_source="fallback_text_features")
 
@@ -99,7 +100,7 @@ async def build_fragment_visualization(
         fallback_items = [
             (fragment, build_text_feature_embedding(fragment))
             for fragment in fallback_fragments
-            if (fragment.transcript or "").strip()
+            if read_fragment_effective_text(fragment)
         ]
         return build_visualization_payload(items=fallback_items, used_vector_source="fallback_text_features")
 

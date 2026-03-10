@@ -40,7 +40,6 @@ class TranscriptionUseCase:
             db=db,
             user_id=user_id,
             transcript=None,
-            capture_text=None,
             source="voice",
             audio_source="upload",
             audio_storage_provider=None,

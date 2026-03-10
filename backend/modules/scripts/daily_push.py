@@ -5,7 +5,7 @@ from math import ceil
 from core.config import settings
 from core.exceptions import ValidationError
 from models import Fragment
-from modules.shared.content_markdown import compile_fragment_markdown, extract_plain_text
+from modules.fragments.content import read_fragment_effective_text
 from modules.shared.ports import VectorStore
 
 
@@ -79,9 +79,4 @@ def _largest_connected_component(*, adjacency: dict[str, set[str]], fragment_ids
 
 def read_fragment_content(fragment: Fragment) -> str:
     """统一读取每日推盘使用的碎片正文。"""
-    if fragment.blocks:
-        markdown = compile_fragment_markdown(
-            block_payloads=[block.payload_json for block in sorted(fragment.blocks, key=lambda item: item.order_index)],
-        )
-        return extract_plain_text(markdown)
-    return ""
+    return read_fragment_effective_text(fragment)

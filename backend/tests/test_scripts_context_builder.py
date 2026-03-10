@@ -22,7 +22,6 @@ def _create_fragment(db, transcript: str):
         db=db,
         user_id=TEST_USER_ID,
         transcript=transcript,
-        capture_text=transcript,
         source="manual",
         audio_source=None,
         audio_storage_provider=None,

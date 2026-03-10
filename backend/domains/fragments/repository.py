@@ -76,13 +76,11 @@ def get_by_ids(db: Session, user_id: str, fragment_ids: list[str]) -> list[Fragm
 
 
 def list_vectorizable_by_user(db: Session, user_id: str) -> list[Fragment]:
+    """查询可参与向量化的碎片。"""
     return (
         db.query(Fragment)
         .options(joinedload(Fragment.blocks))
-        .filter(
-            Fragment.user_id == user_id,
-            Fragment.transcript.isnot(None),
-        )
+        .filter(Fragment.user_id == user_id)
         .order_by(Fragment.created_at.asc())
         .all()
     )
@@ -98,11 +96,12 @@ def list_content_ready_in_range(
     return (
         db.query(Fragment)
         .options(joinedload(Fragment.blocks))
-        .join(FragmentBlock, FragmentBlock.fragment_id == Fragment.id)
+        .outerjoin(FragmentBlock, FragmentBlock.fragment_id == Fragment.id)
         .filter(
             Fragment.user_id == user_id,
             Fragment.created_at >= start_at,
             Fragment.created_at < end_at,
+            (FragmentBlock.id.isnot(None) | Fragment.transcript.isnot(None)),
         )
         .distinct()
         .order_by(Fragment.created_at.asc())
@@ -114,7 +113,6 @@ def create(
     db: Session,
     user_id: str,
     transcript: Optional[str],
-    capture_text: Optional[str],
     source: str,
     audio_source: Optional[str],
     audio_storage_provider: Optional[str],
@@ -130,10 +128,10 @@ def create(
     tags_json: Optional[str] = None,
     tags: Optional[list[str]] = None,
 ) -> Fragment:
+    """创建碎片主记录并同步归一化标签。"""
     fragment = Fragment(
         user_id=user_id,
         folder_id=folder_id,
-        capture_text=capture_text,
         transcript=transcript,
         audio_storage_provider=audio_storage_provider,
         audio_bucket=audio_bucket,
@@ -180,7 +178,6 @@ def save_transcription_result(
         return False
 
     fragment.transcript = transcript
-    fragment.capture_text = transcript
     fragment.speaker_segments = speaker_segments_json
     fragment.summary = summary
     fragment.tags = tags_json
@@ -227,16 +224,6 @@ def update_audio_file(
     fragment.audio_mime_type = audio_mime_type
     fragment.audio_file_size = audio_file_size
     fragment.audio_checksum = audio_checksum
-    db.commit()
-    return True
-
-
-def update_capture_text(db: Session, *, fragment_id: str, user_id: str, capture_text: str | None) -> bool:
-    """更新碎片原始采集文本。"""
-    fragment = get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
-    if not fragment:
-        return False
-    fragment.capture_text = capture_text
     db.commit()
     return True
 

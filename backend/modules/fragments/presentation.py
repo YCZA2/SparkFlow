@@ -24,7 +24,11 @@ from .schemas import (
 router = APIRouter(prefix="/api/fragments", tags=["fragments"], responses={401: {"description": "未认证"}})
 
 def get_fragment_command_service(container: ServiceContainer = Depends(get_container)) -> FragmentCommandService:
-    return FragmentCommandService(file_storage=container.file_storage)
+    return FragmentCommandService(
+        file_storage=container.file_storage,
+        vector_store=container.vector_store,
+        llm_provider=container.llm_provider,
+    )
 
 
 def get_fragment_query_service(container: ServiceContainer = Depends(get_container)) -> FragmentQueryService:
@@ -75,7 +79,6 @@ async def create_fragment(
         db=db,
         user_id=current_user["user_id"],
         transcript=data.transcript,
-        capture_text=data.capture_text,
         body_markdown=data.body_markdown,
         source=data.source,
         audio_source=data.audio_source,
@@ -103,7 +106,6 @@ async def create_fragment_with_content(
         db=db,
         user_id=current_user["user_id"],
         transcript=data.transcript,
-        capture_text=data.capture_text,
         body_markdown=data.body_markdown,
         source=data.source,
         audio_source=data.audio_source,
@@ -226,7 +228,7 @@ async def update_fragment(
     service: FragmentCommandService = Depends(get_fragment_command_service),
 ):
     payload = data.model_dump(exclude_unset=True)
-    fragment = service.update_fragment(
+    fragment = await service.update_fragment(
         db=db,
         user_id=current_user["user_id"],
         fragment_id=fragment_id,
