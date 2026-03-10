@@ -81,14 +81,15 @@
 
 | 子项 | 状态 | 说明 |
 |------|------|------|
-| 13.1 每日聚合用例 | 已完成 | `DailyPushUseCase` 已存在 |
+| 13.1 每日聚合用例 | 已完成 | `DailyPushUseCase` + `daily_push_generation` pipeline 已存在 |
 | 13.2 APScheduler 定时任务 | 已完成 | app lifespan 中自动启动 |
-| 13.3 查询 / 触发 API | 已完成 | `GET/POST /api/scripts/daily-push*` |
+| 13.3 查询 / 触发 API | 已完成 | `GET/POST /api/scripts/daily-push*`，触发接口返回异步 `pipeline_run_id` |
 | 13.4 移动端首页灵感卡片 | 部分完成 | hooks 已有，当前主首页未稳定接入 |
 
 ### 当前实现位置
 
 - Use case: [`backend/modules/scripts/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/application.py)
+- Pipeline: [`backend/modules/scripts/daily_push_pipeline.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/daily_push_pipeline.py)
 - Selector rules: [`backend/modules/scripts/daily_push.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/daily_push.py)
 - Router: [`backend/modules/scripts/presentation.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/presentation.py)
 - Scheduler: [`backend/modules/scheduler/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scheduler/application.py)
@@ -98,10 +99,11 @@
 ### 已落地能力
 
 - 查询今日 daily push 稿件。
-- 为当前用户手动触发生成。
-- 提供强制触发入口，忽略语义集中度不足的限制。
+- 为当前用户手动触发异步生成，并返回 `pipeline_run_id`。
+- 提供强制触发入口，忽略语义集中度不足的限制，同样走异步 pipeline。
 - 定时任务按 `APP_TIMEZONE` 和配置时间自动执行。
 - 通过向量相似度图找出主题最集中的碎片集合。
+- 每日推盘正文生成已切到 Dify workflow，不再走后端直连 `llm_provider.generate(...)`。
 
 ### 当前缺口
 
@@ -132,7 +134,7 @@
 - 真机完整冒烟：录音 -> 转写 -> 合稿 -> 拍摄 -> 相册保存。
 - daily push 前端主路径验证。
 - 知识库移动端真实入口验证。
-- `CLAUDE.md`、移动端使用说明和 onboarding 口径还需要继续收口。
+- `backend/dify_dsl/README.md`、`CLAUDE.md`、移动端使用说明和 onboarding 口径还需要继续收口。
 
 ## 当前结论
 

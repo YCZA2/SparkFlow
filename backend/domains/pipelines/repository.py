@@ -85,6 +85,54 @@ def get_by_id(db: Session, *, user_id: str, run_id: str) -> PipelineRun | None:
     )
 
 
+def get_latest_run_by_resource(
+    db: Session,
+    *,
+    user_id: str,
+    pipeline_type: str,
+    resource_type: str,
+    resource_id: str,
+) -> PipelineRun | None:
+    """按资源定位最近一次相关流水线。"""
+    return (
+        db.query(PipelineRun)
+        .options(joinedload(PipelineRun.steps))
+        .filter(
+            PipelineRun.user_id == user_id,
+            PipelineRun.pipeline_type == pipeline_type,
+            PipelineRun.resource_type == resource_type,
+            PipelineRun.resource_id == resource_id,
+        )
+        .order_by(PipelineRun.created_at.desc())
+        .first()
+    )
+
+
+def get_latest_run_by_type_in_window(
+    db: Session,
+    *,
+    user_id: str,
+    pipeline_type: str,
+    start_at: datetime,
+    end_at: datetime,
+    statuses: list[str] | None = None,
+) -> PipelineRun | None:
+    """按用户、类型和时间窗口读取最近一条流水线。"""
+    query = (
+        db.query(PipelineRun)
+        .options(joinedload(PipelineRun.steps))
+        .filter(
+            PipelineRun.user_id == user_id,
+            PipelineRun.pipeline_type == pipeline_type,
+            PipelineRun.created_at >= start_at,
+            PipelineRun.created_at < end_at,
+        )
+    )
+    if statuses:
+        query = query.filter(PipelineRun.status.in_(statuses))
+    return query.order_by(PipelineRun.created_at.desc()).first()
+
+
 def get_by_id_for_update(db: Session, *, run_id: str) -> PipelineRun | None:
     """读取并锁定一条流水线。"""
     run = (

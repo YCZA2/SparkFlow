@@ -15,9 +15,9 @@ flowchart LR
     DB[("PostgreSQL<br/>SQLAlchemy")]
     FS[("File Storage<br/>local uploads / Aliyun OSS")]
     CHROMA[("ChromaDB<br/>fragments_* / knowledge_*")]
-    WFP["Workflow Provider<br/>当前为 Dify adapter"]
+    WFP["Workflow Provider<br/>当前为 Dify adapter<br/>脚本生成 + 每日推盘"]
     STT["STT Provider<br/>DashScope / Aliyun"]
-    LLM["LLM Provider<br/>Qwen"]
+    LLM["LLM Provider<br/>Qwen<br/>轻量摘要/标签增强"]
     EMB["Embedding Provider<br/>Qwen"]
     SCH["APScheduler<br/>daily push cron"]
     PIPE["Pipeline Dispatcher<br/>DB-backed worker"]
@@ -164,6 +164,7 @@ flowchart TD
 
 - `application.py`: 脚本查询、写操作与每日推盘编排入口。
 - `pipeline.py`: `script_generation` 流水线步骤定义与协调。
+- `daily_push_pipeline.py`: `daily_push_generation` 流水线步骤定义、Dify 调用与结果回流。
 - `context_builder.py`: fragment 校验、query 构造、knowledge/web hits 聚合。
 - `persistence.py`: workflow 输出解析、失败消息提取、脚本幂等落库。
 - `daily_push.py`: 每日推盘的碎片文本拼接与相似度筛选规则。
@@ -217,11 +218,11 @@ flowchart TD
 
 ### 4.6 External Dependencies
 
-- LLM: 默认 `Qwen`，通过 `services/factory.py` 创建。
+- LLM: 默认 `Qwen`，通过 `services/factory.py` 创建，当前仅承担碎片摘要/标签等轻量增强能力。
 - STT: 默认 `DashScope`，保留 Aliyun 兼容实现。
 - Embedding: 默认 `Qwen text-embedding-v2`。
 - Vector DB: 默认 `ChromaDB`。
-- Workflow Provider: 当前通过通用 `workflow_provider` 端口接入，默认实现为 `DifyWorkflowProvider`。
+- Workflow Provider: 当前通过通用 `workflow_provider` 端口接入，默认实现为 `DifyWorkflowProvider`；脚本生成与每日推盘均走 Dify。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 统一 `FileStorage` 端口；本地开发默认 `local` provider，线上默认私有阿里云 OSS，通过签名 URL 暴露文件访问。
 - Database: PostgreSQL（本地开发默认由 Docker 提供，默认库为 `sparkflow` / `sparkflow_test`）。
@@ -400,19 +401,23 @@ sequenceDiagram
     participant UseCase as DailyPushUseCase
     participant DB as PostgreSQL
     participant VDB as VectorStore
-    participant LLM as Qwen
+    participant PIPE as Pipeline Runner
+    participant Dify as Dify Workflow
 
     Scheduler->>UseCase: run_daily_job()
     UseCase->>DB: load yesterday fragments
     UseCase->>VDB: semantic relatedness check
-    UseCase->>LLM: generate mode_a script
-    UseCase->>DB: save ready daily push script
+    UseCase->>PIPE: create daily_push_generation run
+    PIPE->>Dify: submit / poll workflow
+    Dify-->>PIPE: draft/title
+    PIPE->>DB: save ready daily push script
 ```
 
 关键点：
 
 - scheduler 在 FastAPI lifespan 内启动与停止。
-- 手动触发接口已存在：`/api/scripts/daily-push/trigger` 和 `/api/scripts/daily-push/force-trigger`。
+- 手动触发接口已存在：`/api/scripts/daily-push/trigger` 和 `/api/scripts/daily-push/force-trigger`，当前返回异步 `pipeline_run_id`。
+- 每日推盘与脚本生成统一走 Dify workflow；摘要/标签增强仍保留在后端直连 LLM。
 - 当前后端链路已完成，但首页“每日灵感卡片”还没有稳定接入到实际主页面。
 
 ## 6. Current API Surface

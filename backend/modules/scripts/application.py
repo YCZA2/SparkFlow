@@ -1,22 +1,16 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from core.config import settings
 from core.exceptions import NotFoundError, ValidationError
-from models import Fragment, Script, User
+from models import Script
 from utils.serialization import format_iso_datetime, parse_json_list
-from utils.time import get_app_timezone, get_local_day_bounds
+from utils.time import get_local_day_bounds
 
-from domains.fragments import repository as fragment_repository
 from domains.scripts import repository as script_repository
-from modules.shared.ports import TextGenerationProvider, VectorStore
-from modules.shared.infrastructure import PromptLoader
-from .daily_push import DailyPushFragmentSelector, build_fragments_text
+from .daily_push_pipeline import DailyPushPipelineService, PIPELINE_TYPE_DAILY_PUSH_GENERATION
 from .pipeline import ScriptGenerationPipelineService
 from .schemas import ScriptDetail, ScriptGenerationResponse, ScriptItem, ScriptListResponse
 
@@ -75,6 +69,7 @@ class ScriptGenerationUseCase:
             pipeline_type="script_generation",
             status=run.status,
         )
+
 
 class ScriptQueryService:
     """提供稿件查询能力。"""
@@ -138,108 +133,34 @@ class DailyPushUseCase:
     def __init__(
         self,
         *,
-        llm_provider: TextGenerationProvider,
-        prompt_loader: PromptLoader,
-        vector_store: VectorStore,
-        fragment_selector: DailyPushFragmentSelector | None = None,
+        pipeline_service: DailyPushPipelineService,
     ) -> None:
         """装配每日推盘依赖。"""
-        self.llm_provider = llm_provider
-        self.prompt_loader = prompt_loader
-        self.fragment_selector = fragment_selector or DailyPushFragmentSelector(vector_store=vector_store)
+        self.pipeline_service = pipeline_service
 
     async def trigger_for_user(
         self,
         *,
         db: Session,
         user_id: str,
-        reference_time: datetime | None = None,
         force: bool = False,
-    ) -> Script:
-        """按当天碎片即时生成每日推盘。"""
-        target_time = reference_time or datetime.now(timezone.utc)
-        today_start, today_end = get_local_day_bounds(target_time, day_offset=0)
-        existing = script_repository.get_latest_daily_push_for_window(db=db, user_id=user_id, start_at=today_start, end_at=today_end)
-        if existing:
-            return existing
-
-        recent_fragments = fragment_repository.list_content_ready_in_range(db=db, user_id=user_id, start_at=today_start, end_at=today_end)
-        if len(recent_fragments) < settings.DAILY_PUSH_MIN_FRAGMENTS:
-            raise ValidationError(
-                message=f"今天至少需要 {settings.DAILY_PUSH_MIN_FRAGMENTS} 条已转写碎片，才能立即生成灵感卡片",
-                field_errors={"fragments": "今日碎片数量不足"},
-            )
-
-        selected = recent_fragments if force else await self.fragment_selector.select_related_fragments(user_id=user_id, fragments=recent_fragments)
-        if len(selected) < settings.DAILY_PUSH_MIN_FRAGMENTS:
-            raise ValidationError(message="今天的碎片主题还不够集中，暂时无法生成灵感卡片", field_errors={"fragments": "语义关联不足"})
-
-        content = await self.llm_provider.generate(
-            system_prompt=self.prompt_loader.load_script_prompt("mode_a").replace("{fragments_text}", build_fragments_text(selected)),
-            user_message="",
-            temperature=0.7,
-            max_tokens=1500,
-        )
-        local_now = target_time.astimezone(get_app_timezone())
-        return script_repository.create(
+    ) -> ScriptGenerationResponse:
+        """按当天碎片创建异步每日推盘流水线。"""
+        run = await self.pipeline_service.create_run(
             db=db,
             user_id=user_id,
-            content=content,
-            body_markdown=content,
-            mode="mode_a",
-            source_fragment_ids=json.dumps([fragment.id for fragment in selected], ensure_ascii=False),
-            title=f"{'强制' if force else '即时'}灵感推盘 · {local_now.date().isoformat()}",
-            status="ready",
-            is_daily_push=True,
+            reference_time=None,
+            force=force,
+            source_day_offset=0,
+            title_prefix="强制" if force else "即时",
+            trigger_kind="manual_force" if force else "manual",
+        )
+        return ScriptGenerationResponse(
+            pipeline_run_id=run.id,
+            pipeline_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+            status=run.status,
         )
 
-    async def run_daily_job(self, *, db: Session, reference_time: datetime | None = None) -> dict[str, Any]:
-        """为所有用户执行每日推盘调度任务。"""
-        target_time = reference_time or datetime.now(timezone.utc)
-        yesterday_start, yesterday_end = get_local_day_bounds(target_time, day_offset=-1)
-        today_start, today_end = get_local_day_bounds(target_time, day_offset=0)
-        local_now = target_time.astimezone(get_app_timezone())
-        generated_script_ids: list[str] = []
-        skipped_users = 0
-        user_ids = {row[0] for row in db.query(User.id).all()}
-        user_ids.update(row[0] for row in db.query(Fragment.user_id).filter(Fragment.user_id.isnot(None)).distinct().all())
-
-        for user_id in sorted(user_ids):
-            if script_repository.get_latest_daily_push_for_window(db=db, user_id=user_id, start_at=today_start, end_at=today_end):
-                skipped_users += 1
-                continue
-            recent_fragments = fragment_repository.list_content_ready_in_range(db=db, user_id=user_id, start_at=yesterday_start, end_at=yesterday_end)
-            if len(recent_fragments) < settings.DAILY_PUSH_MIN_FRAGMENTS:
-                skipped_users += 1
-                continue
-            selected = await self.fragment_selector.select_related_fragments(user_id=user_id, fragments=recent_fragments)
-            if len(selected) < settings.DAILY_PUSH_MIN_FRAGMENTS:
-                skipped_users += 1
-                continue
-            content = await self.llm_provider.generate(
-                system_prompt=self.prompt_loader.load_script_prompt("mode_a").replace("{fragments_text}", build_fragments_text(selected)),
-                user_message="",
-                temperature=0.7,
-                max_tokens=1500,
-            )
-            script = script_repository.create(
-                db=db,
-                user_id=user_id,
-                content=content,
-                body_markdown=content,
-                mode="mode_a",
-                source_fragment_ids=json.dumps([fragment.id for fragment in selected], ensure_ascii=False),
-                title=f"每日灵感推盘 · {local_now.date().isoformat()}",
-                status="ready",
-                is_daily_push=True,
-            )
-            generated_script_ids.append(script.id)
-
-        return {
-            "processed_users": len(user_ids),
-            "generated_scripts": len(generated_script_ids),
-            "generated_script_ids": generated_script_ids,
-            "skipped_users": skipped_users,
-            "window_start": yesterday_start.isoformat(),
-            "window_end": yesterday_end.isoformat(),
-        }
+    async def run_daily_job(self, *, db: Session) -> dict:
+        """为所有用户入队每日推盘调度任务。"""
+        return await self.pipeline_service.enqueue_for_all_users(db=db)

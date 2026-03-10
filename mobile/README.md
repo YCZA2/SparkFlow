@@ -166,11 +166,13 @@ http://192.168.31.157:8000
 
 ### 0. 新的后台任务接口怎么联调
 
-媒体导入和脚本生成现在默认是任务态：
+媒体导入、脚本生成和每日推盘触发现在默认是任务态：
 
 - `POST /api/transcriptions`
 - `POST /api/external-media/audio-imports`
 - `POST /api/scripts/generation`
+- `POST /api/scripts/daily-push/trigger`
+- `POST /api/scripts/daily-push/force-trigger`
 
 这些接口先返回 `pipeline_run_id`，不会保证请求返回时已经拿到最终 `fragment` 或 `script`。
 
@@ -184,6 +186,7 @@ http://192.168.31.157:8000
 当前补齐范围：
 
 - 脚本生成页已经按上述任务态接入，会在成功后再跳转脚本详情
+- 每日推盘触发接口后端已经切成任务态，移动端首页主入口仍未完整消费
 - 媒体上传和外链导入的客户端统一任务态展示仍属于后续阶段
 
 ### 0.1 Markdown 内容层当前怎么联调

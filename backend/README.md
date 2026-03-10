@@ -38,6 +38,8 @@ bash scripts/test-all.sh
 DIFY_BASE_URL=https://your-dify.example.com/v1
 DIFY_API_KEY=app-xxx
 DIFY_SCRIPT_WORKFLOW_ID=wf-script-generation
+DIFY_DAILY_PUSH_API_KEY=app-daily-push-xxx  # 可选，未配置时复用 DIFY_API_KEY
+DIFY_DAILY_PUSH_WORKFLOW_ID=wf-daily-push
 ```
 
 如果要在本地自托管 Dify，可在仓库根目录执行：
@@ -59,6 +61,8 @@ bash scripts/dify-local.sh start
 DIFY_BASE_URL=http://127.0.0.1:18080/v1
 DIFY_API_KEY=app-xxx
 DIFY_SCRIPT_WORKFLOW_ID=wf-script-generation
+DIFY_DAILY_PUSH_API_KEY=app-daily-push-xxx
+DIFY_DAILY_PUSH_WORKFLOW_ID=wf-daily-push
 ```
 
 如果不想在 Dify 页面里手工从零搭工作流，仓库已经提供可直接导入的 DSL 模板：
@@ -134,6 +138,7 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 
 - `application.py` 只保留查询、命令和每日推盘编排入口。
 - `pipeline.py` 只负责 `script_generation` 步骤定义与协调。
+- `daily_push_pipeline.py` 只负责 `daily_push_generation` 步骤定义、Dify 调用与结果回流。
 - `context_builder.py` 负责脚本生成的输入校验和研究上下文构建。
 - `persistence.py` 负责 workflow 输出解析与脚本幂等落库。
 - `daily_push.py` 负责每日推盘的碎片拼接和相似度筛选规则。
@@ -144,6 +149,11 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 - `models/`: SQLAlchemy ORM 模型和数据库 session 工厂。
 - `services/`: 外部 provider 适配器与工厂，当前包含 LLM / STT / Embedding 和 `DifyWorkflowProvider`。
 - `prompts/`: Prompt 模板文件。
+
+当前职责边界：
+
+- `llm_provider` 只承担轻量增强能力，例如碎片摘要、标签，以及对应 fallback。
+- `workflow_provider` 承担内容生成类能力，例如脚本生成和每日推盘。
 
 ### Runtime data and maintenance
 
@@ -213,7 +223,7 @@ bash scripts/postgres-local.sh stop
 
 当前接入策略：
 
-- `POST /api/transcriptions` / `POST /api/external-media/audio-imports` / `POST /api/scripts/generation` 现在都会先创建 `pipeline_runs`
+- `POST /api/transcriptions` / `POST /api/external-media/audio-imports` / `POST /api/scripts/generation` / `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 现在都会先创建 `pipeline_runs`
 - `GET /api/pipelines/{run_id}` / `GET /api/pipelines/{run_id}/steps` / `POST /api/pipelines/{run_id}/retry` 提供统一后台任务观察与补偿入口
 - SparkFlow 后端先收集 fragments、knowledge hits 和可选 web hits
 - SparkFlow 后端先把这些内容组装为结构化上下文，再交给通用 `workflow_provider`
@@ -227,6 +237,7 @@ bash scripts/postgres-local.sh stop
 - `POST /api/transcriptions` 返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
 - `POST /api/external-media/audio-imports` 返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
 - `POST /api/scripts/generation` 返回 `pipeline_run_id`、`pipeline_type`、`status`
+- `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 返回 `pipeline_run_id`、`pipeline_type`、`status`
 - 文件类响应不再暴露 `audio_path` / `storage_path`，统一返回签名 `*_file_url` 与过期时间
 - `fragments` 列表 / 详情与 `GET /api/transcriptions/{fragment_id}` 不再返回 `sync_status`
 - 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`

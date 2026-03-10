@@ -8,6 +8,13 @@
   - 用途：将 SparkFlow 后端整理后的碎片上下文转换成结构化口播稿
   - 输出字段：`title`、`outline`、`draft`、`used_sources`、`review_notes`、`model_metadata`
 
+当前仓库还支持独立的每日推盘 workflow，但 DSL 文件暂未内置到仓库：
+
+- daily push workflow
+  - 用途：消费每日推盘筛选后的碎片集合，生成今日待拍稿
+  - 最少输出字段：`draft`
+  - 可选输出字段：`title`、`outline`、`model_metadata`
+
 ## 导入方式
 
 在 Dify Web 中进入：
@@ -30,6 +37,11 @@
    - 当前 SparkFlow 后端已经按这个 DSL 的约定，把复杂字段序列化为 JSON 字符串后再提交
    - 对应字段包括 `selected_fragments`、`knowledge_hits`、`web_hits`、`user_context`、`generation_metadata`
 
+4. 每日推盘 workflow 的输入差异
+   - 每日推盘不复用脚本生成 workflow
+   - 当前后端会向 daily push workflow 传递 `selected_fragments`、`fragments_text`、`target_date`、`trigger_kind`、`force`、`generation_metadata`
+   - 如需为 daily push 单独搭建 Dify workflow，请按上述字段对齐 Start 节点输入
+
 ## 推荐命名
 
 导入后建议把应用名保持为：
@@ -43,3 +55,8 @@
 再把 Dify 中显示的 workflow/app 标识填回：
 
 - `DIFY_SCRIPT_WORKFLOW_ID`
+- `DIFY_DAILY_PUSH_WORKFLOW_ID`
+
+如果 daily push workflow 使用独立应用 API Key，还需要配置：
+
+- `DIFY_DAILY_PUSH_API_KEY`

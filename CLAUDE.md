@@ -112,7 +112,10 @@ mobile/
    - Mode A: "导师爆款模式" - Forces golden structure (hook + pain point + value + CTA)
    - Mode B: "专属二脑模式" - Mimics user's writing style from knowledge base
 3. **Markdown Content Export** → Export fragment / script / knowledge doc as `.md` or batch zip
-4. **Daily Auto-Aggregation** → If ≥3 related fragments recorded yesterday → AI generates script at 8 AM → Push notification
+4. **Daily Auto-Aggregation** → If ≥3 related fragments recorded yesterday → Create `daily_push_generation` pipeline run → Dify workflow generates script
+   - Manual triggers use `/api/scripts/daily-push/trigger` and `/api/scripts/daily-push/force-trigger`
+   - The trigger endpoints now return `pipeline_run_id`, and the client should poll `/api/pipelines/{run_id}`
+   - Fragment summary/tag enrichment still uses direct `llm_provider`; daily-push正文生成已切到 Dify
 5. **Teleprompter Recording** → One-tap to camera → Overlay teleprompter → Save video to local photos
 
 ## Database Schema (Key Tables)

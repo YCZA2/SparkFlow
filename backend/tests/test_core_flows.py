@@ -739,7 +739,7 @@ async def test_delete_fragment_removes_audio_file(async_client, auth_headers_fac
 
 @pytest.mark.asyncio
 async def test_scripts_daily_push_trigger_get_force_trigger_and_idempotency(async_client, auth_headers_factory, app, db_session_factory) -> None:
-    """每日推盘触发、读取和强制触发应保持幂等结果。"""
+    """每日推盘触发后应返回异步任务，并在完成后保持幂等。"""
     fragment_ids = [
         (await _create_fragment(async_client, auth_headers_factory, {"transcript": f"同主题内容 {index}", "source": "manual"}))["id"]
         for index in range(3)
@@ -751,14 +751,18 @@ async def test_scripts_daily_push_trigger_get_force_trigger_and_idempotency(asyn
         db.commit()
 
     first_response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
-    daily_push_id = first_response.json()["data"]["id"]
+    assert first_response.status_code == 200
+    first_run_id = first_response.json()["data"]["pipeline_run_id"]
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, first_run_id)
+    assert pipeline["status"] == "succeeded"
+
     get_response = await async_client.get("/api/scripts/daily-push", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert get_response.json()["data"]["id"] == daily_push_id
+    assert get_response.json()["data"]["id"] == pipeline["resource"]["resource_id"]
 
     second_response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
     force_response = await async_client.post("/api/scripts/daily-push/force-trigger", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert second_response.json()["data"]["id"] == daily_push_id
-    assert force_response.json()["data"]["id"] == daily_push_id
+    assert second_response.json()["data"]["pipeline_run_id"] == first_run_id
+    assert force_response.json()["data"]["pipeline_run_id"] == first_run_id
 
 
 @pytest.mark.asyncio

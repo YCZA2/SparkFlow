@@ -626,3 +626,11 @@ def create_workflow_provider(*, settings: Settings) -> WorkflowProvider:
         base_url=settings.DIFY_BASE_URL,
         api_key=settings.DIFY_API_KEY,
     )
+
+
+def create_daily_push_workflow_provider(*, settings: Settings) -> WorkflowProvider:
+    """构造每日推盘专用的外挂工作流 provider。"""
+    return DifyWorkflowProvider(
+        base_url=settings.DIFY_BASE_URL,
+        api_key=settings.DIFY_DAILY_PUSH_API_KEY or settings.DIFY_API_KEY,
+    )

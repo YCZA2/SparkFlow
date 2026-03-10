@@ -27,6 +27,10 @@ from modules.knowledge.presentation import router as knowledge_router
 from modules.media_assets.presentation import router as media_assets_router
 from modules.pipelines.presentation import router as pipelines_router
 from modules.scripts.application import DailyPushUseCase
+from modules.scripts.daily_push_pipeline import (
+    PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+    build_daily_push_pipeline_service,
+)
 from modules.scripts.pipeline import build_script_generation_pipeline_service, PIPELINE_TYPE_SCRIPT_GENERATION
 from modules.scripts.presentation import router as scripts_router
 from modules.shared.audio_ingestion import build_media_ingestion_pipeline_service, PIPELINE_TYPE_MEDIA_INGESTION
@@ -72,6 +76,7 @@ def create_app() -> FastAPI:
             if container.pipeline_dispatcher:
                 await container.pipeline_dispatcher.stop()
             await container.workflow_provider.aclose()
+            await container.daily_push_workflow_provider.aclose()
 
     app = FastAPI(
         title=settings.APP_NAME,
@@ -219,11 +224,9 @@ def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:
     async def run_daily_push_job() -> None:
         with container.session_factory() as db:
             use_case = DailyPushUseCase(
-                llm_provider=container.llm_provider,
-                prompt_loader=container.prompt_loader,
-                vector_store=container.vector_store,
+                pipeline_service=build_daily_push_pipeline_service(container),
             )
-            await use_case.run_daily_job(db=db)
+            return await use_case.run_daily_job(db=db)
 
     return SchedulerService(scheduler=scheduler, run_job=run_daily_push_job)
 
@@ -260,6 +263,12 @@ def _configure_pipeline_runtime(container: ServiceContainer) -> None:
         executor_registry=executor_registry,
         pipeline_type=PIPELINE_TYPE_SCRIPT_GENERATION,
         definitions=build_script_generation_pipeline_service(container).build_pipeline_definitions(),
+    )
+    _register_pipeline(
+        definition_registry=definition_registry,
+        executor_registry=executor_registry,
+        pipeline_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+        definitions=build_daily_push_pipeline_service(container).build_pipeline_definitions(),
     )
 
 

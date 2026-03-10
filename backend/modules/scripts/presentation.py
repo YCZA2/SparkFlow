@@ -8,6 +8,7 @@ from core.auth import get_current_user
 from modules.shared.container import ServiceContainer, get_container, get_db_session
 
 from .application import DailyPushUseCase, ScriptCommandService, ScriptGenerationUseCase, ScriptQueryService, map_script
+from .daily_push_pipeline import build_daily_push_pipeline_service
 from .pipeline import build_script_generation_pipeline_service
 from .schemas import ScriptDetail, ScriptGenerationRequest, ScriptGenerationResponse, ScriptListResponse, ScriptUpdateRequest
 
@@ -24,9 +25,7 @@ def get_script_generation_use_case(container: ServiceContainer = Depends(get_con
 def get_daily_push_use_case(container: ServiceContainer = Depends(get_container)) -> DailyPushUseCase:
     """构建每日推盘用例。"""
     return DailyPushUseCase(
-        llm_provider=container.llm_provider,
-        prompt_loader=container.prompt_loader,
-        vector_store=container.vector_store,
+        pipeline_service=build_daily_push_pipeline_service(container),
     )
 
 
@@ -84,32 +83,32 @@ async def get_daily_push(
 
 @router.post(
     "/daily-push/trigger",
-    response_model=ResponseModel[ScriptDetail],
+    response_model=ResponseModel[ScriptGenerationResponse],
     summary="立即触发今日推盘",
-    description="根据今天已转写的碎片即时生成一篇今日灵感推盘稿。",
+    description="根据今天已转写的碎片创建一条异步每日推盘流水线。",
 )
 async def trigger_daily_push(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
     use_case: DailyPushUseCase = Depends(get_daily_push_use_case),
 ):
-    script = await use_case.trigger_for_user(db=db, user_id=current_user["user_id"])
-    return success_response(data=map_script(script), message="今日灵感卡片已生成")
+    payload = await use_case.trigger_for_user(db=db, user_id=current_user["user_id"])
+    return success_response(data=payload, message="今日灵感卡片任务已创建")
 
 
 @router.post(
     "/daily-push/force-trigger",
-    response_model=ResponseModel[ScriptDetail],
+    response_model=ResponseModel[ScriptGenerationResponse],
     summary="强制触发今日推盘",
-    description="忽略语义聚合约束，基于今天的碎片强制生成一篇今日灵感推盘稿。",
+    description="忽略语义聚合约束，基于今天的碎片创建一条异步每日推盘流水线。",
 )
 async def force_trigger_daily_push(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
     use_case: DailyPushUseCase = Depends(get_daily_push_use_case),
 ):
-    script = await use_case.trigger_for_user(db=db, user_id=current_user["user_id"], force=True)
-    return success_response(data=map_script(script), message="已强制生成今日灵感卡片")
+    payload = await use_case.trigger_for_user(db=db, user_id=current_user["user_id"], force=True)
+    return success_response(data=payload, message="已创建强制每日推盘任务")
 
 
 @router.get(

@@ -12,7 +12,7 @@ class PipelineResourcePreview(BaseModel):
 
 class PipelineRunResponse(BaseModel):
     id: str
-    pipeline_type: Literal["media_ingestion", "script_generation"]
+    pipeline_type: Literal["media_ingestion", "script_generation", "daily_push_generation"]
     status: str
     current_step: str | None = None
     error_message: str | None = None

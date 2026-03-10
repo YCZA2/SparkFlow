@@ -88,6 +88,14 @@ class Settings(BaseSettings):
         default=None,
         description="脚本研究工作流标识，用于本地记录和校验"
     )
+    DIFY_DAILY_PUSH_API_KEY: Optional[str] = Field(
+        default=None,
+        description="每日推盘工作流 API Key；未配置时复用 DIFY_API_KEY"
+    )
+    DIFY_DAILY_PUSH_WORKFLOW_ID: Optional[str] = Field(
+        default=None,
+        description="每日推盘工作流标识，用于本地记录和校验"
+    )
     DIFY_POLL_INTERVAL_SECONDS: int = Field(
         default=2,
         description="轮询 Dify 运行状态的建议间隔"

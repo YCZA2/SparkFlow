@@ -17,6 +17,7 @@ from services.factory import (
 )
 
 from .infrastructure import (
+    create_daily_push_workflow_provider,
     PromptLoader,
     create_external_media_provider,
     create_file_storage,
@@ -52,6 +53,7 @@ class ServiceContainer:
     prompt_loader: PromptLoader
     web_search_provider: WebSearchProvider
     workflow_provider: WorkflowProvider
+    daily_push_workflow_provider: WorkflowProvider
     pipeline_runner: Any | None = None
     pipeline_dispatcher: Any | None = None
     pipeline_recovery_service: Any | None = None
@@ -75,6 +77,7 @@ def build_container() -> ServiceContainer:
         prompt_loader=create_prompt_loader(Path(__file__).resolve().parents[2] / "prompts"),
         web_search_provider=create_web_search_provider(),
         workflow_provider=create_workflow_provider(settings=settings),
+        daily_push_workflow_provider=create_daily_push_workflow_provider(settings=settings),
     )
 
 

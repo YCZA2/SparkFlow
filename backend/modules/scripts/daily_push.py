@@ -11,7 +11,7 @@ from modules.shared.ports import VectorStore
 
 def build_fragments_text(fragments: list[Fragment]) -> str:
     """拼接脚本生成所需的碎片文本。"""
-    parts = [_fragment_content(fragment) for fragment in fragments if _fragment_content(fragment)]
+    parts = [read_fragment_content(fragment) for fragment in fragments if read_fragment_content(fragment)]
     if not parts:
         raise ValidationError(message="选中的碎片均无转写内容，无法生成口播稿", field_errors={"fragment_ids": "碎片内容为空"})
     return "\n\n---\n\n".join(parts)
@@ -26,13 +26,13 @@ class DailyPushFragmentSelector:
 
     async def select_related_fragments(self, *, user_id: str, fragments: list[Fragment]) -> list[Fragment]:
         """基于向量相似度选出同主题碎片。"""
-        candidate_ids = {fragment.id for fragment in fragments if _fragment_content(fragment)}
+        candidate_ids = {fragment.id for fragment in fragments if read_fragment_content(fragment)}
         if len(candidate_ids) < settings.DAILY_PUSH_MIN_FRAGMENTS:
             return []
         adjacency: dict[str, set[str]] = {fragment.id: set() for fragment in fragments}
         top_k = max(5, ceil(len(fragments) * 1.5))
         for fragment in fragments:
-            query_text = _fragment_content(fragment) or fragment.summary or ""
+            query_text = read_fragment_content(fragment) or fragment.summary or ""
             if not query_text.strip():
                 continue
             try:
@@ -77,7 +77,7 @@ def _largest_connected_component(*, adjacency: dict[str, set[str]], fragment_ids
     return best_component
 
 
-def _fragment_content(fragment: Fragment) -> str:
+def read_fragment_content(fragment: Fragment) -> str:
     """统一读取每日推盘使用的碎片正文。"""
     if fragment.blocks:
         markdown = compile_fragment_markdown(

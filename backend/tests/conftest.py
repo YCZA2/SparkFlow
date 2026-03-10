@@ -21,6 +21,8 @@ os.environ.setdefault("DASHSCOPE_API_KEY", "test-dashscope-key")
 os.environ.setdefault("DIFY_BASE_URL", "https://dify.example.com/v1")
 os.environ.setdefault("DIFY_API_KEY", "test-key")
 os.environ.setdefault("DIFY_SCRIPT_WORKFLOW_ID", "wf-script-001")
+os.environ.setdefault("DIFY_DAILY_PUSH_API_KEY", "test-daily-push-key")
+os.environ.setdefault("DIFY_DAILY_PUSH_WORKFLOW_ID", "wf-daily-push-001")
 os.environ.setdefault("DIFY_POLL_INTERVAL_SECONDS", "0")
 os.environ.setdefault("DIFY_POLL_TIMEOUT_SECONDS", "1")
 os.environ.setdefault("DATABASE_URL", os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL))
@@ -127,11 +129,13 @@ async def app(
     test_app.state.container.llm_provider = llm_provider
     test_app.state.container.stt_provider = stt_provider
     test_app.state.container.workflow_provider = workflow_provider
+    test_app.state.container.daily_push_workflow_provider = workflow_provider
     yield test_app
     test_app.state.scheduler_service.stop()
     if test_app.state.container.pipeline_dispatcher:
         await test_app.state.container.pipeline_dispatcher.stop()
     await test_app.state.container.workflow_provider.aclose()
+    await test_app.state.container.daily_push_workflow_provider.aclose()
 
 
 @pytest_asyncio.fixture
