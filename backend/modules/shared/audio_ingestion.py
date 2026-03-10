@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
+from core.exceptions import AppException, NotFoundError, ServiceUnavailableError, ValidationError
 from core.logging_config import get_logger
 from domains.fragment_folders import repository as fragment_folder_repository
 from domains.fragments import repository as fragment_repository
@@ -18,7 +18,7 @@ from modules.shared.infrastructure import (
     build_imported_audio_object_key,
     sanitize_filename,
 )
-from modules.shared.pipeline_runtime import PipelineExecutionContext, PipelineStepDefinition
+from modules.shared.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
 from modules.shared.ports import (
     ExternalMediaProvider,
     FileStorage,
@@ -260,10 +260,13 @@ class AudioIngestionService:
         external_media_provider = self._runtime_external_media_provider(context)
         if external_media_provider is None:
             raise RuntimeError("external_media_provider is not configured")
-        resolved = await external_media_provider.resolve_audio(
-            share_url=payload["share_url"],
-            platform=payload.get("platform") or "auto",
-        )
+        try:
+            resolved = await external_media_provider.resolve_audio(
+                share_url=payload["share_url"],
+                platform=payload.get("platform") or "auto",
+            )
+        except Exception as exc:
+            raise self._wrap_external_media_error(exc, fallback_message="外链解析失败") from exc
         return {
             "platform": resolved.platform,
             "share_url": resolved.share_url,
@@ -299,13 +302,20 @@ class AudioIngestionService:
             platform=resolved["platform"],
             filename=filename,
         )
-        saved = await file_storage.save_local_file(
-            source_path=resolved["local_audio_path"],
-            object_key=object_key,
-            original_filename=filename,
-            mime_type=mime_type,
-        )
-        await self._cleanup_temp(resolved.get("local_audio_path"))
+        try:
+            saved = await file_storage.save_local_file(
+                source_path=resolved["local_audio_path"],
+                object_key=object_key,
+                original_filename=filename,
+                mime_type=mime_type,
+            )
+        except Exception as exc:
+            raise PipelineExecutionError(
+                f"媒体音频保存失败: {str(exc) or 'unknown error'}",
+                retryable=True,
+            ) from exc
+        finally:
+            await self._cleanup_temp(resolved.get("local_audio_path"))
         fragment_repository.update_audio_file(
             db=context.db,
             fragment_id=payload["fragment_id"],
@@ -342,7 +352,15 @@ class AudioIngestionService:
         file_storage = self._runtime_file_storage(context)
         materialized = file_storage.materialize(stored_file)
         try:
-            result = await self._runtime_stt_provider(context).transcribe(str(materialized.local_path))
+            try:
+                result = await self._runtime_stt_provider(context).transcribe(str(materialized.local_path))
+            except asyncio.CancelledError as exc:
+                raise PipelineExecutionError("语音转写被取消", retryable=False) from exc
+            except Exception as exc:
+                raise PipelineExecutionError(
+                    f"语音转写失败: {str(exc) or 'unknown error'}",
+                    retryable=True,
+                ) from exc
         finally:
             materialized.cleanup()
         transcript = result.text or ""
@@ -356,24 +374,36 @@ class AudioIngestionService:
     async def enrich_fragment(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """生成摘要和标签。"""
         transcript = context.get_step_output("transcribe_audio").get("transcript") or ""
-        summary, tags = await self._generate_enrichment(
-            transcript,
-            llm_provider=self._runtime_llm_provider(context),
-        )
+        try:
+            summary, tags = await self._generate_enrichment(
+                transcript,
+                llm_provider=self._runtime_llm_provider(context),
+            )
+        except Exception as exc:
+            raise PipelineExecutionError(
+                f"摘要增强失败: {str(exc) or 'unknown error'}",
+                retryable=True,
+            ) from exc
         return {"summary": summary, "tags": tags}
 
     async def upsert_fragment_vector(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """将碎片文本写入向量库。"""
         transcript_payload = context.get_step_output("transcribe_audio")
         enrichment_payload = context.get_step_output("enrich_fragment")
-        await self._runtime_vector_store(context).upsert_fragment(
-            user_id=context.run.user_id,
-            fragment_id=context.input_payload["fragment_id"],
-            text=transcript_payload.get("transcript") or "",
-            source="voice",
-            summary=enrichment_payload.get("summary"),
-            tags=enrichment_payload.get("tags") or [],
-        )
+        try:
+            await self._runtime_vector_store(context).upsert_fragment(
+                user_id=context.run.user_id,
+                fragment_id=context.input_payload["fragment_id"],
+                text=transcript_payload.get("transcript") or "",
+                source="voice",
+                summary=enrichment_payload.get("summary"),
+                tags=enrichment_payload.get("tags") or [],
+            )
+        except Exception as exc:
+            raise PipelineExecutionError(
+                f"碎片向量写入失败: {str(exc) or 'unknown error'}",
+                retryable=True,
+            ) from exc
         return {"vectorized": True}
 
     async def finalize_fragment(self, context: PipelineExecutionContext) -> dict[str, Any]:
@@ -381,6 +411,7 @@ class AudioIngestionService:
         transcript_payload = context.get_step_output("transcribe_audio")
         enrichment_payload = context.get_step_output("enrich_fragment")
         audio_payload = context.get_step_output("download_media")
+        source_context = context.input_payload.get("source_context") or {}
         fragment_id = context.input_payload["fragment_id"]
         fragment_repository.save_transcription_result(
             db=context.db,
@@ -391,17 +422,30 @@ class AudioIngestionService:
             tags_json=json.dumps(enrichment_payload.get("tags") or [], ensure_ascii=False),
             speaker_segments_json=json.dumps(transcript_payload.get("speaker_segments") or [], ensure_ascii=False),
         )
+        stored_file = _stored_file_from_payload(audio_payload.get("audio_file") or context.input_payload.get("audio_file"))
+        access = None
+        if stored_file is not None:
+            access = self._runtime_file_storage(context).create_download_url(stored_file)
         return {
             "resource_type": "fragment",
             "resource_id": fragment_id,
             "run_output": {
                 "fragment_id": fragment_id,
+                "source": "voice",
+                "audio_source": context.input_payload.get("source_kind"),
                 "audio_file": audio_payload.get("audio_file") or context.input_payload.get("audio_file"),
-                "audio_file_url": audio_payload.get("audio_file_url"),
-                "audio_file_expires_at": audio_payload.get("audio_file_expires_at"),
+                "audio_file_url": access.url if access else audio_payload.get("audio_file_url"),
+                "audio_file_expires_at": access.expires_at if access else audio_payload.get("audio_file_expires_at"),
                 "transcript": transcript_payload.get("transcript"),
                 "summary": enrichment_payload.get("summary"),
                 "tags": enrichment_payload.get("tags") or [],
+                "platform": audio_payload.get("platform") or source_context.get("platform"),
+                "share_url": audio_payload.get("share_url") or source_context.get("share_url"),
+                "media_id": audio_payload.get("media_id") or source_context.get("media_id"),
+                "title": audio_payload.get("title") or source_context.get("title"),
+                "author": audio_payload.get("author") or source_context.get("author"),
+                "cover_url": audio_payload.get("cover_url") or source_context.get("cover_url"),
+                "content_type": audio_payload.get("content_type") or source_context.get("content_type"),
             },
         }
 
@@ -489,6 +533,18 @@ class AudioIngestionService:
                 resource_type="fragment_folder",
                 resource_id=folder_id,
             )
+
+    @staticmethod
+    def _wrap_external_media_error(exc: Exception, *, fallback_message: str) -> PipelineExecutionError:
+        """将外链导入异常映射为带重试语义的流水线错误。"""
+        if isinstance(exc, PipelineExecutionError):
+            return exc
+        if isinstance(exc, ValidationError):
+            return PipelineExecutionError(str(exc), retryable=False)
+        if isinstance(exc, AppException):
+            retryable = exc.status_code >= 500
+            return PipelineExecutionError(exc.message or fallback_message, retryable=retryable)
+        return PipelineExecutionError(f"{fallback_message}: {str(exc) or 'unknown error'}", retryable=True)
 
 
 def build_media_ingestion_pipeline_service(container) -> AudioIngestionService:

@@ -124,7 +124,7 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 - `modules/fragment_folders/`: 碎片文件夹 CRUD 和文件夹统计。
 - `modules/fragments/`: 碎片列表、详情、移动、标签、相似检索、可视化。
 - `modules/transcriptions/`: 音频上传、后台转写、转写状态查询。
-- `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接转 m4a，并直接创建碎片进入统一转写流程。
+- `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接；请求入口只创建任务，解析链接、下载转 m4a、转写与增强全部走统一后台流水线。
 - `modules/scripts/`: 口播稿生成、脚本生成 pipeline 定义、上下文构建、结果回流、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
 - `modules/pipelines/`: 后台流水线详情、步骤和重跑 API。
@@ -231,6 +231,7 @@ bash scripts/postgres-local.sh stop
 
 - `POST /api/transcriptions` / `POST /api/external-media/audio-imports` / `POST /api/scripts/generation` / `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 现在都会先创建 `pipeline_runs`
 - `GET /api/pipelines/{run_id}` / `GET /api/pipelines/{run_id}/steps` / `POST /api/pipelines/{run_id}/retry` 提供统一后台任务观察与补偿入口
+- `POST /api/external-media/audio-imports` 不再同步解析或下载媒体；`resolve_external_media` / `download_media` 也属于 `media_ingestion` pipeline 步骤
 - SparkFlow 后端先收集 fragments、knowledge hits 和可选 web hits
 - SparkFlow 后端先把这些内容组装为结构化上下文，再交给通用 `workflow_provider`
 - 当前 Dify adapter 会在适配层把 `selected_fragments`、`knowledge_hits`、`web_hits`、`user_context`、`generation_metadata` 序列化为 JSON 字符串，以兼容 Dify Start 节点
@@ -249,6 +250,7 @@ bash scripts/postgres-local.sh stop
 - `fragments.transcript` 表示机器转写原文，`compiled_markdown` 表示用户整理后的正式正文；正文消费统一按 `compiled_markdown -> transcript` 回退
 - 非语音碎片创建必须提供 `body_markdown`；`transcript` 仅保留给语音转写链路
 - 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`
+- 外链导入成功后的 `platform`、`share_url`、`media_id`、`title`、`author`、`cover_url`、`content_type`、`audio_file_url` 统一从 `GET /api/pipelines/{run_id}` 的 `output` 读取
 - 当前移动端已切脚本生成任务态；媒体上传和外链导入的客户端统一任务态展示仍作为后续阶段继续补齐
 
 当前仓库附带的 Dify DSL 目录：

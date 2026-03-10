@@ -17,8 +17,6 @@ router = APIRouter(prefix="/api/external-media", tags=["external_media"], respon
 def get_external_media_use_case(container: ServiceContainer = Depends(get_container)) -> ExternalMediaUseCase:
     return ExternalMediaUseCase(
         ingestion_service=build_media_ingestion_pipeline_service(container),
-        external_media_provider=container.external_media_provider,
-        file_storage=container.file_storage,
     )
 
 
@@ -26,7 +24,7 @@ def get_external_media_use_case(container: ServiceContainer = Depends(get_contai
     "/audio-imports",
     response_model=ResponseModel[ExternalAudioImportResponse],
     summary="导入外部媒体音频",
-    description="接收外部媒体分享链接，下载并转换为 m4a 音频后保存到后端 uploads 目录。",
+    description="接收外部媒体分享链接并创建后台导入任务，解析、下载、转写与增强均由 pipeline 异步完成。",
 )
 async def import_external_audio(
     data: ExternalAudioImportRequest,

@@ -235,8 +235,38 @@ async def test_create_fragment_rejects_invalid_audio_source(async_client, auth_h
 
 
 @pytest.mark.asyncio
-async def test_import_external_audio_returns_saved_url(async_client, auth_headers_factory, app, external_media_provider, db_session_factory, tmp_path) -> None:
-    """外部媒体导入成功后应通过流水线创建碎片并保存音频文件。"""
+async def test_import_external_audio_only_creates_pipeline_in_request_phase(async_client, auth_headers_factory, app, external_media_provider, db_session_factory) -> None:
+    """外链导入请求阶段只创建任务，不同步解析媒体。"""
+    await app.state.container.pipeline_dispatcher.stop()
+    app.state.container.pipeline_runner.dispatcher.wake_up = lambda: None
+
+    response = await async_client.post(
+        "/api/external-media/audio-imports",
+        json={"share_url": "https://v.douyin.com/demo", "platform": "auto"},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload == {
+        "pipeline_run_id": payload["pipeline_run_id"],
+        "pipeline_type": "media_ingestion",
+        "fragment_id": payload["fragment_id"],
+        "source": "voice",
+        "audio_source": "external_link",
+    }
+    assert external_media_provider.calls == []
+
+    with db_session_factory() as db:
+        fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
+        assert fragment is not None
+        assert fragment.source == "voice"
+        assert fragment.audio_source == "external_link"
+        assert fragment.transcript is None
+
+
+@pytest.mark.asyncio
+async def test_import_external_audio_runs_full_async_pipeline(async_client, auth_headers_factory, external_media_provider, db_session_factory, tmp_path) -> None:
+    """外部媒体导入成功后应由后台流水线完成解析、下载和转写。"""
     temp_audio = tmp_path / "incoming.m4a"
     temp_audio.write_bytes(b"fake-m4a-audio")
     external_media_provider.queue_success(
@@ -262,24 +292,23 @@ async def test_import_external_audio_returns_saved_url(async_client, auth_header
     assert payload["pipeline_type"] == "media_ingestion"
     assert payload["source"] == "voice"
     assert payload["audio_source"] == "external_link"
-    assert payload["platform"] == "douyin"
-    assert payload["media_id"] == "7614713222814088953"
-    assert payload["title"] == "别说了 拿大力胶吧"
-    assert payload["author"] == "老薯的薯"
-    assert payload["cover_url"] == "https://example.com/cover.jpg"
-    assert payload["content_type"] == "video"
-    assert payload["audio_file_url"]
-    assert "audio_public_url" not in payload
-    assert "audio_relative_path" not in payload
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
     assert pipeline["status"] == "succeeded"
     assert pipeline["resource"]["resource_id"] == payload["fragment_id"]
+    assert pipeline["output"]["platform"] == "douyin"
+    assert pipeline["output"]["media_id"] == "7614713222814088953"
+    assert pipeline["output"]["title"] == "别说了 拿大力胶吧"
+    assert pipeline["output"]["author"] == "老薯的薯"
+    assert pipeline["output"]["cover_url"] == "https://example.com/cover.jpg"
+    assert pipeline["output"]["content_type"] == "video"
+    assert pipeline["output"]["audio_file_url"]
 
     steps_response = await async_client.get(
         f"/api/pipelines/{payload['pipeline_run_id']}/steps",
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
+    assert steps["resolve_external_media"]["status"] == "succeeded"
     download_output = steps["download_media"]["output"]
     assert "audio/imported/" in download_output["audio_file"]["object_key"]
     assert download_output["audio_file_url"]
@@ -294,8 +323,8 @@ async def test_import_external_audio_returns_saved_url(async_client, auth_header
 
 
 @pytest.mark.asyncio
-async def test_import_external_audio_rejects_invalid_link(async_client, auth_headers_factory, external_media_provider) -> None:
-    """不支持的链接应在请求阶段直接返回校验错误。"""
+async def test_import_external_audio_marks_pipeline_failed_for_invalid_link(async_client, auth_headers_factory, external_media_provider) -> None:
+    """不支持的链接应在后台步骤里失败且不触发重试。"""
     external_media_provider.queue_error(
         ValidationError(
             message="无法识别外部媒体链接",
@@ -307,23 +336,56 @@ async def test_import_external_audio_rejects_invalid_link(async_client, auth_hea
         json={"share_url": "https://example.com/not-supported", "platform": "auto"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "VALIDATION"
+    assert response.status_code == 200
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, response.json()["data"]["pipeline_run_id"])
+    assert pipeline["status"] == "failed"
+    assert pipeline["error_message"] == "无法识别外部媒体链接"
+
+    steps_response = await async_client.get(
+        f"/api/pipelines/{response.json()['data']['pipeline_run_id']}/steps",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
+    assert steps["resolve_external_media"]["status"] == "failed"
+    assert steps["resolve_external_media"]["attempt_count"] == 1
 
 
 @pytest.mark.asyncio
-async def test_import_external_audio_returns_error_when_provider_fails(async_client, auth_headers_factory, external_media_provider) -> None:
-    """上游解析失败时应在请求阶段直接透传错误。"""
-    external_media_provider.queue_error(
-        AppException(message="抖音内容解析失败", code="EXTERNAL_MEDIA_IMPORT_FAILED", status_code=502)
+async def test_import_external_audio_retries_when_provider_temporarily_fails(async_client, auth_headers_factory, app, tmp_path) -> None:
+    """上游解析临时失败后应自动重试并恢复成功。"""
+    temp_audio = tmp_path / "retry-success.m4a"
+    temp_audio.write_bytes(b"fake-m4a-audio")
+    resolved = ExternalMediaResolvedAudio(
+        platform="douyin",
+        share_url="https://v.douyin.com/demo",
+        media_id="7614713222814088954",
+        title="重试成功",
+        author="测试作者",
+        cover_url="https://example.com/retry.jpg",
+        content_type="video",
+        local_audio_path=str(temp_audio),
+    )
+    app.state.container.external_media_provider = SimpleNamespace(
+        resolve_audio=AsyncMock(side_effect=[RuntimeError("temporary parse error"), resolved]),
+        health_check=AsyncMock(return_value=True),
     )
     response = await async_client.post(
         "/api/external-media/audio-imports",
         json={"share_url": "https://v.douyin.com/demo", "platform": "douyin"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
-    assert response.status_code == 502
-    assert response.json()["error"]["code"] == "EXTERNAL_MEDIA_IMPORT_FAILED"
+    assert response.status_code == 200
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, response.json()["data"]["pipeline_run_id"])
+    assert pipeline["status"] == "succeeded"
+    assert pipeline["output"]["media_id"] == "7614713222814088954"
+
+    steps_response = await async_client.get(
+        f"/api/pipelines/{response.json()['data']['pipeline_run_id']}/steps",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
+    assert steps["resolve_external_media"]["status"] == "succeeded"
+    assert steps["resolve_external_media"]["attempt_count"] == 2
 
 
 @pytest.mark.asyncio
@@ -627,7 +689,7 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
     assert payload["audio_file_url"]
     assert "audio_path" not in payload
     assert "relative_path" not in payload
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
     assert pipeline["status"] == "succeeded"
 
     status_response = await async_client.get(
@@ -669,13 +731,46 @@ async def test_upload_audio_marks_failed_when_stt_crashes(async_client, auth_hea
         files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
     )
     payload = response.json()["data"]
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
     assert pipeline["status"] == "failed"
+    steps_response = await async_client.get(
+        f"/api/pipelines/{payload['pipeline_run_id']}/steps",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
+    assert steps["transcribe_audio"]["attempt_count"] == 3
+    assert steps["transcribe_audio"]["status"] == "failed"
 
     with db_session_factory() as db:
         fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
         assert fragment.audio_source == "upload"
         assert fragment.transcript is None
+
+
+@pytest.mark.asyncio
+async def test_upload_audio_retries_transcription_and_then_succeeds(async_client, auth_headers_factory, app) -> None:
+    """STT 临时失败后应在重试后成功完成。"""
+    successful_result = SimpleNamespace(text="转写完成", speaker_segments=[])
+    app.state.container.stt_provider = SimpleNamespace(
+        transcribe=AsyncMock(side_effect=[RuntimeError("temporary stt error"), successful_result]),
+        health_check=AsyncMock(return_value=True),
+    )
+    response = await async_client.post(
+        "/api/transcriptions",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+        files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
+    )
+    payload = response.json()["data"]
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
+    assert pipeline["status"] == "succeeded"
+
+    steps_response = await async_client.get(
+        f"/api/pipelines/{payload['pipeline_run_id']}/steps",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
+    assert steps["transcribe_audio"]["status"] == "succeeded"
+    assert steps["transcribe_audio"]["attempt_count"] == 2
 
 
 @pytest.mark.asyncio

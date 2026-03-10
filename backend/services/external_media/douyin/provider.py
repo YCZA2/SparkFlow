@@ -45,11 +45,7 @@ class DouyinProvider:
 
         media_id = str(info.get("aweme_id") or "").strip()
         if not media_id:
-            raise AppException(
-                message="抖音内容缺少媒体 ID",
-                code="EXTERNAL_MEDIA_IMPORT_FAILED",
-                status_code=502,
-            )
+            raise ValidationError(message="抖音内容缺少媒体 ID", field_errors={"share_url": "当前链接缺少可识别的视频标识"})
 
         local_audio_path = self.extractor.extract_from_url(media_url=audio_source_url, output_stem=media_id)
         return ExternalMediaResolvedAudio(

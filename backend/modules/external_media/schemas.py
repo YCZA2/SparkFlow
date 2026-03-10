@@ -16,12 +16,3 @@ class ExternalAudioImportResponse(BaseModel):
     fragment_id: str | None = None
     source: str
     audio_source: str
-    platform: str | None = None
-    share_url: str | None = None
-    media_id: str | None = None
-    title: str | None = None
-    author: str | None = None
-    cover_url: str | None = None
-    content_type: str | None = None
-    audio_file_url: str | None = None
-    audio_file_expires_at: str | None = None

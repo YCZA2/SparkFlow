@@ -196,7 +196,7 @@ flowchart TD
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
 - `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；`transcript` 只保留语音机器转写原文，正式正文只存于 `fragment_blocks`。
 - `transcriptions`: 音频上传、后台转写、状态查询，上传入口会创建 `source=voice`、`audio_source=upload` 的碎片。
-- `external_media`: 外部媒体音频导入，当前支持抖音分享链接下载并转成 m4a，导入完成后直接创建 `source=voice`、`audio_source=external_link` 的碎片并接入同一条转写管线。
+- `external_media`: 外部媒体音频导入，当前支持抖音分享链接；请求只创建 `source=voice`、`audio_source=external_link` 的碎片和 `media_ingestion` 任务，解析链接、下载转 m4a、转写与增强都在同一条后台管线里执行。
 - `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_markdown`。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段只保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷。
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
@@ -292,28 +292,30 @@ sequenceDiagram
 sequenceDiagram
     participant App as Client
     participant API as /api/external-media/audio-imports
+    participant DB as PostgreSQL
+    participant PIPE as Pipeline Worker
     participant Provider as ExternalMediaProvider
     participant FF as ffmpeg
     participant FS as uploads/external_media
-    participant DB as PostgreSQL
-    participant BG as Background Task
 
     App->>API: POST share_url + platform
-    API->>Provider: resolve_audio(...)
+    API->>DB: create fragment(source=voice, audio_source=external_link)
+    API->>API: audio_ingestion.ingest_external_media(external_link)
+    API->>DB: create pipeline_runs + pipeline_step_runs
+    API-->>App: pipeline_run_id + fragment_id
+    PIPE->>Provider: resolve_audio(...)
     Provider->>FF: extract m4a from remote video url
     FF-->>Provider: temp m4a path
-    API->>FS: save imported audio
-    API->>API: audio_ingestion.ingest_audio(external_link)
-    API->>DB: create fragment(source=voice, audio_source=external_link)
-    API->>BG: schedule transcription
-    API-->>App: pipeline_run_id + fragment_id + media metadata
+    PIPE->>FS: save imported audio
+    PIPE->>DB: update fragment audio metadata
+    PIPE->>DB: transcribe / enrich / vectorize / finalize
 ```
 
 关键点：
 
-- 当前接口会在保存外部音频后直接创建 fragment，并接入统一后台转写链路。
+- 当前接口只创建 fragment 和后台任务，外链解析、下载转码、转写与增强全部在 `media_ingestion` pipeline 中异步执行。
 - 对外接口按多平台抽象设计，但 v1 只有抖音 provider。
-- 导入文件统一保存到 `uploads/external_media/<user_id>/<platform>/`，输出格式固定为 `m4a`。
+- 导入文件统一保存到对象存储 `audio/imported/...` 命名空间，输出格式固定为 `m4a`。
 ### 5.3 Script Generation Pipeline
 
 ```mermaid
