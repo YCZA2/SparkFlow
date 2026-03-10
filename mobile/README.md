@@ -57,6 +57,15 @@ bash scripts/dev-mobile.sh start
 npm run dev:mobile
 ```
 
+如果你要用 iOS 模拟器而不是真机，请执行：
+
+```bash
+npm run dev:mobile:simulator
+```
+
+这个模式会先启动 Metro，再由脚本手动唤起已安装的 iOS dev client，
+比直接依赖 Expo CLI 自动 `openurl` 更稳定。
+
 如需单独管理本地数据库：
 
 ```bash
@@ -147,6 +156,22 @@ bash scripts/dev-mobile.sh
 3. 用手机扫描 Expo 终端里的二维码打开项目
 
 不要直接依赖手机桌面上一次残留的开发包状态。
+
+如果使用 iOS 模拟器，推荐流程改为：
+
+1. 首次安装或原生配置变更后，先执行模式2：
+
+```bash
+bash scripts/dev-mobile.sh build
+```
+
+2. 日常联调执行：
+
+```bash
+bash scripts/dev-mobile.sh simulator
+```
+
+3. 若脚本提示 dev client 未安装，先重新执行一次 build 模式。
 
 ### 3. 应用内网络设置填什么
 

@@ -129,6 +129,69 @@ ensure_local_postgres() {
   bash "${POSTGRES_SCRIPT}" start dev
 }
 
+wait_for_http_ready() {
+  # 轮询本地 HTTP 地址，避免后续自动打开客户端时 Metro 尚未就绪。
+  local url="$1"
+  local label="$2"
+  local retries="${3:-30}"
+
+  for _ in $(seq 1 "${retries}"); do
+    if curl -fsS "${url}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "[dev-mobile] ${label} not ready: ${url}"
+  return 1
+}
+
+ensure_booted_simulator() {
+  # 显式确保 iOS 模拟器已启动，避免 Expo 自动 openurl 时命中超时。
+  if ! xcrun simctl list devices booted | grep -q "Booted"; then
+    echo "[dev-mobile] booting iOS Simulator..."
+    open -a Simulator >/dev/null 2>&1 || true
+    xcrun simctl boot "iPhone 17 Pro" >/dev/null 2>&1 || true
+  fi
+
+  for _ in $(seq 1 20); do
+    if xcrun simctl list devices booted | grep -q "Booted"; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "[dev-mobile] no booted iOS Simulator detected."
+  echo "[dev-mobile] please open Simulator.app and rerun this command."
+  return 1
+}
+
+open_expo_in_simulator() {
+  # 手动打开 dev client，并对 deep link 做重试，规避 Expo CLI 偶发超时。
+  local bundle_id="com.sparkflow.mobile"
+  local deep_link="exp+sparkflow-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A${EXPO_PORT}"
+
+  if ! xcrun simctl listapps booted | grep -q "\"${bundle_id}\""; then
+    echo "[dev-mobile] iOS dev client is not installed on the booted simulator."
+    echo "[dev-mobile] run 'bash scripts/dev-mobile.sh build' first."
+    return 1
+  fi
+
+  xcrun simctl launch booted "${bundle_id}" >/dev/null 2>&1 || true
+  sleep 2
+
+  for _ in $(seq 1 3); do
+    if xcrun simctl openurl booted "${deep_link}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "[dev-mobile] failed to open Expo dev client via simulator deep link."
+  echo "[dev-mobile] open the installed SparkFlow-mobile app manually and retry."
+  return 1
+}
+
 run_backend_migrations() {
   local alembic_cmd=()
 
@@ -246,7 +309,7 @@ run_start_mode() {
 }
 
 run_simulator_mode() {
-  local local_ip public_backend_url local_backend_health_url backend_ready
+  local local_ip public_backend_url local_backend_health_url backend_ready metro_ready
 
   trap cleanup EXIT INT TERM
 
@@ -282,12 +345,25 @@ run_simulator_mode() {
     echo "[dev-mobile] backend health check timeout, but continue to start expo."
   fi
 
+  ensure_booted_simulator
+
   echo "[dev-mobile] starting expo (iOS Simulator)..."
   (
     cd "${MOBILE_DIR}"
-    exec npx expo start --ios
+    exec npx expo start --localhost --dev-client --port "${EXPO_PORT}"
   ) &
   EXPO_PID=$!
+
+  metro_ready=0
+  if wait_for_http_ready "http://127.0.0.1:${EXPO_PORT}" "expo metro" 45; then
+    metro_ready=1
+  fi
+
+  if [[ "${metro_ready}" -eq 1 ]]; then
+    open_expo_in_simulator || true
+  else
+    echo "[dev-mobile] skip auto-opening simulator because metro is not ready yet."
+  fi
 
   echo
   echo "========================================"
