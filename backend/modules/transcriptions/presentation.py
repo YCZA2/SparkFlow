@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/transcriptions", tags=["transcriptions"], respon
 
 def get_transcription_use_case(container: ServiceContainer = Depends(get_container)) -> TranscriptionUseCase:
     return TranscriptionUseCase(
-        audio_storage=container.audio_storage,
+        file_storage=container.file_storage,
         ingestion_service=build_media_ingestion_pipeline_service(container),
     )
 

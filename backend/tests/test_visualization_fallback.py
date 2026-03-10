@@ -34,7 +34,14 @@ async def test_falls_back_to_text_features_when_vector_store_has_no_embeddings(d
             capture_text="这是一个关于定位方法的碎片",
             source="manual",
             audio_source=None,
-            audio_path=None,
+            audio_storage_provider=None,
+            audio_bucket=None,
+            audio_object_key=None,
+            audio_access_level=None,
+            audio_original_filename=None,
+            audio_mime_type=None,
+            audio_file_size=None,
+            audio_checksum=None,
         )
         store = _FakeVectorStore()
         payload = await build_fragment_visualization(db=db, user_id="test-user-001", vector_store=store)
@@ -55,7 +62,14 @@ async def test_uses_vector_store_when_embeddings_exist(db_session_factory) -> No
             capture_text="这是另一个碎片",
             source="manual",
             audio_source=None,
-            audio_path=None,
+            audio_storage_provider=None,
+            audio_bucket=None,
+            audio_object_key=None,
+            audio_access_level=None,
+            audio_original_filename=None,
+            audio_mime_type=None,
+            audio_file_size=None,
+            audio_checksum=None,
         )
         store = _FakeVectorStore()
         store._docs = [SimpleNamespace(id=fragment.id, embedding=[0.1, 0.2, 0.3])]

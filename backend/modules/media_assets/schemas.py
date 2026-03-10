@@ -13,7 +13,7 @@ class MediaAssetListResponse(BaseModel):
 
 
 class MediaAssetUploadResponse(MediaAssetItem):
-    public_url: str | None = None
+    pass
 
 
 class MediaAssetAttachRequest(BaseModel):

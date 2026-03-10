@@ -24,7 +24,6 @@ export interface MediaAsset {
   media_kind: 'image' | 'audio' | 'file';
   original_filename: string;
   mime_type: string;
-  storage_path: string;
   file_size: number;
   checksum: string | null;
   width: number | null;
@@ -32,6 +31,8 @@ export interface MediaAsset {
   duration_ms: number | null;
   status: string;
   created_at: string | null;
+  file_url?: string | null;
+  expires_at?: string | null;
 }
 
 /**
@@ -40,8 +41,10 @@ export interface MediaAsset {
 export interface Fragment {
   /** 碎片ID */
   id: string;
-  /** 音频文件路径 */
-  audio_path: string | null;
+  /** 音频下载地址 */
+  audio_file_url: string | null;
+  /** 音频地址过期时间 */
+  audio_file_expires_at?: string | null;
   /** 转写文本 */
   transcript: string | null;
   /** 原始采集文本 */

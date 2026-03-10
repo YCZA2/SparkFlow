@@ -164,9 +164,37 @@ class Settings(BaseSettings):
     )
 
     # 存储配置
+    FILE_STORAGE_PROVIDER: str = Field(
+        default="local",
+        description="文件存储提供方: local | oss"
+    )
     UPLOAD_DIR: str = Field(
         default=os.path.join(BACKEND_DIR, "uploads"),
         description="上传音频文件的存储目录"
+    )
+    OSS_ENDPOINT: Optional[str] = Field(
+        default=None,
+        description="阿里云 OSS endpoint，例如 oss-cn-hangzhou.aliyuncs.com"
+    )
+    OSS_BUCKET: Optional[str] = Field(
+        default=None,
+        description="阿里云 OSS bucket 名称"
+    )
+    OSS_ACCESS_KEY_ID: Optional[str] = Field(
+        default=None,
+        description="阿里云 OSS Access Key ID"
+    )
+    OSS_ACCESS_KEY_SECRET: Optional[str] = Field(
+        default=None,
+        description="阿里云 OSS Access Key Secret"
+    )
+    OSS_URL_EXPIRE_SECONDS: int = Field(
+        default=3600,
+        description="OSS 签名下载地址有效期（秒）"
+    )
+    OSS_PUBLIC_BASE_URL: Optional[str] = Field(
+        default=None,
+        description="可选的 OSS 下载域名；未配置时使用 SDK 签名 URL"
     )
     RUNTIME_LOG_DIR: str = Field(
         default=os.path.join(BACKEND_DIR, "runtime_logs"),
@@ -214,6 +242,16 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             normalized = value.strip().rstrip("/")
             return normalized or None
+        return value
+
+    @field_validator("FILE_STORAGE_PROVIDER", mode="before")
+    @classmethod
+    def normalize_file_storage_provider(cls, value):
+        """归一化文件存储 provider 枚举。"""
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"local", "oss"}:
+                return normalized
         return value
 
     @field_validator(

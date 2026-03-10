@@ -62,7 +62,7 @@ export default function FragmentDetailScreen() {
     load();
   }, [id]);
 
-  const player = useFragmentAudioPlayer(fragment?.audio_path);
+  const player = useFragmentAudioPlayer(fragment?.audio_file_url);
   const activeSegmentIndex = useMemo(() => {
     const segments = fragment?.speaker_segments;
     if (!segments?.length) {
@@ -132,7 +132,7 @@ export default function FragmentDetailScreen() {
   }
 
   const tags = normalizeFragmentTags(fragment.tags);
-  const hasAudio = Boolean(fragment.audio_path);
+  const hasAudio = Boolean(fragment.audio_file_url);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}> 
@@ -191,7 +191,7 @@ export default function FragmentDetailScreen() {
           <TranscriptSection
             transcript={fragment.transcript}
             speakerSegments={fragment.speaker_segments}
-            audioPath={fragment.audio_path}
+            audioPath={fragment.audio_file_url}
             activeIndex={activeSegmentIndex}
             activeSegmentId={null}
             onSegmentPress={({ segment }) => {
@@ -215,11 +215,11 @@ export default function FragmentDetailScreen() {
             </View>
           ) : null}
 
-          {fragment.audio_path ? (
+          {fragment.audio_file_url ? (
             <View style={[styles.card, theme.shadow.card, { backgroundColor: theme.colors.surface }]}> 
               <Text style={[styles.cardTitle, { color: theme.colors.textSubtle }]}>音频信息</Text>
               <Text style={[styles.audioPathText, { color: theme.colors.textSubtle }]}>
-                {fragment.audio_path}
+                {fragment.audio_file_url}
               </Text>
             </View>
           ) : null}

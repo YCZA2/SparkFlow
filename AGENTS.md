@@ -149,6 +149,7 @@ http://<your-lan-ip>:8000
 - Do not introduce structural drift: follow the existing module boundaries, routing shape, and layering instead of bypassing them for convenience
 - Do not let files grow into monoliths; when logic, state, or UI keeps expanding, split it into focused modules/components/hooks before it becomes a large single file
 - Default backend storage is PostgreSQL only; do not reintroduce SQLite compatibility branches or local SQLite fallback docs
+- 文件存储默认通过统一对象存储抽象接入；本地开发可使用 `FILE_STORAGE_PROVIDER=local`，线上默认按私有 OSS + 签名 URL 设计，不要再把磁盘路径或 `storage_path` / `audio_path` 暴露为对外 contract
 
 ## When Updating Docs
 

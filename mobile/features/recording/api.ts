@@ -5,8 +5,8 @@ export interface UploadAudioResponse {
   pipeline_run_id: string;
   pipeline_type: 'media_ingestion';
   fragment_id: string | null;
-  audio_path: string | null;
-  relative_path: string | null;
+  audio_file_url: string | null;
+  audio_file_expires_at: string | null;
   file_size: number;
   duration: number | null;
 }
@@ -16,7 +16,8 @@ export interface TranscribeStatusResponse {
   transcript: string | null;
   summary: string | null;
   tags: string[] | null;
-  audio_path: string | null;
+  audio_file_url: string | null;
+  audio_file_expires_at: string | null;
   created_at: string;
 }
 

@@ -28,7 +28,7 @@ os.environ.setdefault("DATABASE_URL", os.environ.get("TEST_DATABASE_URL", DEFAUL
 from main import create_app
 from models import Base, User
 from modules.auth.application import TEST_USER_ID
-from modules.shared.infrastructure import LocalAudioStorage, LocalImportedAudioStorage, LocalMediaAssetStorage, PromptLoader
+from modules.shared.infrastructure import LocalFileStorage, PromptLoader
 from tests.support import FakeExternalMediaProvider, FakeVectorStore, FakeWebSearchProvider, FakeWorkflowProvider
 
 
@@ -119,9 +119,7 @@ async def app(
     """创建挂载测试依赖的 FastAPI 应用。"""
     test_app = create_app()
     test_app.state.container.session_factory = db_session_factory
-    test_app.state.container.audio_storage = LocalAudioStorage(str(tmp_path))
-    test_app.state.container.imported_audio_storage = LocalImportedAudioStorage(str(tmp_path))
-    test_app.state.container.media_asset_storage = LocalMediaAssetStorage(str(tmp_path))
+    test_app.state.container.file_storage = LocalFileStorage(str(tmp_path))
     test_app.state.container.vector_store = vector_store
     test_app.state.container.external_media_provider = external_media_provider
     test_app.state.container.web_search_provider = web_search_provider

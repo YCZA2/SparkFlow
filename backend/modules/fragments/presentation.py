@@ -24,11 +24,11 @@ from .schemas import (
 router = APIRouter(prefix="/api/fragments", tags=["fragments"], responses={401: {"description": "未认证"}})
 
 def get_fragment_command_service(container: ServiceContainer = Depends(get_container)) -> FragmentCommandService:
-    return FragmentCommandService(audio_storage=container.audio_storage)
+    return FragmentCommandService(file_storage=container.file_storage)
 
 
 def get_fragment_query_service(container: ServiceContainer = Depends(get_container)) -> FragmentQueryService:
-    return FragmentQueryService(vector_store=container.vector_store)
+    return FragmentQueryService(vector_store=container.vector_store, file_storage=container.file_storage)
 
 
 @router.get(
@@ -79,7 +79,7 @@ async def create_fragment(
         body_markdown=data.body_markdown,
         source=data.source,
         audio_source=data.audio_source,
-        audio_path=data.audio_path,
+        audio_file=None,
         folder_id=data.folder_id,
         media_asset_ids=data.media_asset_ids,
     )
@@ -107,7 +107,7 @@ async def create_fragment_with_content(
         body_markdown=data.body_markdown,
         source=data.source,
         audio_source=data.audio_source,
-        audio_path=data.audio_path,
+        audio_file=None,
         folder_id=data.folder_id,
         media_asset_ids=data.media_asset_ids,
     )

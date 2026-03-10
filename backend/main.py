@@ -106,7 +106,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+    if settings.FILE_STORAGE_PROVIDER == "local":
+        app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
     register_exception_handlers(app)
     register_routes(app)

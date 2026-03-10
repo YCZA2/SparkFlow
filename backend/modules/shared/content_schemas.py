@@ -8,7 +8,6 @@ class MediaAssetItem(BaseModel):
     media_kind: str
     original_filename: str
     mime_type: str
-    storage_path: str
     file_size: int
     checksum: str | None = None
     width: int | None = None
@@ -16,6 +15,8 @@ class MediaAssetItem(BaseModel):
     duration_ms: int | None = None
     status: str
     created_at: str | None = None
+    file_url: str | None = None
+    expires_at: str | None = None
 
 
 class FragmentBlockItem(BaseModel):

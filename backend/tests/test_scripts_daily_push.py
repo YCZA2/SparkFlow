@@ -21,7 +21,14 @@ def _create_fragment(db, transcript: str):
         capture_text=transcript,
         source="manual",
         audio_source=None,
-        audio_path=None,
+        audio_storage_provider=None,
+        audio_bucket=None,
+        audio_object_key=None,
+        audio_access_level=None,
+        audio_original_filename=None,
+        audio_mime_type=None,
+        audio_file_size=None,
+        audio_checksum=None,
     )
 
 

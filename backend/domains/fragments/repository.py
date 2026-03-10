@@ -116,7 +116,14 @@ def create(
     capture_text: Optional[str],
     source: str,
     audio_source: Optional[str],
-    audio_path: Optional[str],
+    audio_storage_provider: Optional[str],
+    audio_bucket: Optional[str],
+    audio_object_key: Optional[str],
+    audio_access_level: Optional[str],
+    audio_original_filename: Optional[str],
+    audio_mime_type: Optional[str],
+    audio_file_size: Optional[int],
+    audio_checksum: Optional[str],
     *,
     folder_id: Optional[str] = None,
     tags_json: Optional[str] = None,
@@ -127,7 +134,14 @@ def create(
         folder_id=folder_id,
         capture_text=capture_text,
         transcript=transcript,
-        audio_path=audio_path,
+        audio_storage_provider=audio_storage_provider,
+        audio_bucket=audio_bucket,
+        audio_object_key=audio_object_key,
+        audio_access_level=audio_access_level,
+        audio_original_filename=audio_original_filename,
+        audio_mime_type=audio_mime_type,
+        audio_file_size=audio_file_size,
+        audio_checksum=audio_checksum,
         tags=tags_json,
         source=source,
         audio_source=audio_source,
@@ -186,12 +200,32 @@ def update_folder(db: Session, fragment: Fragment, *, folder_id: Optional[str]) 
     return fragment
 
 
-def update_audio_path(db: Session, *, fragment_id: str, user_id: str, audio_path: str) -> bool:
-    """更新碎片音频路径，供异步导入链路补写产物地址。"""
+def update_audio_file(
+    db: Session,
+    *,
+    fragment_id: str,
+    user_id: str,
+    audio_storage_provider: str,
+    audio_bucket: str,
+    audio_object_key: str,
+    audio_access_level: str,
+    audio_original_filename: str,
+    audio_mime_type: str,
+    audio_file_size: int,
+    audio_checksum: str | None,
+) -> bool:
+    """更新碎片音频对象存储元数据。"""
     fragment = get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
     if not fragment:
         return False
-    fragment.audio_path = audio_path
+    fragment.audio_storage_provider = audio_storage_provider
+    fragment.audio_bucket = audio_bucket
+    fragment.audio_object_key = audio_object_key
+    fragment.audio_access_level = audio_access_level
+    fragment.audio_original_filename = audio_original_filename
+    fragment.audio_mime_type = audio_mime_type
+    fragment.audio_file_size = audio_file_size
+    fragment.audio_checksum = audio_checksum
     db.commit()
     return True
 

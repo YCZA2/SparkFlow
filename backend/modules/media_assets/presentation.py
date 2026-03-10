@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/media-assets", tags=["media_assets"], responses=
 
 def get_media_asset_use_case(container: ServiceContainer = Depends(get_container)) -> MediaAssetUseCase:
     """构建媒体资源用例。"""
-    return MediaAssetUseCase(storage=container.media_asset_storage)
+    return MediaAssetUseCase(storage=container.file_storage)
 
 
 @router.post(

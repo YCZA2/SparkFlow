@@ -12,11 +12,15 @@ from models import ContentMediaLink, MediaAsset
 def create(
     db: Session,
     *,
+    asset_id: str | None = None,
     user_id: str,
     media_kind: str,
     original_filename: str,
     mime_type: str,
-    storage_path: str,
+    storage_provider: str,
+    bucket: str,
+    object_key: str,
+    access_level: str,
     file_size: int,
     checksum: str | None,
     width: int | None = None,
@@ -26,11 +30,15 @@ def create(
 ) -> MediaAsset:
     """创建一条媒体资源记录。"""
     asset = MediaAsset(
+        id=asset_id,
         user_id=user_id,
         media_kind=media_kind,
         original_filename=original_filename,
         mime_type=mime_type,
-        storage_path=storage_path,
+        storage_provider=storage_provider,
+        bucket=bucket,
+        object_key=object_key,
+        access_level=access_level,
         file_size=file_size,
         checksum=checksum,
         width=width,

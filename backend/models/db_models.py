@@ -93,7 +93,14 @@ class Fragment(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     folder_id = Column(String, ForeignKey("fragment_folders.id"), nullable=True)
-    audio_path = Column(String, nullable=True)  # uploads/{user_id}/{uuid}.m4a
+    audio_storage_provider = Column(String, nullable=True)  # local | oss
+    audio_bucket = Column(String, nullable=True)
+    audio_object_key = Column(String, nullable=True)
+    audio_access_level = Column(String, nullable=True, default="private")
+    audio_original_filename = Column(String, nullable=True)
+    audio_mime_type = Column(String, nullable=True)
+    audio_file_size = Column(Integer, nullable=True)
+    audio_checksum = Column(String, nullable=True)
     capture_text = Column(Text, nullable=True)  # 原始采集文本
     transcript = Column(Text, nullable=True)  # 转写文本
     speaker_segments = Column(Text, nullable=True)  # JSON数组字符串，说话人分段
@@ -209,7 +216,7 @@ class KnowledgeDoc(Base):
 
 
 class MediaAsset(Base):
-    """统一媒体资源表，记录本地文件元数据和存储位置。"""
+    """统一媒体资源表，记录对象存储元数据和文件信息。"""
 
     __tablename__ = "media_assets"
     __table_args__ = (
@@ -222,7 +229,10 @@ class MediaAsset(Base):
     media_kind = Column(String, nullable=False)  # image | audio | file
     original_filename = Column(String, nullable=False)
     mime_type = Column(String, nullable=False)
-    storage_path = Column(String, nullable=False)
+    storage_provider = Column(String, nullable=False, default="local")
+    bucket = Column(String, nullable=False, default="local")
+    object_key = Column(String, nullable=False)
+    access_level = Column(String, nullable=False, default="private")
     file_size = Column(Integer, nullable=False)
     checksum = Column(String, nullable=True)
     width = Column(Integer, nullable=True)

@@ -191,6 +191,7 @@ http://192.168.31.157:8000
 - 若是语音碎片且用户还没正式编辑内容，后端会回退到 `capture_text`
 - 脚本详情优先读取 `body_markdown`
 - 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
+- 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`
 
 ### 1. 一打开 App 就红屏，出现 `8000/index.bundle`
 

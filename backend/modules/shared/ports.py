@@ -76,10 +76,65 @@ class VectorStore(Protocol):
     async def health_check(self) -> bool: ...
 
 
-class AudioStorage(Protocol):
-    async def save(self, *, audio: UploadFile, user_id: str) -> dict[str, Any]: ...
-    def delete(self, audio_path: Optional[str]) -> None: ...
-    def resolve_path(self, audio_path: str) -> Path: ...
+StorageProvider = Literal["local", "oss"]
+StorageAccessLevel = Literal["private"]
+
+
+@dataclass
+class StoredFile:
+    """描述已持久化文件的统一元数据。"""
+
+    storage_provider: StorageProvider
+    bucket: str
+    object_key: str
+    access_level: StorageAccessLevel
+    original_filename: str
+    mime_type: str
+    file_size: int
+    checksum: str | None = None
+
+
+@dataclass
+class FileAccess:
+    """描述文件访问地址及过期时间。"""
+
+    url: str
+    expires_at: str | None = None
+
+
+@dataclass
+class MaterializedFile:
+    """描述被物化到本地磁盘的文件句柄。"""
+
+    local_path: Path
+    cleanup: Any
+
+
+class FileStorage(Protocol):
+    async def save_upload(
+        self,
+        *,
+        file: UploadFile,
+        object_key: str,
+        original_filename: str,
+        mime_type: str,
+        access_level: StorageAccessLevel = "private",
+    ) -> StoredFile: ...
+
+    async def save_local_file(
+        self,
+        *,
+        source_path: str,
+        object_key: str,
+        original_filename: str,
+        mime_type: str,
+        access_level: StorageAccessLevel = "private",
+    ) -> StoredFile: ...
+
+    def delete(self, stored_file: StoredFile | None) -> None: ...
+    def create_download_url(self, stored_file: StoredFile) -> FileAccess: ...
+    def materialize(self, stored_file: StoredFile) -> MaterializedFile: ...
+    def read_bytes(self, stored_file: StoredFile) -> bytes: ...
 
 
 @dataclass
@@ -92,18 +147,6 @@ class ExternalMediaResolvedAudio:
     cover_url: str | None
     content_type: str
     local_audio_path: str
-
-
-class ImportedAudioStorage(Protocol):
-    async def save_file(self, *, source_path: str, user_id: str, platform: str, filename: str) -> dict[str, Any]: ...
-    def delete(self, audio_path: Optional[str]) -> None: ...
-    def resolve_path(self, audio_path: str) -> Path: ...
-
-
-class MediaAssetStorage(Protocol):
-    async def save(self, *, file: UploadFile, user_id: str, media_kind: str) -> dict[str, Any]: ...
-    def delete(self, storage_path: Optional[str]) -> None: ...
-    def resolve_path(self, storage_path: str) -> Path: ...
 
 
 class ExternalMediaProvider(Protocol):

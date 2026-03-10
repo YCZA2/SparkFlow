@@ -274,6 +274,8 @@ async def test_import_external_audio_returns_saved_url(async_client, auth_header
     assert payload["pipeline_type"] == "media_ingestion"
     assert payload["source"] == "voice"
     assert payload["audio_source"] == "external_link"
+    assert "audio_public_url" not in payload
+    assert "audio_relative_path" not in payload
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
     assert pipeline["status"] == "succeeded"
     assert pipeline["resource"]["resource_id"] == payload["fragment_id"]
@@ -284,11 +286,8 @@ async def test_import_external_audio_returns_saved_url(async_client, auth_header
     )
     steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
     download_output = steps["download_media"]["output"]
-    assert "external_media/" in download_output["audio_path"]
-    assert download_output["audio_public_url"].startswith("/")
-
-    saved_path = app.state.container.imported_audio_storage.resolve_path(download_output["audio_path"])
-    assert saved_path.exists()
+    assert "audio/imported/" in download_output["audio_file"]["object_key"]
+    assert download_output["audio_file_url"]
     assert not temp_audio.exists()
 
     with db_session_factory() as db:
@@ -600,6 +599,9 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
     assert response.status_code == 200
     payload = response.json()["data"]
     assert payload["pipeline_type"] == "media_ingestion"
+    assert payload["audio_file_url"]
+    assert "audio_path" not in payload
+    assert "relative_path" not in payload
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
     assert pipeline["status"] == "succeeded"
 
@@ -618,7 +620,7 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
         assert fragment.folder_id == folder_id
         fragment_tags = db.query(FragmentTag).filter(FragmentTag.fragment_id == fragment.id).all()
         assert len(fragment_tags) >= 1
-        assert Path(payload["audio_path"]).exists()
+        assert payload["audio_file_url"]
 
 
 @pytest.mark.asyncio
@@ -701,21 +703,26 @@ async def test_upload_audio_marks_failed_when_transcription_is_cancelled(async_c
 
 @pytest.mark.asyncio
 async def test_delete_fragment_removes_audio_file(async_client, auth_headers_factory, app, db_session_factory, tmp_path) -> None:
-    """删除带音频路径的碎片时应一并删除本地文件。"""
+    """删除带音频对象的碎片时应一并删除本地文件。"""
     upload_root = tmp_path.resolve()
-    user_dir = upload_root / TEST_USER_ID
-    user_dir.mkdir(parents=True, exist_ok=True)
-    audio_file = user_dir / "delete-me.m4a"
+    audio_file = upload_root / "audio" / "original" / TEST_USER_ID / "fragment-delete" / "delete-me.m4a"
+    audio_file.parent.mkdir(parents=True, exist_ok=True)
     audio_file.write_bytes(b"fake-audio")
-    relative_audio_path = str(audio_file.relative_to(upload_root.parent))
 
     with db_session_factory() as db:
         fragment = Fragment(
             user_id=TEST_USER_ID,
             transcript="待删除的碎片",
-            audio_path=relative_audio_path,
             source="voice",
             audio_source="upload",
+            audio_storage_provider="local",
+            audio_bucket="local",
+            audio_object_key="audio/original/test-user-001/fragment-delete/delete-me.m4a",
+            audio_access_level="private",
+            audio_original_filename="delete-me.m4a",
+            audio_mime_type="audio/m4a",
+            audio_file_size=len(b"fake-audio"),
+            audio_checksum=None,
         )
         db.add(fragment)
         db.commit()

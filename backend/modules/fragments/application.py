@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
@@ -21,7 +22,7 @@ from modules.shared.content_markdown import (
     parse_markdown_block_payload,
 )
 from modules.shared.content_schemas import FragmentBlockInput, FragmentBlockItem, MediaAssetItem
-from modules.shared.ports import AudioStorage, VectorStore
+from modules.shared.ports import FileStorage, StoredFile, VectorStore
 from .schemas import (
     FragmentBatchMoveResponse,
     FragmentFolderInfo,
@@ -73,7 +74,6 @@ def map_media_asset(asset: MediaAsset) -> MediaAssetItem:
         media_kind=asset.media_kind,
         original_filename=asset.original_filename,
         mime_type=asset.mime_type,
-        storage_path=asset.storage_path,
         file_size=asset.file_size,
         checksum=asset.checksum,
         width=asset.width,
@@ -81,6 +81,36 @@ def map_media_asset(asset: MediaAsset) -> MediaAssetItem:
         duration_ms=asset.duration_ms,
         status=asset.status,
         created_at=format_iso_datetime(asset.created_at),
+    )
+
+
+def _build_fragment_audio_file(fragment: Fragment) -> StoredFile | None:
+    """从碎片模型恢复统一音频文件元数据。"""
+    if not fragment.audio_object_key or not fragment.audio_storage_provider or not fragment.audio_bucket:
+        return None
+    return StoredFile(
+        storage_provider=fragment.audio_storage_provider,
+        bucket=fragment.audio_bucket,
+        object_key=fragment.audio_object_key,
+        access_level=fragment.audio_access_level or "private",
+        original_filename=fragment.audio_original_filename or Path(fragment.audio_object_key).name,
+        mime_type=fragment.audio_mime_type or "application/octet-stream",
+        file_size=fragment.audio_file_size or 0,
+        checksum=fragment.audio_checksum,
+    )
+
+
+def _build_media_asset_file(asset: MediaAsset) -> StoredFile:
+    """从素材模型恢复统一文件元数据。"""
+    return StoredFile(
+        storage_provider=asset.storage_provider,
+        bucket=asset.bucket,
+        object_key=asset.object_key,
+        access_level=asset.access_level or "private",
+        original_filename=asset.original_filename,
+        mime_type=asset.mime_type,
+        file_size=asset.file_size,
+        checksum=asset.checksum,
     )
 
 
@@ -108,7 +138,7 @@ def _resolve_content_state(*, blocks: list[FragmentBlockItem], capture_text: str
     return "empty"
 
 
-def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = None) -> FragmentItem:
+def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = None, file_storage: FileStorage | None = None) -> FragmentItem:
     """将碎片模型映射为含 Markdown 内容层的响应结构。"""
     folder = None
     if fragment.folder:
@@ -118,6 +148,19 @@ def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = 
         block_payloads=[block.payload_json for block in sorted(fragment.blocks, key=lambda item: item.order_index)],
         fallback_text=fragment.capture_text or fragment.transcript,
     )
+    audio_access = None
+    if file_storage is not None:
+        audio_file = _build_fragment_audio_file(fragment)
+        if audio_file is not None:
+            audio_access = file_storage.create_download_url(audio_file)
+    mapped_media_assets: list[MediaAssetItem] = []
+    for item in media_assets or []:
+        payload = map_media_asset(item)
+        if file_storage is None:
+            mapped_media_assets.append(payload)
+            continue
+        access = file_storage.create_download_url(_build_media_asset_file(item))
+        mapped_media_assets.append(MediaAssetItem(**payload.model_dump(), file_url=access.url, expires_at=access.expires_at))
     return FragmentItem(
         id=fragment.id,
         capture_text=fragment.capture_text,
@@ -128,20 +171,21 @@ def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = 
         source=fragment.source,
         audio_source=fragment.audio_source,
         created_at=format_iso_datetime(fragment.created_at),
-        audio_path=fragment.audio_path,
+        audio_file_url=audio_access.url if audio_access else None,
+        audio_file_expires_at=audio_access.expires_at if audio_access else None,
         folder_id=fragment.folder_id,
         folder=folder,
         blocks=blocks,
         compiled_markdown=compiled_markdown or None,
         content_state=_resolve_content_state(blocks=blocks, capture_text=fragment.capture_text, transcript=fragment.transcript),
-        media_assets=[map_media_asset(item) for item in media_assets or []],
+        media_assets=mapped_media_assets,
     )
 
 
 class FragmentCommandService:
-    def __init__(self, *, audio_storage: AudioStorage) -> None:
+    def __init__(self, *, file_storage: FileStorage) -> None:
         """装配碎片写操作依赖。"""
-        self.audio_storage = audio_storage
+        self.file_storage = file_storage
 
     def create_fragment(
         self,
@@ -153,7 +197,7 @@ class FragmentCommandService:
         body_markdown: Optional[str],
         source: str,
         audio_source: Optional[str],
-        audio_path: Optional[str],
+        audio_file: StoredFile | None,
         folder_id: Optional[str] = None,
         media_asset_ids: list[str] | None = None,
     ) -> Fragment:
@@ -182,7 +226,14 @@ class FragmentCommandService:
             capture_text=normalized_capture,
             source=source,
             audio_source=audio_source,
-            audio_path=audio_path,
+            audio_storage_provider=audio_file.storage_provider if audio_file else None,
+            audio_bucket=audio_file.bucket if audio_file else None,
+            audio_object_key=audio_file.object_key if audio_file else None,
+            audio_access_level=audio_file.access_level if audio_file else None,
+            audio_original_filename=audio_file.original_filename if audio_file else None,
+            audio_mime_type=audio_file.mime_type if audio_file else None,
+            audio_file_size=audio_file.file_size if audio_file else None,
+            audio_checksum=audio_file.checksum if audio_file else None,
             folder_id=folder_id,
             tags=[],
         )
@@ -206,7 +257,7 @@ class FragmentCommandService:
         body_markdown: Optional[str],
         source: str,
         audio_source: Optional[str],
-        audio_path: Optional[str],
+        audio_file: StoredFile | None,
         folder_id: Optional[str] = None,
         media_asset_ids: list[str] | None = None,
     ) -> Fragment:
@@ -219,7 +270,7 @@ class FragmentCommandService:
             body_markdown=body_markdown,
             source=source,
             audio_source=audio_source,
-            audio_path=audio_path,
+            audio_file=audio_file,
             folder_id=folder_id,
             media_asset_ids=media_asset_ids,
         )
@@ -245,7 +296,7 @@ class FragmentCommandService:
     def delete_fragment(self, *, db: Session, user_id: str, fragment_id: str) -> None:
         """删除碎片及关联音频文件。"""
         fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
-        self.audio_storage.delete(fragment.audio_path)
+        self.file_storage.delete(_build_fragment_audio_file(fragment))
         fragment_repository.delete(db=db, fragment=fragment)
 
     def update_fragment_folder(self, *, db: Session, user_id: str, fragment_id: str, folder_id: Optional[str]) -> Fragment:
@@ -305,7 +356,7 @@ class FragmentCommandService:
                 resource_id=",".join(missing_ids),
             )
         updated = fragment_repository.move_by_ids(db=db, fragments=fragments, folder_id=folder_id)
-        return FragmentBatchMoveResponse(items=[map_fragment(fragment) for fragment in updated], moved_count=len(updated))
+        return FragmentBatchMoveResponse(items=[map_fragment(fragment, file_storage=self.file_storage) for fragment in updated], moved_count=len(updated))
 
     def get_fragment(self, *, db: Session, user_id: str, fragment_id: str) -> Fragment:
         """读取单条碎片并在找不到时抛出统一异常。"""
@@ -327,7 +378,7 @@ class FragmentCommandService:
             content_type="fragment",
             content_id=fragment.id,
         )
-        return map_fragment(fragment, media_assets=media_assets)
+        return map_fragment(fragment, media_assets=media_assets, file_storage=self.file_storage)
 
     def export_fragment_markdown(self, *, db: Session, user_id: str, fragment_id: str) -> FragmentItem:
         """导出前复用带完整内容层的详情载荷。"""
@@ -427,9 +478,10 @@ class FragmentCommandService:
 
 
 class FragmentQueryService:
-    def __init__(self, *, vector_store: VectorStore) -> None:
+    def __init__(self, *, vector_store: VectorStore, file_storage: FileStorage) -> None:
         """装配碎片读操作依赖。"""
         self.vector_store = vector_store
+        self.file_storage = file_storage
 
     def list_fragments(
         self,
@@ -465,7 +517,7 @@ class FragmentQueryService:
             folder_id=folder_id,
             tag=normalized_tag,
         )
-        return FragmentListResponse(items=[map_fragment(item) for item in items], total=total, limit=limit, offset=offset)
+        return FragmentListResponse(items=[map_fragment(item, file_storage=self.file_storage) for item in items], total=total, limit=limit, offset=offset)
 
     def list_tags(
         self,
@@ -516,7 +568,7 @@ class FragmentQueryService:
             fragment = fragment_map.get(match["fragment_id"])
             if not fragment:
                 continue
-            mapped = map_fragment(fragment)
+            mapped = map_fragment(fragment, file_storage=self.file_storage)
             items.append(
                 SimilarFragmentItem(
                     **mapped.model_dump(),

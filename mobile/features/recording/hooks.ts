@@ -24,7 +24,7 @@ function formatDuration(seconds: number): string {
 interface UploadResult {
   pipeline_run_id: string;
   fragment_id: string;
-  audio_path: string | null;
+  audio_file_url: string | null;
   message: string;
 }
 
@@ -215,7 +215,7 @@ export function useAudioUpload() {
       const nextResult = {
         pipeline_run_id: response.pipeline_run_id,
         fragment_id: response.fragment_id,
-        audio_path: response.audio_path,
+        audio_file_url: response.audio_file_url,
         message: '已创建后台转写任务，可在任务状态中继续观察进度。',
       };
       setResult(nextResult);

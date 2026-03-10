@@ -15,7 +15,7 @@ function toMilliseconds(seconds: number): number {
   return Math.max(0, Math.round(seconds * 1000));
 }
 
-export function useFragmentAudioPlayer(audioPath: string | null | undefined) {
+export function useFragmentAudioPlayer(audioFileUrl: string | null | undefined) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
 
@@ -23,9 +23,9 @@ export function useFragmentAudioPlayer(audioPath: string | null | undefined) {
     let mounted = true;
 
     async function resolveUrl() {
-      setIsResolving(Boolean(audioPath));
+      setIsResolving(Boolean(audioFileUrl));
       try {
-        const nextUrl = await resolveFragmentAudioUrl(audioPath);
+        const nextUrl = await resolveFragmentAudioUrl(audioFileUrl);
         if (mounted) {
           setAudioUrl(nextUrl);
         }
@@ -45,7 +45,7 @@ export function useFragmentAudioPlayer(audioPath: string | null | undefined) {
     return () => {
       mounted = false;
     };
-  }, [audioPath]);
+  }, [audioFileUrl]);
 
   const source = useMemo(() => (audioUrl ? { uri: audioUrl } : null), [audioUrl]);
   const player = useAudioPlayer(source, { updateInterval: 250, keepAudioSessionActive: true });

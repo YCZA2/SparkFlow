@@ -23,7 +23,6 @@ class FragmentCreateRequest(BaseModel):
     body_markdown: str | None = Field(None, description="Markdown 正文")
     source: str = Field("voice", description="来源：voice, manual, video_parse")
     audio_source: str | None = Field(None, description="音频来源：upload, external_link")
-    audio_path: str | None = Field(None, description="音频路径")
     folder_id: str | None = Field(None, description="文件夹 ID")
     media_asset_ids: list[str] = Field(default_factory=list, description="关联素材 ID 列表")
 
@@ -56,7 +55,8 @@ class FragmentItem(BaseModel):
     source: str
     audio_source: str | None = None
     created_at: str | None = None
-    audio_path: str | None = None
+    audio_file_url: str | None = None
+    audio_file_expires_at: str | None = None
     folder_id: str | None = None
     folder: FragmentFolderInfo | None = None
     blocks: list[FragmentBlockItem] = Field(default_factory=list)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -12,13 +13,17 @@ from core.exceptions import NotFoundError, ServiceUnavailableError, ValidationEr
 from core.logging_config import get_logger
 from domains.fragment_folders import repository as fragment_folder_repository
 from domains.fragments import repository as fragment_repository
-from models import generate_uuid
 from modules.shared.enrichment import build_fallback_summary_and_tags, generate_summary_and_tags
+from modules.shared.infrastructure import (
+    build_imported_audio_object_key,
+    sanitize_filename,
+)
 from modules.shared.pipeline_runtime import PipelineExecutionContext, PipelineStepDefinition
 from modules.shared.ports import (
     ExternalMediaProvider,
-    ImportedAudioStorage,
+    FileStorage,
     SpeechToTextProvider,
+    StoredFile,
     TextGenerationProvider,
     VectorStore,
 )
@@ -31,8 +36,9 @@ PIPELINE_TYPE_MEDIA_INGESTION = "media_ingestion"
 @dataclass
 class AudioIngestionRequest:
     user_id: str
-    audio_path: str | None
+    audio_file: StoredFile | None
     audio_source: str
+    fragment_id: str | None = None
     folder_id: str | None = None
     source_context: dict[str, Any] = field(default_factory=dict)
 
@@ -41,9 +47,46 @@ class AudioIngestionRequest:
 class AudioIngestionResult:
     pipeline_run_id: str
     fragment_id: str | None
-    audio_path: str | None
+    audio_file: StoredFile | None
     source: str
     audio_source: str
+
+
+def _stored_file_to_payload(stored_file: StoredFile | None) -> dict[str, Any] | None:
+    """把统一文件元数据转换为可持久化 payload。"""
+    if stored_file is None:
+        return None
+    return {
+        "storage_provider": stored_file.storage_provider,
+        "bucket": stored_file.bucket,
+        "object_key": stored_file.object_key,
+        "access_level": stored_file.access_level,
+        "original_filename": stored_file.original_filename,
+        "mime_type": stored_file.mime_type,
+        "file_size": stored_file.file_size,
+        "checksum": stored_file.checksum,
+    }
+
+
+def _stored_file_from_payload(payload: dict[str, Any] | None) -> StoredFile | None:
+    """从流水线 payload 恢复统一文件元数据。"""
+    if not payload:
+        return None
+    object_key = payload.get("object_key")
+    storage_provider = payload.get("storage_provider")
+    bucket = payload.get("bucket")
+    if not object_key or not storage_provider or not bucket:
+        return None
+    return StoredFile(
+        storage_provider=storage_provider,
+        bucket=bucket,
+        object_key=object_key,
+        access_level=payload.get("access_level") or "private",
+        original_filename=payload.get("original_filename") or Path(object_key).name,
+        mime_type=payload.get("mime_type") or "application/octet-stream",
+        file_size=int(payload.get("file_size") or 0),
+        checksum=payload.get("checksum"),
+    )
 
 
 class AudioIngestionService:
@@ -54,16 +97,16 @@ class AudioIngestionService:
         llm_provider: TextGenerationProvider,
         vector_store: VectorStore,
         pipeline_runner,
+        file_storage: FileStorage,
         external_media_provider: ExternalMediaProvider | None = None,
-        imported_audio_storage: ImportedAudioStorage | None = None,
     ) -> None:
         """初始化媒体导入流水线依赖。"""
         self.stt_provider = stt_provider
         self.llm_provider = llm_provider
         self.vector_store = vector_store
         self.pipeline_runner = pipeline_runner
+        self.file_storage = file_storage
         self.external_media_provider = external_media_provider
-        self.imported_audio_storage = imported_audio_storage
 
     async def ensure_transcription_available(self) -> None:
         """在上传前检查转写服务是否可用。"""
@@ -86,34 +129,44 @@ class AudioIngestionService:
         """创建上传音频流水线并返回异步任务句柄。"""
         self._validate_audio_source(request.audio_source)
         self._validate_folder_exists(db=db, user_id=request.user_id, folder_id=request.folder_id)
-        fragment = fragment_repository.create(
-            db=db,
-            user_id=request.user_id,
-            transcript=None,
-            capture_text=None,
-            source="voice",
-            audio_source=request.audio_source,
-            audio_path=request.audio_path,
-            folder_id=request.folder_id,
-        )
+        fragment_id = request.fragment_id
+        if fragment_id is None:
+            fragment = fragment_repository.create(
+                db=db,
+                user_id=request.user_id,
+                transcript=None,
+                capture_text=None,
+                source="voice",
+                audio_source=request.audio_source,
+                audio_storage_provider=request.audio_file.storage_provider if request.audio_file else None,
+                audio_bucket=request.audio_file.bucket if request.audio_file else None,
+                audio_object_key=request.audio_file.object_key if request.audio_file else None,
+                audio_access_level=request.audio_file.access_level if request.audio_file else None,
+                audio_original_filename=request.audio_file.original_filename if request.audio_file else None,
+                audio_mime_type=request.audio_file.mime_type if request.audio_file else None,
+                audio_file_size=request.audio_file.file_size if request.audio_file else None,
+                audio_checksum=request.audio_file.checksum if request.audio_file else None,
+                folder_id=request.folder_id,
+            )
+            fragment_id = fragment.id
         run = await self.pipeline_runner.create_run(
             run_id=None,
             user_id=request.user_id,
             pipeline_type=PIPELINE_TYPE_MEDIA_INGESTION,
             input_payload={
                 "source_kind": request.audio_source,
-                "audio_path": request.audio_path,
+                "audio_file": _stored_file_to_payload(request.audio_file),
                 "folder_id": request.folder_id,
-                "fragment_id": fragment.id,
+                "fragment_id": fragment_id,
                 "source_context": request.source_context,
             },
             resource_type="fragment",
-            resource_id=fragment.id,
+            resource_id=fragment_id,
         )
         return AudioIngestionResult(
             pipeline_run_id=run.id,
-            fragment_id=fragment.id,
-            audio_path=request.audio_path,
+            fragment_id=fragment_id,
+            audio_file=request.audio_file,
             source="voice",
             audio_source=request.audio_source,
         )
@@ -136,7 +189,14 @@ class AudioIngestionService:
             capture_text=None,
             source="voice",
             audio_source="external_link",
-            audio_path=None,
+            audio_storage_provider=None,
+            audio_bucket=None,
+            audio_object_key=None,
+            audio_access_level=None,
+            audio_original_filename=None,
+            audio_mime_type=None,
+            audio_file_size=None,
+            audio_checksum=None,
             folder_id=folder_id,
         )
         run = await self.pipeline_runner.create_run(
@@ -156,7 +216,7 @@ class AudioIngestionService:
         return AudioIngestionResult(
             pipeline_run_id=run.id,
             fragment_id=fragment.id,
-            audio_path=None,
+            audio_file=None,
             source="voice",
             audio_source="external_link",
         )
@@ -188,9 +248,9 @@ class AudioIngestionService:
         """按当前容器状态读取外链解析 provider。"""
         return context.container.external_media_provider
 
-    def _runtime_imported_audio_storage(self, context: PipelineExecutionContext):
-        """按当前容器状态读取导入音频存储。"""
-        return context.container.imported_audio_storage
+    def _runtime_file_storage(self, context: PipelineExecutionContext):
+        """按当前容器状态读取文件存储实现。"""
+        return context.container.file_storage
 
     async def resolve_external_media(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """解析外链媒体并拿到临时音频文件。"""
@@ -216,36 +276,47 @@ class AudioIngestionService:
         }
 
     async def download_media(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """保存外链音频产物，并把路径补写回碎片。"""
+        """保存外链音频产物，并把对象元数据补写回碎片。"""
         payload = context.input_payload
         if payload.get("source_kind") != "external_link":
-            audio_path = payload.get("audio_path")
-            return {"audio_path": audio_path}
-        imported_audio_storage = self._runtime_imported_audio_storage(context)
-        if imported_audio_storage is None:
-            raise RuntimeError("imported_audio_storage is not configured")
+            return {"audio_file": payload.get("audio_file")}
+        file_storage = self._runtime_file_storage(context)
         resolved = context.get_step_output("resolve_external_media")
         filename = self._build_external_filename(
             platform=resolved["platform"],
             media_id=resolved["media_id"],
             title=resolved.get("title"),
         )
-        saved = await imported_audio_storage.save_file(
-            source_path=resolved["local_audio_path"],
+        mime_type = mimetypes.guess_type(filename)[0] or "audio/m4a"
+        object_key = build_imported_audio_object_key(
             user_id=context.run.user_id,
+            fragment_id=payload["fragment_id"],
             platform=resolved["platform"],
             filename=filename,
         )
+        saved = await file_storage.save_local_file(
+            source_path=resolved["local_audio_path"],
+            object_key=object_key,
+            original_filename=filename,
+            mime_type=mime_type,
+        )
         await self._cleanup_temp(resolved.get("local_audio_path"))
-        relative_path = Path(saved["relative_path"]).as_posix()
-        fragment_repository.update_audio_path(
+        fragment_repository.update_audio_file(
             db=context.db,
             fragment_id=payload["fragment_id"],
             user_id=context.run.user_id,
-            audio_path=relative_path,
+            audio_storage_provider=saved.storage_provider,
+            audio_bucket=saved.bucket,
+            audio_object_key=saved.object_key,
+            audio_access_level=saved.access_level,
+            audio_original_filename=saved.original_filename,
+            audio_mime_type=saved.mime_type,
+            audio_file_size=saved.file_size,
+            audio_checksum=saved.checksum,
         )
+        access = file_storage.create_download_url(saved)
         return {
-            "audio_path": relative_path,
+            "audio_file": _stored_file_to_payload(saved),
             "platform": resolved["platform"],
             "share_url": resolved["share_url"],
             "media_id": resolved["media_id"],
@@ -253,20 +324,26 @@ class AudioIngestionService:
             "author": resolved.get("author"),
             "cover_url": resolved.get("cover_url"),
             "content_type": resolved.get("content_type"),
-            "audio_public_url": f"/{relative_path}",
+            "audio_file_url": access.url,
+            "audio_file_expires_at": access.expires_at,
         }
 
     async def transcribe_audio(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """调用 STT 把音频转成文本。"""
         payload = context.input_payload
-        audio_path = context.get_step_output("download_media").get("audio_path") or payload.get("audio_path")
-        if not audio_path:
-            raise RuntimeError("audio path missing for transcription")
-        result = await self._runtime_stt_provider(context).transcribe(audio_path)
+        stored_file = _stored_file_from_payload(context.get_step_output("download_media").get("audio_file") or payload.get("audio_file"))
+        if stored_file is None:
+            raise RuntimeError("audio file missing for transcription")
+        file_storage = self._runtime_file_storage(context)
+        materialized = file_storage.materialize(stored_file)
+        try:
+            result = await self._runtime_stt_provider(context).transcribe(str(materialized.local_path))
+        finally:
+            materialized.cleanup()
         transcript = result.text or ""
         normalized_segments = self._normalize_speaker_segments(getattr(result, "speaker_segments", None) or [])
         return {
-            "audio_path": audio_path,
+            "audio_file": _stored_file_to_payload(stored_file),
             "transcript": transcript,
             "speaker_segments": normalized_segments,
         }
@@ -309,19 +386,14 @@ class AudioIngestionService:
             tags_json=json.dumps(enrichment_payload.get("tags") or [], ensure_ascii=False),
             speaker_segments_json=json.dumps(transcript_payload.get("speaker_segments") or [], ensure_ascii=False),
         )
-        if audio_payload.get("audio_path"):
-            fragment_repository.update_audio_path(
-                db=context.db,
-                fragment_id=fragment_id,
-                user_id=context.run.user_id,
-                audio_path=audio_payload["audio_path"],
-            )
         return {
             "resource_type": "fragment",
             "resource_id": fragment_id,
             "run_output": {
                 "fragment_id": fragment_id,
-                "audio_path": audio_payload.get("audio_path") or context.input_payload.get("audio_path"),
+                "audio_file": audio_payload.get("audio_file") or context.input_payload.get("audio_file"),
+                "audio_file_url": audio_payload.get("audio_file_url"),
+                "audio_file_expires_at": audio_payload.get("audio_file_expires_at"),
                 "transcript": transcript_payload.get("transcript"),
                 "summary": enrichment_payload.get("summary"),
                 "tags": enrichment_payload.get("tags") or [],
@@ -370,9 +442,7 @@ class AudioIngestionService:
     @staticmethod
     def _build_external_filename(*, platform: str, media_id: str, title: str | None) -> str:
         """根据平台和标题构造稳定的文件名。"""
-        safe_title = "".join("_" if ch in '\\/:*?"<>|' else ch for ch in (title or "").strip())
-        safe_title = " ".join(safe_title.split()).strip(" .")
-        stem = safe_title[:80] if safe_title else platform
+        stem = sanitize_filename(title or platform, platform)
         if stem == platform:
             return f"{platform}-{media_id}.m4a"
         return f"{stem}-{media_id}.m4a"
@@ -423,6 +493,6 @@ def build_media_ingestion_pipeline_service(container) -> AudioIngestionService:
         llm_provider=container.llm_provider,
         vector_store=container.vector_store,
         pipeline_runner=container.pipeline_runner,
+        file_storage=container.file_storage,
         external_media_provider=container.external_media_provider,
-        imported_audio_storage=container.imported_audio_storage,
     )

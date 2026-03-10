@@ -1,6 +1,6 @@
 # SparkFlow Backend
 
-SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以本地 PostgreSQL + ChromaDB + 本地文件存储联调。
+SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以本地 PostgreSQL + ChromaDB 联调；文件存储已统一走对象存储抽象，本地开发默认使用 `local` provider，线上可切阿里云 OSS。
 
 ## Quick Start
 
@@ -79,7 +79,7 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
    - 负责数据库连接、Session、表模型。
 6. `modules/shared` + `services`
    - 外部能力抽象与适配层。
-   - 负责 LLM、STT、Embedding、VectorStore、AudioStorage、WorkflowProvider 等端口与实现。
+   - 负责 LLM、STT、Embedding、VectorStore、FileStorage、WorkflowProvider 等端口与实现。
    - `modules/shared/container.py` 只负责 `ServiceContainer` 和默认依赖装配。
    - `modules/shared/infrastructure.py` 集中放本地存储、向量存储适配、PromptLoader 和 provider 构造辅助。
    - `modules/shared/audio_ingestion.py` 提供统一媒体导入流水线步骤，供上传音频和外部链接导入复用。
@@ -136,9 +136,7 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 - `alembic/`: 数据库迁移。
 - `tests/`: `pytest` + `Schemathesis` 测试。
 - `scripts/`: 后端本地辅助脚本。
-- `uploads/`: 本地音频上传目录，配置层会固定解析到 `backend/uploads/`，不依赖启动 cwd。
-- `uploads/external_media/<user_id>/<platform>/`: 外部媒体导入后的音频文件。
-- `uploads/media_assets/<user_id>/<kind>/`: 手动上传的统一素材文件。
+- `uploads/`: `local` 文件存储 provider 的对象根目录，配置层会固定解析到 `backend/uploads/`，不依赖启动 cwd。
 - `chroma_data/`: 本地 ChromaDB 数据目录，相对路径同样固定解析到 `backend/chroma_data/`。
 - `runtime_logs/`: 运行时日志目录，当前包含移动端错误日志文件。
 
@@ -165,6 +163,17 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 
 Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `media_assets`, `exports`, `pipelines`, `debug_logs`, and `scheduler`.
 
+文件存储相关配置：
+
+```bash
+FILE_STORAGE_PROVIDER=local  # 或 oss
+OSS_ENDPOINT=oss-cn-hangzhou.aliyuncs.com
+OSS_BUCKET=sparkflow-private
+OSS_ACCESS_KEY_ID=...
+OSS_ACCESS_KEY_SECRET=...
+OSS_URL_EXPIRE_SECONDS=3600
+```
+
 任务与工作流相关接口：
 
 - `POST /api/scripts/generation`
@@ -188,6 +197,7 @@ Current business modules include `auth`, `fragment_folders`, `fragments`, `trans
 - `POST /api/transcriptions` 返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
 - `POST /api/external-media/audio-imports` 返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
 - `POST /api/scripts/generation` 返回 `pipeline_run_id`、`pipeline_type`、`status`
+- 文件类响应不再暴露 `audio_path` / `storage_path`，统一返回签名 `*_file_url` 与过期时间
 - `fragments` 列表 / 详情与 `GET /api/transcriptions/{fragment_id}` 不再返回 `sync_status`
 - 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`
 - 当前移动端已切脚本生成任务态；媒体上传和外链导入的客户端统一任务态展示仍作为后续阶段继续补齐

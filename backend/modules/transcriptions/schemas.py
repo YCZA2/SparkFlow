@@ -9,8 +9,8 @@ class AudioUploadResponse(BaseModel):
     pipeline_run_id: str
     pipeline_type: str
     fragment_id: str | None = None
-    audio_path: str | None = None
-    relative_path: str | None = None
+    audio_file_url: str | None = None
+    audio_file_expires_at: str | None = None
     file_size: int
     duration: float | None = None
 

@@ -6,7 +6,7 @@ import { useAppTheme } from '@/theme/useAppTheme';
 
 interface UploadResult {
   fragment_id: string;
-  audio_path: string | null;
+  audio_file_url: string | null;
   message: string;
 }
 

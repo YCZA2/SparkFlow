@@ -23,5 +23,5 @@ class ExternalAudioImportResponse(BaseModel):
     author: str | None = None
     cover_url: str | None = None
     content_type: str | None = None
-    audio_relative_path: str | None = None
-    audio_public_url: str | None = None
+    audio_file_url: str | None = None
+    audio_file_expires_at: str | None = None
