@@ -17,6 +17,8 @@ router = APIRouter(prefix="/api/external-media", tags=["external_media"], respon
 def get_external_media_use_case(container: ServiceContainer = Depends(get_container)) -> ExternalMediaUseCase:
     return ExternalMediaUseCase(
         ingestion_service=build_media_ingestion_pipeline_service(container),
+        external_media_provider=container.external_media_provider,
+        file_storage=container.file_storage,
     )
 
 

@@ -257,6 +257,8 @@ class AudioIngestionService:
         payload = context.input_payload
         if payload.get("source_kind") != "external_link":
             return {"skipped": True}
+        if payload.get("audio_file"):
+            return {"skipped": True, **(payload.get("source_context") or {})}
         external_media_provider = self._runtime_external_media_provider(context)
         if external_media_provider is None:
             raise RuntimeError("external_media_provider is not configured")
@@ -280,6 +282,11 @@ class AudioIngestionService:
         payload = context.input_payload
         if payload.get("source_kind") != "external_link":
             return {"audio_file": payload.get("audio_file")}
+        if payload.get("audio_file"):
+            return {
+                "audio_file": payload.get("audio_file"),
+                **(payload.get("source_context") or {}),
+            }
         file_storage = self._runtime_file_storage(context)
         resolved = context.get_step_output("resolve_external_media")
         filename = self._build_external_filename(

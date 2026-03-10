@@ -274,6 +274,13 @@ async def test_import_external_audio_returns_saved_url(async_client, auth_header
     assert payload["pipeline_type"] == "media_ingestion"
     assert payload["source"] == "voice"
     assert payload["audio_source"] == "external_link"
+    assert payload["platform"] == "douyin"
+    assert payload["media_id"] == "7614713222814088953"
+    assert payload["title"] == "别说了 拿大力胶吧"
+    assert payload["author"] == "老薯的薯"
+    assert payload["cover_url"] == "https://example.com/cover.jpg"
+    assert payload["content_type"] == "video"
+    assert payload["audio_file_url"]
     assert "audio_public_url" not in payload
     assert "audio_relative_path" not in payload
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
@@ -300,7 +307,7 @@ async def test_import_external_audio_returns_saved_url(async_client, auth_header
 
 @pytest.mark.asyncio
 async def test_import_external_audio_rejects_invalid_link(async_client, auth_headers_factory, external_media_provider) -> None:
-    """不支持的链接应在后台流水线里落到失败状态。"""
+    """不支持的链接应在请求阶段直接返回校验错误。"""
     external_media_provider.next_error = ValidationError(
         message="无法识别外部媒体链接",
         field_errors={"share_url": "当前仅支持抖音分享链接"},
@@ -310,25 +317,21 @@ async def test_import_external_audio_rejects_invalid_link(async_client, auth_hea
         json={"share_url": "https://example.com/not-supported", "platform": "auto"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
-    assert response.status_code == 200
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "failed"
-    assert "无法识别外部媒体链接" in (pipeline["error_message"] or "")
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION"
 
 
 @pytest.mark.asyncio
 async def test_import_external_audio_returns_error_when_provider_fails(async_client, auth_headers_factory, external_media_provider) -> None:
-    """上游解析失败时应落到后台流水线失败状态。"""
+    """上游解析失败时应在请求阶段直接透传错误。"""
     external_media_provider.next_error = AppException(message="抖音内容解析失败", code="EXTERNAL_MEDIA_IMPORT_FAILED", status_code=502)
     response = await async_client.post(
         "/api/external-media/audio-imports",
         json={"share_url": "https://v.douyin.com/demo", "platform": "douyin"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
-    assert response.status_code == 200
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "failed"
-    assert "抖音内容解析失败" in (pipeline["error_message"] or "")
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "EXTERNAL_MEDIA_IMPORT_FAILED"
 
 
 @pytest.mark.asyncio
