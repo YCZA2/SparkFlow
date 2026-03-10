@@ -77,7 +77,7 @@ export default function ScriptDetailScreen() {
 
         <View style={[styles.contentCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
           <Text style={[styles.contentTitle, { color: theme.colors.text }]}>文案内容</Text>
-          <Text style={[styles.scriptContent, { color: theme.colors.text }]}>{script.content || '无内容'}</Text>
+          <Text style={[styles.scriptContent, { color: theme.colors.text }]}>{script.body_markdown || script.content || '无内容'}</Text>
         </View>
       </ScrollView>
 
@@ -90,7 +90,7 @@ export default function ScriptDetailScreen() {
               pathname: '/shoot',
               params: {
                 script_id: script.id,
-                content: script.content ?? '',
+                content: script.body_markdown ?? script.content ?? '',
               },
             })
           }

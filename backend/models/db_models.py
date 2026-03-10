@@ -53,6 +53,7 @@ class User(Base):
     fragment_tags = relationship("FragmentTag", back_populates="user", cascade="all, delete-orphan")
     scripts = relationship("Script", back_populates="user", cascade="all, delete-orphan")
     knowledge_docs = relationship("KnowledgeDoc", back_populates="user", cascade="all, delete-orphan")
+    media_assets = relationship("MediaAsset", back_populates="user", cascade="all, delete-orphan")
     def __repr__(self) -> str:
         return f"<User(id={self.id}, role={self.role}, nickname={self.nickname})>"
 
@@ -93,6 +94,7 @@ class Fragment(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     folder_id = Column(String, ForeignKey("fragment_folders.id"), nullable=True)
     audio_path = Column(String, nullable=True)  # uploads/{user_id}/{uuid}.m4a
+    capture_text = Column(Text, nullable=True)  # 原始采集文本
     transcript = Column(Text, nullable=True)  # 转写文本
     speaker_segments = Column(Text, nullable=True)  # JSON数组字符串，说话人分段
     summary = Column(Text, nullable=True)  # AI一句话摘要
@@ -105,9 +107,33 @@ class Fragment(Base):
     user = relationship("User", back_populates="fragments")
     folder = relationship("FragmentFolder", back_populates="fragments")
     fragment_tags = relationship("FragmentTag", back_populates="fragment", cascade="all, delete-orphan")
+    blocks = relationship("FragmentBlock", back_populates="fragment", cascade="all, delete-orphan", order_by="FragmentBlock.order_index")
 
     def __repr__(self) -> str:
         return f"<Fragment(id={self.id}, user_id={self.user_id}, source={self.source})>"
+
+
+class FragmentBlock(Base):
+    """碎片块表，用于承载可扩展的 Markdown/图片/音频内容。"""
+
+    __tablename__ = "fragment_blocks"
+    __table_args__ = (
+        UniqueConstraint("fragment_id", "order_index", name="uq_fragment_blocks_fragment_order"),
+        Index("ix_fragment_blocks_fragment_id_order_index", "fragment_id", "order_index"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    fragment_id = Column(String, ForeignKey("fragments.id"), nullable=False)
+    block_type = Column(String, nullable=False)  # 当前仅支持 markdown
+    order_index = Column(Integer, nullable=False, default=0)
+    payload_json = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    fragment = relationship("Fragment", back_populates="blocks")
+
+    def __repr__(self) -> str:
+        return f"<FragmentBlock(id={self.id}, fragment_id={self.fragment_id}, block_type={self.block_type})>"
 
 
 class FragmentTag(Base):
@@ -144,6 +170,7 @@ class Script(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=True)
     content = Column(Text, nullable=True)  # 成稿内容
+    body_markdown = Column(Text, nullable=True)  # Markdown 正文
     mode = Column(String, nullable=False)  # 'mode_a' | 'mode_b'
     source_fragment_ids = Column(String, nullable=True)  # JSON数组字符串，关联碎片ID
     status = Column(String, default="draft", nullable=False)  # 'draft'|'ready'|'filmed'
@@ -169,6 +196,7 @@ class KnowledgeDoc(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
+    body_markdown = Column(Text, nullable=True)  # Markdown 正文
     doc_type = Column(String, nullable=False)  # 'high_likes'|'language_habit'
     vector_ref_id = Column(String, nullable=True)  # 向量库中的引用ID，格式：docs_{user_id}:{doc_id}
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
@@ -178,6 +206,59 @@ class KnowledgeDoc(Base):
 
     def __repr__(self) -> str:
         return f"<KnowledgeDoc(id={self.id}, user_id={self.user_id}, title={self.title})>"
+
+
+class MediaAsset(Base):
+    """统一媒体资源表，记录本地文件元数据和存储位置。"""
+
+    __tablename__ = "media_assets"
+    __table_args__ = (
+        Index("ix_media_assets_user_id_created_at", "user_id", "created_at"),
+        Index("ix_media_assets_user_id_media_kind", "user_id", "media_kind"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    media_kind = Column(String, nullable=False)  # image | audio | file
+    original_filename = Column(String, nullable=False)
+    mime_type = Column(String, nullable=False)
+    storage_path = Column(String, nullable=False)
+    file_size = Column(Integer, nullable=False)
+    checksum = Column(String, nullable=True)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    status = Column(String, nullable=False, default="ready")
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="media_assets")
+
+    def __repr__(self) -> str:
+        return f"<MediaAsset(id={self.id}, user_id={self.user_id}, media_kind={self.media_kind})>"
+
+
+class ContentMediaLink(Base):
+    """统一内容资源关联表，用于 fragment/script/knowledge 复用素材。"""
+
+    __tablename__ = "content_media_links"
+    __table_args__ = (
+        UniqueConstraint("media_asset_id", "content_type", "content_id", "role", name="uq_content_media_links_asset_content_role"),
+        Index("ix_content_media_links_content_type_content_id", "content_type", "content_id"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    media_asset_id = Column(String, ForeignKey("media_assets.id"), nullable=False)
+    content_type = Column(String, nullable=False)  # fragment | script | knowledge
+    content_id = Column(String, nullable=False)
+    role = Column(String, nullable=False, default="attachment")
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    user = relationship("User")
+    media_asset = relationship("MediaAsset")
+
+    def __repr__(self) -> str:
+        return f"<ContentMediaLink(id={self.id}, content_type={self.content_type}, content_id={self.content_id})>"
 
 class PipelineRun(Base):
     """持久化整条后台流水线运行状态。"""

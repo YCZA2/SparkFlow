@@ -1,6 +1,6 @@
 # SparkFlow — 开发进度跟踪
 
-> 最后更新：2026-03-09
+> 最后更新：2026-03-10
 
 这份文档记录“当前代码仓库的真实状态”。对历史阶段的原始计划，如与现状不一致，应以当前实现、[`PRD.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/PRD.md) 和 [`architecture.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/architecture.md) 为准。
 
@@ -35,12 +35,15 @@
 - 音频上传、后台异步转写、摘要/标签回写、speaker segments 持久化。
 - `pipeline_runs` / `pipeline_step_runs` 持久化后台任务队列与自动重试。
 - 文本碎片创建与外部媒体音频导入。
+- `fragments.capture_text`、`fragment_blocks` 与 Markdown 内容编译链路。
 - 碎片列表、详情、删除、文件夹归类与批量移动。
 - 碎片语义相似检索。
 - 碎片向量可视化（灵感云图）。
 - `mode_a` / `mode_b` 脚本生成、脚本列表、详情、状态更新、删除。
+- `scripts.body_markdown` / `knowledge_docs.body_markdown` 统一正文存储。
 - Dify 统一脚本工作流创建、状态查询与脚本回流。
 - 媒体导入和脚本生成统一任务态 API、步骤查询与手动重跑。
+- 统一 `media_assets` 资源层与单条 / 批量 Markdown 导出。
 - 提词拍摄与视频保存到系统相册的最小闭环。
 - 知识库文档创建、上传、列表、搜索、详情、删除。
 - 每日推盘用例、API 和 APScheduler 定时任务。
@@ -48,6 +51,9 @@
 ## 当前未完成或半完成部分
 
 - 知识库移动端仍是占位页，不是完整管理界面。
+- 碎片详情页还没有真正的块式 Markdown 编辑器。
+- 知识库和脚本也还没有完整的 Markdown 编辑 UI。
+- 图片 / 音频 block 类型还没开放，当前 `fragment_blocks` 只支持 Markdown。
 - 每日推盘能力在后端已可运行，但当前主首页没有稳定展示“今日灵感卡片”。
 - 提词拍摄链路虽然可用，但还不应视为复杂拍摄产品已经完成。
 - 全链路手工冒烟与文档归档还没有收口到一个最终版本。
@@ -59,6 +65,8 @@
 
 - 后端主业务入口已经收敛到 `backend/modules/*`，旧路由目录已清理，不应再按历史结构写新文档。
 - 后端媒体导入与脚本生成已经切到 `pipeline_runs` / `pipeline_step_runs` 作为任务事实源。
+- 内容层已经切到“数据库事实源 + Markdown 编辑/导出视图”的方向，而不是本地 `.md` 主存储。
+- 后端已新增 `media_assets`、Markdown 导出和 `fragment_blocks`，移动端只完成了最小展示适配。
 - 移动端当前是 stack 路由，不存在实际在用的 `(tabs)` 目录。
 - 推荐联调方式已经是仓库根目录执行 `bash scripts/dev-mobile.sh`。
 - 本仓库已不再保留 SQLite 兼容分支；后端默认且唯一支持 PostgreSQL。

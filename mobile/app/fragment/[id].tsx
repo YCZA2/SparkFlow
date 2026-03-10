@@ -181,6 +181,13 @@ export default function FragmentDetailScreen() {
             </View>
           ) : null}
 
+          {fragment.compiled_markdown ? (
+            <View style={[styles.card, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
+              <Text style={[styles.cardTitle, { color: theme.colors.textSubtle }]}>Markdown 正文</Text>
+              <Text style={[styles.summaryText, { color: theme.colors.text }]}>{fragment.compiled_markdown}</Text>
+            </View>
+          ) : null}
+
           <TranscriptSection
             transcript={fragment.transcript}
             speakerSegments={fragment.speaker_segments}
@@ -214,6 +221,17 @@ export default function FragmentDetailScreen() {
               <Text style={[styles.audioPathText, { color: theme.colors.textSubtle }]}>
                 {fragment.audio_path}
               </Text>
+            </View>
+          ) : null}
+
+          {fragment.media_assets?.length ? (
+            <View style={[styles.card, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
+              <Text style={[styles.cardTitle, { color: theme.colors.textSubtle }]}>素材</Text>
+              {fragment.media_assets.map((asset) => (
+                <Text key={asset.id} style={[styles.audioPathText, { color: theme.colors.textSubtle }]}>
+                  {asset.original_filename}
+                </Text>
+              ))}
             </View>
           ) : null}
 

@@ -18,6 +18,7 @@ def _create_fragment(db, transcript: str):
         db=db,
         user_id=TEST_USER_ID,
         transcript=transcript,
+        capture_text=transcript,
         source="manual",
         audio_source=None,
         audio_path=None,
@@ -38,6 +39,7 @@ async def test_context_builder_builds_context_with_research_hits(db_session_fact
             user_id=TEST_USER_ID,
             title="定位文档",
             content="关于定位的经验",
+            body_markdown="关于定位的经验",
             doc_type="high_likes",
         )
         vector_store.knowledge_results = [{"doc_id": knowledge_doc.id, "score": 0.91}]

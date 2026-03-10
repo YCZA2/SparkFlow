@@ -7,15 +7,15 @@ from core import ResponseModel, success_response
 from core.auth import get_current_user
 from modules.shared.container import get_container, get_db_session, ServiceContainer
 
-from .application import FragmentCommandService, FragmentQueryService, map_fragment
+from .application import FragmentCommandService, FragmentQueryService
 from .schemas import (
     FragmentBatchMoveRequest,
     FragmentBatchMoveResponse,
     FragmentCreateRequest,
-    FragmentFolderUpdateRequest,
     FragmentItem,
     FragmentListResponse,
     FragmentTagListResponse,
+    FragmentUpdateRequest,
     FragmentVisualizationResponse,
     SimilarityQueryRequest,
     SimilarFragmentListResponse,
@@ -75,12 +75,43 @@ async def create_fragment(
         db=db,
         user_id=current_user["user_id"],
         transcript=data.transcript,
+        capture_text=data.capture_text,
+        body_markdown=data.body_markdown,
         source=data.source,
         audio_source=data.audio_source,
         audio_path=data.audio_path,
         folder_id=data.folder_id,
+        media_asset_ids=data.media_asset_ids,
     )
-    return success_response(data=map_fragment(fragment), message="碎片笔记创建成功")
+    return success_response(data=service.get_fragment_payload(db=db, user_id=current_user["user_id"], fragment_id=fragment.id), message="碎片笔记创建成功")
+
+
+@router.post(
+    "/content",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ResponseModel[FragmentItem],
+    summary="创建带 Markdown 内容的碎片",
+    description="创建一条可编辑内容碎片，并在首次落库时初始化 Markdown 块。",
+)
+async def create_fragment_with_content(
+    data: FragmentCreateRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    service: FragmentCommandService = Depends(get_fragment_command_service),
+):
+    fragment = service.create_fragment_with_content(
+        db=db,
+        user_id=current_user["user_id"],
+        transcript=data.transcript,
+        capture_text=data.capture_text,
+        body_markdown=data.body_markdown,
+        source=data.source,
+        audio_source=data.audio_source,
+        audio_path=data.audio_path,
+        folder_id=data.folder_id,
+        media_asset_ids=data.media_asset_ids,
+    )
+    return success_response(data=service.get_fragment_payload(db=db, user_id=current_user["user_id"], fragment_id=fragment.id), message="碎片笔记创建成功")
 
 
 @router.post(
@@ -178,7 +209,7 @@ async def get_fragment(
     db: Session = Depends(get_db_session),
     service: FragmentCommandService = Depends(get_fragment_command_service),
 ):
-    return success_response(data=map_fragment(service.get_fragment(db=db, user_id=current_user["user_id"], fragment_id=fragment_id)))
+    return success_response(data=service.get_fragment_payload(db=db, user_id=current_user["user_id"], fragment_id=fragment_id))
 
 
 @router.patch(
@@ -189,18 +220,23 @@ async def get_fragment(
 )
 async def update_fragment(
     fragment_id: str,
-    data: FragmentFolderUpdateRequest,
+    data: FragmentUpdateRequest,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
     service: FragmentCommandService = Depends(get_fragment_command_service),
 ):
-    fragment = service.update_fragment_folder(
+    payload = data.model_dump(exclude_unset=True)
+    fragment = service.update_fragment(
         db=db,
         user_id=current_user["user_id"],
         fragment_id=fragment_id,
-        folder_id=data.folder_id,
+        folder_id=payload.get("folder_id"),
+        folder_id_provided="folder_id" in payload,
+        body_markdown=payload.get("body_markdown"),
+        blocks=data.blocks if "blocks" in payload else None,
+        media_asset_ids=payload.get("media_asset_ids"),
     )
-    return success_response(data=map_fragment(fragment), message="碎片更新成功")
+    return success_response(data=service.get_fragment_payload(db=db, user_id=current_user["user_id"], fragment_id=fragment_id), message="碎片更新成功")
 
 
 @router.delete(

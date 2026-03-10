@@ -8,9 +8,8 @@ import type {
 } from '@/types/fragment';
 
 export interface UpdateFragmentRequest {
-  transcript?: string;
-  summary?: string;
-  tags?: string[];
+  folder_id?: string | null;
+  body_markdown?: string;
 }
 
 export async function fetchFragments(folderId?: string): Promise<FragmentListResponse> {
@@ -35,7 +34,8 @@ export async function deleteFragment(id: string): Promise<void> {
 export async function createFragment(data: CreateFragmentRequest, folderId?: string): Promise<Fragment> {
   // 如果传入了 folderId，合并到请求数据中
   const requestData = folderId ? { ...data, folder_id: folderId } : data;
-  return post<Fragment>(API_ENDPOINTS.FRAGMENTS.LIST, requestData);
+  const endpoint = data.body_markdown ? API_ENDPOINTS.FRAGMENTS.CONTENT : API_ENDPOINTS.FRAGMENTS.LIST;
+  return post<Fragment>(endpoint, requestData);
 }
 
 export async function updateFragment(id: string, data: UpdateFragmentRequest): Promise<Fragment> {

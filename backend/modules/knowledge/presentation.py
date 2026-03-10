@@ -14,6 +14,7 @@ from .schemas import (
     KnowledgeDocListResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
+    KnowledgeDocUpdateRequest,
 )
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"], responses={401: {"description": "未认证"}})
@@ -34,7 +35,14 @@ async def create_knowledge_doc(
     db: Session = Depends(get_db_session),
     use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
 ):
-    doc = await use_case.create_doc(db=db, user_id=current_user["user_id"], title=data.title, content=data.content, doc_type=data.doc_type)
+    doc = await use_case.create_doc(
+        db=db,
+        user_id=current_user["user_id"],
+        title=data.title,
+        content=data.content,
+        body_markdown=data.body_markdown,
+        doc_type=data.doc_type,
+    )
     return success_response(data=map_knowledge_doc(doc), message="知识库文档创建成功")
 
 
@@ -53,7 +61,14 @@ async def upload_knowledge_doc(
     use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
 ):
     content = parse_uploaded_file(file_content=await file.read(), filename=file.filename or "")
-    doc = await use_case.create_doc(db=db, user_id=current_user["user_id"], title=title, content=content, doc_type=doc_type)
+    doc = await use_case.create_doc(
+        db=db,
+        user_id=current_user["user_id"],
+        title=title,
+        content=content,
+        body_markdown=content,
+        doc_type=doc_type,
+    )
     return success_response(data=map_knowledge_doc(doc), message="知识库文档上传成功")
 
 
@@ -102,6 +117,29 @@ async def get_knowledge_doc(
     use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
 ):
     return success_response(data=map_knowledge_doc(use_case.get_doc(db=db, user_id=current_user["user_id"], doc_id=doc_id)))
+
+
+@router.patch(
+    "/{doc_id}",
+    response_model=ResponseModel[KnowledgeDocItem],
+    summary="更新知识库文档",
+    description="更新知识库文档标题或 Markdown 正文，并同步刷新向量索引。",
+)
+async def update_knowledge_doc(
+    doc_id: str,
+    data: KnowledgeDocUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
+):
+    doc = await use_case.update_doc(
+        db=db,
+        user_id=current_user["user_id"],
+        doc_id=doc_id,
+        title=data.title,
+        body_markdown=data.body_markdown,
+    )
+    return success_response(data=map_knowledge_doc(doc), message="知识库文档更新成功")
 
 
 @router.delete(

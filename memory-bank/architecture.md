@@ -13,7 +13,7 @@ flowchart LR
     S["AsyncStorage<br/>token / user / backend base url"]
     API["FastAPI API<br/>模块化单体"]
     DB[("PostgreSQL<br/>SQLAlchemy")]
-    FS[("uploads/<user_id><br/>本地音频文件")]
+    FS[("uploads/<user_id><br/>本地音频 / 媒体素材")]
     CHROMA[("ChromaDB<br/>fragments_* / knowledge_*")]
     WFP["Workflow Provider<br/>当前为 Dify adapter"]
     STT["STT Provider<br/>DashScope / Aliyun"]
@@ -180,7 +180,7 @@ flowchart TD
 - `backend/prompts/`: LLM prompt 模板。
 - `backend/alembic/`: 数据库迁移脚本。
 - `backend/tests/`: 后端自动化测试。
-- `backend/uploads/`: 本地音频文件存储。
+- `backend/uploads/`: 本地音频和媒体素材文件存储。
 - `backend/chroma_data/`: 本地向量库持久化目录。
 - `backend/runtime_logs/`: 运行时日志目录，当前包含移动端错误日志落盘文件。
 - `backend/scripts/`: 后端辅助脚本。
@@ -191,11 +191,13 @@ flowchart TD
 - `auth`: 测试 token 签发、当前用户信息、refresh。
 - 本地联调会确保默认测试用户 `test-user-001` 在数据库中存在，避免恢复旧 token 时触发用户外键错误。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
-- `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化。
+- `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；内容层已新增 `capture_text + fragment_blocks`。
 - `transcriptions`: 音频上传、后台转写、状态查询，上传入口会创建 `source=voice`、`audio_source=upload` 的碎片。
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接下载并转成 m4a，导入完成后直接创建 `source=voice`、`audio_source=external_link` 的碎片并接入同一条转写管线。
-- `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘。
-- `knowledge`: 文档创建、上传、列表、搜索、详情、删除。
+- `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文已统一到 `body_markdown`。
+- `knowledge`: 文档创建、上传、列表、搜索、详情、删除；正文已统一到 `body_markdown`。
+- `media_assets`: 统一媒体资源上传、列表和删除。
+- `exports`: 单条 Markdown 导出与批量 zip 导出。
 - `pipelines`: 后台流水线详情、步骤查询与手动重跑入口。
 - `backend/dify_dsl/`: 仓库内置的 Dify DSL 模板目录，当前提供 `sparkflow_script_generation.workflow.yml` 供导入。
 - `debug_logs`: 移动端调试日志接收，并复用结构化日志链路落盘。
@@ -219,7 +221,7 @@ flowchart TD
 - Vector DB: 默认 `ChromaDB`。
 - Workflow Provider: 当前通过通用 `workflow_provider` 端口接入，默认实现为 `DifyWorkflowProvider`。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
-- Storage: 本地文件系统 `backend/uploads/<user_id>/`。
+- Storage: 本地文件系统 `backend/uploads/<user_id>/`，并按 `media_assets/<user_id>/<kind>/` 继续扩展素材目录。
 - Database: PostgreSQL（本地开发默认）。
 
 ### 4.7 Namespaces and Storage Conventions
@@ -228,6 +230,9 @@ flowchart TD
 - 碎片归一化标签表：`fragment_tags`
 - `fragments.folder_id` 指向真实文件夹；“全部”只是前端系统视图，不落库。
 - `fragments.audio_source` 用于区分音频来源；当前取值为 `upload` / `external_link` / `null`
+- `fragments.capture_text` 保存原始采集文本，`fragment_blocks` 保存正式可编辑内容块
+- `scripts.body_markdown` / `knowledge_docs.body_markdown` 保存统一 Markdown 正文
+- 媒体资源表：`media_assets` / `content_media_links`
 - 碎片向量 namespace: `fragments_{user_id}`
 - 知识库向量 namespace: `knowledge_{user_id}`
 - 后台流水线表：`pipeline_runs` / `pipeline_step_runs`

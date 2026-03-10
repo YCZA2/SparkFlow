@@ -21,6 +21,7 @@ from .infrastructure import (
     create_audio_storage,
     create_external_media_provider,
     create_imported_audio_storage,
+    create_media_asset_storage,
     create_prompt_loader,
     create_vector_store,
     create_web_search_provider,
@@ -31,6 +32,7 @@ from .ports import (
     EmbeddingProvider,
     ExternalMediaProvider,
     ImportedAudioStorage,
+    MediaAssetStorage,
     SpeechToTextProvider,
     TextGenerationProvider,
     VectorStore,
@@ -51,6 +53,7 @@ class ServiceContainer:
     vector_store: VectorStore
     audio_storage: AudioStorage
     imported_audio_storage: ImportedAudioStorage
+    media_asset_storage: MediaAssetStorage
     external_media_provider: ExternalMediaProvider
     prompt_loader: PromptLoader
     web_search_provider: WebSearchProvider
@@ -75,6 +78,7 @@ def build_container() -> ServiceContainer:
         vector_store=create_vector_store(embedding_provider=embedding_provider, vector_db_provider=vector_db_provider),
         audio_storage=create_audio_storage(settings.UPLOAD_DIR),
         imported_audio_storage=create_imported_audio_storage(settings.UPLOAD_DIR),
+        media_asset_storage=create_media_asset_storage(settings.UPLOAD_DIR),
         external_media_provider=create_external_media_provider(),
         prompt_loader=create_prompt_loader(Path(__file__).resolve().parents[2] / "prompts"),
         web_search_provider=create_web_search_provider(),

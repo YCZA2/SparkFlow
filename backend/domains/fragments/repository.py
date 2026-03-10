@@ -37,7 +37,7 @@ def list_by_user(
     folder_id: Optional[str] = None,
     tag: Optional[str] = None,
 ) -> list[Fragment]:
-    query = db.query(Fragment).options(joinedload(Fragment.folder))
+    query = db.query(Fragment).options(joinedload(Fragment.folder), joinedload(Fragment.blocks))
     query = _apply_fragment_filters(query, user_id=user_id, folder_id=folder_id, tag=tag)
     return (
         query
@@ -57,7 +57,7 @@ def count_by_user(db: Session, user_id: str, *, folder_id: Optional[str] = None,
 def get_by_id(db: Session, user_id: str, fragment_id: str) -> Optional[Fragment]:
     return (
         db.query(Fragment)
-        .options(joinedload(Fragment.folder))
+        .options(joinedload(Fragment.folder), joinedload(Fragment.blocks))
         .filter(Fragment.id == fragment_id, Fragment.user_id == user_id)
         .first()
     )
@@ -69,7 +69,7 @@ def get_by_ids(db: Session, user_id: str, fragment_ids: list[str]) -> list[Fragm
 
     return (
         db.query(Fragment)
-        .options(joinedload(Fragment.folder))
+        .options(joinedload(Fragment.folder), joinedload(Fragment.blocks))
         .filter(Fragment.id.in_(fragment_ids), Fragment.user_id == user_id)
         .all()
     )
@@ -78,6 +78,7 @@ def get_by_ids(db: Session, user_id: str, fragment_ids: list[str]) -> list[Fragm
 def list_vectorizable_by_user(db: Session, user_id: str) -> list[Fragment]:
     return (
         db.query(Fragment)
+        .options(joinedload(Fragment.blocks))
         .filter(
             Fragment.user_id == user_id,
             Fragment.transcript.isnot(None),
@@ -96,9 +97,10 @@ def list_content_ready_in_range(
     """查询指定时间窗内已有可用文本内容的碎片。"""
     return (
         db.query(Fragment)
+        .options(joinedload(Fragment.blocks))
         .filter(
             Fragment.user_id == user_id,
-            Fragment.transcript.isnot(None),
+            func.coalesce(Fragment.capture_text, Fragment.transcript).isnot(None),
             Fragment.created_at >= start_at,
             Fragment.created_at < end_at,
         )
@@ -111,6 +113,7 @@ def create(
     db: Session,
     user_id: str,
     transcript: Optional[str],
+    capture_text: Optional[str],
     source: str,
     audio_source: Optional[str],
     audio_path: Optional[str],
@@ -122,6 +125,7 @@ def create(
     fragment = Fragment(
         user_id=user_id,
         folder_id=folder_id,
+        capture_text=capture_text,
         transcript=transcript,
         audio_path=audio_path,
         tags=tags_json,
@@ -161,6 +165,7 @@ def save_transcription_result(
         return False
 
     fragment.transcript = transcript
+    fragment.capture_text = transcript
     fragment.speaker_segments = speaker_segments_json
     fragment.summary = summary
     fragment.tags = tags_json
@@ -187,6 +192,16 @@ def update_audio_path(db: Session, *, fragment_id: str, user_id: str, audio_path
     if not fragment:
         return False
     fragment.audio_path = audio_path
+    db.commit()
+    return True
+
+
+def update_capture_text(db: Session, *, fragment_id: str, user_id: str, capture_text: str | None) -> bool:
+    """更新碎片原始采集文本。"""
+    fragment = get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
+    if not fragment:
+        return False
+    fragment.capture_text = capture_text
     db.commit()
     return True
 

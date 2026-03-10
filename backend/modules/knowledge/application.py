@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ValidationError
 from models import KnowledgeDoc
+from modules.shared.content_markdown import extract_plain_text
 from utils.serialization import format_iso_datetime
 
 from domains.knowledge import repository as knowledge_repository
@@ -22,6 +23,7 @@ def map_knowledge_doc(doc: KnowledgeDoc) -> KnowledgeDocItem:
         id=doc.id,
         title=doc.title,
         content=doc.content,
+        body_markdown=doc.body_markdown or doc.content,
         doc_type=doc.doc_type,
         vector_ref_id=doc.vector_ref_id,
         created_at=format_iso_datetime(doc.created_at),
@@ -59,16 +61,34 @@ class KnowledgeUseCase:
     def __init__(self, *, vector_store: VectorStore) -> None:
         self.vector_store = vector_store
 
-    async def create_doc(self, *, db: Session, user_id: str, title: str, content: str, doc_type: str) -> KnowledgeDoc:
+    async def create_doc(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        title: str,
+        content: str,
+        body_markdown: str | None,
+        doc_type: str,
+    ) -> KnowledgeDoc:
         if doc_type not in VALID_DOC_TYPES:
             raise ValidationError(message="文档类型无效", field_errors={"doc_type": f"必须是以下之一: {', '.join(sorted(VALID_DOC_TYPES))}"})
-        doc = knowledge_repository.create(db=db, user_id=user_id, title=title, content=content, doc_type=doc_type)
+        normalized_markdown = (body_markdown or content).strip()
+        plain_text = extract_plain_text(normalized_markdown) or content.strip()
+        doc = knowledge_repository.create(
+            db=db,
+            user_id=user_id,
+            title=title,
+            content=plain_text,
+            body_markdown=normalized_markdown,
+            doc_type=doc_type,
+        )
         try:
             doc.vector_ref_id = await self.vector_store.upsert_knowledge_doc(
                 user_id=user_id,
                 doc_id=doc.id,
                 title=title,
-                content=content,
+                content=plain_text,
                 doc_type=doc_type,
             )
             db.add(doc)
@@ -77,6 +97,33 @@ class KnowledgeUseCase:
         except Exception:
             db.rollback()
         return doc
+
+    async def update_doc(self, *, db: Session, user_id: str, doc_id: str, title: str | None, body_markdown: str | None) -> KnowledgeDoc:
+        """更新知识库文档正文并刷新向量索引。"""
+        doc = self.get_doc(db=db, user_id=user_id, doc_id=doc_id)
+        normalized_markdown = body_markdown.strip() if body_markdown is not None else (doc.body_markdown or doc.content)
+        plain_text = extract_plain_text(normalized_markdown) or doc.content
+        updated = knowledge_repository.update(
+            db=db,
+            doc=doc,
+            title=title,
+            content=plain_text,
+            body_markdown=normalized_markdown,
+        )
+        try:
+            updated.vector_ref_id = await self.vector_store.upsert_knowledge_doc(
+                user_id=user_id,
+                doc_id=updated.id,
+                title=updated.title,
+                content=updated.content,
+                doc_type=updated.doc_type,
+            )
+            db.add(updated)
+            db.commit()
+            db.refresh(updated)
+        except Exception:
+            db.rollback()
+        return updated
 
     def list_docs(self, *, db: Session, user_id: str, doc_type: Optional[str], limit: int, offset: int) -> KnowledgeDocListResponse:
         if doc_type and doc_type not in VALID_DOC_TYPES:

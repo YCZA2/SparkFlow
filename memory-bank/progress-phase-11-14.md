@@ -1,6 +1,6 @@
 # SparkFlow — 阶段 11-14 现状记录
 
-> 最后更新：2026-03-09
+> 最后更新：2026-03-10
 
 本文档只记录阶段 11-14 在当前仓库中的真实落地状态，不再沿用已经失真的旧路径和旧任务描述。
 
@@ -11,9 +11,11 @@
 | 子项 | 状态 | 说明 |
 |------|------|------|
 | 11.1 文档创建 API | 已完成 | `POST /api/knowledge` |
-| 11.2 文档列表 / 详情 / 删除 | 已完成 | `GET /api/knowledge` / `GET /api/knowledge/{id}` / `DELETE /api/knowledge/{id}` |
+| 11.2 文档列表 / 详情 / 删除 / 更新 | 已完成 | `GET /api/knowledge` / `GET /api/knowledge/{id}` / `PATCH /api/knowledge/{id}` / `DELETE /api/knowledge/{id}` |
 | 11.3 文件上传解析 | 已完成 | 支持 `.txt` / `.docx` |
-| 11.4 移动端知识库入口 | 部分完成 | 只有占位页，没有完整管理 UI |
+| 11.4 Markdown 正文存储 | 已完成 | `knowledge_docs.body_markdown` 已落地 |
+| 11.5 素材资源挂载基础层 | 已完成 | 已有统一 `media_assets` / `content_media_links` |
+| 11.6 移动端知识库入口 | 部分完成 | 只有占位页，没有完整管理 UI |
 
 ### 当前实现位置
 
@@ -26,6 +28,7 @@
 
 - JSON 创建知识库文档。
 - 表单上传 `.txt` / `.docx` 文件并解析内容。
+- 知识库正文统一落到 `body_markdown`，并兼容下游纯文本提取。
 - 按 `doc_type` 过滤与分页查询。
 - 基于向量库进行知识库搜索。
 - 删除时同步删除对应向量文档。
@@ -33,6 +36,7 @@
 ### 当前缺口
 
 - 移动端没有真正的“我的方法论”管理页。
+- 还没有完整的知识库 Markdown 编辑器和素材管理 UI。
 - 长文档 chunking 还没有单独设计。
 - 产品侧还没有决定知识库前端的最终交互。
 
@@ -44,9 +48,10 @@
 |------|------|------|
 | 12.1 碎片自动向量化 | 已完成 | 转写成功后自动写入 |
 | 12.2 碎片语义相似检索 | 已完成 | `POST /api/fragments/similar` |
-| 12.3 Mode B 历史碎片增强 | 未完成 | 仍未稳定接入生成流程 |
-| 12.4 碎片向量可视化 | 已完成 | `GET /api/fragments/visualization` |
-| 12.5 知识库向量化增强 | 部分完成 | 文档已写向量，但高级检索策略未展开 |
+| 12.3 Markdown 正文参与内容消费 | 已完成 | 下游优先消费正式正文，兼容回退采集文本 |
+| 12.4 Mode B 历史碎片增强 | 未完成 | 仍未稳定接入生成流程 |
+| 12.5 碎片向量可视化 | 已完成 | `GET /api/fragments/visualization` |
+| 12.6 知识库向量化增强 | 部分完成 | 文档已写向量，但高级检索策略未展开 |
 
 ### 当前实现位置
 
@@ -59,6 +64,7 @@
 ### 已落地能力
 
 - 转写完成后自动生成 embedding 并写入 `fragments_{user_id}`。
+- `fragment_blocks` 编译结果和 `body_markdown` 已能进入脚本上下文、daily push 与知识库消费链路。
 - 可按语义查询相似碎片，并回表补齐摘要、标签、来源和时间。
 - 灵感云图可批量读取用户向量，做 PCA / 聚类 / fallback projection。
 - 知识库文档创建时会同步写入 `knowledge_{user_id}`。
@@ -67,6 +73,7 @@
 
 - `mode_b` 还没有系统化利用相似碎片作为风格参考。
 - 知识库侧还没有 chunk、混合检索、重排序等增强策略。
+- 碎片多模态 block 还没有开放，当前只有 Markdown block。
 
 ## 阶段 13：每日灵感推盘
 
@@ -110,20 +117,22 @@
 | 14.1 后端路由与核心流程自动化验证 | 部分完成 | `backend/tests` 已覆盖多条主路径 |
 | 14.2 数据库预留字段检查 | 部分完成 | schema 已具备核心预留字段 |
 | 14.3 API 契约与异常路径检查 | 部分完成 | 有 route contracts / core flow tests |
-| 14.4 文档收口 | 进行中 | 本次已更新 PRD / architecture / progress / 协作规范 |
+| 14.4 Markdown 内容层与资源层验证 | 已完成 | 路由契约、核心测试、全量测试均已通过 |
+| 14.5 文档收口 | 进行中 | 本次已更新 README / architecture / progress / 计划文档 |
 
 ### 当前已有验证
 
 - `backend/tests/test_route_contracts.py`
 - `backend/tests/test_core_flows.py`
 - `mobile/package.json` 中的 `npm run test:state`
+- `bash scripts/test-all.sh` 全量测试已通过
 
 ### 当前仍缺的验证
 
 - 真机完整冒烟：录音 -> 转写 -> 合稿 -> 拍摄 -> 相册保存。
 - daily push 前端主路径验证。
 - 知识库移动端真实入口验证。
-- 最终 README / onboarding 统一收口。
+- `CLAUDE.md`、移动端使用说明和 onboarding 口径还需要继续收口。
 
 ## 当前结论
 

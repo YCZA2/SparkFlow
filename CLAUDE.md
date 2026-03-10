@@ -72,6 +72,8 @@ backend/
 │   ├── scripts/            # Script generation and script pipeline definitions
 │   ├── pipelines/          # Persistent pipeline APIs
 │   ├── knowledge/          # Knowledge base APIs
+│   ├── media_assets/       # Unified media asset APIs
+│   ├── exports/            # Markdown export APIs
 │   └── transcriptions/     # Voice upload and transcription
 ├── services/
 │   ├── factory.py          # Provider factory
@@ -91,30 +93,38 @@ backend/
 mobile/
 ├── app/                    # expo-router file-based routing
 ├── components/             # Reusable UI components
-├── hooks/                  # Custom React hooks
+├── features/               # Feature APIs / state / hooks
+├── providers/              # App-level bootstrap
 └── utils/                  # Utilities
 ```
 
 ## Core Features (User Flow)
 
 1. **Voice Capture** → Record voice → Receive `pipeline_run_id` → Poll task → Stored in fragment library
+   - Voice fragments keep raw `capture_text`
+   - Editable fragment content is prepared for Markdown blocks and export
+2. **Manual Fragment Capture** → Create text fragment directly in Markdown → Stored in fragment library
+   - Mobile text note flow now submits Markdown content to `/api/fragments/content`
 2. **AI Script Generation** → Select multiple fragments → Receive `pipeline_run_id` → Poll task → Generate script
    - Backend assembles structured context, then calls the workflow provider through a shared port
    - Current provider adapter is Dify; script generation is publicly exposed through `/api/scripts/generation` + `/api/pipelines/{run_id}`
    - Script domain no longer depends on any Dify-specific client code directly
    - Mode A: "导师爆款模式" - Forces golden structure (hook + pain point + value + CTA)
    - Mode B: "专属二脑模式" - Mimics user's writing style from knowledge base
-3. **Daily Auto-Aggregation** → If ≥3 related fragments recorded yesterday → AI generates script at 8 AM → Push notification
-4. **Teleprompter Recording** → One-tap to camera → Overlay teleprompter → Save video to local photos
+3. **Markdown Content Export** → Export fragment / script / knowledge doc as `.md` or batch zip
+4. **Daily Auto-Aggregation** → If ≥3 related fragments recorded yesterday → AI generates script at 8 AM → Push notification
+5. **Teleprompter Recording** → One-tap to camera → Overlay teleprompter → Save video to local photos
 
 ## Database Schema (Key Tables)
 
 - `users` - User accounts (with RBAC: user/creator roles)
-- `fragments` - Voice notes (transcript, AI summary, auto-tags, source)
-- `scripts` - Generated scripts (mode, status, linked fragment IDs)
+- `fragments` - Fragment containers (source, summary, tags, `capture_text`)
+- `fragment_blocks` - Ordered editable fragment content blocks (current v1: Markdown only)
+- `scripts` - Generated scripts (mode, status, linked fragment IDs, `body_markdown`)
 - `pipeline_runs` - Persistent async pipeline run records
 - `pipeline_step_runs` - Step-level execution, retries, and external refs
-- `knowledge_docs` - Knowledge base docs (with vector embeddings)
+- `knowledge_docs` - Knowledge base docs (`body_markdown` + vector embeddings)
+- `media_assets` / `content_media_links` - Local media file metadata and content references
 - `agents` - Creator agents (for future marketplace feature)
 
 See `memory-bank/tech-stack.md` for full SQL schema.

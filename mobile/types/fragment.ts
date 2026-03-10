@@ -12,6 +12,28 @@ export interface SpeakerSegment {
   text: string;
 }
 
+export interface FragmentBlock {
+  id: string;
+  type: string;
+  order_index: number;
+  markdown: string | null;
+}
+
+export interface MediaAsset {
+  id: string;
+  media_kind: 'image' | 'audio' | 'file';
+  original_filename: string;
+  mime_type: string;
+  storage_path: string;
+  file_size: number;
+  checksum: string | null;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  status: string;
+  created_at: string | null;
+}
+
 /**
  * 碎片笔记数据模型
  */
@@ -22,6 +44,8 @@ export interface Fragment {
   audio_path: string | null;
   /** 转写文本 */
   transcript: string | null;
+  /** 原始采集文本 */
+  capture_text?: string | null;
   /** 说话人分段 */
   speaker_segments: SpeakerSegment[] | null;
   /** AI一句话摘要 */
@@ -34,6 +58,14 @@ export interface Fragment {
   audio_source?: FragmentAudioSource | null;
   /** 创建时间 */
   created_at: string;
+  /** 正式 Markdown 内容 */
+  compiled_markdown?: string | null;
+  /** 内容状态 */
+  content_state?: 'empty' | 'capture_only' | 'blocks_present';
+  /** 内容块 */
+  blocks?: FragmentBlock[];
+  /** 关联素材 */
+  media_assets?: MediaAsset[];
 }
 
 /**
@@ -56,6 +88,10 @@ export interface FragmentListResponse {
 export interface CreateFragmentRequest {
   /** 转写文本 */
   transcript?: string;
+  /** 原始采集文本 */
+  capture_text?: string;
+  /** Markdown 正文 */
+  body_markdown?: string;
   /** AI摘要 */
   summary?: string;
   /** AI标签 */
@@ -64,6 +100,8 @@ export interface CreateFragmentRequest {
   source?: FragmentSource;
   /** 文件夹ID，不传表示放入"全部"文件夹 */
   folder_id?: string;
+  /** 关联素材 ID */
+  media_asset_ids?: string[];
 }
 
 export interface FragmentVisualizationPoint {

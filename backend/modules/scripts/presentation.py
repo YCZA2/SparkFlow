@@ -144,6 +144,7 @@ async def update_script(
         script_id=script_id,
         status_value=data.status,
         title=data.title,
+        body_markdown=data.body_markdown,
     )
     return success_response(data=map_script(script), message="口播稿更新成功")
 

@@ -38,6 +38,7 @@ export const API_ENDPOINTS = {
   },
   FRAGMENTS: {
     LIST: '/api/fragments',
+    CONTENT: '/api/fragments/content',
     DETAIL: (id: string) => `/api/fragments/${id}`,
     VISUALIZATION: '/api/fragments/visualization',
     SIMILAR: '/api/fragments/similar',

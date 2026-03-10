@@ -90,6 +90,7 @@ def create(
     user_id: str,
     title: str,
     content: str,
+    body_markdown: str,
     doc_type: str,
 ) -> KnowledgeDoc:
     """
@@ -109,6 +110,7 @@ def create(
         user_id=user_id,
         title=title,
         content=content,
+        body_markdown=body_markdown,
         doc_type=doc_type,
     )
 
@@ -116,6 +118,28 @@ def create(
     db.commit()
     db.refresh(doc)
 
+    return doc
+
+
+def update(
+    db: Session,
+    *,
+    doc: KnowledgeDoc,
+    title: str | None = None,
+    content: str | None = None,
+    body_markdown: str | None = None,
+) -> KnowledgeDoc:
+    """更新知识库文档基础字段。"""
+    if title is not None:
+        doc.title = title
+    if content is not None:
+        doc.content = content
+    if body_markdown is not None:
+        doc.body_markdown = body_markdown
+        if content is None:
+            doc.content = body_markdown
+    db.commit()
+    db.refresh(doc)
     return doc
 
 

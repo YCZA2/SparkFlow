@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -19,6 +20,7 @@ from .ports import (
     ExternalMediaProvider,
     ImportedAudioStorage,
     JobRunner,
+    MediaAssetStorage,
     VectorStore,
     WebSearchProvider,
     WebSearchResult,
@@ -43,6 +45,11 @@ ALLOWED_AUDIO_TYPES = {
 }
 ALLOWED_AUDIO_EXTENSIONS = {".m4a", ".wav", ".mp3", ".aac", ".ogg", ".opus"}
 MAX_AUDIO_FILE_SIZE = 50 * 1024 * 1024
+ALLOWED_MEDIA_EXTENSIONS = {
+    "image": {".png", ".jpg", ".jpeg", ".gif", ".webp"},
+    "audio": ALLOWED_AUDIO_EXTENSIONS,
+    "file": {".txt", ".md", ".docx", ".pdf"},
+}
 
 
 def _fragment_namespace(user_id: str) -> str:
@@ -193,6 +200,62 @@ class LocalImportedAudioStorage(ImportedAudioStorage):
         candidate = self.resolve_path(audio_path)
         if candidate.exists():
             candidate.unlink()
+
+
+class LocalMediaAssetStorage(MediaAssetStorage):
+    """提供统一媒体资源的本地落盘能力。"""
+
+    def __init__(self, upload_dir: str) -> None:
+        """记录媒体资源根目录。"""
+        self.upload_dir = Path(upload_dir).resolve()
+
+    def _ensure_dir(self, user_id: str, media_kind: str) -> Path:
+        """确保媒体资源目录存在。"""
+        destination = self.upload_dir / "media_assets" / user_id / media_kind
+        destination.mkdir(parents=True, exist_ok=True)
+        return destination
+
+    def resolve_path(self, storage_path: str) -> Path:
+        """把相对媒体路径解析为绝对路径。"""
+        raw_path = Path(storage_path)
+        if raw_path.is_absolute():
+            return raw_path
+        return (self.upload_dir.parent / raw_path).resolve()
+
+    def delete(self, storage_path: Optional[str]) -> None:
+        """删除指定媒体文件。"""
+        if not storage_path:
+            return
+        candidate = self.resolve_path(storage_path)
+        if candidate.exists():
+            candidate.unlink()
+
+    async def save(self, *, file: UploadFile, user_id: str, media_kind: str) -> dict[str, Any]:
+        """校验并保存通用媒体文件。"""
+        normalized_kind = media_kind if media_kind in ALLOWED_MEDIA_EXTENSIONS else "file"
+        ext = Path(file.filename or "").suffix.lower()
+        if ext not in ALLOWED_MEDIA_EXTENSIONS[normalized_kind]:
+            raise ValidationError(
+                message="不支持的媒体文件格式",
+                field_errors={"file": f"{normalized_kind} 类型暂不支持该扩展名"},
+            )
+        content = await file.read()
+        if not content:
+            raise ValidationError(message="上传文件为空", field_errors={"file": "请选择有效文件"})
+        destination_dir = self._ensure_dir(user_id, normalized_kind)
+        digest = hashlib.sha256(content).hexdigest()
+        stem = Path(file.filename or normalized_kind).stem[:80] or normalized_kind
+        destination = destination_dir / f"{stem}-{digest[:12]}{ext}"
+        destination.write_bytes(content)
+        relative_path = destination.relative_to(self.upload_dir.parent)
+        return {
+            "file_path": str(destination),
+            "relative_path": str(relative_path),
+            "file_size": len(content),
+            "checksum": digest,
+            "mime_type": (file.content_type or "application/octet-stream").lower(),
+            "original_filename": file.filename or destination.name,
+        }
 
 
 class AppVectorStore(VectorStore):
@@ -359,6 +422,11 @@ def create_audio_storage(upload_dir: str) -> LocalAudioStorage:
 def create_imported_audio_storage(upload_dir: str) -> LocalImportedAudioStorage:
     """创建默认导入音频存储实现。"""
     return LocalImportedAudioStorage(upload_dir)
+
+
+def create_media_asset_storage(upload_dir: str) -> LocalMediaAssetStorage:
+    """创建默认媒体资源存储实现。"""
+    return LocalMediaAssetStorage(upload_dir)
 
 
 def create_vector_store(*, embedding_provider: EmbeddingProvider, vector_db_provider: Any) -> AppVectorStore:

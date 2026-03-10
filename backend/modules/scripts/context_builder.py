@@ -9,6 +9,7 @@ from core.exceptions import NotFoundError, ValidationError
 from domains.fragments import repository as fragment_repository
 from domains.knowledge import repository as knowledge_repository
 from models import Fragment
+from modules.shared.content_markdown import compile_fragment_markdown, extract_plain_text
 from modules.shared.ports import VectorStore, WebSearchProvider
 from utils.serialization import format_iso_datetime, parse_json_list
 
@@ -65,7 +66,7 @@ class ScriptGenerationContextBuilder:
                 resource_type="fragment",
                 resource_id=",".join(missing_ids),
             )
-        if not any((fragment.transcript or "").strip() for fragment in fragments):
+        if not any(self._fragment_content(fragment).strip() for fragment in fragments):
             raise ValidationError(message="选中的碎片均无可用文本，无法发起生成", field_errors={"fragment_ids": "碎片内容为空"})
         return fragments
 
@@ -100,7 +101,8 @@ class ScriptGenerationContextBuilder:
             selected_fragments=[
                 {
                     "id": fragment.id,
-                    "transcript": fragment.transcript,
+                    "transcript": self._fragment_content(fragment),
+                    "capture_text": fragment.capture_text,
                     "summary": fragment.summary,
                     "tags": parse_json_list(fragment.tags),
                     "source": fragment.source,
@@ -119,7 +121,7 @@ class ScriptGenerationContextBuilder:
         """生成知识库和网页搜索使用的查询词。"""
         if query_hint and query_hint.strip():
             return query_hint.strip()
-        parts = [item.summary or item.transcript or "" for item in fragments]
+        parts = [item.summary or ScriptGenerationContextBuilder._fragment_content(item) or "" for item in fragments]
         query_text = "\n".join(part.strip() for part in parts if part and part.strip()).strip()
         return query_text[:2000]
 
@@ -151,7 +153,7 @@ class ScriptGenerationContextBuilder:
                 {
                     "doc_id": doc.id,
                     "title": doc.title,
-                    "content": doc.content,
+                    "content": doc.body_markdown or doc.content,
                     "doc_type": doc.doc_type,
                     "score": float(item.get("score") or 0.0),
                 }
@@ -171,6 +173,17 @@ class ScriptGenerationContextBuilder:
         runtime_web_search_provider = web_search_provider or self.web_search_provider
         results = await runtime_web_search_provider.search(query_text=query_text, top_k=5)
         return [{"title": item.title, "url": item.url, "snippet": item.snippet} for item in results]
+
+    @staticmethod
+    def _fragment_content(fragment: Fragment) -> str:
+        """统一读取碎片在脚本生成中的正式内容。"""
+        if fragment.blocks:
+            markdown = compile_fragment_markdown(
+                block_payloads=[block.payload_json for block in sorted(fragment.blocks, key=lambda item: item.order_index)],
+                fallback_text=fragment.capture_text or fragment.transcript,
+            )
+            return extract_plain_text(markdown)
+        return (fragment.capture_text or fragment.transcript or "").strip()
 
 
 def build_workflow_inputs(context: ResearchContext) -> dict[str, Any]:

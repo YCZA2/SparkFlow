@@ -38,6 +38,7 @@ def create(
     db: Session,
     user_id: str,
     content: str,
+    body_markdown: str | None,
     mode: str,
     source_fragment_ids: str,
     *,
@@ -49,6 +50,7 @@ def create(
         user_id=user_id,
         title=title,
         content=content,
+        body_markdown=body_markdown,
         mode=mode,
         source_fragment_ids=source_fragment_ids,
         status=status,
@@ -66,11 +68,21 @@ def delete(db: Session, script: Script) -> None:
     db.commit()
 
 
-def update(db: Session, script: Script, *, status_value: Optional[str], title: Optional[str]) -> Script:
+def update(
+    db: Session,
+    script: Script,
+    *,
+    status_value: Optional[str],
+    title: Optional[str],
+    body_markdown: Optional[str] = None,
+) -> Script:
     if status_value is not None:
         script.status = status_value
     if title is not None:
         script.title = title
+    if body_markdown is not None:
+        script.body_markdown = body_markdown
+        script.content = body_markdown
     db.commit()
     db.refresh(script)
     return script

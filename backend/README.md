@@ -111,6 +111,8 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
 - `modules/pipelines/`: 后台流水线详情、步骤和重跑 API。
 - `modules/debug_logs/`: 接收移动端调试日志，并通过结构化日志链路写入本地文件。
+- `modules/media_assets/`: 统一媒体资源上传、列表和删除。
+- `modules/exports/`: Markdown 单条导出和批量 zip 导出。
 - `modules/scheduler/`: APScheduler 装配与每日推盘调度入口。
 - `modules/shared/`: 模块共享端口、DI 容器、增强逻辑，不承载独立业务模块。
 
@@ -136,6 +138,7 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 - `scripts/`: 后端本地辅助脚本。
 - `uploads/`: 本地音频上传目录，配置层会固定解析到 `backend/uploads/`，不依赖启动 cwd。
 - `uploads/external_media/<user_id>/<platform>/`: 外部媒体导入后的音频文件。
+- `uploads/media_assets/<user_id>/<kind>/`: 手动上传的统一素材文件。
 - `chroma_data/`: 本地 ChromaDB 数据目录，相对路径同样固定解析到 `backend/chroma_data/`。
 - `runtime_logs/`: 运行时日志目录，当前包含移动端错误日志文件。
 
@@ -160,7 +163,7 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 
 当前仓库的前后端并行开发约定见 [`memory-bank/frontend-backend-collaboration.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/frontend-backend-collaboration.md)。如果接口字段、状态枚举或返回结构发生变化，后端需要在更新 `schemas.py` 的同时同步这份协作规范涉及的联调约定。
 
-Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `pipelines`, `debug_logs`, and `scheduler`.
+Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `media_assets`, `exports`, `pipelines`, `debug_logs`, and `scheduler`.
 
 任务与工作流相关接口：
 

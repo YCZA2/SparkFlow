@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from modules.shared.content_schemas import FragmentBlockInput, FragmentBlockItem, MediaAssetItem
+
 
 class FragmentFolderInfo(BaseModel):
     id: str
@@ -17,14 +19,20 @@ class SpeakerSegmentItem(BaseModel):
 
 class FragmentCreateRequest(BaseModel):
     transcript: str | None = Field(None, description="转写文本")
+    capture_text: str | None = Field(None, description="原始采集文本")
+    body_markdown: str | None = Field(None, description="Markdown 正文")
     source: str = Field("voice", description="来源：voice, manual, video_parse")
     audio_source: str | None = Field(None, description="音频来源：upload, external_link")
     audio_path: str | None = Field(None, description="音频路径")
     folder_id: str | None = Field(None, description="文件夹 ID")
+    media_asset_ids: list[str] = Field(default_factory=list, description="关联素材 ID 列表")
 
 
-class FragmentFolderUpdateRequest(BaseModel):
-    folder_id: str | None = Field(..., description="文件夹 ID，传 null 表示移出文件夹")
+class FragmentUpdateRequest(BaseModel):
+    folder_id: str | None = Field(None, description="文件夹 ID，传 null 表示移出文件夹")
+    body_markdown: str | None = Field(None, description="保存 Markdown 正文时使用")
+    blocks: list[FragmentBlockInput] | None = Field(None, description="完整碎片块列表，当前仅支持 markdown")
+    media_asset_ids: list[str] | None = Field(None, description="要绑定到碎片的素材 ID 列表")
 
 
 class FragmentBatchMoveRequest(BaseModel):
@@ -40,6 +48,7 @@ class SimilarityQueryRequest(BaseModel):
 
 class FragmentItem(BaseModel):
     id: str
+    capture_text: str | None = None
     transcript: str | None = None
     speaker_segments: list[SpeakerSegmentItem] | None = None
     summary: str | None = None
@@ -50,6 +59,10 @@ class FragmentItem(BaseModel):
     audio_path: str | None = None
     folder_id: str | None = None
     folder: FragmentFolderInfo | None = None
+    blocks: list[FragmentBlockItem] = Field(default_factory=list)
+    compiled_markdown: str | None = None
+    content_state: str = "empty"
+    media_assets: list[MediaAssetItem] = Field(default_factory=list)
 
 
 class FragmentListResponse(BaseModel):

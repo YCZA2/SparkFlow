@@ -20,9 +20,11 @@ from modules.auth.application import AuthUseCase
 from modules.auth.presentation import router as auth_router
 from modules.debug_logs.presentation import router as debug_logs_router
 from modules.external_media.presentation import router as external_media_router
+from modules.exports.presentation import router as exports_router
 from modules.fragment_folders.presentation import router as fragment_folders_router
 from modules.fragments.presentation import router as fragments_router
 from modules.knowledge.presentation import router as knowledge_router
+from modules.media_assets.presentation import router as media_assets_router
 from modules.pipelines.presentation import router as pipelines_router
 from modules.scripts.application import DailyPushUseCase
 from modules.scripts.pipeline import build_script_generation_pipeline_service, PIPELINE_TYPE_SCRIPT_GENERATION
@@ -199,8 +201,10 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(auth_router)
     app.include_router(debug_logs_router)
     app.include_router(external_media_router)
+    app.include_router(exports_router)
     app.include_router(fragment_folders_router)
     app.include_router(fragments_router)
+    app.include_router(media_assets_router)
     app.include_router(transcriptions_router)
     app.include_router(scripts_router)
     app.include_router(knowledge_router)

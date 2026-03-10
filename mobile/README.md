@@ -12,6 +12,14 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - `utils/`: 工具方法（网络配置、日期等）
 - `constants/`: 常量与接口地址
 
+## 当前移动端已接入的内容能力
+
+- 手动文本碎片会直接走 Markdown 内容创建接口 `POST /api/fragments/content`。
+- 碎片详情页会优先展示后端返回的 `compiled_markdown`，兼容旧碎片无 block 的情况。
+- 脚本详情页会优先展示 `body_markdown`，旧数据仍回退到原 `content`。
+- 移动端尚未提供真正的块式编辑器；当前是“手动创建支持 + 详情展示优先读 Markdown”。
+- 知识库移动端仍是占位入口，还没有完整的 Markdown 编辑和素材管理 UI。
+
 ## 一、推荐用法：统一走 `scripts/dev-mobile.sh`
 
 以后你只需要记住两个模式：
@@ -170,6 +178,20 @@ http://192.168.31.157:8000
 - 脚本生成页已经按上述任务态接入，会在成功后再跳转脚本详情
 - 媒体上传和外链导入的客户端统一任务态展示仍属于后续阶段
 
+### 0.1 Markdown 内容层当前怎么联调
+
+这次内容层改造后，移动端需要区分两类碎片创建：
+
+- 语音上传：继续走 `POST /api/transcriptions`
+- 手动文本碎片：走 `POST /api/fragments/content`
+
+当前返回和展示约定：
+
+- 碎片详情优先读取 `compiled_markdown`
+- 若是语音碎片且用户还没正式编辑内容，后端会回退到 `capture_text`
+- 脚本详情优先读取 `body_markdown`
+- 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
+
 ### 1. 一打开 App 就红屏，出现 `8000/index.bundle`
 
 原因：Dev Client 把后端 `8000` 错当成了 Metro 地址。
@@ -258,6 +280,13 @@ backend/runtime_logs/mobile-debug.log
 ```bash
 cd mobile
 npm run test:state
+```
+
+TypeScript 类型检查：
+
+```bash
+cd mobile
+npx tsc --noEmit
 ```
 
 全仓测试：
