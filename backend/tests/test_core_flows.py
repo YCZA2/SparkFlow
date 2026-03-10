@@ -537,6 +537,25 @@ async def test_generate_script_success_and_failures(async_client, auth_headers_f
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, script_data["pipeline_run_id"])
     assert pipeline["status"] == "succeeded"
     assert pipeline["output"]["script_id"]
+    assert pipeline["output"]["provider"] == {
+        "workflow_id": "wf-script-001",
+        "provider_run_id": "provider-run-default",
+        "provider_task_id": "task-default",
+    }
+    steps_response = await async_client.get(
+        f"/api/pipelines/{script_data['pipeline_run_id']}/steps",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert steps_response.status_code == 200
+    steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
+    assert steps["submit_workflow_run"]["external_ref"] == {
+        "provider_run_id": "provider-run-default",
+        "provider_task_id": "task-default",
+    }
+    assert steps["poll_workflow_run"]["external_ref"] == {
+        "provider_run_id": "provider-run-default",
+        "provider_task_id": "task-default",
+    }
 
     missing_fragment_response = await async_client.post(
         "/api/scripts/generation",

@@ -47,7 +47,8 @@ export async function waitForPipelineTerminal(
   options: { intervalMs?: number; timeoutMs?: number } = {}
 ): Promise<PipelineRun> {
   const intervalMs = options.intervalMs ?? 800;
-  const timeoutMs = options.timeoutMs ?? 30_000;
+  // 中文注释：默认与后端 Dify 轮询超时对齐，避免服务端仍在执行时前端先误报超时。
+  const timeoutMs = options.timeoutMs ?? 120_000;
   const startedAt = Date.now();
 
   while (Date.now() - startedAt <= timeoutMs) {

@@ -223,6 +223,7 @@ flowchart TD
 - Embedding: 默认 `Qwen text-embedding-v2`。
 - Vector DB: 默认 `ChromaDB`。
 - Workflow Provider: 当前通过通用 `workflow_provider` 端口接入，默认实现为 `DifyWorkflowProvider`；脚本生成与每日推盘均走 Dify。
+- Dify adapter 当前采用“streaming 首包建单 + 后续轮询终态”的异步模式：提交时只拿 `workflow_run_id` / `task_id`，最终输出统一在 pipeline 轮询步骤读取。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 统一 `FileStorage` 端口；本地开发默认 `local` provider，线上默认私有阿里云 OSS，通过签名 URL 暴露文件访问。
 - Database: PostgreSQL（本地开发默认由 Docker 提供，默认库为 `sparkflow` / `sparkflow_test`）。
@@ -348,6 +349,7 @@ sequenceDiagram
 - 外挂工作流 provider 只负责远程执行步骤，不直接访问 PostgreSQL、ChromaDB 或业务表。
 - fragments、knowledge hits 和可选 web hits 都由 SparkFlow 后端先收集。
 - SparkFlow 后端向 provider 传递结构化上下文；当前 Dify adapter 会在适配层把复杂字段序列化为 JSON 字符串，以兼容 Dify Start 节点。
+- SparkFlow 后端不会把 Dify 原始 SSE 事件流直接暴露给客户端；客户端继续只消费 `pipeline_run_id` 和 `/api/pipelines/*`。
 - `pipeline_runs` / `pipeline_step_runs` 是后台状态唯一事实源；`agent_runs` 与 `/api/agent/*` 已移除。
 - 仓库内置的 DSL 模板位于 `backend/dify_dsl/sparkflow_script_generation.workflow.yml`，可直接导入本地 Dify。
 
@@ -375,6 +377,7 @@ sequenceDiagram
 - `POST /api/scripts/generation` 只负责创建任务，不再同步返回 `Script`。
 - 客户端应统一经由 `/api/pipelines/{run_id}` 读取最终 `script_id`，再跳转脚本详情。
 - `mode_a` / `mode_b` 目前共享同一条 Dify 工作流，但脚本域只依赖通用 provider 端口。
+- 如需排查 Dify 侧执行，优先查看 `GET /api/pipelines/{run_id}/steps` 中 `submit_workflow_run` / `poll_workflow_run` 的 `external_ref`，其中包含 `provider_run_id` / `provider_task_id`。
 
 ### 5.5 Fragment Visualization
 

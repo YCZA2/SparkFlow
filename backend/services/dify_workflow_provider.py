@@ -45,13 +45,11 @@ class DifyWorkflowProvider(WorkflowProvider):
         return bool(self.base_url and self.api_key)
 
     async def submit_run(self, *, inputs: dict[str, Any], user_id: str) -> WorkflowProviderRun:
-        """提交一次 Dify 工作流运行。"""
-        payload = await self._request(
-            "POST",
-            "/workflows/run",
-            json={"inputs": self._build_request_inputs(inputs), "response_mode": "blocking", "user": user_id},
+        """提交一次 Dify 工作流运行，并在首个 SSE 事件后立即返回句柄。"""
+        payload = await self._submit_streaming_run(
+            inputs={"inputs": self._build_request_inputs(inputs), "response_mode": "streaming", "user": user_id}
         )
-        return self._parse_run_payload(payload.get("data") or payload, fallback_status="running")
+        return self._parse_submit_payload(payload)
 
     async def get_run(self, *, run_id: str) -> WorkflowProviderRun:
         """查询一次 Dify 工作流运行。"""
@@ -106,6 +104,118 @@ class DifyWorkflowProvider(WorkflowProvider):
             )
         return payload
 
+    async def _submit_streaming_run(self, *, inputs: dict[str, Any]) -> dict[str, Any]:
+        """执行一次 streaming 提交，并在拿到 workflow_started 首包后返回。"""
+        if not self.is_configured():
+            raise WorkflowProviderTimeoutError(provider_name=_DIFY_PROVIDER_NAME, message="Dify 未配置")
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+        }
+        request = self.http_client.build_request(
+            "POST",
+            f"{self.base_url}/workflows/run",
+            headers=headers,
+            json=inputs,
+        )
+        response: httpx.Response | None = None
+        try:
+            response = await self.http_client.send(request, stream=True)
+            if response.status_code >= 400:
+                payload = await self._read_error_payload(response=response)
+                self._raise_http_error(response_status=response.status_code, payload=payload)
+            event_payload = await self._read_first_stream_event(response=response)
+        except httpx.TimeoutException as exc:
+            raise WorkflowProviderTimeoutError(provider_name=_DIFY_PROVIDER_NAME, message="请求 Dify 超时") from exc
+        except httpx.HTTPError as exc:
+            raise WorkflowProviderUpstreamError(provider_name=_DIFY_PROVIDER_NAME, message="请求 Dify 失败") from exc
+        finally:
+            if response is not None:
+                await response.aclose()
+        return event_payload
+
+    async def _read_error_payload(self, *, response: httpx.Response) -> dict[str, Any]:
+        """读取异常响应体并尽量解析为 JSON。"""
+        text = await response.aread()
+        try:
+            payload = json.loads(text.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            payload = {}
+        if not isinstance(payload, dict):
+            return {}
+        return payload
+
+    def _raise_http_error(self, *, response_status: int, payload: dict[str, Any]) -> None:
+        """把 Dify HTTP 错误映射为统一异常。"""
+        if response_status >= 500:
+            raise WorkflowProviderUpstreamError(provider_name=_DIFY_PROVIDER_NAME, message="Dify 服务暂时不可用")
+        message = payload.get("message") or payload.get("error") or payload.get("code") or "Dify 请求失败"
+        raise WorkflowProviderRequestError(
+            provider_name=_DIFY_PROVIDER_NAME,
+            message=f"Dify 请求失败: {message}",
+            field_errors={"dify": str(message)},
+        )
+
+    async def _read_first_stream_event(self, *, response: httpx.Response) -> dict[str, Any]:
+        """读取 SSE 流中的第一个 workflow_started 事件。"""
+        data_lines: list[str] = []
+        async for raw_line in response.aiter_lines():
+            line = raw_line.strip()
+            if not line:
+                if data_lines:
+                    payload = self._parse_sse_data(data_lines)
+                    if payload.get("event") == "workflow_started":
+                        return payload
+                    data_lines = []
+                continue
+            if line.startswith(":"):
+                continue
+            if line.startswith("data:"):
+                data_lines.append(line[5:].strip())
+        raise WorkflowProviderInvalidResponseError(
+            provider_name=_DIFY_PROVIDER_NAME,
+            message="Dify streaming 返回缺少 workflow_started 事件",
+        )
+
+    def _parse_sse_data(self, data_lines: list[str]) -> dict[str, Any]:
+        """解析单个 SSE 事件的数据段。"""
+        raw_payload = "\n".join(data_lines).strip()
+        try:
+            payload = json.loads(raw_payload)
+        except ValueError as exc:
+            raise WorkflowProviderInvalidResponseError(
+                provider_name=_DIFY_PROVIDER_NAME,
+                message="Dify streaming 返回了无效 JSON",
+            ) from exc
+        if not isinstance(payload, dict):
+            raise WorkflowProviderInvalidResponseError(
+                provider_name=_DIFY_PROVIDER_NAME,
+                message="Dify streaming 返回结构无效",
+            )
+        return payload
+
+    def _parse_submit_payload(self, payload: dict[str, Any]) -> WorkflowProviderRun:
+        """解析 streaming 提交首包并映射为统一运行结构。"""
+        if not isinstance(payload, dict):
+            raise WorkflowProviderInvalidResponseError(provider_name=_DIFY_PROVIDER_NAME, message="Dify 返回结构无效")
+        workflow_run_id = payload.get("workflow_run_id")
+        task_id = payload.get("task_id")
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        if not isinstance(workflow_run_id, str) or not workflow_run_id.strip():
+            raise WorkflowProviderInvalidResponseError(provider_name=_DIFY_PROVIDER_NAME, message="Dify 返回缺少运行 ID")
+        provider_workflow_id = data.get("workflow_id")
+        raw_status = data.get("status") or "running"
+        return WorkflowProviderRun(
+            run_id=workflow_run_id,
+            status=self._map_status(raw_status),
+            outputs={},
+            raw_payload=payload,
+            provider_run_id=workflow_run_id,
+            provider_workflow_id=provider_workflow_id if isinstance(provider_workflow_id, str) else None,
+            provider_task_id=task_id if isinstance(task_id, str) else None,
+        )
+
     def _parse_run_payload(self, payload: dict[str, Any], *, fallback_status: str) -> WorkflowProviderRun:
         """解析 Dify 运行载荷并映射为统一结构。"""
         if not isinstance(payload, dict):
@@ -131,6 +241,7 @@ class DifyWorkflowProvider(WorkflowProvider):
             raw_payload=payload,
             provider_run_id=provider_run_id if isinstance(provider_run_id, str) else None,
             provider_workflow_id=provider_workflow_id if isinstance(provider_workflow_id, str) else None,
+            provider_task_id=payload.get("task_id") if isinstance(payload.get("task_id"), str) else None,
         )
 
     def _map_status(self, status: Any) -> str:

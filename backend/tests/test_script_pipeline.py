@@ -96,6 +96,20 @@ async def test_script_generation_pipeline_collects_context_and_persists_script(
     assert pipeline["status"] == "succeeded"
     assert pipeline["resource"]["resource_type"] == "script"
     assert pipeline["resource"]["resource_id"] == pipeline["output"]["script_id"]
+    assert pipeline["output"]["provider"] == {
+        "workflow_id": "wf-script-001",
+        "provider_run_id": "provider-run-default",
+        "provider_task_id": "task-default",
+    }
+
+    steps_response = await async_client.get(
+        f"/api/pipelines/{payload['pipeline_run_id']}/steps",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert steps_response.status_code == 200
+    steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
+    assert steps["submit_workflow_run"]["external_ref"]["provider_task_id"] == "task-default"
+    assert steps["poll_workflow_run"]["external_ref"]["provider_run_id"] == "provider-run-default"
 
     detail_response = await async_client.get(
         f"/api/scripts/{pipeline['resource']['resource_id']}",
@@ -134,3 +148,34 @@ async def test_script_generation_pipeline_marks_failed_when_provider_fails(
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
     assert pipeline["status"] == "failed"
     assert "workflow failed" in (pipeline["error_message"] or "")
+
+
+@pytest.mark.asyncio
+async def test_script_generation_pipeline_keeps_submit_task_id_when_poll_response_omits_it(
+    async_client,
+    auth_headers_factory,
+    workflow_provider,
+) -> None:
+    """轮询结果缺少 task_id 时应继续保留提交阶段返回的 provider 句柄。"""
+    fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于复盘的一条碎片")
+    workflow_provider.poll_provider_task_id = None
+
+    create_response = await async_client.post(
+        "/api/scripts/generation",
+        json={"fragment_ids": [fragment_id], "mode": "mode_a"},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert create_response.status_code == 201
+
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
+    assert pipeline["status"] == "succeeded"
+    assert pipeline["output"]["provider"]["provider_task_id"] == "task-default"
+
+    steps_response = await async_client.get(
+        f"/api/pipelines/{create_response.json()['data']['pipeline_run_id']}/steps",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert steps_response.status_code == 200
+    steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
+    assert steps["submit_workflow_run"]["external_ref"]["provider_task_id"] == "task-default"
+    assert steps["poll_workflow_run"]["external_ref"]["provider_task_id"] == "task-default"

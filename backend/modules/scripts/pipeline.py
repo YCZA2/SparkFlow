@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.exceptions import ValidationError
 from models import PipelineRun
 from .context_builder import ResearchContext, ScriptGenerationContextBuilder, build_workflow_inputs
@@ -14,6 +15,16 @@ from modules.shared.ports import WorkflowProvider
 SUCCESS_STATUSES = {"succeeded", "success", "completed"}
 FAILED_STATUSES = {"failed", "error", "stopped"}
 PIPELINE_TYPE_SCRIPT_GENERATION = "script_generation"
+
+
+def _build_poll_max_attempts(timeout_seconds: int) -> int:
+    """根据指数退避窗口推导 workflow 轮询步骤的最大尝试次数。"""
+    attempts = 1
+    total_wait = 0
+    while total_wait < timeout_seconds:
+        total_wait += max(1, (2 ** attempts) - 1)
+        attempts += 1
+    return max(4, attempts)
 
 
 class ScriptGenerationPipelineService:
@@ -71,7 +82,11 @@ class ScriptGenerationPipelineService:
             PipelineStepDefinition(step_name="collect_knowledge_hits", executor=self.collect_knowledge_hits, max_attempts=1),
             PipelineStepDefinition(step_name="collect_web_hits", executor=self.collect_web_hits, max_attempts=1),
             PipelineStepDefinition(step_name="submit_workflow_run", executor=self.submit_workflow_run, max_attempts=2),
-            PipelineStepDefinition(step_name="poll_workflow_run", executor=self.poll_workflow_run, max_attempts=4),
+            PipelineStepDefinition(
+                step_name="poll_workflow_run",
+                executor=self.poll_workflow_run,
+                max_attempts=_build_poll_max_attempts(settings.DIFY_POLL_TIMEOUT_SECONDS),
+            ),
             PipelineStepDefinition(step_name="persist_script", executor=self.persist_script, max_attempts=2),
             PipelineStepDefinition(step_name="finalize_run", executor=self.finalize_run, max_attempts=1),
         ]
@@ -114,16 +129,22 @@ class ScriptGenerationPipelineService:
             inputs=build_workflow_inputs(ResearchContext(**research_context)),
             user_id=context.run.user_id,
         )
+        provider_run_id = workflow_run.provider_run_id or workflow_run.run_id
         return {
-            "provider_run_id": workflow_run.provider_run_id or workflow_run.run_id,
+            "provider_run_id": provider_run_id,
+            "provider_task_id": workflow_run.provider_task_id,
             "workflow_id": workflow_run.provider_workflow_id,
             "raw_payload": workflow_run.raw_payload,
-            "external_ref": {"provider_run_id": workflow_run.provider_run_id or workflow_run.run_id},
+            "external_ref": {
+                "provider_run_id": provider_run_id,
+                "provider_task_id": workflow_run.provider_task_id,
+            },
         }
 
     async def poll_workflow_run(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """查询 workflow provider 的最新运行状态。"""
         provider_run_id = context.get_step_output("submit_workflow_run").get("provider_run_id")
+        submit_task_id = context.get_step_output("submit_workflow_run").get("provider_task_id")
         if not provider_run_id:
             raise ValidationError(message="工作流尚未成功提交到 provider", field_errors={"run_id": "缺少 provider 运行 ID"})
         workflow_run = await self._runtime_workflow_provider(context).get_run(run_id=provider_run_id)
@@ -132,11 +153,18 @@ class ScriptGenerationPipelineService:
             raise PipelineExecutionError(self.persistence_service.resolve_failure_message(workflow_run.raw_payload), retryable=False)
         if workflow_run.status not in SUCCESS_STATUSES:
             raise PipelineExecutionError("workflow still running", retryable=True)
+        provider_run_id = workflow_run.provider_run_id or provider_run_id
+        provider_task_id = workflow_run.provider_task_id or submit_task_id
         return {
             "workflow_id": workflow_run.provider_workflow_id,
+            "provider_run_id": provider_run_id,
+            "provider_task_id": provider_task_id,
             "result": parsed,
             "raw_payload": workflow_run.raw_payload,
-            "external_ref": {"provider_run_id": provider_run_id},
+            "external_ref": {
+                "provider_run_id": provider_run_id,
+                "provider_task_id": provider_task_id,
+            },
         }
 
     async def persist_script(self, context: PipelineExecutionContext) -> dict[str, Any]:
@@ -148,6 +176,11 @@ class ScriptGenerationPipelineService:
             run=context.run,
             input_payload=payload,
             parsed_result=poll_payload.get("result") or {},
+            provider_metadata=self.persistence_service.build_provider_metadata(
+                workflow_id=poll_payload.get("workflow_id"),
+                provider_run_id=poll_payload.get("provider_run_id"),
+                provider_task_id=poll_payload.get("provider_task_id"),
+            ),
         )
 
     async def finalize_run(self, context: PipelineExecutionContext) -> dict[str, Any]:
@@ -158,6 +191,7 @@ class ScriptGenerationPipelineService:
             script_id=persist_payload["script_id"],
             parsed_result=persist_payload.get("result") or {},
             mode=payload["mode"],
+            provider_metadata=persist_payload.get("provider"),
         )
 
 

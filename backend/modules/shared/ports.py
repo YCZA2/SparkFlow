@@ -175,12 +175,15 @@ WorkflowRunStatus = Literal["queued", "running", "succeeded", "failed"]
 
 @dataclass
 class WorkflowProviderRun:
+    """描述一次外挂工作流提交或查询返回的统一结构。"""
+
     run_id: str
     status: WorkflowRunStatus
     outputs: dict[str, Any]
     raw_payload: dict[str, Any]
     provider_run_id: str | None = None
     provider_workflow_id: str | None = None
+    provider_task_id: str | None = None
 
 
 class WorkflowProviderRequestError(ValidationError):
@@ -213,6 +216,9 @@ class WorkflowProviderInvalidResponseError(ServiceUnavailableError):
 
 
 class WorkflowProvider(Protocol):
+    """外挂工作流 provider 协议。"""
+
+    # 中文注释：submit_run 只负责创建远端运行并返回句柄，最终结果统一通过 get_run 查询。
     async def submit_run(self, *, inputs: dict[str, Any], user_id: str) -> WorkflowProviderRun: ...
     async def get_run(self, *, run_id: str) -> WorkflowProviderRun: ...
     async def aclose(self) -> None: ...

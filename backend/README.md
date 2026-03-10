@@ -76,6 +76,14 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 1. LLM 节点模型是否已经切到你在 Dify 中真实可用的 provider / model
 2. 导入后的应用 API Key 和 workflow 标识是否已经回填到后端 `.env`
 
+当前 Dify adapter 的运行方式：
+
+1. `submit_run` 使用 Dify streaming 首包建单，只拿 `workflow_run_id` / `task_id`
+2. SparkFlow 后端把 provider 句柄写入 `pipeline_step_runs.external_ref`
+3. 后续由后台 pipeline 继续轮询 Dify 运行状态并在成功后回流脚本
+
+因此客户端只需要继续轮询 SparkFlow 自己的 `/api/pipelines/{run_id}`，不需要直接消费 Dify SSE。
+
 ## Backend Architecture
 
 当前后端按如下层级协作：
@@ -235,6 +243,7 @@ bash scripts/postgres-local.sh stop
 - SparkFlow 后端先收集 fragments、knowledge hits 和可选 web hits
 - SparkFlow 后端先把这些内容组装为结构化上下文，再交给通用 `workflow_provider`
 - 当前 Dify adapter 会在适配层把 `selected_fragments`、`knowledge_hits`、`web_hits`、`user_context`、`generation_metadata` 序列化为 JSON 字符串，以兼容 Dify Start 节点
+- Dify 提交阶段只会拿到 `workflow_run_id` / `task_id`，最终 `draft` 等结果统一在后续轮询步骤获取
 - 外挂工作流 provider 只消费整理后的上下文并返回结构化输出
 - `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源
 - `agent_runs` 与 `/api/agent/*` 已移除，脚本生成公开链路完全收口到 `scripts + pipelines`
@@ -250,6 +259,7 @@ bash scripts/postgres-local.sh stop
 - `fragments.transcript` 表示机器转写原文，`compiled_markdown` 表示用户整理后的正式正文；正文消费统一按 `compiled_markdown -> transcript` 回退
 - 非语音碎片创建必须提供 `body_markdown`；`transcript` 仅保留给语音转写链路
 - 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`
+- 如需排查 Dify 侧问题，优先查看 `GET /api/pipelines/{run_id}/steps` 中 `submit_workflow_run` / `poll_workflow_run` 的 `external_ref`，其中会暴露 `provider_run_id` / `provider_task_id`
 - 外链导入成功后的 `platform`、`share_url`、`media_id`、`title`、`author`、`cover_url`、`content_type`、`audio_file_url` 统一从 `GET /api/pipelines/{run_id}` 的 `output` 读取
 - 当前移动端已切脚本生成任务态；媒体上传和外链导入的客户端统一任务态展示仍作为后续阶段继续补齐
 

@@ -14,6 +14,18 @@ from models import PipelineRun
 class ScriptGenerationPersistenceService:
     """封装脚本生成结果解析与持久化。"""
 
+    @staticmethod
+    def build_provider_metadata(*, workflow_id: str | None, provider_run_id: str | None, provider_task_id: str | None) -> dict[str, str]:
+        """构造流水线结果中可复用的 provider 元数据。"""
+        provider: dict[str, str] = {}
+        if workflow_id:
+            provider["workflow_id"] = workflow_id
+        if provider_run_id:
+            provider["provider_run_id"] = provider_run_id
+        if provider_task_id:
+            provider["provider_task_id"] = provider_task_id
+        return provider
+
     def parse_outputs(self, outputs: dict[str, Any]) -> dict[str, Any]:
         """规范化外挂工作流输出字段。"""
         if not isinstance(outputs, dict):
@@ -38,6 +50,7 @@ class ScriptGenerationPersistenceService:
         run: PipelineRun,
         input_payload: dict[str, Any],
         parsed_result: dict[str, Any],
+        provider_metadata: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """在 workflow 成功后回流创建脚本记录。"""
         draft = (parsed_result.get("draft") or "").strip()
@@ -45,7 +58,12 @@ class ScriptGenerationPersistenceService:
             raise ValidationError(message="工作流输出缺少 draft，无法创建口播稿", field_errors={"generation": "工作流执行失败"})
         existing = script_repository.get_by_id(db=db, user_id=run.user_id, script_id=run.resource_id or "")
         if existing:
-            return {"script_id": existing.id, "result": parsed_result}
+            return self.build_run_output(
+                script_id=existing.id,
+                parsed_result=parsed_result,
+                mode=input_payload["mode"],
+                provider_metadata=provider_metadata,
+            )
         script = script_repository.create(
             db=db,
             user_id=run.user_id,
@@ -58,6 +76,7 @@ class ScriptGenerationPersistenceService:
             script_id=script.id,
             parsed_result=parsed_result,
             mode=input_payload["mode"],
+            provider_metadata=provider_metadata,
         )
         pipeline_repository.update_run_resource(
             db=db,
@@ -69,18 +88,39 @@ class ScriptGenerationPersistenceService:
         return run_output
 
     @staticmethod
-    def build_run_output(*, script_id: str, parsed_result: dict[str, Any], mode: str) -> dict[str, Any]:
+    def build_run_output(
+        *,
+        script_id: str,
+        parsed_result: dict[str, Any],
+        mode: str,
+        provider_metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """构造统一的流水线输出载荷。"""
-        return {
+        payload = {
             "script_id": script_id,
             "result": parsed_result,
             "mode": mode,
         }
+        if provider_metadata:
+            payload["provider"] = provider_metadata
+        return payload
 
-    def build_finalize_payload(self, *, script_id: str, parsed_result: dict[str, Any], mode: str) -> dict[str, Any]:
+    def build_finalize_payload(
+        self,
+        *,
+        script_id: str,
+        parsed_result: dict[str, Any],
+        mode: str,
+        provider_metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """构造结束流水线所需的最终返回。"""
         return {
             "resource_type": "script",
             "resource_id": script_id,
-            "run_output": self.build_run_output(script_id=script_id, parsed_result=parsed_result, mode=mode),
+            "run_output": self.build_run_output(
+                script_id=script_id,
+                parsed_result=parsed_result,
+                mode=mode,
+                provider_metadata=provider_metadata,
+            ),
         }

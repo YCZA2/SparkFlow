@@ -25,6 +25,16 @@ FAILED_STATUSES = {"failed", "error", "stopped"}
 PIPELINE_TYPE_DAILY_PUSH_GENERATION = "daily_push_generation"
 
 
+def _build_poll_max_attempts(timeout_seconds: int) -> int:
+    """根据指数退避窗口推导 workflow 轮询步骤的最大尝试次数。"""
+    attempts = 1
+    total_wait = 0
+    while total_wait < timeout_seconds:
+        total_wait += max(1, (2 ** attempts) - 1)
+        attempts += 1
+    return max(4, attempts)
+
+
 @dataclass
 class DailyPushContext:
     """描述每日推盘提交给工作流的结构化上下文。"""
@@ -75,6 +85,18 @@ def build_daily_push_workflow_inputs(context: DailyPushContext) -> dict[str, Any
 class DailyPushPersistenceService:
     """封装每日推盘结果解析与落库。"""
 
+    @staticmethod
+    def build_provider_metadata(*, workflow_id: str | None, provider_run_id: str | None, provider_task_id: str | None) -> dict[str, str]:
+        """构造流水线结果中可复用的 provider 元数据。"""
+        provider: dict[str, str] = {}
+        if workflow_id:
+            provider["workflow_id"] = workflow_id
+        if provider_run_id:
+            provider["provider_run_id"] = provider_run_id
+        if provider_task_id:
+            provider["provider_task_id"] = provider_task_id
+        return provider
+
     def parse_outputs(self, outputs: dict[str, Any]) -> dict[str, Any]:
         """规范化每日推盘工作流输出字段。"""
         if not isinstance(outputs, dict):
@@ -97,6 +119,7 @@ class DailyPushPersistenceService:
         run: PipelineRun,
         input_payload: dict[str, Any],
         parsed_result: dict[str, Any],
+        provider_metadata: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """在工作流成功后回流创建每日推盘稿件。"""
         draft = (parsed_result.get("draft") or "").strip()
@@ -110,7 +133,12 @@ class DailyPushPersistenceService:
                 target_date=input_payload["target_date"],
             )
         if existing:
-            return self._build_run_output(script_id=existing.id, parsed_result=parsed_result, target_date=input_payload["target_date"])
+            return self._build_run_output(
+                script_id=existing.id,
+                parsed_result=parsed_result,
+                target_date=input_payload["target_date"],
+                provider_metadata=provider_metadata,
+            )
 
         local_date = input_payload["target_date"]
         title = parsed_result.get("title") or f"{input_payload['title_prefix']}灵感推盘 · {local_date}"
@@ -124,7 +152,12 @@ class DailyPushPersistenceService:
             status="ready",
             is_daily_push=True,
         )
-        run_output = self._build_run_output(script_id=script.id, parsed_result=parsed_result, target_date=input_payload["target_date"])
+        run_output = self._build_run_output(
+            script_id=script.id,
+            parsed_result=parsed_result,
+            target_date=input_payload["target_date"],
+            provider_metadata=provider_metadata,
+        )
         pipeline_repository.update_run_resource(
             db=db,
             run_id=run.id,
@@ -134,23 +167,44 @@ class DailyPushPersistenceService:
         )
         return run_output
 
-    def build_finalize_payload(self, *, script_id: str, parsed_result: dict[str, Any], target_date: str) -> dict[str, Any]:
+    def build_finalize_payload(
+        self,
+        *,
+        script_id: str,
+        parsed_result: dict[str, Any],
+        target_date: str,
+        provider_metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """构造结束流水线所需的最终返回。"""
         return {
             "resource_type": "script",
             "resource_id": script_id,
-            "run_output": self._build_run_output(script_id=script_id, parsed_result=parsed_result, target_date=target_date),
+            "run_output": self._build_run_output(
+                script_id=script_id,
+                parsed_result=parsed_result,
+                target_date=target_date,
+                provider_metadata=provider_metadata,
+            ),
         }
 
     @staticmethod
-    def _build_run_output(*, script_id: str, parsed_result: dict[str, Any], target_date: str) -> dict[str, Any]:
+    def _build_run_output(
+        *,
+        script_id: str,
+        parsed_result: dict[str, Any],
+        target_date: str,
+        provider_metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """构造每日推盘流水线输出载荷。"""
-        return {
+        payload = {
             "script_id": script_id,
             "result": parsed_result,
             "target_date": target_date,
             "is_daily_push": True,
         }
+        if provider_metadata:
+            payload["provider"] = provider_metadata
+        return payload
 
     @staticmethod
     def _get_existing_script_for_target_date(*, db: Session, user_id: str, target_date: str):
@@ -295,7 +349,11 @@ class DailyPushPipelineService:
         return [
             PipelineStepDefinition(step_name="collect_daily_push_context", executor=self.collect_daily_push_context, max_attempts=1),
             PipelineStepDefinition(step_name="submit_daily_push_workflow", executor=self.submit_daily_push_workflow, max_attempts=2),
-            PipelineStepDefinition(step_name="poll_daily_push_workflow", executor=self.poll_daily_push_workflow, max_attempts=4),
+            PipelineStepDefinition(
+                step_name="poll_daily_push_workflow",
+                executor=self.poll_daily_push_workflow,
+                max_attempts=_build_poll_max_attempts(settings.DIFY_POLL_TIMEOUT_SECONDS),
+            ),
             PipelineStepDefinition(step_name="persist_daily_push_script", executor=self.persist_daily_push_script, max_attempts=2),
             PipelineStepDefinition(step_name="finalize_daily_push_run", executor=self.finalize_daily_push_run, max_attempts=1),
         ]
@@ -341,16 +399,22 @@ class DailyPushPipelineService:
             inputs=build_daily_push_workflow_inputs(DailyPushContext(**workflow_context)),
             user_id=context.run.user_id,
         )
+        provider_run_id = workflow_run.provider_run_id or workflow_run.run_id
         return {
-            "provider_run_id": workflow_run.provider_run_id or workflow_run.run_id,
+            "provider_run_id": provider_run_id,
+            "provider_task_id": workflow_run.provider_task_id,
             "workflow_id": workflow_run.provider_workflow_id,
             "raw_payload": workflow_run.raw_payload,
-            "external_ref": {"provider_run_id": workflow_run.provider_run_id or workflow_run.run_id},
+            "external_ref": {
+                "provider_run_id": provider_run_id,
+                "provider_task_id": workflow_run.provider_task_id,
+            },
         }
 
     async def poll_daily_push_workflow(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """查询每日推盘 workflow provider 的最新运行状态。"""
         provider_run_id = context.get_step_output("submit_daily_push_workflow").get("provider_run_id")
+        submit_task_id = context.get_step_output("submit_daily_push_workflow").get("provider_task_id")
         if not provider_run_id:
             raise ValidationError(message="每日推盘工作流尚未成功提交到 provider", field_errors={"run_id": "缺少 provider 运行 ID"})
         workflow_run = await self._runtime_workflow_provider(context).get_run(run_id=provider_run_id)
@@ -359,11 +423,18 @@ class DailyPushPipelineService:
             raise PipelineExecutionError(self.persistence_service.resolve_failure_message(workflow_run.raw_payload), retryable=False)
         if workflow_run.status not in SUCCESS_STATUSES:
             raise PipelineExecutionError("workflow still running", retryable=True)
+        provider_run_id = workflow_run.provider_run_id or provider_run_id
+        provider_task_id = workflow_run.provider_task_id or submit_task_id
         return {
             "workflow_id": workflow_run.provider_workflow_id,
+            "provider_run_id": provider_run_id,
+            "provider_task_id": provider_task_id,
             "result": parsed,
             "raw_payload": workflow_run.raw_payload,
-            "external_ref": {"provider_run_id": provider_run_id},
+            "external_ref": {
+                "provider_run_id": provider_run_id,
+                "provider_task_id": provider_task_id,
+            },
         }
 
     async def persist_daily_push_script(self, context: PipelineExecutionContext) -> dict[str, Any]:
@@ -375,6 +446,11 @@ class DailyPushPipelineService:
             run=context.run,
             input_payload=payload,
             parsed_result=poll_payload.get("result") or {},
+            provider_metadata=self.persistence_service.build_provider_metadata(
+                workflow_id=poll_payload.get("workflow_id"),
+                provider_run_id=poll_payload.get("provider_run_id"),
+                provider_task_id=poll_payload.get("provider_task_id"),
+            ),
         )
 
     async def finalize_daily_push_run(self, context: PipelineExecutionContext) -> dict[str, Any]:
@@ -385,6 +461,7 @@ class DailyPushPipelineService:
             script_id=persist_payload["script_id"],
             parsed_result=persist_payload.get("result") or {},
             target_date=payload["target_date"],
+            provider_metadata=persist_payload.get("provider"),
         )
 
 

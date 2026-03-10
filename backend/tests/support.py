@@ -153,6 +153,8 @@ class FakeWorkflowProvider:
         self.next_error_message = "workflow failed"
         self.provider_run_id = "provider-run-default"
         self.provider_workflow_id = "wf-script-001"
+        self.provider_task_id = "task-default"
+        self.poll_provider_task_id: str | None = "task-default"
         self.last_submitted_run_id: str | None = None
 
     def _build_success_outcome(
@@ -219,11 +221,21 @@ class FakeWorkflowProvider:
         self.last_submitted_run_id = self.provider_run_id
         return WorkflowProviderRun(
             run_id=self.provider_run_id,
-            status="running",
+            status="queued",
             outputs={},
-            raw_payload={"id": self.provider_run_id, "workflow_id": self.provider_workflow_id, "status": "running", "outputs": {}},
+            raw_payload={
+                "workflow_run_id": self.provider_run_id,
+                "task_id": self.provider_task_id,
+                "data": {
+                    "id": self.provider_run_id,
+                    "workflow_id": self.provider_workflow_id,
+                    "status": "running",
+                    "outputs": {},
+                },
+            },
             provider_run_id=self.provider_run_id,
             provider_workflow_id=self.provider_workflow_id,
+            provider_task_id=self.provider_task_id,
         )
 
     async def get_run(self, *, run_id: str) -> WorkflowProviderRun:
@@ -234,6 +246,8 @@ class FakeWorkflowProvider:
         outcome = self._queued_outcome
         outputs = dict(outcome.outputs)
         raw_payload = {"id": run_id, "workflow_id": self.provider_workflow_id, "status": outcome.status, "outputs": outputs}
+        if self.poll_provider_task_id:
+            raw_payload["task_id"] = self.poll_provider_task_id
         if outcome.status == "failed":
             raw_payload["error"] = outcome.error_message or self.next_error_message
             outputs = {}
@@ -244,6 +258,7 @@ class FakeWorkflowProvider:
             raw_payload=raw_payload,
             provider_run_id=run_id,
             provider_workflow_id=self.provider_workflow_id,
+            provider_task_id=self.poll_provider_task_id,
         )
 
     async def aclose(self) -> None:
