@@ -5,9 +5,11 @@ from __future__ import annotations
 import pytest
 
 from core.exceptions import ValidationError
+from domains.fragment_blocks import repository as fragment_block_repository
 from domains.fragments import repository as fragment_repository
 from domains.knowledge import repository as knowledge_repository
 from modules.auth.application import TEST_USER_ID
+from modules.shared.content_markdown import build_markdown_block_payload
 from modules.scripts.context_builder import ScriptGenerationContextBuilder
 from tests.support import FakeVectorStore, FakeWebSearchProvider
 
@@ -16,7 +18,7 @@ pytestmark = pytest.mark.integration
 
 def _create_fragment(db, transcript: str):
     """创建供上下文构建测试使用的碎片。"""
-    return fragment_repository.create(
+    fragment = fragment_repository.create(
         db=db,
         user_id=TEST_USER_ID,
         transcript=transcript,
@@ -32,6 +34,13 @@ def _create_fragment(db, transcript: str):
         audio_file_size=None,
         audio_checksum=None,
     )
+    fragment_block_repository.create_markdown_block(
+        db=db,
+        fragment_id=fragment.id,
+        order_index=0,
+        payload_json=build_markdown_block_payload(transcript),
+    )
+    return fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=fragment.id)
 
 
 @pytest.mark.asyncio
@@ -98,8 +107,8 @@ def test_context_builder_validate_fragments_rejects_invalid_mode(db_session_fact
     assert exc_info.value.details["mode"] == "必须是 mode_a 或 mode_b"
 
 
-def test_context_builder_build_query_text_falls_back_to_fragment_content(db_session_factory) -> None:
-    """查询词缺省时应回落到碎片内容。"""
+def test_context_builder_build_query_text_uses_fragment_blocks(db_session_factory) -> None:
+    """查询词缺省时应基于碎片块正文生成。"""
     builder = ScriptGenerationContextBuilder(
         vector_store=FakeVectorStore(),
         web_search_provider=FakeWebSearchProvider(),

@@ -129,12 +129,10 @@ def _map_blocks(fragment: Fragment) -> list[FragmentBlockItem]:
     return blocks
 
 
-def _resolve_content_state(*, blocks: list[FragmentBlockItem], capture_text: str | None, transcript: str | None) -> str:
+def _resolve_content_state(*, blocks: list[FragmentBlockItem]) -> str:
     """根据当前内容层状态给出稳定枚举。"""
     if blocks:
         return "blocks_present"
-    if (capture_text or transcript or "").strip():
-        return "capture_only"
     return "empty"
 
 
@@ -146,7 +144,6 @@ def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = 
     blocks = _map_blocks(fragment)
     compiled_markdown = compile_fragment_markdown(
         block_payloads=[block.payload_json for block in sorted(fragment.blocks, key=lambda item: item.order_index)],
-        fallback_text=fragment.capture_text or fragment.transcript,
     )
     audio_access = None
     if file_storage is not None:
@@ -177,7 +174,7 @@ def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = 
         folder=folder,
         blocks=blocks,
         compiled_markdown=compiled_markdown or None,
-        content_state=_resolve_content_state(blocks=blocks, capture_text=fragment.capture_text, transcript=fragment.transcript),
+        content_state=_resolve_content_state(blocks=blocks),
         media_assets=mapped_media_assets,
     )
 
@@ -326,7 +323,6 @@ class FragmentCommandService:
             markdown_contents = self._normalize_markdown_blocks(
                 blocks=blocks,
                 body_markdown=body_markdown,
-                fallback_capture=fragment.capture_text or fragment.transcript,
             )
             fragment_block_repository.replace_markdown_blocks(
                 db=db,
@@ -402,7 +398,6 @@ class FragmentCommandService:
         *,
         blocks: list[FragmentBlockInput] | None,
         body_markdown: str | None,
-        fallback_capture: str | None,
     ) -> list[str]:
         """把块更新请求规整为 Markdown 文本列表。"""
         if blocks is not None:
@@ -415,9 +410,7 @@ class FragmentCommandService:
         if body_markdown is not None:
             normalized = body_markdown.strip()
             return [normalized]
-        if fallback_capture and fallback_capture.strip():
-            return [fallback_capture.strip()]
-        return [""]
+        return []
 
     @staticmethod
     def _attach_media_assets(

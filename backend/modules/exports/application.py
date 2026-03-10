@@ -40,7 +40,7 @@ class MarkdownExportUseCase:
             "tags": payload.tags or [],
             "folder_id": payload.folder_id,
         }
-        body = self._append_media_section(payload.compiled_markdown or payload.capture_text or "", payload.media_assets)
+        body = self._append_media_section(payload.compiled_markdown or "", payload.media_assets)
         filename = f"fragment-{sanitize_export_stem(payload.summary or payload.id, fallback=payload.id)}.md"
         return MarkdownExportFile(filename=filename, content=render_markdown_document(metadata=metadata, body_markdown=body)), self._asset_files(payload.media_assets, db=db, user_id=user_id, content_type="fragment", content_id=fragment_id)
 

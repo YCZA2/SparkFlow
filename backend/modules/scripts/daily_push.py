@@ -82,7 +82,6 @@ def read_fragment_content(fragment: Fragment) -> str:
     if fragment.blocks:
         markdown = compile_fragment_markdown(
             block_payloads=[block.payload_json for block in sorted(fragment.blocks, key=lambda item: item.order_index)],
-            fallback_text=fragment.capture_text or fragment.transcript,
         )
         return extract_plain_text(markdown)
-    return (fragment.capture_text or fragment.transcript or "").strip()
+    return ""

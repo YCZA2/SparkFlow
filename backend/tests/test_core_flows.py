@@ -27,7 +27,8 @@ async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
 
 async def _create_fragment(async_client, auth_headers_factory, payload: dict) -> dict:
     """通过 API 创建碎片并返回响应数据。"""
-    response = await async_client.post("/api/fragments", json=payload, headers=await _auth_headers(async_client, auth_headers_factory))
+    endpoint = "/api/fragments/content" if payload.get("body_markdown") is not None else "/api/fragments"
+    response = await async_client.post(endpoint, json=payload, headers=await _auth_headers(async_client, auth_headers_factory))
     assert response.status_code == 201
     return response.json()["data"]
 
@@ -455,7 +456,13 @@ async def test_fragment_tags_listing_filtering_and_delete_consistency(async_clie
 @pytest.mark.asyncio
 async def test_generate_script_success_and_failures(async_client, auth_headers_factory) -> None:
     """脚本生成应覆盖成功、缺失碎片和空内容失败分支。"""
-    fragment_id = (await _create_fragment(async_client, auth_headers_factory, {"transcript": "一条可用于生成稿件的碎片", "source": "manual"}))["id"]
+    fragment_id = (
+        await _create_fragment(
+            async_client,
+            auth_headers_factory,
+            {"transcript": "一条可用于生成稿件的碎片", "body_markdown": "一条可用于生成稿件的碎片", "source": "manual"},
+        )
+    )["id"]
 
     response = await async_client.post(
         "/api/scripts/generation",
@@ -488,7 +495,13 @@ async def test_generate_script_success_and_failures(async_client, auth_headers_f
 @pytest.mark.asyncio
 async def test_generate_script_mode_b_uses_same_dify_flow(async_client, auth_headers_factory) -> None:
     """mode_b 应复用统一的 Dify 工作流并成功回流脚本。"""
-    fragment_id = (await _create_fragment(async_client, auth_headers_factory, {"transcript": "一条更自然表达的碎片", "source": "manual"}))["id"]
+    fragment_id = (
+        await _create_fragment(
+            async_client,
+            auth_headers_factory,
+            {"transcript": "一条更自然表达的碎片", "body_markdown": "一条更自然表达的碎片", "source": "manual"},
+        )
+    )["id"]
 
     response = await async_client.post(
         "/api/scripts/generation",
@@ -506,7 +519,13 @@ async def test_generate_script_mode_b_uses_same_dify_flow(async_client, auth_hea
 @pytest.mark.asyncio
 async def test_generate_script_fails_when_workflow_output_has_no_draft(async_client, auth_headers_factory, app) -> None:
     """外挂工作流缺少 draft 时应按失败处理。"""
-    fragment_id = (await _create_fragment(async_client, auth_headers_factory, {"transcript": "一条缺稿测试碎片", "source": "manual"}))["id"]
+    fragment_id = (
+        await _create_fragment(
+            async_client,
+            auth_headers_factory,
+            {"transcript": "一条缺稿测试碎片", "body_markdown": "一条缺稿测试碎片", "source": "manual"},
+        )
+    )["id"]
     app.state.container.workflow_provider.queue_success(draft="")  # type: ignore[attr-defined]
 
     response = await async_client.post(
@@ -530,7 +549,13 @@ async def test_get_daily_push_returns_not_found_when_missing(async_client, auth_
 @pytest.mark.asyncio
 async def test_scripts_list_detail_update_and_delete(async_client, auth_headers_factory) -> None:
     """脚本列表、详情、更新和删除应形成完整 CRUD。"""
-    fragment_id = (await _create_fragment(async_client, auth_headers_factory, {"transcript": "用于脚本列表和详情测试", "source": "manual"}))["id"]
+    fragment_id = (
+        await _create_fragment(
+            async_client,
+            auth_headers_factory,
+            {"transcript": "用于脚本列表和详情测试", "body_markdown": "用于脚本列表和详情测试", "source": "manual"},
+        )
+    )["id"]
     create_response = await async_client.post(
         "/api/scripts/generation",
         json={"fragment_ids": [fragment_id], "mode": "mode_a"},
@@ -562,7 +587,13 @@ async def test_scripts_list_detail_update_and_delete(async_client, auth_headers_
 @pytest.mark.asyncio
 async def test_update_script_rejects_invalid_status(async_client, auth_headers_factory) -> None:
     """非法脚本状态更新应被校验层拦截。"""
-    fragment_id = (await _create_fragment(async_client, auth_headers_factory, {"transcript": "用于非法状态测试", "source": "manual"}))["id"]
+    fragment_id = (
+        await _create_fragment(
+            async_client,
+            auth_headers_factory,
+            {"transcript": "用于非法状态测试", "body_markdown": "用于非法状态测试", "source": "manual"},
+        )
+    )["id"]
     create_response = await async_client.post(
         "/api/scripts/generation",
         json={"fragment_ids": [fragment_id], "mode": "mode_a"},
@@ -732,7 +763,13 @@ async def test_delete_fragment_removes_audio_file(async_client, auth_headers_fac
 async def test_scripts_daily_push_trigger_get_force_trigger_and_idempotency(async_client, auth_headers_factory, app, db_session_factory) -> None:
     """每日推盘触发后应返回异步任务，并在完成后保持幂等。"""
     fragment_ids = [
-        (await _create_fragment(async_client, auth_headers_factory, {"transcript": f"同主题内容 {index}", "source": "manual"}))["id"]
+        (
+            await _create_fragment(
+                async_client,
+                auth_headers_factory,
+                {"transcript": f"同主题内容 {index}", "body_markdown": f"同主题内容 {index}", "source": "manual"},
+            )
+        )["id"]
         for index in range(3)
     ]
     with db_session_factory() as db:

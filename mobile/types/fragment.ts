@@ -64,7 +64,7 @@ export interface Fragment {
   /** 正式 Markdown 内容 */
   compiled_markdown?: string | null;
   /** 内容状态 */
-  content_state?: 'empty' | 'capture_only' | 'blocks_present';
+  content_state?: 'empty' | 'blocks_present';
   /** 内容块 */
   blocks?: FragmentBlock[];
   /** 关联素材 */

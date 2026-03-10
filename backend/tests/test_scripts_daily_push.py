@@ -7,14 +7,16 @@ from types import SimpleNamespace
 import pytest
 
 from core.exceptions import ValidationError
+from domains.fragment_blocks import repository as fragment_block_repository
 from domains.fragments import repository as fragment_repository
 from modules.auth.application import TEST_USER_ID
+from modules.shared.content_markdown import build_markdown_block_payload
 from modules.scripts.daily_push import DailyPushFragmentSelector, build_fragments_text
 
 
 def _create_fragment(db, transcript: str):
     """创建供每日推盘测试使用的碎片。"""
-    return fragment_repository.create(
+    fragment = fragment_repository.create(
         db=db,
         user_id=TEST_USER_ID,
         transcript=transcript,
@@ -30,6 +32,13 @@ def _create_fragment(db, transcript: str):
         audio_file_size=None,
         audio_checksum=None,
     )
+    fragment_block_repository.create_markdown_block(
+        db=db,
+        fragment_id=fragment.id,
+        order_index=0,
+        payload_json=build_markdown_block_payload(transcript),
+    )
+    return fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=fragment.id)
 
 
 class StubVectorStore:
@@ -49,23 +58,23 @@ class StubVectorStore:
 async def test_daily_push_selector_returns_largest_component(db_session_factory) -> None:
     """碎片筛选应返回最大连通分量对应的碎片集合。"""
     with db_session_factory() as db:
-        f1 = _create_fragment(db, "topic-a-1")
-        f2 = _create_fragment(db, "topic-a-2")
-        f3 = _create_fragment(db, "topic-a-3")
-        _create_fragment(db, "topic-b-1")
-        _create_fragment(db, "topic-b-2")
+        f1 = _create_fragment(db, "topic a one")
+        f2 = _create_fragment(db, "topic a two")
+        f3 = _create_fragment(db, "topic a three")
+        _create_fragment(db, "topic b one")
+        _create_fragment(db, "topic b two")
 
         selector = DailyPushFragmentSelector(
-            vector_store=StubVectorStore(
-                {
-                    "topic-a-1": [{"fragment_id": f2.id, "score": 0.9}, {"fragment_id": f3.id, "score": 0.88}],
-                    "topic-a-2": [{"fragment_id": f1.id, "score": 0.9}, {"fragment_id": f3.id, "score": 0.89}],
-                    "topic-a-3": [{"fragment_id": f1.id, "score": 0.88}, {"fragment_id": f2.id, "score": 0.89}],
-                    "topic-b-1": [{"fragment_id": "other-1", "score": 0.9}],
-                    "topic-b-2": [{"fragment_id": "other-2", "score": 0.9}],
-                }
+                vector_store=StubVectorStore(
+                    {
+                        "topic a one": [{"fragment_id": f2.id, "score": 0.9}, {"fragment_id": f3.id, "score": 0.88}],
+                        "topic a two": [{"fragment_id": f1.id, "score": 0.9}, {"fragment_id": f3.id, "score": 0.89}],
+                        "topic a three": [{"fragment_id": f1.id, "score": 0.88}, {"fragment_id": f2.id, "score": 0.89}],
+                        "topic b one": [{"fragment_id": "other-1", "score": 0.9}],
+                        "topic b two": [{"fragment_id": "other-2", "score": 0.9}],
+                    }
+                )
             )
-        )
 
         selected = await selector.select_related_fragments(
             user_id=TEST_USER_ID,
@@ -93,6 +102,6 @@ async def test_daily_push_selector_returns_empty_when_candidates_below_minimum(d
 
 
 def test_build_fragments_text_requires_available_content() -> None:
-    """文本拼接应拒绝没有有效 transcript 的输入。"""
+    """文本拼接应拒绝没有正文块的输入。"""
     with pytest.raises(ValidationError):
         build_fragments_text([SimpleNamespace(transcript=None, capture_text=None, blocks=[])])

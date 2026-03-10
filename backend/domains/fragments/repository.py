@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from models import Fragment, FragmentTag
+from models import Fragment, FragmentBlock, FragmentTag
 
 from domains.fragment_tags import repository as fragment_tag_repository
 
@@ -98,12 +98,13 @@ def list_content_ready_in_range(
     return (
         db.query(Fragment)
         .options(joinedload(Fragment.blocks))
+        .join(FragmentBlock, FragmentBlock.fragment_id == Fragment.id)
         .filter(
             Fragment.user_id == user_id,
-            func.coalesce(Fragment.capture_text, Fragment.transcript).isnot(None),
             Fragment.created_at >= start_at,
             Fragment.created_at < end_at,
         )
+        .distinct()
         .order_by(Fragment.created_at.asc())
         .all()
     )
