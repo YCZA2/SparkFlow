@@ -299,6 +299,8 @@ cd mobile
 npm run test:state
 ```
 
+当前移动端测试仍是轻量状态测试，只覆盖 `tests/*.test.mjs` 下的纯状态 helper，不包含 UI 渲染测试或 Expo 原生集成测试。
+
 TypeScript 类型检查：
 
 ```bash

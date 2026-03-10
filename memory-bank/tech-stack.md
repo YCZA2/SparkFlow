@@ -26,7 +26,7 @@
 | Embedding | Qwen text-embedding-v2 | 通过 provider factory 装配 |
 | Vector DB | ChromaDB 0.6 | 本地持久化 |
 | Logging | structlog | request-id 贯穿的结构化日志 |
-| Test | `pytest` + `Schemathesis` + Node `--test` | 后端 API、契约测试 / 移动端少量状态测试 |
+| Test | `pytest` + `Schemathesis` + Node `--test` | 后端分层测试（smoke/contract + integration）/ 移动端少量状态测试 |
 
 ## 2. Mobile
 
@@ -199,6 +199,13 @@ cd backend
 ```bash
 cd backend
 .venv/bin/pytest
+```
+
+后端轻量测试：
+
+```bash
+cd backend
+.venv/bin/pytest -m "not integration"
 ```
 
 移动端：

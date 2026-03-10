@@ -249,7 +249,9 @@ flowchart TD
 - 关键后台链路日志字段至少包含 `event`、`request_id`、`path`、`module`，核心转写链路额外补 `fragment_id`、`user_id`、`provider`、`attempt`。
 - 移动端调试日志通过独立 file handler 写入 `runtime_logs/mobile-debug.log`，但字段格式与主日志链路保持一致。
 - 后端自动化测试已切换到 `pytest`。
-- OpenAPI 契约 smoke 校验通过 `Schemathesis` 直接消费 `/openapi.json`，不维护第二套独立契约文件。
+- 后端测试现按两层运行：轻量 smoke / contract 测试不依赖 PostgreSQL，依赖数据库或真实应用启动副作用的测试统一标记为 `integration`。
+- OpenAPI 契约 smoke 校验通过 `Schemathesis` 直接消费 `/openapi.json`，其中公开无状态端点走轻量基线，认证等依赖数据库的契约单独保留在 integration 测试里。
+- 移动端自动化测试当前仍以 Node `--test` 运行的少量状态 helper 为主，不包含完整 UI 渲染基线。
 
 ## 5. Core Flows
 
