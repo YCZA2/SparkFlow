@@ -272,10 +272,11 @@ run_start_mode() {
   ) &
   BACKEND_PID=$!
 
-  echo "[dev-mobile] waiting backend health check: ${local_backend_health_url}"
+  echo "[dev-mobile] waiting backend readiness check: HEAD ${local_backend_health_url}"
   backend_ready=0
   for _ in $(seq 1 30); do
-    if curl -fsS "${local_backend_health_url}" >/dev/null 2>&1; then
+    # 开发启动只需要确认 FastAPI 已监听端口，避免 GET /health 触发外部依赖深度探活。
+    if curl -fsSI "${local_backend_health_url}" >/dev/null 2>&1; then
       backend_ready=1
       break
     fi
@@ -283,7 +284,7 @@ run_start_mode() {
   done
 
   if [[ "${backend_ready}" -ne 1 ]]; then
-    echo "[dev-mobile] backend health check timeout, but continue to start expo."
+    echo "[dev-mobile] backend readiness check timeout, but continue to start expo."
   fi
 
   echo "[dev-mobile] starting expo (LAN mode)..."
@@ -331,10 +332,11 @@ run_simulator_mode() {
   ) &
   BACKEND_PID=$!
 
-  echo "[dev-mobile] waiting backend health check: ${local_backend_health_url}"
+  echo "[dev-mobile] waiting backend readiness check: HEAD ${local_backend_health_url}"
   backend_ready=0
   for _ in $(seq 1 30); do
-    if curl -fsS "${local_backend_health_url}" >/dev/null 2>&1; then
+    # 开发启动只需要确认 FastAPI 已监听端口，避免 GET /health 触发外部依赖深度探活。
+    if curl -fsSI "${local_backend_health_url}" >/dev/null 2>&1; then
       backend_ready=1
       break
     fi
@@ -342,7 +344,7 @@ run_simulator_mode() {
   done
 
   if [[ "${backend_ready}" -ne 1 ]]; then
-    echo "[dev-mobile] backend health check timeout, but continue to start expo."
+    echo "[dev-mobile] backend readiness check timeout, but continue to start expo."
   fi
 
   ensure_booted_simulator

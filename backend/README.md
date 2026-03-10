@@ -84,7 +84,7 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 - `knowledge_context`
 - `web_context`
 
-其中提示词模板本身保留在 Dify workflow 内部，SparkFlow 后端只负责把碎片和检索结果整理成可读文本，不再把大段 JSON 上下文直接塞给 Start 节点。
+其中提示词模板本身保留在 Dify workflow 内部，SparkFlow 后端只负责把碎片正文和实际命中的参考内容整理成尽量精简的文本，不再把大段 JSON 上下文或无意义占位说明塞给 Start 节点。
 
 当前推荐把脚本生成 Dify app 的标识也持久化到后端环境变量：
 
@@ -119,6 +119,22 @@ cd backend
   --console-access-token <token> \
   --console-csrf-token <csrf-token>
 ```
+
+如果你想验证“真实后端 + 真实 Dify workflow”的整条生成链路，可以运行：
+
+```bash
+cd backend
+.venv/bin/python scripts/test_dify_script_generation.py --cleanup
+```
+
+这个脚本会：
+
+- 调用 `POST /api/auth/token` 获取测试用户 token
+- 创建 1-2 条手动文本碎片
+- 调用 `POST /api/scripts/generation`
+- 轮询 `GET /api/pipelines/{run_id}` 直到终态
+- 成功后读取 `GET /api/scripts/{script_id}` 并打印结果摘要
+- 传入 `--cleanup` 时自动删除本次联调创建的碎片和脚本
 
 当前 Dify adapter 的运行方式：
 

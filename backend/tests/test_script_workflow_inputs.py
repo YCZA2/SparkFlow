@@ -44,6 +44,30 @@ def test_build_workflow_inputs_compacts_context_into_text_fields() -> None:
     assert inputs["mode"] == "mode_a"
     assert inputs["query_hint"] == "写一篇关于时间管理误区的口播稿"
     assert "忙不等于有效产出" in inputs["fragments_text"]
+    assert "id:" not in inputs["fragments_text"]
+    assert "摘要:" not in inputs["fragments_text"]
+    assert "标签:" not in inputs["fragments_text"]
+    assert "来源:" not in inputs["fragments_text"]
+    assert "创建时间:" not in inputs["fragments_text"]
     assert "高赞时间管理文档" in inputs["knowledge_context"]
     assert "https://example.com/time" in inputs["web_context"]
     assert set(inputs.keys()) == {"mode", "query_hint", "fragments_text", "knowledge_context", "web_context"}
+
+
+def test_build_workflow_inputs_omits_empty_placeholder_text() -> None:
+    """无额外参考时不应再向工作流传入占位说明。"""
+    context = ResearchContext(
+        mode="mode_a",
+        query_hint=None,
+        selected_fragments=[{"transcript": "只保留正文"}],
+        knowledge_hits=[],
+        web_hits=[],
+        user_context={},
+        generation_metadata={},
+    )
+
+    inputs = build_workflow_inputs(context)
+
+    assert inputs["fragments_text"] == "碎片 1\n只保留正文"
+    assert inputs["knowledge_context"] == ""
+    assert inputs["web_context"] == ""

@@ -231,6 +231,34 @@ def import_dsl(
     return result
 
 
+def import_dsl_with_fallback(
+    session: ConsoleSession,
+    *,
+    dsl_content: str,
+    app_id: str | None,
+) -> dict[str, Any]:
+    """优先更新目标 app，不存在时自动回退为新建。"""
+    if not app_id:
+        return import_dsl(session, dsl_content=dsl_content, app_id=None)
+    try:
+        return import_dsl(session, dsl_content=dsl_content, app_id=app_id)
+    except DifyImportError as exc:
+        # 中文注释：当历史 app 已被删除时，自动改走新建，避免人工先清理 env。
+        if "not found" not in str(exc).lower() and "404" not in str(exc):
+            raise
+        return import_dsl(session, dsl_content=dsl_content, app_id=None)
+
+
+def publish_workflow(session: ConsoleSession, *, app_id: str) -> None:
+    """发布当前 app 的 draft workflow，确保运行态可见。"""
+    request_json(
+        session,
+        "POST",
+        f"/apps/{app_id}/workflows/publish",
+        json_body={"marked_name": "", "marked_comment": ""},
+    )
+
+
 def fetch_app_detail(session: ConsoleSession, *, app_id: str) -> dict[str, Any]:
     """读取应用详情，用于提取 workflow id。"""
     return request_json(session, "GET", f"/apps/{app_id}")
@@ -347,10 +375,12 @@ def build_import_result(args: argparse.Namespace) -> ImportResult:
     dsl_content = args.dsl.read_text(encoding="utf-8")
     session = resolve_session(args, console_api_base=console_api_base)
     try:
-        imported = import_dsl(session, dsl_content=dsl_content, app_id=target_app_id)
+        imported = import_dsl_with_fallback(session, dsl_content=dsl_content, app_id=target_app_id)
         app_id = imported.get("app_id")
         if not isinstance(app_id, str) or not app_id.strip():
             raise DifyImportError(f"Dify 导入成功，但缺少 app_id: {json.dumps(imported, ensure_ascii=False)}")
+        if not args.skip_publish:
+            publish_workflow(session, app_id=app_id)
         detail = fetch_app_detail(session, app_id=app_id)
         workflow_id = resolve_workflow_id(session, app_id=app_id, app_detail=detail)
         api_key = ensure_api_key(session, app_id=app_id, reuse_existing=not args.create_new_api_key)
@@ -377,6 +407,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--console-csrf-token", help="与 access token 配套的 csrf token")
     parser.add_argument("--app-id", help="已有 app_id；传入后会在该应用上执行 DSL 导入")
     parser.add_argument("--create-new-api-key", action="store_true", help="忽略已有 API key，强制新建一枚")
+    parser.add_argument("--skip-publish", action="store_true", help="导入后不自动发布 workflow，仅保留 draft")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, help="HTTP 超时时间，单位秒")
     return parser.parse_args()
 

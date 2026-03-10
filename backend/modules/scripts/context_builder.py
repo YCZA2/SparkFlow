@@ -196,19 +196,11 @@ def _build_fragments_text(fragments: list[dict[str, Any]]) -> str:
     for index, item in enumerate(fragments, start=1):
         if not isinstance(item, dict):
             continue
-        tags = item.get("tags") or []
-        tags_text = ", ".join(str(tag).strip() for tag in tags if str(tag).strip()) if isinstance(tags, list) else ""
-        lines = [
-            f"碎片 {index}",
-            f"id: {item.get('id', '')}",
-            f"正文: {item.get('transcript', '')}",
-            f"摘要: {item.get('summary', '')}",
-            f"标签: {tags_text or '无'}",
-            f"来源: {item.get('source', '')}",
-            f"创建时间: {item.get('created_at', '')}",
-        ]
-        blocks.append("\n".join(lines).strip())
-    return "\n\n".join(blocks).strip() or "无可用碎片素材"
+        transcript = str(item.get("transcript") or "").strip()
+        if not transcript:
+            continue
+        blocks.append(f"碎片 {index}\n{transcript}")
+    return "\n\n".join(blocks).strip()
 
 
 def _build_knowledge_context(knowledge_hits: list[dict[str, Any]]) -> str:
@@ -217,15 +209,17 @@ def _build_knowledge_context(knowledge_hits: list[dict[str, Any]]) -> str:
     for index, item in enumerate(knowledge_hits, start=1):
         if not isinstance(item, dict):
             continue
-        lines = [
-            f"参考 {index}",
-            f"标题: {item.get('title', '')}",
-            f"类型: {item.get('doc_type', '')}",
-            f"相关度: {item.get('score', '')}",
-            f"内容: {item.get('body_markdown', '')}",
-        ]
+        title = str(item.get("title") or "").strip()
+        body_markdown = str(item.get("body_markdown") or "").strip()
+        if not title and not body_markdown:
+            continue
+        lines = [f"参考 {index}"]
+        if title:
+            lines.append(f"标题: {title}")
+        if body_markdown:
+            lines.append(f"内容: {body_markdown}")
         blocks.append("\n".join(lines).strip())
-    return "\n\n".join(blocks).strip() or "无额外知识库参考"
+    return "\n\n".join(blocks).strip()
 
 
 def _build_web_context(web_hits: list[dict[str, Any]]) -> str:
@@ -234,11 +228,17 @@ def _build_web_context(web_hits: list[dict[str, Any]]) -> str:
     for index, item in enumerate(web_hits, start=1):
         if not isinstance(item, dict):
             continue
-        lines = [
-            f"网页 {index}",
-            f"标题: {item.get('title', '')}",
-            f"链接: {item.get('url', '')}",
-            f"摘要: {item.get('snippet', '')}",
-        ]
+        title = str(item.get("title") or "").strip()
+        url = str(item.get("url") or "").strip()
+        snippet = str(item.get("snippet") or "").strip()
+        if not title and not url and not snippet:
+            continue
+        lines = [f"网页 {index}"]
+        if title:
+            lines.append(f"标题: {title}")
+        if url:
+            lines.append(f"链接: {url}")
+        if snippet:
+            lines.append(f"摘要: {snippet}")
         blocks.append("\n".join(lines).strip())
-    return "\n\n".join(blocks).strip() or "无网页搜索参考"
+    return "\n\n".join(blocks).strip()

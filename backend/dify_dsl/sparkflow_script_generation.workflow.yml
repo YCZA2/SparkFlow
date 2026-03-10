@@ -275,8 +275,8 @@ workflow:
             completion_params:
               temperature: 0.7
             mode: "chat"
-            name: "gpt-4o-mini"
-            provider: "langgenius/openai/openai"
+            name: "openai/gpt-4o-mini"
+            provider: "langgenius/openrouter/openrouter"
           prompt_template:
             - id: "system_prompt"
               role: "system"
