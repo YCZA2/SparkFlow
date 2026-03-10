@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/backend"
 MOBILE_DIR="${ROOT_DIR}/mobile"
+POSTGRES_SCRIPT="${ROOT_DIR}/scripts/postgres-local.sh"
 
 DEFAULT_TEST_DATABASE_URL="postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow_test"
 TEST_DATABASE_URL="${TEST_DATABASE_URL:-${DATABASE_URL:-${DEFAULT_TEST_DATABASE_URL}}}"
@@ -23,6 +24,10 @@ ensure_backend_test_deps() {
     echo "[test-all] missing backend pytest executable: ${BACKEND_DIR}/.venv/bin/pytest"
     exit 1
   fi
+  if [[ ! -f "${POSTGRES_SCRIPT}" ]]; then
+    echo "[test-all] postgres helper not found: ${POSTGRES_SCRIPT}"
+    exit 1
+  fi
 }
 
 
@@ -38,6 +43,7 @@ ensure_mobile_test_deps() {
 run_backend_tests() {
   # 运行后端 PostgreSQL 基线下的全量 pytest。
   print_header "Backend pytest"
+  bash "${POSTGRES_SCRIPT}" start test
   (
     cd "${BACKEND_DIR}"
     TEST_DATABASE_URL="${TEST_DATABASE_URL}" .venv/bin/pytest

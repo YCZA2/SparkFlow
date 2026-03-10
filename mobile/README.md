@@ -47,6 +47,7 @@ bash scripts/dev-mobile.sh start
 
 它会同时启动：
 
+- Docker PostgreSQL（`5432`）
 - 后端 FastAPI（`8000`）
 - Expo / Metro（`8081`）
 
@@ -54,6 +55,13 @@ bash scripts/dev-mobile.sh start
 
 ```bash
 npm run dev:mobile
+```
+
+如需单独管理本地数据库：
+
+```bash
+npm run dev:db
+npm run dev:db:status
 ```
 
 ### 模式2：需要 Build 的修改
@@ -218,6 +226,11 @@ bash scripts/dev-mobile.sh
 按顺序检查：
 
 1. 后端是否已启动
+2. 本地 Docker PostgreSQL 是否已就绪，可执行：
+
+```bash
+bash scripts/postgres-local.sh status
+```
 2. 手机和电脑是否在同一 Wi‑Fi
 3. 应用网络设置中填写的是否为 `http://电脑IP:8000`
 4. 后端日志里是否能看到来自手机 IP 的请求
@@ -306,6 +319,12 @@ bash scripts/test-all.sh
 - 模式2 ≈ `npm install` + `expo prebuild` + `pod-install` + `expo run:ios --device`
 
 ## 六、后端数据库迁移（本项目联调时常用）
+
+默认本地数据库由 Docker 提供。手动运行迁移前，先确保数据库容器已启动：
+
+```bash
+bash scripts/postgres-local.sh start dev
+```
 
 当后端有 Alembic 新迁移（例如新增字段）时，先执行：
 

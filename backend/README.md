@@ -1,20 +1,34 @@
 # SparkFlow Backend
 
-SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以本地 PostgreSQL + ChromaDB 联调；文件存储已统一走对象存储抽象，本地开发默认使用 `local` provider，线上可切阿里云 OSS。
+SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Docker PostgreSQL + ChromaDB 联调；文件存储已统一走对象存储抽象，本地开发默认使用 `local` provider，线上可切阿里云 OSS。
 
 ## Quick Start
 
 1. Create venv and install dependencies.
-2. Start PostgreSQL and create a local database such as `sparkflow`.
+2. Start local PostgreSQL via Docker.
 3. Configure `.env` (see `.env.example`).
 4. Run migrations and start server:
 
 ```bash
+bash ../scripts/postgres-local.sh start dev
 .venv/bin/alembic upgrade head
 uvicorn main:app --reload
 ```
 
 Default local address: `http://127.0.0.1:8000`
+
+默认数据库：
+
+- 开发库：`sparkflow`
+- 测试库：`sparkflow_test`
+- 默认连接串仍是 `postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/...`
+
+也可以直接使用根目录脚本让数据库随联调 / 测试自动启动：
+
+```bash
+bash scripts/dev-mobile.sh
+bash scripts/test-all.sh
+```
 
 本地联调默认测试账号 `test-user-001` 会在应用启动和 `POST /api/auth/token` 时自动补齐到数据库，避免切库后出现外键错误。
 
@@ -136,6 +150,7 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 - `alembic/`: 数据库迁移。
 - `tests/`: `pytest` + `Schemathesis` 测试。
 - `scripts/`: 后端本地辅助脚本。
+- `../docker-compose.postgres.yml`: 本地 PostgreSQL Docker 编排文件。
 - `uploads/`: `local` 文件存储 provider 的对象根目录，配置层会固定解析到 `backend/uploads/`，不依赖启动 cwd。
 - `chroma_data/`: 本地 ChromaDB 数据目录，相对路径同样固定解析到 `backend/chroma_data/`。
 - `runtime_logs/`: 运行时日志目录，当前包含移动端错误日志文件。
@@ -173,6 +188,21 @@ OSS_ACCESS_KEY_ID=...
 OSS_ACCESS_KEY_SECRET=...
 OSS_URL_EXPIRE_SECONDS=3600
 ```
+
+本地数据库相关命令：
+
+```bash
+bash scripts/postgres-local.sh start all
+bash scripts/postgres-local.sh status
+bash scripts/postgres-local.sh logs
+bash scripts/postgres-local.sh stop
+```
+
+脚本行为约定：
+
+- `bash scripts/dev-mobile.sh` 会在 Alembic 之前自动确保本地 Docker PostgreSQL 可用
+- `bash scripts/test-all.sh` 会在 pytest 之前自动确保 `sparkflow_test` 可用
+- 若 `DATABASE_URL` / `TEST_DATABASE_URL` 被 shell 环境变量或 `backend/.env` 显式改成非默认值，数据库脚本会跳过本地 Docker 启动
 
 任务与工作流相关接口：
 

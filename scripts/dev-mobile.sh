@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/backend"
 MOBILE_DIR="${ROOT_DIR}/mobile"
+POSTGRES_SCRIPT="${ROOT_DIR}/scripts/postgres-local.sh"
 
 BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
@@ -119,6 +120,15 @@ ensure_start_mode_deps() {
   fi
 }
 
+ensure_local_postgres() {
+  # 联调默认确保本地 Docker PostgreSQL 可用，除非数据库连接被显式覆盖。
+  if [[ ! -f "${POSTGRES_SCRIPT}" ]]; then
+    echo "[dev-mobile] postgres helper not found: ${POSTGRES_SCRIPT}"
+    exit 1
+  fi
+  bash "${POSTGRES_SCRIPT}" start dev
+}
+
 run_backend_migrations() {
   local alembic_cmd=()
 
@@ -189,6 +199,7 @@ run_start_mode() {
   free_port "${BACKEND_PORT}" "backend"
   free_port "${EXPO_PORT}" "expo"
 
+  ensure_local_postgres
   run_backend_migrations
 
   echo "[dev-mobile] starting backend..."
@@ -245,7 +256,9 @@ run_simulator_mode() {
 
   echo "[dev-mobile] mode3: starting backend + expo (iOS Simulator)..."
   free_port "${BACKEND_PORT}" "backend"
+  free_port "${EXPO_PORT}" "expo"
 
+  ensure_local_postgres
   run_backend_migrations
 
   echo "[dev-mobile] starting backend..."
