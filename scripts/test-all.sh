@@ -43,7 +43,7 @@ ensure_mobile_test_deps() {
 run_backend_tests() {
   # 运行后端 PostgreSQL 基线下的全量 pytest。
   print_header "Backend pytest"
-  bash "${POSTGRES_SCRIPT}" start test
+  TEST_DATABASE_URL="${TEST_DATABASE_URL}" bash "${POSTGRES_SCRIPT}" start test
   (
     cd "${BACKEND_DIR}"
     TEST_DATABASE_URL="${TEST_DATABASE_URL}" .venv/bin/pytest
