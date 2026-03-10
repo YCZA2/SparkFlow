@@ -69,17 +69,21 @@ backend/
 ├── main.py                 # FastAPI entry point
 ├── modules/                # Modular feature entrypoints
 │   ├── fragments/          # Fragment APIs and orchestration
+│   │   ├── application.py  # Fragment command/query orchestration
+│   │   ├── mapper.py       # Fragment / media response mapping
+│   │   └── *_service.py    # Content / derivatives / asset binding internals
 │   ├── scripts/            # Script generation and script pipeline definitions
 │   ├── pipelines/          # Persistent pipeline APIs
 │   ├── knowledge/          # Knowledge base APIs
 │   ├── media_assets/       # Unified media asset APIs
 │   ├── exports/            # Markdown export APIs
-│   └── transcriptions/     # Voice upload and transcription
+│   ├── transcriptions/     # Voice upload and transcription
+│   └── shared/             # Shared ports, container, storage, vector store, providers, media ingestion runtime
 ├── services/
 │   ├── factory.py          # Provider factory
 │   ├── dify_workflow_provider.py # Current workflow provider adapter
 │   ├── dashscope_stt.py    # Speech-to-text adapter
-│   ├── embedding_service.py# Embedding adapter
+│   ├── qwen_embedding.py   # Current embedding adapter
 │   └── external_media/     # External media providers
 ├── models/
 │   └── database.py         # Engine / session setup

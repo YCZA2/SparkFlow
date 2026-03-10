@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from modules.shared.audio_ingestion import AudioIngestionService
+from modules.shared.audio_ingestion_use_case import AudioIngestionUseCase
 
 from .schemas import ExternalAudioImportResponse
 
@@ -11,7 +11,7 @@ class ExternalMediaUseCase:
     def __init__(
         self,
         *,
-        ingestion_service: AudioIngestionService,
+        ingestion_service: AudioIngestionUseCase,
     ) -> None:
         """装配外链导入任务创建所需依赖。"""
         self.ingestion_service = ingestion_service

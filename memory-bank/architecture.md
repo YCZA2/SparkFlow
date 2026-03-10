@@ -119,7 +119,7 @@ flowchart TD
     MAIN["main.py<br/>app assembly + lifespan + routes"]
     PRE["modules/*/presentation.py<br/>FastAPI Router"]
     APP["modules/*/application.py<br/>use case / orchestration"]
-    SHARED["modules/shared/*<br/>container / infrastructure / ports / enrichment / audio_ingestion"]
+    SHARED["modules/shared/*<br/>container / storage / vector_store / providers / prompts / audio_ingestion"]
     REPO["domains/*/repository.py<br/>SQLAlchemy access"]
     MODEL["models/*<br/>ORM + session factory"]
     PROVIDER["services/*<br/>provider adapters / factory"]
@@ -153,12 +153,28 @@ flowchart TD
 - `presentation.py` 应显式声明 `response_model=ResponseModel[...]`，让 OpenAPI 可直接作为前后端并行开发的契约。
 - 删除接口统一返回 `200 + ResponseModel[None]`，成功时 `data` 为 `null`。
 - `backend/modules/shared/container.py`: DI 容器入口，只负责 `ServiceContainer`、默认依赖装配和 FastAPI 依赖读取。
-- `backend/modules/shared/infrastructure.py`: `PromptLoader`、本地音频存储、向量存储适配、默认空网页搜索与 workflow/provider 构造辅助。
+- `backend/modules/shared/infrastructure.py`: 兼容层，统一转发 `storage` / `vector_store` / `providers` / `prompts` 的导出，避免上层导入点一次性迁移。
+- `backend/modules/shared/storage.py`: 本地 / OSS 文件存储实现、对象 key 规则与上传校验。
+- `backend/modules/shared/vector_store.py`: 应用级向量存储适配与 namespace 规则。
+- `backend/modules/shared/providers.py`: 外部媒体、网页搜索与 workflow provider 的默认工厂。
+- `backend/modules/shared/prompts.py`: PromptLoader 与 prompt 读取逻辑。
 - `backend/modules/shared/ports.py`: LLM、STT、Embedding、Vector DB、音频存储、外挂工作流等端口抽象。
 - `backend/modules/shared/enrichment.py`: 摘要与标签增强逻辑。
-- `backend/modules/shared/audio_ingestion.py`: 统一音频碎片导入流水线步骤，负责媒体导入、转写、增强和向量化。
+- `backend/modules/shared/audio_ingestion.py`: 兼容层，对外保留媒体导入统一入口。
+- `backend/modules/shared/audio_ingestion_use_case.py`: 媒体导入任务创建入口，负责 fragment 初始化、入队与前置校验。
+- `backend/modules/shared/media_ingestion_steps.py`: 媒体导入 pipeline 的步骤执行器。
+- `backend/modules/shared/media_ingestion_persistence.py`: 媒体导入链路的音频元数据回写、转写落库与终态输出组装。
+- `backend/modules/shared/stored_file_payloads.py`: `StoredFile` 与 pipeline payload 的互转 helper。
 - `backend/modules/shared/pipeline_runtime.py`: 持久化后台流水线运行时，负责步骤定义、worker 抢占、自动重试与恢复。
 - `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，而不是继续扩散到 legacy service 文件。
+
+当前 `fragments` 模块内部进一步拆分为：
+
+- `application.py`: 碎片写操作编排和查询入口。
+- `mapper.py`: 碎片与媒体资源响应映射。
+- `content_service.py`: Markdown 块创建、替换和 effective text 读取。
+- `derivative_service.py`: 摘要 / 标签刷新和向量同步。
+- `asset_binding_service.py`: 碎片与媒体素材绑定关系维护。
 
 当前 `scripts` 模块内部进一步拆分为：
 

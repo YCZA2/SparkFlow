@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from core.exceptions import NotFoundError, ValidationError
 from domains.knowledge import repository as knowledge_repository
 from domains.media_assets import repository as media_asset_repository
-from modules.fragments.application import FragmentCommandService, _build_media_asset_file, map_media_asset
+from modules.fragments.application import FragmentCommandService
+from modules.fragments.mapper import build_media_asset_file, map_media_asset
 from modules.scripts.application import ScriptQueryService, map_script
 from modules.shared.content_markdown import (
     MarkdownExportFile,
@@ -108,7 +109,7 @@ class MarkdownExportUseCase:
         actual_assets = media_asset_repository.list_content_assets(db=db, user_id=user_id, content_type=content_type, content_id=content_id)
         files: list[tuple[str, bytes]] = []
         for asset in actual_assets:
-            files.append((f"assets/{asset.id}-{asset.original_filename}", self.file_storage.read_bytes(_build_media_asset_file(asset))))
+            files.append((f"assets/{asset.id}-{asset.original_filename}", self.file_storage.read_bytes(build_media_asset_file(asset))))
         return files
 
     @staticmethod

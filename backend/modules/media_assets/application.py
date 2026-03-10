@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from core.exceptions import NotFoundError, ValidationError
 from domains.media_assets import repository as media_asset_repository
 from models import generate_uuid
-from modules.fragments.application import _build_media_asset_file, map_media_asset
-from modules.shared.infrastructure import build_media_asset_object_key, sanitize_filename, validate_media_upload
+from modules.fragments.mapper import build_media_asset_file, map_media_asset
+from modules.shared.storage import build_media_asset_object_key, sanitize_filename, validate_media_upload
 from modules.shared.ports import FileStorage
 from .schemas import MediaAssetListResponse, MediaAssetUploadResponse
 
@@ -84,7 +84,7 @@ class MediaAssetUseCase:
         )
         payload_items = []
         for item in items:
-            access = self.storage.create_download_url(_build_media_asset_file(item))
+            access = self.storage.create_download_url(build_media_asset_file(item))
             payload_items.append(MediaAssetUploadResponse(**map_media_asset(item).model_dump(), file_url=access.url, expires_at=access.expires_at))
         return MediaAssetListResponse(
             items=payload_items,
@@ -98,5 +98,5 @@ class MediaAssetUseCase:
         asset = media_asset_repository.get_by_id(db=db, user_id=user_id, asset_id=asset_id)
         if not asset:
             raise NotFoundError(message="媒体资源不存在或无权访问", resource_type="media_asset", resource_id=asset_id)
-        self.storage.delete(_build_media_asset_file(asset))
+        self.storage.delete(build_media_asset_file(asset))
         media_asset_repository.delete(db=db, asset=asset)

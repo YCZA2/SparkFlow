@@ -167,8 +167,9 @@ cd backend
    - 外部能力抽象与适配层。
    - 负责 LLM、STT、Embedding、VectorStore、FileStorage、WorkflowProvider 等端口与实现。
    - `modules/shared/container.py` 只负责 `ServiceContainer` 和默认依赖装配。
-   - `modules/shared/infrastructure.py` 集中放本地存储、向量存储适配、PromptLoader 和 provider 构造辅助。
-   - `modules/shared/audio_ingestion.py` 提供统一媒体导入流水线步骤，供上传音频和外部链接导入复用。
+   - `modules/shared/infrastructure.py` 只保留兼容导出，真实实现拆到 `storage.py`、`vector_store.py`、`providers.py`、`prompts.py`。
+   - `modules/shared/audio_ingestion_use_case.py` 负责媒体导入入口编排，`media_ingestion_steps.py` 负责步骤执行，`media_ingestion_persistence.py` 负责落库与终态输出。
+   - `modules/shared/audio_ingestion.py` 保留统一入口导出，供现有依赖平滑迁移。
    - `modules/shared/pipeline_runtime.py` 提供持久化后台流水线运行时、worker 抢占、重试与恢复。
 7. `modules/pipelines`
    - 后台任务流水线层。
@@ -210,6 +211,14 @@ cd backend
 - `context_builder.py` 负责脚本生成的输入校验和研究上下文构建。
 - `persistence.py` 负责 workflow 输出解析与脚本幂等落库。
 - `daily_push.py` 负责每日推盘的碎片拼接和相似度筛选规则。
+
+当前 `modules/fragments/` 内部约定：
+
+- `application.py` 只保留碎片写操作编排与查询入口。
+- `mapper.py` 负责碎片与素材响应映射。
+- `content_service.py` 负责 Markdown 块写入和 effective text 读取。
+- `derivative_service.py` 负责摘要、标签和向量衍生同步。
+- `asset_binding_service.py` 负责媒体素材绑定关系维护。
 
 ### Persistence and providers
 
