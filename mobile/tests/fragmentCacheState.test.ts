@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 
 import {
   FRAGMENT_CACHE_TTL_MS,
@@ -8,9 +8,10 @@ import {
   removeFragmentFromListItems,
   sanitizeFragmentCacheEntry,
   sanitizeFragmentListCacheEntry,
-} from '../features/fragments/fragmentCacheState.js';
+} from '../features/fragments/fragmentCacheState';
 
 function buildFragment(overrides = {}) {
+  /** 中文注释：为纯状态测试构造最小 fragment 载荷，聚焦缓存与草稿规则。 */
   return {
     id: 'fragment-001',
     audio_file_url: null,
@@ -29,7 +30,7 @@ function buildFragment(overrides = {}) {
 
 test('sanitizeFragmentCacheEntry drops expired detail cache', () => {
   const expired = sanitizeFragmentCacheEntry({
-    fragment: buildFragment(),
+    fragment: buildFragment() as any,
     cachedAt: new Date(Date.now() - FRAGMENT_CACHE_TTL_MS - 1000).toISOString(),
   });
 
@@ -38,7 +39,7 @@ test('sanitizeFragmentCacheEntry drops expired detail cache', () => {
 
 test('sanitizeFragmentListCacheEntry keeps fresh list cache', () => {
   const entry = sanitizeFragmentListCacheEntry({
-    items: [buildFragment()],
+    items: [buildFragment() as any],
     cachedAt: new Date().toISOString(),
   });
 
@@ -48,13 +49,13 @@ test('sanitizeFragmentListCacheEntry keeps fresh list cache', () => {
 
 test('mergeFragmentIntoListItems updates existing fragment preview in place', () => {
   const items = [
-    buildFragment({ id: 'fragment-001', body_markdown: '旧正文', plain_text_snapshot: '旧正文' }),
-    buildFragment({ id: 'fragment-002', body_markdown: '第二条', plain_text_snapshot: '第二条' }),
+    buildFragment({ id: 'fragment-001', body_markdown: '旧正文', plain_text_snapshot: '旧正文' }) as any,
+    buildFragment({ id: 'fragment-002', body_markdown: '第二条', plain_text_snapshot: '第二条' }) as any,
   ];
 
   const merged = mergeFragmentIntoListItems(
     items,
-    buildFragment({ id: 'fragment-001', body_markdown: '新正文', plain_text_snapshot: '新正文' })
+    buildFragment({ id: 'fragment-001', body_markdown: '新正文', plain_text_snapshot: '新正文' }) as any
   );
 
   assert.equal(merged.length, 2);
@@ -65,7 +66,7 @@ test('mergeFragmentIntoListItems updates existing fragment preview in place', ()
 
 test('removeFragmentFromListItems removes deleted fragment from cached list', () => {
   const nextItems = removeFragmentFromListItems(
-    [buildFragment({ id: 'fragment-001' }), buildFragment({ id: 'fragment-002' })],
+    [buildFragment({ id: 'fragment-001' }) as any, buildFragment({ id: 'fragment-002' }) as any],
     'fragment-002'
   );
 
@@ -76,7 +77,7 @@ test('applyDraftToFragment prefers unsynced draft over cached server markdown', 
   const fragment = buildFragment({
     body_markdown: '服务端正文',
     plain_text_snapshot: '服务端正文',
-  });
+  }) as any;
 
   const nextFragment = applyDraftToFragment(fragment, '# 本地草稿\n\n更新后的正文');
 

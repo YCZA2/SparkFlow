@@ -23,10 +23,19 @@ type AiInstruction = 'polish' | 'shorten' | 'expand' | 'title' | 'script_seed';
 
 interface FragmentDetailSheetProps {
   visible: boolean;
-  fragment: Fragment;
-  isDeleting: boolean;
-  isUploadingImage: boolean;
-  isAiRunning: boolean;
+  content: {
+    audioFileUrl: string | null;
+    transcript: string | null;
+    speakerSegments: Fragment['speaker_segments'];
+    summary: string | null;
+    tags: string[] | null;
+  };
+  metadata: {
+    source: Fragment['source'];
+    audioSource: Fragment['audio_source'] | null;
+    createdAt: string;
+    folderName: string;
+  };
   activeSegmentIndex: number | null;
   player: {
     isReady: boolean;
@@ -42,10 +51,17 @@ interface FragmentDetailSheetProps {
     cyclePlaybackRate: () => void;
     playSegment: (segment: NonNullable<Fragment['speaker_segments']>[number]) => Promise<void>;
   };
-  onClose: () => void;
-  onDelete: () => void;
-  onInsertImage: () => Promise<void>;
-  onAiAction: (instruction: AiInstruction) => Promise<void>;
+  tools: {
+    isUploadingImage: boolean;
+    isAiRunning: boolean;
+    onInsertImage: () => Promise<void>;
+    onAiAction: (instruction: AiInstruction) => Promise<void>;
+  };
+  actions: {
+    isDeleting: boolean;
+    onClose: () => void;
+    onDelete: () => void;
+  };
 }
 
 function getSourceLabel(source: string): string {
@@ -124,31 +140,27 @@ function Section({
 
 export function FragmentDetailSheet({
   visible,
-  fragment,
-  isDeleting,
-  isUploadingImage,
-  isAiRunning,
+  content,
+  metadata,
   activeSegmentIndex,
   player,
-  onClose,
-  onDelete,
-  onInsertImage,
-  onAiAction,
+  tools,
+  actions,
 }: FragmentDetailSheetProps) {
   /** 中文注释：在底部抽屉中收纳原文、音频、整理工具和碎片元信息。 */
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
-  const tags = normalizeFragmentTags(fragment.tags);
-  const hasAudio = Boolean(fragment.audio_file_url);
-  const hasTranscript = Boolean(fragment.transcript?.trim() || fragment.speaker_segments?.length);
-  const sourceLabel = getSourceLabel(fragment.source);
-  const audioSourceLabel = getAudioSourceLabel(fragment.audio_source);
+  const tags = normalizeFragmentTags(content.tags);
+  const hasAudio = Boolean(content.audioFileUrl);
+  const hasTranscript = Boolean(content.transcript?.trim() || content.speakerSegments?.length);
+  const sourceLabel = getSourceLabel(metadata.source);
+  const audioSourceLabel = getAudioSourceLabel(metadata.audioSource);
 
   return (
-    <Modal animationType="none" visible={visible} transparent statusBarTranslucent onRequestClose={onClose}>
+    <Modal animationType="none" visible={visible} transparent statusBarTranslucent onRequestClose={actions.onClose}>
       <View style={styles.modalRoot}>
         <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={StyleSheet.absoluteFill}>
-          <Pressable style={styles.backdrop} onPress={onClose} />
+          <Pressable style={styles.backdrop} onPress={actions.onClose} />
         </Animated.View>
 
         <Animated.View
@@ -170,7 +182,7 @@ export function FragmentDetailSheet({
                 原文、音频、整理工具和碎片信息都收在这里。
               </Text>
             </View>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose} hitSlop={8}>
+            <TouchableOpacity style={styles.closeButton} onPress={actions.onClose} hitSlop={8}>
               <SymbolView name="xmark" size={16} tintColor={theme.colors.textSubtle} />
             </TouchableOpacity>
           </View>
@@ -201,9 +213,9 @@ export function FragmentDetailSheet({
 
               {hasTranscript ? (
                 <TranscriptSection
-                  transcript={fragment.transcript}
-                  speakerSegments={fragment.speaker_segments}
-                  audioPath={fragment.audio_file_url}
+                  transcript={content.transcript}
+                  speakerSegments={content.speakerSegments}
+                  audioPath={content.audioFileUrl}
                   activeIndex={activeSegmentIndex}
                   activeSegmentId={null}
                   dense={true}
@@ -223,73 +235,73 @@ export function FragmentDetailSheet({
             <Section title="整理工具">
               <ToolRow
                 icon="photo"
-                title={isUploadingImage ? '正在插图' : '插入图片'}
+                title={tools.isUploadingImage ? '正在插图' : '插入图片'}
                 subtitle="把图片插进正文，和笔记内容一起保存。"
                 onPress={() => {
-                  void onInsertImage();
+                  void tools.onInsertImage();
                 }}
-                disabled={isUploadingImage}
+                disabled={tools.isUploadingImage}
               />
               <ToolRow
                 icon="sparkles"
-                title={isAiRunning ? 'AI 正在润色' : '润色正文'}
+                title={tools.isAiRunning ? 'AI 正在润色' : '润色正文'}
                 subtitle="优化当前正文语气和表达清晰度。"
                 onPress={() => {
-                  void onAiAction('polish');
+                  void tools.onAiAction('polish');
                 }}
-                disabled={isAiRunning}
+                disabled={tools.isAiRunning}
               />
               <ToolRow
                 icon="arrow.down.right.and.arrow.up.left"
                 title="压缩内容"
                 subtitle="把当前内容收紧成更精炼的版本。"
                 onPress={() => {
-                  void onAiAction('shorten');
+                  void tools.onAiAction('shorten');
                 }}
-                disabled={isAiRunning}
+                disabled={tools.isAiRunning}
               />
               <ToolRow
                 icon="arrow.up.left.and.arrow.down.right"
                 title="扩写内容"
                 subtitle="为当前内容补充更多铺垫和细节。"
                 onPress={() => {
-                  void onAiAction('expand');
+                  void tools.onAiAction('expand');
                 }}
-                disabled={isAiRunning}
+                disabled={tools.isAiRunning}
               />
               <ToolRow
                 icon="textformat.size"
                 title="生成标题"
                 subtitle="基于当前正文给出一条更聚焦的标题。"
                 onPress={() => {
-                  void onAiAction('title');
+                  void tools.onAiAction('title');
                 }}
-                disabled={isAiRunning}
+                disabled={tools.isAiRunning}
               />
               <ToolRow
                 icon="document.badge.gearshape"
                 title="脚本草稿"
                 subtitle="先生成一版偏口播结构的正文草稿。"
                 onPress={() => {
-                  void onAiAction('script_seed');
+                  void tools.onAiAction('script_seed');
                 }}
-                disabled={isAiRunning}
+                disabled={tools.isAiRunning}
               />
             </Section>
 
             <Section title="碎片信息">
-              {fragment.summary ? (
+              {content.summary ? (
                 <View style={[styles.infoCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
                   <Text style={[styles.infoLabel, { color: theme.colors.textSubtle }]}>AI 摘要</Text>
-                  <Text style={[styles.summaryText, { color: theme.colors.text }]}>{fragment.summary}</Text>
+                  <Text style={[styles.summaryText, { color: theme.colors.text }]}>{content.summary}</Text>
                 </View>
               ) : null}
 
               <View style={[styles.infoCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
                 <InfoRow label="来源" value={sourceLabel} />
                 {audioSourceLabel ? <InfoRow label="音频来源" value={audioSourceLabel} /> : null}
-                <InfoRow label="创建时间" value={formatDate(fragment.created_at)} />
-                <InfoRow label="文件夹" value={fragment.folder?.name ?? '未归档'} />
+                <InfoRow label="创建时间" value={formatDate(metadata.createdAt)} />
+                <InfoRow label="文件夹" value={metadata.folderName} />
               </View>
 
               {tags.length > 0 ? (
@@ -312,19 +324,19 @@ export function FragmentDetailSheet({
             <Section title="危险操作">
               <TouchableOpacity
                 activeOpacity={0.82}
-                onPress={onDelete}
-                disabled={isDeleting}
+                onPress={actions.onDelete}
+                disabled={actions.isDeleting}
                 style={[
                   styles.deleteButton,
                   {
                     backgroundColor: theme.colors.surface,
                     borderColor: theme.colors.danger,
-                    opacity: isDeleting ? 0.65 : 1,
+                    opacity: actions.isDeleting ? 0.65 : 1,
                   },
                 ]}
               >
                 <Text style={[styles.deleteText, { color: theme.colors.danger }]}>
-                  {isDeleting ? '删除中...' : '删除这条碎片'}
+                  {actions.isDeleting ? '删除中...' : '删除这条碎片'}
                 </Text>
               </TouchableOpacity>
             </Section>

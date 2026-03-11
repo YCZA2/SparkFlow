@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 
 import {
   clearVisibleIds,
@@ -7,13 +7,13 @@ import {
   filterPointsByCluster,
   selectVisibleIds,
   toggleSelectedIds,
-} from '../features/fragments/fragmentCloudState.js';
+} from '../features/fragments/fragmentCloudState';
 
 const points = [
   { id: 'a', cluster_id: 1 },
   { id: 'b', cluster_id: 2 },
   { id: 'c', cluster_id: 1 },
-];
+] as any;
 
 test('filterPointsByCluster filters by cluster or returns all', () => {
   assert.equal(filterPointsByCluster(points, 'all').length, 3);

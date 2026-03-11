@@ -178,6 +178,7 @@ http://<your-lan-ip>:8000
 - Default backend storage is PostgreSQL only; do not reintroduce SQLite compatibility branches or local SQLite fallback docs
 - 文件存储默认通过统一对象存储抽象接入；本地开发可使用 `FILE_STORAGE_PROVIDER=local`，线上默认按私有 OSS + 签名 URL 设计，不要再把磁盘路径或 `storage_path` / `audio_path` 暴露为对外 contract
 - 当前首页与文件夹页底部 `+` 的产品语义是“打开导入抽屉”；新增外部导入能力时优先扩展该抽屉，而不是把 `+` 改回直接跳页
+- `mobile/features` 下的状态 helper 以 TypeScript 源码为单一事实源，不要再提交 `.js` / `.d.ts` 编译产物；纯状态测试统一放在 `mobile/tests/*.test.ts`，通过 `mobile/scripts/run-state-tests.mjs` 运行
 
 ## When Updating Docs
 

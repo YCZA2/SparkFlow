@@ -100,6 +100,7 @@ flowchart TD
 - `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态。
+- `features/fragments/detail/*` 把碎片详情拆成 `resource / body session / screen` 三层：资源层负责缓存和远端刷新，编辑层负责自动保存/草稿/AI patch/插图，页面层只编排 header、抽屉和播放器交互。
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
 - `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用。
 
@@ -256,6 +257,7 @@ flowchart TD
 - `fragments.transcript` 保存机器转写原文，`fragments.body_markdown` 保存唯一正式正文的 Markdown，`fragments.plain_text_snapshot` 保存派生纯文本快照
 - 非语音碎片必须直接写入 `body_markdown`，不再把 `transcript` 当作正式正文来源
 - 移动端碎片详情正文继续采用 `WebView + Tiptap` 编辑内核，但 DOM 编辑器是唯一 live state；原生层只消费节流后的 Markdown 快照、AI 操作和图片插入命令
+- 移动端碎片详情的本地缓存和展示态真值允许分离：`fragmentRepository` 只持久化 fragment/list 快照与订阅广播，本地草稿覆盖逻辑只存在于 detail resource 层，不直接回写服务端真值
 - `scripts.body_markdown` / `knowledge_docs.body_markdown` 保存统一 Markdown 正文
 - 媒体资源表：`media_assets` / `content_media_links`，对象元数据保存 `storage_provider` / `bucket` / `object_key`
 - 碎片向量 namespace: `fragments_{user_id}`
@@ -499,6 +501,7 @@ sequenceDiagram
 - Frontend home: [`mobile/app/index.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/index.tsx)
 - Session bootstrap: [`mobile/providers/AppSessionProvider.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/providers/AppSessionProvider.tsx)
 - Fragment screen model: [`mobile/features/fragments/useFragmentsScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/useFragmentsScreen.ts)
+- Fragment detail screen model: [`mobile/features/fragments/detail/useFragmentDetailScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/detail/useFragmentDetailScreen.ts)
 - Generate screen model: [`mobile/features/scripts/useGenerateScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/scripts/useGenerateScreen.ts)
 - Fragment cloud model: [`mobile/features/fragments/useFragmentCloudScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/useFragmentCloudScreen.ts)
 - Audio state provider: [`mobile/features/recording/AudioCaptureProvider.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/recording/AudioCaptureProvider.tsx)

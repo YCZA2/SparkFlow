@@ -1,11 +1,11 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 
 import {
   buildExternalAudioImportPayload,
   isImportLinkReady,
   resolveImportedFragmentId,
-} from '../features/imports/importState.js';
+} from '../features/imports/importState';
 
 test('buildExternalAudioImportPayload trims share url and appends folder id', () => {
   assert.deepEqual(

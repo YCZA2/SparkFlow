@@ -7,7 +7,7 @@ import {
   removeFragmentFromListItems,
   sanitizeFragmentCacheEntry,
   sanitizeFragmentListCacheEntry,
-} from './fragmentCacheState.js';
+} from './fragmentCacheState';
 
 export interface FragmentCacheEntry {
   fragment: Fragment;

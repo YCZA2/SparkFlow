@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 
 import {
   clampFontSize,
@@ -7,7 +7,7 @@ import {
   isTapAfterPan,
   shouldStartPan,
   togglePauseState,
-} from '../features/recording/teleprompterState.js';
+} from '../features/recording/teleprompterState';
 
 test('clampFontSize limits values', () => {
   assert.equal(clampFontSize(10), 20);

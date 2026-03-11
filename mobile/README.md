@@ -19,6 +19,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
 - 碎片详情页默认进入轻量正文编辑视图，正文改动会自动保存；`transcript`、音频、摘要、标签和 AI 整理工具收口到右上角“更多”底部抽屉。
+- 碎片详情内部已拆成 `detail resource / body session / screen` 三层：缓存和远端刷新、正文会话、页面交互分别维护，避免自动保存和播放器互相耦合。
 - 碎片正文详情和列表已接入本地缓存：已访问过的 fragment 会先秒开缓存，再后台静默刷新；未同步正文会保留本地草稿并显示“未同步”状态。
 - 脚本详情页只展示 `body_markdown`，后端负责迁移旧数据。
 - 移动端碎片正文已切到 `WebView + Tiptap` 编辑器，DOM 编辑器内部维持富文本状态，但持久化真值统一为 `body_markdown`，支持标题、列表、引用、粗体、斜体、图片和 AI patch。
@@ -333,7 +334,7 @@ cd mobile
 npm run test:state
 ```
 
-当前移动端测试仍是轻量状态测试，只覆盖 `tests/*.test.mjs` 下的纯状态 helper，不包含 UI 渲染测试或 Expo 原生集成测试。
+当前移动端测试仍是轻量状态测试，只覆盖 `tests/*.test.ts` 下的纯状态 helper，不包含 UI 渲染测试或 Expo 原生集成测试；测试通过仓库内置的 `scripts/run-state-tests.mjs` 先用 esbuild 预编译再执行 `node --test`，`mobile/features` 不再保留 `.js` / `.d.ts` 编译产物。
 
 TypeScript 类型检查：
 

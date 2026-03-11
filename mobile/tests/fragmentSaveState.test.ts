@@ -1,7 +1,7 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 
-import { resolveDoneAction, resolveSaveOutcome } from '../features/fragments/fragmentSaveState.js';
+import { resolveDoneAction, resolveSaveOutcome } from '../features/fragments/fragmentSaveState';
 
 test('resolveSaveOutcome marks synced save as clearable draft', () => {
   const outcome = resolveSaveOutcome({

@@ -7,7 +7,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test:state": "node --test tests/*.test.mjs"
+    "test:state": "node scripts/run-state-tests.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
