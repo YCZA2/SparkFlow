@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class ExternalAudioImportRequest(BaseModel):
     share_url: str = Field(..., description="外部媒体分享链接")
     platform: Literal["auto", "douyin"] = Field("auto", description="平台：auto 或 douyin")
+    folder_id: str | None = Field(None, description="目标文件夹 ID，不传表示放入全部")
 
 
 class ExternalAudioImportResponse(BaseModel):

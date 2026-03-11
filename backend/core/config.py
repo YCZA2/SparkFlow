@@ -256,6 +256,14 @@ class Settings(BaseSettings):
         default=os.path.join(BACKEND_DIR, "runtime_logs", "mobile-debug.log"),
         description="移动端调试日志文件路径"
     )
+    BACKEND_LOG_PATH: str = Field(
+        default=os.path.join(BACKEND_DIR, "runtime_logs", "backend.log"),
+        description="后端全量业务日志文件路径"
+    )
+    BACKEND_ERROR_LOG_PATH: str = Field(
+        default=os.path.join(BACKEND_DIR, "runtime_logs", "backend-error.log"),
+        description="后端错误日志文件路径"
+    )
     MAX_UPLOAD_SIZE: int = Field(
         default=50 * 1024 * 1024,  # 50MB
         description="最大上传文件大小（字节）"
@@ -316,6 +324,8 @@ class Settings(BaseSettings):
         "UPLOAD_DIR",
         "RUNTIME_LOG_DIR",
         "MOBILE_DEBUG_LOG_PATH",
+        "BACKEND_LOG_PATH",
+        "BACKEND_ERROR_LOG_PATH",
         mode="before",
     )
     @classmethod
@@ -337,6 +347,8 @@ class Settings(BaseSettings):
             self.CHROMADB_PATH,
             self.RUNTIME_LOG_DIR,
             os.path.dirname(os.path.abspath(self.MOBILE_DEBUG_LOG_PATH)),
+            os.path.dirname(os.path.abspath(self.BACKEND_LOG_PATH)),
+            os.path.dirname(os.path.abspath(self.BACKEND_ERROR_LOG_PATH)),
         ]
         for directory in directories:
             if directory and not os.path.exists(directory):

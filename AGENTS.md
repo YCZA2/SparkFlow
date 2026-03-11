@@ -62,6 +62,8 @@ If the change also updates repository conventions, development workflow, or agen
 - `mobile/components/`: shared UI components
 - `mobile/providers/`: app-level providers and bootstrap logic
 - `mobile/constants/`, `mobile/types/`, `mobile/utils/`, `mobile/theme/`: shared client utilities
+- `mobile/app/import-link.tsx`: 抖音分享链接导入页
+- `mobile/features/imports/`: 外部链接导入请求、载荷与任务态辅助逻辑
 
 ## Development Workflow
 
@@ -175,6 +177,7 @@ http://<your-lan-ip>:8000
 - Do not let files grow into monoliths; when logic, state, or UI keeps expanding, split it into focused modules/components/hooks before it becomes a large single file
 - Default backend storage is PostgreSQL only; do not reintroduce SQLite compatibility branches or local SQLite fallback docs
 - 文件存储默认通过统一对象存储抽象接入；本地开发可使用 `FILE_STORAGE_PROVIDER=local`，线上默认按私有 OSS + 签名 URL 设计，不要再把磁盘路径或 `storage_path` / `audio_path` 暴露为对外 contract
+- 当前首页与文件夹页底部 `+` 的产品语义是“打开导入抽屉”；新增外部导入能力时优先扩展该抽屉，而不是把 `+` 改回直接跳页
 
 ## When Updating Docs
 

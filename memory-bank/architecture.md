@@ -1,6 +1,6 @@
 # SparkFlow Architecture
 
-> 最后更新：2026-03-10
+> 最后更新：2026-03-11
 
 本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为 Docker 管理的 PostgreSQL。
 
@@ -59,6 +59,7 @@ flowchart LR
 - `fragment/[id].tsx`: 单条碎片详情。
 - `fragment-cloud.tsx`: 灵感云图。
 - `generate.tsx`: AI 编导生成确认页。
+- `import-link.tsx`: 抖音分享链接导入页。
 - `script/[id].tsx`: 口播稿详情。
 - `scripts.tsx`: 口播稿列表。
 - `shoot.tsx`: 提词器 + 相机拍摄。
@@ -72,7 +73,7 @@ flowchart LR
 flowchart TD
     subgraph Mobile["mobile"]
         R["Routes<br/>app/*"]
-        P["Providers<br/>AppSessionProvider<br/>AudioCaptureProvider"]
+        P["Providers<br/>AppSessionProvider<br/>AudioCaptureProvider<br/>ImportActionSheetProvider"]
         SM["Screen composition<br/>useFragmentsScreen / useGenerateScreen / useFragmentCloudScreen"]
         H["Feature hooks<br/>auth / recording / scripts / fragments"]
         C["HTTP client<br/>features/core/api/client.ts"]
@@ -95,9 +96,11 @@ flowchart TD
 
 - `AppSessionProvider` 在应用启动时完成后端地址初始化、token 恢复、测试用户自动登录。
 - `AudioCaptureProvider` 承载录音状态、上传状态与录音文件回放能力。
+- `ImportActionSheetProvider` 承载底部 `+` 导入抽屉开关与当前文件夹上下文。
 - `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态。
+- `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
 - `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用。
 
 ### 3.4 Local Persistence
@@ -199,7 +202,7 @@ flowchart TD
 - `docker-compose.postgres.yml`: 本地 PostgreSQL Docker Compose 编排文件。
 - `backend/uploads/`: `local` 文件存储 provider 的对象根目录。
 - `backend/chroma_data/`: 本地向量库持久化目录。
-- `backend/runtime_logs/`: 运行时日志目录，当前包含移动端错误日志落盘文件。
+- `backend/runtime_logs/`: 运行时日志目录，当前包含后端全量日志、错误日志和移动端错误日志落盘文件。
 - `backend/scripts/`: 后端辅助脚本。
 - 本地路径类配置（如 `UPLOAD_DIR` / `CHROMADB_PATH` / `RUNTIME_LOG_DIR`）即使在 `.env` 中写相对路径，也统一按 `backend/` 目录解析，避免因为启动 cwd 不同漂移到仓库根目录。
 
@@ -258,6 +261,8 @@ flowchart TD
 - 知识库向量 namespace: `knowledge_{user_id}`
 - 后台流水线表：`pipeline_runs` / `pipeline_step_runs`
 - 碎片音频对象元数据：`audio_storage_provider` / `audio_bucket` / `audio_object_key`
+- 后端全量业务日志文件: `runtime_logs/backend.log`
+- 后端错误日志文件: `runtime_logs/backend-error.log`
 - 移动端调试日志文件: `runtime_logs/mobile-debug.log`
 - 每日推盘调度时间：使用 `APP_TIMEZONE`，默认 `Asia/Shanghai`，时间点由 `DAILY_PUSH_HOUR` / `DAILY_PUSH_MINUTE` 控制
 
@@ -265,6 +270,8 @@ flowchart TD
 
 - HTTP 请求入口统一绑定 `request_id`，并通过 `structlog` 输出结构化日志。
 - 关键后台链路日志字段至少包含 `event`、`request_id`、`path`、`module`，核心转写链路额外补 `fragment_id`、`user_id`、`provider`、`attempt`。
+- 后端主日志会同时输出到控制台，并通过独立 file handler 写入 `runtime_logs/backend.log`。
+- 后端 `ERROR` 及以上日志会额外写入 `runtime_logs/backend-error.log`，便于单独排查失败链路。
 - 移动端调试日志通过独立 file handler 写入 `runtime_logs/mobile-debug.log`，但字段格式与主日志链路保持一致。
 - 后端自动化测试已切换到 `pytest`。
 - 后端测试现按两层运行：轻量 smoke / contract 测试不依赖 PostgreSQL，依赖数据库或真实应用启动副作用的测试统一标记为 `integration`。
@@ -315,7 +322,7 @@ sequenceDiagram
     participant FF as ffmpeg
     participant FS as uploads/external_media
 
-    App->>API: POST share_url + platform
+    App->>API: POST share_url + platform (+ optional folder_id)
     API->>DB: create fragment(source=voice, audio_source=external_link)
     API->>API: audio_ingestion.ingest_external_media(external_link)
     API->>DB: create pipeline_runs + pipeline_step_runs
@@ -331,6 +338,7 @@ sequenceDiagram
 关键点：
 
 - 当前接口只创建 fragment 和后台任务，外链解析、下载转码、转写与增强全部在 `media_ingestion` pipeline 中异步执行。
+- `folder_id` 为可选字段；若从某个文件夹页发起导入，预创建 fragment 会直接归入该文件夹。
 - 对外接口按多平台抽象设计，但 v1 只有抖音 provider。
 - 导入文件统一保存到对象存储 `audio/imported/...` 命名空间，输出格式固定为 `m4a`。
 ### 5.3 Script Generation Pipeline

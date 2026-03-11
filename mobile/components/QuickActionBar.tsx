@@ -6,6 +6,7 @@ import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 import { useAppTheme } from '@/theme/useAppTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useImportActionSheet } from '@/providers/ImportActionSheetProvider';
 import { useQuickActionBar } from '@/providers/QuickActionBarProvider';
 
 type SymbolName = React.ComponentProps<typeof SymbolView>['name'];
@@ -28,6 +29,7 @@ export function QuickActionBar() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { visible } = useQuickActionBar();
+  const importActionSheet = useImportActionSheet();
 
   // 根据当前路由判断是否在主流程页面（主页或碎片列表）
   const isVisible = React.useMemo(() => {
@@ -50,12 +52,14 @@ export function QuickActionBar() {
     return undefined;
   }, [pathname]);
 
+  const targetFolderId = folderId && folderId !== '__all__' ? folderId : undefined;
+
   // 构建快捷操作配置
   const quickActions: QuickAction[] = [
     {
-      key: 'knowledge',
+      key: 'import',
       icon: 'plus',
-      onPress: () => router.push('/knowledge'),
+      onPress: () => importActionSheet.open(targetFolderId),
     },
     {
       key: 'record',
@@ -63,10 +67,10 @@ export function QuickActionBar() {
       active: true,
       onPress: () => {
         // 如果在特定文件夹内，传递 folderId
-        if (folderId && folderId !== '__all__') {
+        if (targetFolderId) {
           router.push({
             pathname: '/record-audio',
-            params: { folderId },
+            params: { folderId: targetFolderId },
           });
         } else {
           router.push('/record-audio');
@@ -78,10 +82,10 @@ export function QuickActionBar() {
       icon: 'keyboard',
       onPress: () => {
         // 如果在特定文件夹内，传递 folderId
-        if (folderId && folderId !== '__all__') {
+        if (targetFolderId) {
           router.push({
             pathname: '/text-note',
-            params: { folderId },
+            params: { folderId: targetFolderId },
           });
         } else {
           router.push('/text-note');

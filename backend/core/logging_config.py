@@ -14,6 +14,17 @@ from .config import settings
 MOBILE_DEBUG_LOGGER_NAME = "sparkflow.mobile_debug"
 
 
+class _MaxLevelFilter(logging.Filter):
+    """限制 handler 仅接收不高于指定级别的日志。"""
+
+    def __init__(self, max_level: int) -> None:
+        super().__init__()
+        self.max_level = max_level
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno <= self.max_level
+
+
 def _rename_logger_key(_: Any, __: str, event_dict: structlog.types.EventDict) -> structlog.types.EventDict:
     """将 structlog 的 logger 字段统一映射为 module。"""
     logger_name = event_dict.pop("logger", None)
@@ -80,6 +91,28 @@ def _configure_mobile_debug_logger(shared_processors: list[structlog.types.Proce
     file_logger.propagate = False
 
 
+def _build_file_handler(
+    *,
+    path: str,
+    shared_processors: list[structlog.types.Processor],
+    level: int,
+    max_level: int | None = None,
+) -> logging.FileHandler:
+    """创建统一 JSON 文件日志 handler，可按级别范围分流。"""
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    file_handler = logging.FileHandler(os.path.abspath(path), encoding="utf-8")
+    file_handler.setFormatter(
+        _build_processor_formatter(
+            renderer=structlog.processors.JSONRenderer(),
+            shared_processors=shared_processors,
+        )
+    )
+    file_handler.setLevel(level)
+    if max_level is not None:
+        file_handler.addFilter(_MaxLevelFilter(max_level))
+    return file_handler
+
+
 def configure_logging() -> None:
     """初始化应用级结构化日志配置。"""
     shared_processors = _build_shared_processors()
@@ -93,12 +126,31 @@ def configure_logging() -> None:
         renderer=renderer,
         shared_processors=shared_processors,
     )
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(formatter)
+    stdout_handler.addFilter(_MaxLevelFilter(logging.WARNING))
+
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setFormatter(formatter)
+    stderr_handler.setLevel(logging.ERROR)
+
+    all_file_handler = _build_file_handler(
+        path=settings.BACKEND_LOG_PATH,
+        shared_processors=shared_processors,
+        level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+    )
+    error_file_handler = _build_file_handler(
+        path=settings.BACKEND_ERROR_LOG_PATH,
+        shared_processors=shared_processors,
+        level=logging.ERROR,
+    )
 
     root_logger = logging.getLogger()
     _reset_logger_handlers(root_logger)
-    root_logger.addHandler(handler)
+    root_logger.addHandler(stdout_handler)
+    root_logger.addHandler(stderr_handler)
+    root_logger.addHandler(all_file_handler)
+    root_logger.addHandler(error_file_handler)
     root_logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
 
     structlog.configure(

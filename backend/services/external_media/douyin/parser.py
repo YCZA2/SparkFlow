@@ -191,12 +191,79 @@ class DouyinVideoParser:
 
     def _request_json(self, api_url: str, params: dict, headers: dict) -> dict | None:
         """依次尝试 a_bogus 与 X-Bogus 请求抖音详情接口。"""
+        # 中文注释：记录抖音详情接口的响应摘要，便于区分空 body、非 JSON 或结构变更。
+        def log_response_diagnostics(mode: str, response: requests.Response) -> dict | None:
+            text = response.text or ""
+            content_type = response.headers.get("content-type")
+            body_length = len(response.content or b"")
+            preview = text[:200].replace("\n", "\\n").replace("\r", "\\r")
+
+            if response.status_code != 200:
+                logger.warning(
+                    "douyin_aweme_detail_http_error",
+                    mode=mode,
+                    status_code=response.status_code,
+                    content_type=content_type,
+                    body_length=body_length,
+                    body_preview=preview,
+                )
+                return None
+
+            if not response.content:
+                logger.warning(
+                    "douyin_aweme_detail_empty_body",
+                    mode=mode,
+                    status_code=response.status_code,
+                    content_type=content_type,
+                    body_length=body_length,
+                )
+                return None
+
+            try:
+                payload = response.json()
+            except Exception as exc:
+                logger.warning(
+                    "douyin_aweme_detail_json_decode_failed",
+                    mode=mode,
+                    status_code=response.status_code,
+                    content_type=content_type,
+                    body_length=body_length,
+                    body_preview=preview,
+                    error=str(exc),
+                )
+                return None
+
+            aweme_detail = payload.get("aweme_detail") if isinstance(payload, dict) else None
+            if not isinstance(payload, dict) or not aweme_detail:
+                logger.warning(
+                    "douyin_aweme_detail_missing_payload",
+                    mode=mode,
+                    status_code=response.status_code,
+                    content_type=content_type,
+                    body_length=body_length,
+                    top_level_keys=sorted(payload.keys()) if isinstance(payload, dict) else [],
+                    has_aweme_detail=bool(aweme_detail),
+                    body_preview=preview,
+                )
+                return None
+
+            logger.info(
+                "douyin_aweme_detail_succeeded",
+                mode=mode,
+                status_code=response.status_code,
+                content_type=content_type,
+                body_length=body_length,
+                aweme_id=aweme_detail.get("aweme_id"),
+                aweme_type=aweme_detail.get("aweme_type"),
+            )
+            return payload
+
         # 先试 a_bogus
         try:
             resp = requests.get(api_url, params=params, headers=headers, timeout=10)
-            if resp.status_code == 200 and resp.content:
-                return resp.json()
-            logger.warning("douyin_aweme_detail_non_200", mode="a_bogus", status_code=resp.status_code)
+            payload = log_response_diagnostics("a_bogus", resp)
+            if payload:
+                return payload
         except Exception as exc:
             logger.warning("douyin_aweme_detail_request_failed", mode="a_bogus", error=str(exc))
 
@@ -209,9 +276,9 @@ class DouyinVideoParser:
             xb_value = XBogus(self.user_agent).getXBogus(param_str)
             xb_url = f"{api_url}?{param_str}&X-Bogus={xb_value[1]}"
             resp = requests.get(xb_url, headers=headers, timeout=10)
-            if resp.status_code == 200 and resp.content:
-                return resp.json()
-            logger.warning("douyin_aweme_detail_non_200", mode="x_bogus", status_code=resp.status_code)
+            payload = log_response_diagnostics("x_bogus", resp)
+            if payload:
+                return payload
         except Exception as exc:
             logger.warning("douyin_aweme_detail_request_failed", mode="x_bogus", error=str(exc))
             return None

@@ -43,3 +43,12 @@ def test_runtime_log_path_is_resolved_from_backend_dir(monkeypatch) -> None:
         settings.MOBILE_DEBUG_LOG_PATH
         == f"{BACKEND_DIR}/runtime_logs/mobile-debug.log"
     )
+
+
+def test_backend_log_paths_are_resolved_from_backend_dir(monkeypatch) -> None:
+    """后端日志路径在 .env 中使用相对值时也不受 cwd 影响。"""
+    monkeypatch.setenv("BACKEND_LOG_PATH", "./runtime_logs/backend.log")
+    monkeypatch.setenv("BACKEND_ERROR_LOG_PATH", "./runtime_logs/backend-error.log")
+    settings = Settings()
+    assert settings.BACKEND_LOG_PATH == f"{BACKEND_DIR}/runtime_logs/backend.log"
+    assert settings.BACKEND_ERROR_LOG_PATH == f"{BACKEND_DIR}/runtime_logs/backend-error.log"

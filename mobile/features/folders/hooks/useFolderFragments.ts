@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 
 import { fetchFragments } from '@/features/fragments/api';
+import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
 import { useFragmentSelection } from '@/features/fragments/hooks';
 import type { Fragment } from '@/types/fragment';
 
@@ -105,6 +107,14 @@ export function useFolderFragments(folderId: string): UseFolderFragmentsReturn {
   useEffect(() => {
     void loadFragments();
   }, [loadFragments]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (consumeFragmentsStale()) {
+        void refreshFragments();
+      }
+    }, [refreshFragments])
+  );
 
   return {
     fragments,

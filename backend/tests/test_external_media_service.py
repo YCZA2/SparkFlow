@@ -106,3 +106,27 @@ def test_extract_from_url_reports_subprocess_failure() -> None:
             with pytest.raises(AppException) as ctx:
                 extractor.extract_from_url(media_url="https://example.com/video.mp4", output_stem="demo")
     assert ctx.value.code == "EXTERNAL_MEDIA_IMPORT_FAILED"
+
+
+def test_request_json_logs_empty_body_diagnostics(capsys) -> None:
+    """抖音详情接口返回空 body 时应输出更明确的诊断日志。"""
+    parser = DouyinVideoParser()
+    response = SimpleNamespace(
+        status_code=200,
+        content=b"",
+        text="",
+        headers={"content-type": "application/json"},
+        json=lambda: {},
+    )
+
+    with patch("services.external_media.douyin.parser.requests.get", return_value=response):
+        with patch("services.external_media.douyin.parser.XBogus", None):
+            result = parser._request_json(
+                "https://www.douyin.com/aweme/v1/web/aweme/detail/",
+                {"aweme_id": "123"},
+                {"Referer": "https://www.douyin.com/video/123"},
+            )
+
+    assert result is None
+    captured = capsys.readouterr()
+    assert "douyin_aweme_detail_empty_body" in captured.out

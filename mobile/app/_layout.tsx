@@ -8,6 +8,7 @@ import { PaperProvider } from 'react-native-paper';
 
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { useColorScheme } from '@/components/useColorScheme';
+import { ImportActionSheet } from '@/components/ImportActionSheet';
 import { BackButton } from '@/components/layout/BackButton';
 import { Drawer } from '@/components/Drawer/Drawer';
 import { DrawerBackdrop } from '@/components/Drawer/DrawerBackdrop';
@@ -16,6 +17,7 @@ import { AudioCaptureProvider } from '@/features/recording/AudioCaptureProvider'
 import { AppSessionProvider, useAppSession } from '@/providers/AppSessionProvider';
 import { DebugLogProvider } from '@/providers/DebugLogProvider';
 import { DrawerProvider, useDrawer } from '@/providers/DrawerProvider';
+import { ImportActionSheetProvider } from '@/providers/ImportActionSheetProvider';
 import { QuickActionBarProvider } from '@/providers/QuickActionBarProvider';
 import { QuickActionBar } from '@/components/QuickActionBar';
 
@@ -65,11 +67,13 @@ export default function RootLayout() {
     <DebugLogProvider>
       <AppSessionProvider>
         <DrawerProvider>
-          <QuickActionBarProvider>
-            <AudioCaptureProvider>
-              <RootLayoutNav />
-            </AudioCaptureProvider>
-          </QuickActionBarProvider>
+          <ImportActionSheetProvider>
+            <QuickActionBarProvider>
+              <AudioCaptureProvider>
+                <RootLayoutNav />
+              </AudioCaptureProvider>
+            </QuickActionBarProvider>
+          </ImportActionSheetProvider>
         </DrawerProvider>
       </AppSessionProvider>
     </DebugLogProvider>
@@ -135,6 +139,7 @@ function RootLayoutNav() {
             name="record-audio"
             options={{ title: '录音', headerShown: false, gestureEnabled: false }}
           />
+          <Stack.Screen name="import-link" options={{ title: '导入链接', headerShown: true }} />
           <Stack.Screen name="knowledge" options={{ title: '知识库', headerShown: true }} />
           <Stack.Screen
             name="debug-logs"
@@ -161,6 +166,7 @@ function RootLayoutNav() {
         </Stack>
         {/* 底部快捷操作栏 - 悬浮在页面之上 */}
         <QuickActionBar />
+        <ImportActionSheet />
         {/* 抽屉菜单 */}
         {isOpen && <DrawerBackdrop onPress={close} />}
         {isOpen && <Drawer />}

@@ -57,6 +57,9 @@ export const API_ENDPOINTS = {
     STEPS: (id: string) => `/api/pipelines/${id}/steps`,
     RETRY: (id: string) => `/api/pipelines/${id}/retry`,
   },
+  EXTERNAL_MEDIA: {
+    AUDIO_IMPORTS: '/api/external-media/audio-imports',
+  },
   KNOWLEDGE: '/api/knowledge',
   FOLDERS: {
     LIST: '/api/fragment-folders',

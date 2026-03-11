@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 
 import {
   deleteFragment,
@@ -6,6 +7,7 @@ import {
   fetchFragmentVisualization,
   fetchFragments,
 } from '@/features/fragments/api';
+import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
 import { useAsyncList } from '@/hooks/useAsyncList';
 import type { Fragment, FragmentVisualizationResponse } from '@/types/fragment';
 
@@ -16,6 +18,14 @@ export function useFragments() {
   }, []);
 
   const list = useAsyncList(loadFragments);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (consumeFragmentsStale()) {
+        void list.reload();
+      }
+    }, [list])
+  );
 
   return {
     fragments: list.items,

@@ -258,7 +258,7 @@ cd backend
 - `../docker-compose.postgres.yml`: 本地 PostgreSQL Docker 编排文件。
 - `uploads/`: `local` 文件存储 provider 的对象根目录，配置层会固定解析到 `backend/uploads/`，不依赖启动 cwd。
 - `chroma_data/`: 本地 ChromaDB 数据目录，相对路径同样固定解析到 `backend/chroma_data/`。
-- `runtime_logs/`: 运行时日志目录，当前包含移动端错误日志文件。
+- `runtime_logs/`: 运行时日志目录，当前包含后端全量日志、错误日志和移动端错误日志文件。
 
 ## Coding Conventions
 
@@ -338,7 +338,7 @@ bash scripts/postgres-local.sh stop
 任务态客户端约定：
 
 - `POST /api/transcriptions` 返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
-- `POST /api/external-media/audio-imports` 返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
+- `POST /api/external-media/audio-imports` 请求体支持 `share_url`、`platform` 和可选 `folder_id`，返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
 - `POST /api/scripts/generation` 返回 `pipeline_run_id`、`pipeline_type`、`status`
 - `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 返回 `pipeline_run_id`、`pipeline_type`、`status`
 - 文件类响应不再暴露 `audio_path` / `storage_path`，统一返回签名 `*_file_url` 与过期时间
@@ -348,7 +348,7 @@ bash scripts/postgres-local.sh stop
 - 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`
 - 如需排查 Dify 侧问题，优先查看 `GET /api/pipelines/{run_id}/steps` 中 `submit_workflow_run` / `poll_workflow_run` 的 `external_ref`，其中会暴露 `provider_run_id` / `provider_task_id`
 - 外链导入成功后的 `platform`、`share_url`、`media_id`、`title`、`author`、`cover_url`、`content_type`、`audio_file_url` 统一从 `GET /api/pipelines/{run_id}` 的 `output` 读取
-- 当前移动端已切脚本生成任务态；媒体上传和外链导入的客户端统一任务态展示仍作为后续阶段继续补齐
+- 当前移动端已切脚本生成任务态；外链导入也已接入底部 `+` 抽屉、导入页和任务态轮询
 
 当前仓库附带的 Dify DSL 目录：
 
@@ -358,10 +358,13 @@ bash scripts/postgres-local.sh stop
 
 ## Frontend Debug Logs
 
-移动端错误日志现在会同时：
+运行时日志现在会同时：
 
-- 保存在 App 内错误日志页中
-- 通过 `structlog` 专用文件 handler 写入后端本地文件 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
+- 后端结构化日志继续输出到控制台
+- 后端全量业务日志写入 [`backend/runtime_logs/backend.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend.log)
+- 后端 `ERROR` 及以上日志额外写入 [`backend/runtime_logs/backend-error.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend-error.log)
+- 移动端上报的调试日志保存在 App 内错误日志页中
+- 移动端调试日志通过专用 file handler 写入 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
 
 后端接收接口：
 
@@ -383,6 +386,8 @@ bash scripts/dev-mobile.sh
 3. 复现问题后，Codex 可以直接读取日志文件：
 
 ```bash
+tail -n 100 backend/runtime_logs/backend.log
+tail -n 100 backend/runtime_logs/backend-error.log
 tail -n 100 backend/runtime_logs/mobile-debug.log
 ```
 

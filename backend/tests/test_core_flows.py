@@ -265,6 +265,39 @@ async def test_import_external_audio_only_creates_pipeline_in_request_phase(asyn
 
 
 @pytest.mark.asyncio
+async def test_import_external_audio_assigns_fragment_to_requested_folder(
+    async_client,
+    auth_headers_factory,
+    app,
+    external_media_provider,
+    db_session_factory,
+) -> None:
+    """外链导入在请求阶段应把预创建 fragment 放入指定文件夹。"""
+    await app.state.container.pipeline_dispatcher.stop()
+    app.state.container.pipeline_runner.dispatcher.wake_up = lambda: None
+    folder_id = await _create_folder(async_client, auth_headers_factory, "抖音导入")
+
+    response = await async_client.post(
+        "/api/external-media/audio-imports",
+        json={
+            "share_url": "https://v.douyin.com/demo",
+            "platform": "auto",
+            "folder_id": folder_id,
+        },
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["fragment_id"]
+    assert external_media_provider.calls == []
+
+    with db_session_factory() as db:
+        fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
+        assert fragment is not None
+        assert fragment.folder_id == folder_id
+
+
+@pytest.mark.asyncio
 async def test_import_external_audio_runs_full_async_pipeline(async_client, auth_headers_factory, external_media_provider, db_session_factory, tmp_path) -> None:
     """外部媒体导入成功后应由后台流水线完成解析、下载和转写。"""
     temp_audio = tmp_path / "incoming.m4a"
