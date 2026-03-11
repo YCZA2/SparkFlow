@@ -71,6 +71,7 @@ export function FragmentRichEditor({
         <FragmentRichEditorDom
           ref={editorRef}
           document={document}
+          theme={theme}
           onReady={onEditorReady}
           onDocumentChange={onDocumentChange}
           onSelectionChange={(payload) => onSelectionChange(payload.range, payload.text)}

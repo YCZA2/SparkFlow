@@ -30,6 +30,7 @@ export function buildDocumentFromText(text: string, blockType: 'paragraph' | 'he
 
 function convertLegacyDocument(document: Record<string, unknown>): EditorDocument {
   /** 中文注释：把旧 blocks/children 文档转成 ProseMirror，兼容本地草稿或历史缓存。 */
+  console.warn('[Editor] Legacy document format detected, converting to ProseMirror JSON');
   const rawBlocks = Array.isArray(document.blocks) ? document.blocks : [];
   const content: EditorNode[] = rawBlocks.flatMap((rawBlock) => {
     if (!rawBlock || typeof rawBlock !== 'object') return [];
