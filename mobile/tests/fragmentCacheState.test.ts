@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   FRAGMENT_CACHE_TTL_MS,
   applyDraftToFragment,
+  mergeFragmentDetailForPrewarm,
   mergeFragmentIntoListItems,
   removeFragmentFromListItems,
   sanitizeFragmentCacheEntry,
@@ -62,6 +63,43 @@ test('mergeFragmentIntoListItems updates existing fragment preview in place', ()
   assert.equal(merged[0].id, 'fragment-001');
   assert.equal(merged[0].plain_text_snapshot, '新正文');
   assert.equal(merged[1].id, 'fragment-002');
+});
+
+test('mergeFragmentDetailForPrewarm keeps richer cached body when list snapshot is empty', () => {
+  const merged = mergeFragmentDetailForPrewarm(
+    buildFragment({
+      body_markdown: '详情正文',
+      plain_text_snapshot: '详情正文',
+      media_assets: [{ id: 'asset-1' }],
+    }) as any,
+    buildFragment({
+      body_markdown: '',
+      plain_text_snapshot: '',
+      media_assets: [],
+    }) as any
+  );
+
+  assert.equal(merged.body_markdown, '详情正文');
+  assert.equal(merged.plain_text_snapshot, '详情正文');
+  assert.deepEqual(merged.media_assets, [{ id: 'asset-1' }]);
+});
+
+test('mergeFragmentDetailForPrewarm accepts richer incoming snapshot when it has more body content', () => {
+  const merged = mergeFragmentDetailForPrewarm(
+    buildFragment({
+      body_markdown: '',
+      plain_text_snapshot: '',
+      media_assets: [],
+    }) as any,
+    buildFragment({
+      body_markdown: '列表新正文',
+      plain_text_snapshot: '列表新正文',
+      media_assets: [],
+    }) as any
+  );
+
+  assert.equal(merged.body_markdown, '列表新正文');
+  assert.equal(merged.plain_text_snapshot, '列表新正文');
 });
 
 test('removeFragmentFromListItems removes deleted fragment from cached list', () => {

@@ -63,6 +63,36 @@ export function mergeFragmentIntoListItems(items: Fragment[], fragment: Fragment
   return nextItems;
 }
 
+function resolveFragmentBodyLength(fragment: Fragment | null | undefined): number {
+  /** 中文注释：按正文纯文本长度比较详情快照完整度，避免空快照覆盖已有内容。 */
+  if (!fragment) return 0;
+  const bodyText = extractPlainTextFromMarkdown(fragment.body_markdown);
+  if (bodyText) return bodyText.length;
+  return String(fragment.plain_text_snapshot ?? '').trim().length;
+}
+
+export function mergeFragmentDetailForPrewarm(
+  existing: Fragment | null | undefined,
+  incoming: Fragment
+): Fragment {
+  /** 中文注释：列表预热详情缓存时优先保留更完整的正文和素材，避免旧列表降级详情。 */
+  if (!existing || existing.id !== incoming.id) return incoming;
+
+  const keepExistingBody = resolveFragmentBodyLength(existing) > resolveFragmentBodyLength(incoming);
+  const existingMediaAssets = existing.media_assets ?? [];
+  const incomingMediaAssets = incoming.media_assets ?? [];
+  const keepExistingMediaAssets = existingMediaAssets.length > incomingMediaAssets.length;
+
+  return {
+    ...incoming,
+    body_markdown: keepExistingBody ? existing.body_markdown : incoming.body_markdown,
+    plain_text_snapshot: keepExistingBody
+      ? existing.plain_text_snapshot ?? extractPlainTextFromMarkdown(existing.body_markdown)
+      : incoming.plain_text_snapshot,
+    media_assets: keepExistingMediaAssets ? existingMediaAssets : incomingMediaAssets,
+  };
+}
+
 export function removeFragmentFromListItems(items: Fragment[], fragmentId: string): Fragment[] {
   /** 中文注释：删除详情缓存时同步回收列表项，避免首页残留幽灵卡片。 */
   if (!Array.isArray(items)) return [];

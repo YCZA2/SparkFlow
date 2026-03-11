@@ -4,6 +4,7 @@ import type { Fragment } from '@/types/fragment';
 
 import {
   mergeFragmentIntoListItems,
+  mergeFragmentDetailForPrewarm,
   removeFragmentFromListItems,
   sanitizeFragmentCacheEntry,
   sanitizeFragmentListCacheEntry,
@@ -206,7 +207,12 @@ export async function writeFragmentListCache(items: Fragment[], folderId?: strin
 
 export async function prewarmFragmentDetailCache(fragment: Fragment): Promise<void> {
   /** 中文注释：从列表进入详情前先预热单条缓存，减少首次进入白屏。 */
-  await persistFragmentDetailEntry(fragment.id, createFragmentCacheEntry(fragment));
+  const existingDetailEntry = await readFragmentCache(fragment.id);
+  const mergedFragment = mergeFragmentDetailForPrewarm(
+    existingDetailEntry?.fragment ?? null,
+    fragment
+  );
+  await persistFragmentDetailEntry(fragment.id, createFragmentCacheEntry(mergedFragment));
   const cachedLists = Array.from(listMemoryCache.entries());
   await Promise.all(
     cachedLists.map(async ([scopeKey, entry]) => {

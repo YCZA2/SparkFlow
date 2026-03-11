@@ -19,6 +19,22 @@ interface ResolveHydratedBodySessionOptions {
   cachedBodyMarkdown: string | null;
 }
 
+interface ShouldRehydrateBodySessionOptions {
+  fragment: Fragment;
+  draftMarkdown: string | null;
+  currentSnapshot: FragmentEditorSnapshot;
+  remoteBaseline: string;
+  visibleMediaAssets: MediaAsset[];
+  hasConfirmedLocalEdit: boolean;
+}
+
+interface ShouldProtectSuspiciousEmptySnapshotOptions {
+  snapshot: FragmentEditorSnapshot;
+  remoteBaseline: string;
+  hasLocalDraft: boolean;
+  hasConfirmedLocalEdit: boolean;
+}
+
 function collectAssetIds(mediaAssets: MediaAsset[]): string[] {
   /** 中文注释：统一抽取素材 id，用于比较当前展示态是否已同步。 */
   return mediaAssets.map((asset) => asset.id);
@@ -37,6 +53,16 @@ export function buildFragmentEditorSnapshot(markdown: string): FragmentEditorSna
     plain_text: extractPlainTextFromMarkdown(normalized),
     asset_ids: extractAssetIdsFromMarkdown(normalized),
   };
+}
+
+function resolveMeaningfulTextLength(markdown: string | null | undefined): number {
+  /** 中文注释：统一按纯文本长度评估正文完整度，避免 Markdown 语法干扰比较。 */
+  return extractPlainTextFromMarkdown(markdown).length;
+}
+
+function hasMeaningfulBody(markdown: string | null | undefined): boolean {
+  /** 中文注释：只把真正有正文文本的内容视为可用正文，空白和纯格式不算。 */
+  return resolveMeaningfulTextLength(markdown) > 0;
 }
 
 export function resolveHydratedBodySession({
@@ -59,6 +85,33 @@ export function resolveHydratedBodySession({
     remoteBaseline,
     syncStatus: snapshot.body_markdown === remoteBaseline ? 'synced' : 'idle',
   };
+}
+
+export function shouldRehydrateBodySession({
+  fragment,
+  draftMarkdown,
+  currentSnapshot,
+  remoteBaseline,
+  visibleMediaAssets,
+  hasConfirmedLocalEdit,
+}: ShouldRehydrateBodySessionOptions): boolean {
+  /** 中文注释：仅在没有本地编辑负担时，才允许远端详情重建当前编辑会话。 */
+  if (draftMarkdown !== null) return false;
+  if (hasConfirmedLocalEdit) return false;
+  if (normalizeBodyMarkdown(currentSnapshot.body_markdown) !== normalizeBodyMarkdown(remoteBaseline)) {
+    return false;
+  }
+
+  const incomingSnapshot = buildFragmentEditorSnapshot(fragment.body_markdown);
+  const incomingAssetIds = collectAssetIds(fragment.media_assets ?? []);
+  const currentAssetIds = collectAssetIds(visibleMediaAssets);
+  const bodyChanged = incomingSnapshot.body_markdown !== currentSnapshot.body_markdown;
+  const mediaChanged = !areAssetIdsEqual(incomingAssetIds, currentAssetIds);
+
+  if (!bodyChanged && !mediaChanged) return false;
+  if (incomingSnapshot.plain_text.length > currentSnapshot.plain_text.length) return true;
+  if (mediaChanged && incomingAssetIds.length > currentAssetIds.length) return true;
+  return bodyChanged;
 }
 
 export function mergeVisibleMediaAssets(
@@ -100,6 +153,18 @@ export function shouldCommitOptimisticFragment(
     currentMarkdown !== snapshot.body_markdown ||
     !areAssetIdsEqual(currentAssetIds, nextAssetIds)
   );
+}
+
+export function shouldProtectSuspiciousEmptySnapshot({
+  snapshot,
+  remoteBaseline,
+  hasLocalDraft,
+  hasConfirmedLocalEdit,
+}: ShouldProtectSuspiciousEmptySnapshotOptions): boolean {
+  /** 中文注释：若空正文仅像初始化异常而非用户操作，则阻止其污染本地和远端状态。 */
+  if (hasLocalDraft) return false;
+  if (hasConfirmedLocalEdit) return false;
+  return !hasMeaningfulBody(snapshot.body_markdown) && hasMeaningfulBody(remoteBaseline);
 }
 
 export function appendRuntimeMediaAsset(

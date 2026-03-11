@@ -6,6 +6,8 @@ import {
   applyAiPatchFallbackToSnapshot,
   buildFragmentEditorSnapshot,
   resolveHydratedBodySession,
+  shouldProtectSuspiciousEmptySnapshot,
+  shouldRehydrateBodySession,
 } from '../features/fragments/detail/bodySessionState';
 import type { Fragment, MediaAsset } from '../types/fragment';
 
@@ -46,6 +48,62 @@ test('resolveHydratedBodySession marks synced when no draft overrides remote bod
   assert.equal(result.snapshot.body_markdown, '服务端正文');
   assert.equal(result.remoteBaseline, '服务端正文');
   assert.equal(result.syncStatus, 'synced');
+});
+
+test('shouldRehydrateBodySession allows remote detail to replace stale empty snapshot', () => {
+  const shouldRehydrate = shouldRehydrateBodySession({
+    fragment: buildFragment({
+      body_markdown: '远端正文',
+      plain_text_snapshot: '远端正文',
+      media_assets: [],
+    }),
+    draftMarkdown: null,
+    currentSnapshot: buildFragmentEditorSnapshot(''),
+    remoteBaseline: '',
+    visibleMediaAssets: [],
+    hasConfirmedLocalEdit: false,
+  });
+
+  assert.equal(shouldRehydrate, true);
+});
+
+test('shouldRehydrateBodySession blocks remote reset when local draft exists', () => {
+  const shouldRehydrate = shouldRehydrateBodySession({
+    fragment: buildFragment({
+      body_markdown: '远端正文',
+      plain_text_snapshot: '远端正文',
+      media_assets: [],
+    }),
+    draftMarkdown: '本地草稿',
+    currentSnapshot: buildFragmentEditorSnapshot('本地草稿'),
+    remoteBaseline: '服务端正文',
+    visibleMediaAssets: [],
+    hasConfirmedLocalEdit: true,
+  });
+
+  assert.equal(shouldRehydrate, false);
+});
+
+test('shouldProtectSuspiciousEmptySnapshot blocks accidental empty commit without local edits', () => {
+  const shouldProtect = shouldProtectSuspiciousEmptySnapshot({
+    snapshot: buildFragmentEditorSnapshot(''),
+    remoteBaseline: '可信远端正文',
+    hasLocalDraft: false,
+    hasConfirmedLocalEdit: false,
+  });
+
+  assert.equal(shouldProtect, true);
+});
+
+test('shouldProtectSuspiciousEmptySnapshot allows intentional empty commit after local edits', () => {
+  const shouldProtect = shouldProtectSuspiciousEmptySnapshot({
+    snapshot: buildFragmentEditorSnapshot(''),
+    remoteBaseline: '可信远端正文',
+    hasLocalDraft: false,
+    hasConfirmedLocalEdit: true,
+  });
+
+  assert.equal(shouldProtect, false);
 });
 
 test('applyAiPatchFallbackToSnapshot keeps markdown-derived snapshot fields aligned', () => {

@@ -26,6 +26,8 @@ import {
   mergeVisibleMediaAssets,
   resolveHydratedBodySession,
   shouldCommitOptimisticFragment,
+  shouldProtectSuspiciousEmptySnapshot,
+  shouldRehydrateBodySession,
 } from './bodySessionState';
 import { createLatestOnlySaveController } from './fragmentSaveController';
 
@@ -67,6 +69,12 @@ export function useFragmentEditorPersistence({
   const hydratedRef = useRef(false);
   const hydratedFragmentIdRef = useRef<string | null>(null);
   const lastSyncedMarkdownRef = useRef('');
+  const localDraftMarkdownRef = useRef<string | null>(null);
+  const hydratedSnapshotMarkdownRef = useRef('');
+  const awaitingInitialSnapshotRef = useRef(false);
+  const hasConfirmedLocalEditRef = useRef(false);
+  const hydrationRevisionRef = useRef('');
+  const retriedHydrationRevisionRef = useRef<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<FragmentRichEditorHandle | null>(null);
   const fragmentRef = useRef<Fragment | null>(fragment);
@@ -79,6 +87,17 @@ export function useFragmentEditorPersistence({
     [fragment?.media_assets, runtimeMediaAssets]
   );
 
+  const resolveHydrationRevision = useCallback((targetFragment: Fragment): string => {
+    /** 中文注释：用正文、素材和草稿组合出当前会话版本号，避免同一异常快照反复重建。 */
+    const mediaAssetIds = (targetFragment.media_assets ?? []).map((asset) => asset.id).join(',');
+    return [
+      targetFragment.id,
+      normalizeBodyMarkdown(targetFragment.body_markdown),
+      mediaAssetIds,
+      normalizeBodyMarkdown(localDraftMarkdownRef.current),
+    ].join('::');
+  }, []);
+
   const saveControllerRef = useRef(
     createLatestOnlySaveController<FragmentEditorSnapshot>({
       shouldProcess: (nextSnapshot) =>
@@ -88,6 +107,14 @@ export function useFragmentEditorPersistence({
         /** 中文注释：把正文保存请求串行化，并在成功后刷新可见 fragment。 */
         const currentFragmentId = resolvedFragmentIdRef.current;
         if (!currentFragmentId || !fragmentRef.current) return;
+        if (shouldProtectSuspiciousEmptySnapshot({
+          snapshot: nextSnapshot,
+          remoteBaseline: lastSyncedMarkdownRef.current,
+          hasLocalDraft: localDraftMarkdownRef.current !== null,
+          hasConfirmedLocalEdit: hasConfirmedLocalEditRef.current,
+        })) {
+          return;
+        }
         const normalizedMarkdown = normalizeBodyMarkdown(nextSnapshot.body_markdown);
         setSyncStatus('syncing');
         try {
@@ -103,7 +130,12 @@ export function useFragmentEditorPersistence({
           lastSyncedMarkdownRef.current = outcome.lastSyncedMarkdown;
           if (outcome.shouldClearDraft) {
             await clearFragmentBodyDraft(currentFragmentId);
+            localDraftMarkdownRef.current = null;
+          } else {
+            localDraftMarkdownRef.current = normalizedMarkdown;
           }
+          hydratedSnapshotMarkdownRef.current = outcome.lastSyncedMarkdown;
+          hasConfirmedLocalEditRef.current = false;
           await commitRemoteFragmentRef.current(updated);
           setRuntimeMediaAssets(updated.media_assets ?? []);
           setSyncStatus(outcome.syncStatus);
@@ -113,6 +145,7 @@ export function useFragmentEditorPersistence({
             savedMarkdown: lastSyncedMarkdownRef.current,
             attemptedMarkdown: normalizedMarkdown,
           });
+          localDraftMarkdownRef.current = normalizedMarkdown;
           setSyncStatus(outcome.syncStatus);
           throw error;
         }
@@ -126,6 +159,11 @@ export function useFragmentEditorPersistence({
     resolvedFragmentIdRef.current = resolvedFragmentId;
     commitRemoteFragmentRef.current = commitRemoteFragment;
   }, [commitRemoteFragment, fragment, resolvedFragmentId]);
+
+  useEffect(() => {
+    /** 中文注释：用 ref 维护当前草稿真值，供保存保护和二段 hydrate 读取最新状态。 */
+    localDraftMarkdownRef.current = draftState.loaded ? draftState.markdown : null;
+  }, [draftState.loaded, draftState.markdown]);
 
   useEffect(() => {
     /** 中文注释：服务端刷新后用最新签名素材覆盖运行态副本。 */
@@ -169,6 +207,12 @@ export function useFragmentEditorPersistence({
       hydratedRef.current = false;
       hydratedFragmentIdRef.current = null;
       lastSyncedMarkdownRef.current = '';
+      localDraftMarkdownRef.current = null;
+      hydratedSnapshotMarkdownRef.current = '';
+      awaitingInitialSnapshotRef.current = false;
+      hasConfirmedLocalEditRef.current = false;
+      hydrationRevisionRef.current = '';
+      retriedHydrationRevisionRef.current = null;
       setSnapshot(buildFragmentEditorSnapshot(''));
       setSyncStatus('idle');
       setIsEditorReady(false);
@@ -179,7 +223,22 @@ export function useFragmentEditorPersistence({
     }
     if (!fragment || fragment.id !== resolvedFragmentId) return;
     if (!draftState.loaded || draftState.fragmentId !== resolvedFragmentId) return;
-    if (hydratedFragmentIdRef.current === resolvedFragmentId) return;
+    const nextHydrationRevision = resolveHydrationRevision(fragment);
+    const shouldInitialize = hydratedFragmentIdRef.current !== resolvedFragmentId;
+    const shouldRefresh = !shouldInitialize && shouldRehydrateBodySession({
+      fragment,
+      draftMarkdown: localDraftMarkdownRef.current,
+      currentSnapshot: snapshot,
+      remoteBaseline: lastSyncedMarkdownRef.current,
+      visibleMediaAssets,
+      hasConfirmedLocalEdit: hasConfirmedLocalEditRef.current,
+    });
+    const alreadyRetriedCurrentRevision =
+      retriedHydrationRevisionRef.current === nextHydrationRevision;
+    if (shouldRefresh && hydrationRevisionRef.current === nextHydrationRevision && alreadyRetriedCurrentRevision) {
+      return;
+    }
+    if (!shouldInitialize && !shouldRefresh) return;
 
     hydratedFragmentIdRef.current = resolvedFragmentId;
     setIsEditorReady(false);
@@ -192,20 +251,47 @@ export function useFragmentEditorPersistence({
         peekFragmentCache(resolvedFragmentId)?.fragment.body_markdown ?? null,
     });
     hydratedRef.current = true;
+    if (hydrationRevisionRef.current !== nextHydrationRevision) {
+      retriedHydrationRevisionRef.current = null;
+    } else if (shouldRefresh) {
+      retriedHydrationRevisionRef.current = nextHydrationRevision;
+    }
+    hydrationRevisionRef.current = nextHydrationRevision;
     lastSyncedMarkdownRef.current = hydrated.remoteBaseline;
+    hydratedSnapshotMarkdownRef.current = hydrated.snapshot.body_markdown;
+    awaitingInitialSnapshotRef.current = true;
+    hasConfirmedLocalEditRef.current = localDraftMarkdownRef.current !== null;
     setSnapshot(hydrated.snapshot);
     setSyncStatus(hydrated.syncStatus);
     setIsDraftHydrated(true);
     setEditorKey(`${resolvedFragmentId}:${Date.now()}`);
-  }, [draftState.fragmentId, draftState.loaded, draftState.markdown, fragment, resolvedFragmentId]);
+  }, [
+    draftState.fragmentId,
+    draftState.loaded,
+    draftState.markdown,
+    fragment,
+    resolvedFragmentId,
+    resolveHydrationRevision,
+    snapshot,
+    visibleMediaAssets,
+  ]);
 
   useEffect(() => {
     /** 中文注释：正文变更时先固化本地草稿，再同步详情展示态。 */
     if (!resolvedFragmentId || !hydratedRef.current || !fragment) return;
     if (snapshot.body_markdown === lastSyncedMarkdownRef.current) return;
+    if (shouldProtectSuspiciousEmptySnapshot({
+      snapshot,
+      remoteBaseline: lastSyncedMarkdownRef.current,
+      hasLocalDraft: localDraftMarkdownRef.current !== null,
+      hasConfirmedLocalEdit: hasConfirmedLocalEditRef.current,
+    })) {
+      return;
+    }
     if (!shouldCommitOptimisticFragment(fragment, snapshot, visibleMediaAssets)) {
       return;
     }
+    localDraftMarkdownRef.current = snapshot.body_markdown;
     void Promise.all([
       saveFragmentBodyDraft(resolvedFragmentId, snapshot.body_markdown),
       commitOptimisticFragment(
@@ -224,6 +310,14 @@ export function useFragmentEditorPersistence({
     /** 中文注释：输入停顿后提交最后一次快照，避免编辑时反复打满请求。 */
     if (!resolvedFragmentId || !fragment || !hydratedRef.current) return;
     if (snapshot.body_markdown === lastSyncedMarkdownRef.current) return;
+    if (shouldProtectSuspiciousEmptySnapshot({
+      snapshot,
+      remoteBaseline: lastSyncedMarkdownRef.current,
+      hasLocalDraft: localDraftMarkdownRef.current !== null,
+      hasConfirmedLocalEdit: hasConfirmedLocalEditRef.current,
+    })) {
+      return;
+    }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       const getSnapshot = editorRef.current?.getSnapshot;
@@ -238,7 +332,13 @@ export function useFragmentEditorPersistence({
 
   const onSnapshotChange = useCallback((nextSnapshot: FragmentEditorSnapshot) => {
     /** 中文注释：DOM 编辑器只把节流后的快照回传给持久化层。 */
-    setSnapshot(buildFragmentEditorSnapshot(nextSnapshot.body_markdown));
+    const builtSnapshot = buildFragmentEditorSnapshot(nextSnapshot.body_markdown);
+    if (awaitingInitialSnapshotRef.current) {
+      awaitingInitialSnapshotRef.current = false;
+    } else if (builtSnapshot.body_markdown !== hydratedSnapshotMarkdownRef.current) {
+      hasConfirmedLocalEditRef.current = true;
+    }
+    setSnapshot(builtSnapshot);
     setSyncStatus((current) => (current === 'synced' ? 'idle' : current));
   }, []);
 
@@ -265,6 +365,14 @@ export function useFragmentEditorPersistence({
     const latestSnapshot =
       typeof getSnapshot === 'function' ? getSnapshot() ?? snapshot : snapshot;
     try {
+      if (shouldProtectSuspiciousEmptySnapshot({
+        snapshot: latestSnapshot,
+        remoteBaseline: lastSyncedMarkdownRef.current,
+        hasLocalDraft: localDraftMarkdownRef.current !== null,
+        hasConfirmedLocalEdit: hasConfirmedLocalEditRef.current,
+      })) {
+        return;
+      }
       await saveControllerRef.current.submitLatest(latestSnapshot);
       const doneAction = resolveDoneAction(null);
       if (!doneAction.ok) {
