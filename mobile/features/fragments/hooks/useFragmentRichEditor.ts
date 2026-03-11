@@ -39,6 +39,11 @@ function resolveInitialDocument(fragment: Fragment | null): EditorDocument {
   return normalizeEditorDocument(fragment.editor_document);
 }
 
+function serializeDocument(document: EditorDocument): string {
+  /** 中文注释：统一文档序列化口径，避免保存态与草稿态比较不一致。 */
+  return JSON.stringify(normalizeEditorDocument(document));
+}
+
 export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmentRichEditorOptions) {
   /** 中文注释：管理 ProseMirror 正文、本地草稿、自动保存、图片插入和 AI patch。 */
   const [document, setDocument] = useState<EditorDocument>(emptyEditorDocument());
@@ -55,14 +60,15 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
   const queuedDocumentRef = useRef<EditorDocument | null>(null);
   const lastSyncedDocumentRef = useRef<string>('');
   const editorRef = useRef<FragmentRichEditorHandle | null>(null);
+  const hydratedFragmentIdRef = useRef<string | null>(null);
 
   const fragmentId = fragment?.id ?? null;
-  const initialDocument = useMemo(() => resolveInitialDocument(fragment), [fragment]);
+  const initialDocument = resolveInitialDocument(fragment);
   const visibleDocument = isDraftHydrated ? document : initialDocument;
   const attachedMediaAssetIds = useMemo(() => collectDocumentAssetIds(visibleDocument), [visibleDocument]);
 
   useEffect(() => {
-    /** 中文注释：切换 fragment 时优先恢复本地草稿文档。 */
+    /** 中文注释：仅在切换到新的 fragment 时恢复草稿，避免保存回写触发重复初始化。 */
     if (!fragmentId) {
       hydratedRef.current = false;
       setDocument(emptyEditorDocument());
@@ -72,9 +78,13 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
       setIsEditorReady(false);
       setIsDraftHydrated(false);
       lastSyncedDocumentRef.current = '';
+      hydratedFragmentIdRef.current = null;
       return;
     }
-    setDocument(initialDocument);
+    if (hydratedFragmentIdRef.current === fragmentId) return;
+    hydratedFragmentIdRef.current = fragmentId;
+    const nextInitialDocument = resolveInitialDocument(fragment);
+    setDocument(nextInitialDocument);
     setSelectionRange(null);
     setSelectionText('');
     setIsDraftHydrated(false);
@@ -82,24 +92,24 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
     void (async () => {
       const draft = await loadFragmentBodyDraft(fragmentId);
       if (cancelled) return;
-      const nextDocument = normalizeEditorDocument((draft as EditorDocument | null) ?? initialDocument);
+      const nextDocument = normalizeEditorDocument((draft as EditorDocument | null) ?? nextInitialDocument);
       hydratedRef.current = true;
-      lastSyncedDocumentRef.current = JSON.stringify(initialDocument);
+      lastSyncedDocumentRef.current = serializeDocument(nextInitialDocument);
       setDocument(nextDocument);
       setSelectionRange(null);
       setSelectionText('');
       setIsDraftHydrated(true);
-      setSyncStatus(JSON.stringify(nextDocument) === JSON.stringify(initialDocument) ? 'synced' : 'idle');
+      setSyncStatus(serializeDocument(nextDocument) === serializeDocument(nextInitialDocument) ? 'synced' : 'idle');
     })();
     return () => {
       cancelled = true;
     };
-  }, [fragmentId, initialDocument]);
+  }, [fragmentId]);
 
   useEffect(() => {
     /** 中文注释：正文变更后先写本地文档草稿，保证失败或离页可恢复。 */
     if (!fragmentId || !hydratedRef.current) return;
-    const serialized = JSON.stringify(document);
+    const serialized = serializeDocument(document);
     if (serialized === lastSyncedDocumentRef.current) return;
     void saveFragmentBodyDraft(fragmentId, document).catch(() => undefined);
   }, [document, fragmentId]);
@@ -107,7 +117,7 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
   useEffect(() => {
     /** 中文注释：输入停顿后自动向服务端提交最新正文文档。 */
     if (!fragmentId || !fragment || !hydratedRef.current) return;
-    const serialized = JSON.stringify(document);
+    const serialized = serializeDocument(document);
     if (serialized === lastSyncedDocumentRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
@@ -121,7 +131,7 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
   async function submitLatestDocument(nextDocument: EditorDocument): Promise<void> {
     /** 中文注释：串行化正文保存请求，只保留最后一次文档状态。 */
     if (!fragmentId) return;
-    const serialized = JSON.stringify(nextDocument);
+    const serialized = serializeDocument(nextDocument);
     if (serialized === lastSyncedDocumentRef.current) return;
     if (inFlightRef.current) {
       queuedDocumentRef.current = nextDocument;
@@ -135,7 +145,7 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
         media_asset_ids: collectDocumentAssetIds(nextDocument),
       });
       onFragmentChange(updated);
-      lastSyncedDocumentRef.current = JSON.stringify(normalizeEditorDocument(updated.editor_document));
+      lastSyncedDocumentRef.current = serializeDocument(updated.editor_document);
       await clearFragmentBodyDraft(fragmentId);
       setSyncStatus('synced');
     } catch {
@@ -144,7 +154,7 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
       inFlightRef.current = false;
       const queuedDocument = queuedDocumentRef.current;
       queuedDocumentRef.current = null;
-      if (queuedDocument && JSON.stringify(queuedDocument) !== lastSyncedDocumentRef.current) {
+      if (queuedDocument && serializeDocument(queuedDocument) !== lastSyncedDocumentRef.current) {
         void submitLatestDocument(queuedDocument);
       }
     }

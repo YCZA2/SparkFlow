@@ -21,7 +21,7 @@ export interface EditorTheme {
  */
 export function createEditorTheme(theme: AppTheme): EditorTheme {
   return {
-    background: theme.colors.surfaceMuted,
+    background: theme.colors.surface,
     surface: theme.colors.surface,
     text: theme.colors.text,
     textMuted: theme.colors.textSubtle,

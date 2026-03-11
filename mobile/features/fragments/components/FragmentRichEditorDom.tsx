@@ -81,14 +81,14 @@ export default function FragmentRichEditorDom({
       },
     },
     onCreate: ({ editor }) => {
-      lastSerializedDocumentRef.current = JSON.stringify(editor.getJSON());
+      lastSerializedDocumentRef.current = serializeDocumentSnapshot(editor.getJSON());
       onReady?.();
       emitSelection(editor);
     },
     onUpdate: ({ editor }) => {
       const nextDocument = editor.getJSON();
       if (isEditorDocument(nextDocument)) {
-        const serialized = JSON.stringify(nextDocument);
+        const serialized = serializeDocumentSnapshot(nextDocument);
         if (serialized === lastSerializedDocumentRef.current) return;
         lastSerializedDocumentRef.current = serialized;
         onDocumentChange?.(nextDocument);
@@ -115,9 +115,9 @@ export default function FragmentRichEditorDom({
   useEffect(() => {
     /** 中文注释：当原生层文档变化时回灌到 Tiptap，避免本地草稿或远端更新失真。 */
     if (!editor) return;
-    const nextDocument = toTiptapDocument(normalizeDocument(document));
-    const serialized = JSON.stringify(nextDocument);
+    const serialized = serializeDocumentSnapshot(document);
     if (serialized === lastSerializedDocumentRef.current) return;
+    const nextDocument = toTiptapDocument(normalizeDocument(document));
     lastSerializedDocumentRef.current = serialized;
     editor.commands.setContent(nextDocument, { emitUpdate: false });
     emitSelection(editor);
@@ -127,7 +127,7 @@ export default function FragmentRichEditorDom({
     setDocument(nextDocument: EditorDocument) {
       if (!editor) return;
       const normalized = toTiptapDocument(normalizeDocument(nextDocument));
-      lastSerializedDocumentRef.current = JSON.stringify(normalized);
+      lastSerializedDocumentRef.current = serializeDocumentSnapshot(nextDocument);
       editor.commands.setContent(normalized, { emitUpdate: false });
       emitSelection(editor);
     },
@@ -192,6 +192,11 @@ export default function FragmentRichEditorDom({
       </div>
     </>
   );
+}
+
+function serializeDocumentSnapshot(document: EditorDocument | Record<string, unknown>): string {
+  /** 中文注释：统一规整文档快照，避免 props 与 editor JSON 格式差异导致误判回灌。 */
+  return JSON.stringify(normalizeDocument(document as EditorDocument));
 }
 
 function ToolbarButton({

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 
+from core.logging_config import get_logger
 from domains.fragment_tags import repository as fragment_tag_repository
 from modules.shared.enrichment import build_fallback_summary_and_tags, generate_summary_and_tags
 from utils.serialization import parse_json_list
 
 SUMMARY_REFRESH_MIN_ABS_DELTA = 50
 SUMMARY_REFRESH_MIN_RATIO = 0.2
+
+logger = get_logger(__name__)
 
 
 class FragmentDerivativeService:
@@ -29,17 +32,21 @@ class FragmentDerivativeService:
     ) -> None:
         """在正文更新后同步刷新摘要标签与向量。"""
         if not current_effective_text:
-            await self.vector_store.delete_fragment(user_id=user_id, fragment_id=fragment.id)
+            await self._sync_fragment_vector(
+                action="delete",
+                user_id=user_id,
+                fragment=fragment,
+            )
         if not self.should_refresh_enrichment(
             previous_effective_text=previous_effective_text,
             current_effective_text=current_effective_text,
         ):
             if current_effective_text:
-                await self.vector_store.upsert_fragment(
+                await self._sync_fragment_vector(
+                    action="upsert",
                     user_id=user_id,
-                    fragment_id=fragment.id,
+                    fragment=fragment,
                     text=current_effective_text,
-                    source=fragment.source,
                     summary=fragment.summary,
                     tags=parse_json_list(fragment.tags, allow_csv_fallback=True),
                 )
@@ -55,13 +62,46 @@ class FragmentDerivativeService:
         )
         db.commit()
         if current_effective_text:
+            await self._sync_fragment_vector(
+                action="upsert",
+                user_id=user_id,
+                fragment=fragment,
+                text=current_effective_text,
+                summary=summary,
+                tags=tags,
+            )
+
+    async def _sync_fragment_vector(
+        self,
+        *,
+        action: str,
+        user_id: str,
+        fragment,
+        text: str | None = None,
+        summary: str | None = None,
+        tags: list[str] | None = None,
+    ) -> None:
+        """执行向量同步，并在外部 embedding/向量库故障时降级为仅记录日志。"""
+        try:
+            if action == "delete":
+                await self.vector_store.delete_fragment(user_id=user_id, fragment_id=fragment.id)
+                return
             await self.vector_store.upsert_fragment(
                 user_id=user_id,
                 fragment_id=fragment.id,
-                text=current_effective_text,
+                text=text or "",
                 source=fragment.source,
                 summary=summary,
                 tags=tags,
+            )
+        except Exception as exc:
+            logger.warning(
+                "fragment_vector_sync_failed",
+                fragment_id=fragment.id,
+                user_id=user_id,
+                action=action,
+                error_type=type(exc).__name__,
+                error=str(exc),
             )
 
     @staticmethod

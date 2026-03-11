@@ -23,6 +23,16 @@ class StubDbSession:
         self.commit_calls += 1
 
 
+class ExplodingVectorStore:
+    """在向量同步时抛错，验证正文保存链路的降级行为。"""
+
+    async def upsert_fragment(self, **kwargs) -> bool:
+        raise RuntimeError("vector unavailable")
+
+    async def delete_fragment(self, **kwargs) -> bool:
+        raise RuntimeError("vector unavailable")
+
+
 @pytest.mark.asyncio
 async def test_derivative_service_skips_enrichment_for_small_edits() -> None:
     """小改动时应复用已有摘要标签，只同步向量。"""
@@ -77,6 +87,36 @@ async def test_derivative_service_refreshes_summary_and_tags_for_large_edits(mon
     assert replaced_tags == ["产品", "增长"]
     assert json.loads(fragment.tags) == ["产品", "增长"]
     assert vector_store.fragment_docs[fragment.id]["text"].startswith("这是一次足够长的内容重写")
+
+
+@pytest.mark.asyncio
+async def test_derivative_service_degrades_when_vector_sync_fails(monkeypatch) -> None:
+    """向量同步失败时不应阻断正文衍生字段刷新。"""
+    replaced_tags: list[str] = []
+
+    def _fake_replace_for_fragment(*, db, user_id: str, fragment_id: str, tags: list[str]) -> None:
+        """记录标签回写结果，避免依赖真实仓储。"""
+        replaced_tags[:] = tags
+
+    monkeypatch.setattr("modules.fragments.derivative_service.fragment_tag_repository.replace_for_fragment", _fake_replace_for_fragment)
+
+    db = StubDbSession()
+    fragment = SimpleNamespace(id="frag-3", source="manual", summary=None, tags=None)
+    llm_provider = FakeLLMProvider()
+    llm_provider.queue_text('["编辑", "整理"]')
+    service = FragmentDerivativeService(vector_store=ExplodingVectorStore(), llm_provider=llm_provider)
+
+    await service.refresh_fragment_derivatives(
+        db=db,
+        user_id="test-user-001",
+        fragment=fragment,
+        previous_effective_text="旧内容",
+        current_effective_text="这是一段足够长的重写正文，用来验证向量同步失败时，正文保存和摘要标签刷新仍然可以成功结束。",
+    )
+
+    assert db.commit_calls == 1
+    assert replaced_tags == ["编辑", "整理"]
+    assert json.loads(fragment.tags) == ["编辑", "整理"]
 
 
 def test_asset_binding_service_replace_media_assets_is_idempotent(monkeypatch) -> None:

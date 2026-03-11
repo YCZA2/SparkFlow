@@ -61,6 +61,11 @@ export interface MediaAsset {
   expires_at?: string | null;
 }
 
+export interface FragmentFolder {
+  id: string;
+  name: string;
+}
+
 /**
  * 碎片笔记数据模型
  */
@@ -75,6 +80,8 @@ export interface Fragment {
   source: FragmentSource;
   audio_source?: FragmentAudioSource | null;
   created_at: string;
+  folder_id?: string | null;
+  folder?: FragmentFolder | null;
   editor_document: EditorDocument;
   plain_text_snapshot?: string | null;
   content_state?: 'empty' | 'transcript_only' | 'body_present';
