@@ -4,45 +4,12 @@
 
 export type FragmentSource = 'voice' | 'manual' | 'video_parse';
 export type FragmentAudioSource = 'upload' | 'external_link';
-export type EditorMarkType = 'bold' | 'italic';
-export type EditorNodeType =
-  | 'doc'
-  | 'paragraph'
-  | 'heading'
-  | 'blockquote'
-  | 'bulletList'
-  | 'orderedList'
-  | 'listItem'
-  | 'text'
-  | 'image';
 
 export interface SpeakerSegment {
   speaker_id: string;
   start_ms: number;
   end_ms: number;
   text: string;
-}
-
-export interface EditorMark {
-  type: EditorMarkType;
-}
-
-export interface EditorNode {
-  type: EditorNodeType;
-  attrs?: Record<string, unknown> | null;
-  content?: EditorNode[];
-  text?: string;
-  marks?: EditorMark[];
-}
-
-export interface EditorDocument {
-  type: 'doc';
-  content: EditorNode[];
-}
-
-export interface EditorSelectionRange {
-  from?: number | null;
-  to?: number | null;
 }
 
 export interface MediaAsset {
@@ -82,7 +49,7 @@ export interface Fragment {
   created_at: string;
   folder_id?: string | null;
   folder?: FragmentFolder | null;
-  editor_document: EditorDocument;
+  body_markdown: string;
   plain_text_snapshot?: string | null;
   content_state?: 'empty' | 'transcript_only' | 'body_present';
   media_assets?: MediaAsset[];
@@ -97,7 +64,7 @@ export interface FragmentListResponse {
 
 export interface CreateFragmentRequest {
   transcript?: string;
-  editor_document?: EditorDocument;
+  body_markdown?: string;
   summary?: string;
   tags?: string[];
   source?: FragmentSource;
@@ -153,9 +120,12 @@ export interface FragmentVisualizationResponse {
 }
 
 export interface FragmentAiPatch {
-  op: 'replace_range' | 'insert_block_after_range' | 'prepend_heading';
-  range?: EditorSelectionRange | null;
-  text?: string | null;
-  block?: EditorNode | null;
-  blocks?: EditorNode[];
+  op: 'replace_selection' | 'insert_after_selection' | 'prepend_document';
+  markdown_snippet: string;
+}
+
+export interface FragmentEditorSnapshot {
+  body_markdown: string;
+  plain_text: string;
+  asset_ids: string[];
 }

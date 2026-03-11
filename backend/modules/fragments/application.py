@@ -11,7 +11,10 @@ from domains.fragment_folders import repository as fragment_folder_repository
 from domains.fragment_tags import repository as fragment_tag_repository
 from domains.fragments import repository as fragment_repository
 from domains.media_assets import repository as media_asset_repository
-from modules.shared.editor_document import extract_plain_text_from_document, normalize_editor_document
+from modules.shared.fragment_body_markdown import (
+    extract_plain_text_from_body_markdown,
+    normalize_fragment_body_markdown,
+)
 from modules.shared.ports import FileStorage, StoredFile, TextGenerationProvider, VectorStore
 
 from .asset_binding_service import FragmentAssetBindingService
@@ -50,14 +53,14 @@ class FragmentCommandService:
         db: Session,
         user_id: str,
         transcript: Optional[str],
-        editor_document: dict | None,
+        body_markdown: str | None,
         source: str,
         audio_source: Optional[str],
         audio_file: StoredFile | None,
         folder_id: Optional[str] = None,
         media_asset_ids: list[str] | None = None,
     ) -> Fragment:
-        """创建碎片，并按需初始化富文本正文和素材关联。"""
+        """创建碎片，并按需初始化 Markdown 正文和素材关联。"""
         if source not in VALID_FRAGMENT_SOURCES:
             raise ValidationError(
                 message="无效的 source 值",
@@ -69,13 +72,13 @@ class FragmentCommandService:
                 field_errors={"audio_source": f"必须是以下之一: {', '.join(sorted(VALID_AUDIO_SOURCES))}"},
             )
         self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
-        normalized_document = normalize_editor_document(editor_document)
-        plain_text_snapshot = extract_plain_text_from_document(normalized_document)
+        normalized_body_markdown = normalize_fragment_body_markdown(body_markdown)
+        plain_text_snapshot = extract_plain_text_from_body_markdown(normalized_body_markdown)
         normalized_transcript = self._normalize_transcript(transcript=transcript, source=source)
         if source != "voice" and not plain_text_snapshot:
             raise ValidationError(
                 message="正文不能为空",
-                field_errors={"editor_document": "非语音碎片必须提供正文"},
+                field_errors={"body_markdown": "非语音碎片必须提供正文"},
             )
         fragment = fragment_repository.create(
             db=db,
@@ -91,14 +94,14 @@ class FragmentCommandService:
             audio_mime_type=audio_file.mime_type if audio_file else None,
             audio_file_size=audio_file.file_size if audio_file else None,
             audio_checksum=audio_file.checksum if audio_file else None,
-            editor_document=normalized_document,
+            body_markdown=normalized_body_markdown,
             plain_text_snapshot=plain_text_snapshot,
             folder_id=folder_id,
             tags=[],
         )
         merged_asset_ids = self._merge_media_asset_ids(
             media_asset_ids=media_asset_ids,
-            document_asset_ids=self.content_service.collect_document_asset_ids(editor_document=normalized_document),
+            document_asset_ids=self.content_service.collect_body_asset_ids(body_markdown=normalized_body_markdown),
         )
         if merged_asset_ids:
             self.asset_binding_service.attach_media_assets(
@@ -108,7 +111,7 @@ class FragmentCommandService:
                 content_id=fragment.id,
                 media_asset_ids=merged_asset_ids,
             )
-        self.content_service.create_initial_content(db=db, fragment=fragment, editor_document=normalized_document)
+        self.content_service.create_initial_content(db=db, fragment=fragment, body_markdown=normalized_body_markdown)
         return fragment
 
     def create_fragment_with_content(
@@ -117,19 +120,19 @@ class FragmentCommandService:
         db: Session,
         user_id: str,
         transcript: Optional[str],
-        editor_document: dict | None,
+        body_markdown: str | None,
         source: str,
         audio_source: Optional[str],
         audio_file: StoredFile | None,
         folder_id: Optional[str] = None,
         media_asset_ids: list[str] | None = None,
     ) -> Fragment:
-        """创建碎片并补齐 Markdown 块与素材关联。"""
+        """创建碎片并返回完整正文与素材载荷。"""
         fragment = self.create_fragment(
             db=db,
             user_id=user_id,
             transcript=transcript,
-            editor_document=editor_document,
+            body_markdown=body_markdown,
             source=source,
             audio_source=audio_source,
             audio_file=audio_file,
@@ -158,7 +161,7 @@ class FragmentCommandService:
         fragment_id: str,
         folder_id: Optional[str] = None,
         folder_id_provided: bool = False,
-        editor_document: dict | None = None,
+        body_markdown: str | None = None,
         media_asset_ids: list[str] | None = None,
     ) -> Fragment:
         """更新碎片正文、文件夹和素材绑定。"""
@@ -168,11 +171,11 @@ class FragmentCommandService:
             self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
             fragment = fragment_repository.update_folder(db=db, fragment=fragment, folder_id=folder_id)
         merged_asset_ids = media_asset_ids
-        if editor_document is not None:
-            self.content_service.replace_content(db=db, fragment=fragment, editor_document=editor_document)
+        if body_markdown is not None:
+            self.content_service.replace_content(db=db, fragment=fragment, body_markdown=body_markdown)
             merged_asset_ids = self._merge_media_asset_ids(
                 media_asset_ids=media_asset_ids,
-                document_asset_ids=self.content_service.collect_document_asset_ids(editor_document=editor_document),
+                document_asset_ids=self.content_service.collect_body_asset_ids(body_markdown=body_markdown),
             )
         if media_asset_ids is not None:
             self.asset_binding_service.replace_media_assets(
@@ -183,7 +186,7 @@ class FragmentCommandService:
                 media_asset_ids=merged_asset_ids or [],
             )
         updated_fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
-        if editor_document is not None:
+        if body_markdown is not None:
             await self.derivative_service.refresh_fragment_derivatives(
                 db=db,
                 user_id=user_id,

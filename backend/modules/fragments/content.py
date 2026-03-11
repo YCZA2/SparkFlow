@@ -1,34 +1,36 @@
 from __future__ import annotations
 
 from models import Fragment
-from modules.shared.editor_document import (
-    extract_plain_text_from_document,
-    normalize_editor_document,
-    render_document_as_markdown,
+from modules.shared.fragment_body_markdown import (
+    extract_plain_text_from_body_markdown,
+    normalize_fragment_body_markdown,
 )
 
 
-def read_fragment_editor_document(fragment: Fragment) -> dict:
-    """统一读取并校验碎片当前正文文档。"""
-    return normalize_editor_document(fragment.editor_document)
+def read_fragment_body_markdown(fragment: Fragment) -> str:
+    """统一读取并规整碎片当前 Markdown 正文。"""
+    return normalize_fragment_body_markdown(fragment.body_markdown)
 
 
 def read_fragment_plain_text(fragment: Fragment) -> str:
-    """优先读取已持久化快照，缺失时再从正文文档即时提取。"""
+    """优先读取正文快照，缺失时再从正文或转写即时提取。"""
     snapshot = (fragment.plain_text_snapshot or "").strip()
     if snapshot:
         return snapshot
-    return extract_plain_text_from_document(read_fragment_editor_document(fragment))
+    body_text = extract_plain_text_from_body_markdown(read_fragment_body_markdown(fragment))
+    if body_text:
+        return body_text
+    return str(fragment.transcript or "").strip()
 
 
 def render_fragment_markdown(fragment: Fragment) -> str:
-    """把碎片正文单向渲染为 Markdown 导出文本。"""
-    return render_document_as_markdown(read_fragment_editor_document(fragment))
+    """返回碎片正文 Markdown，供导出和外部消费复用。"""
+    return read_fragment_body_markdown(fragment)
 
 
 def resolve_fragment_content_state(fragment: Fragment) -> str:
     """根据正文快照和转写情况返回稳定内容状态。"""
-    if read_fragment_plain_text(fragment):
+    if extract_plain_text_from_body_markdown(read_fragment_body_markdown(fragment)):
         return "body_present"
     if (fragment.transcript or "").strip():
         return "transcript_only"

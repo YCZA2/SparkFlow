@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -19,14 +19,9 @@ class SpeakerSegmentItem(BaseModel):
     text: str
 
 
-class EditorDocument(BaseModel):
-    type: Literal["doc"] = "doc"
-    content: list[dict[str, Any]] = Field(default_factory=list)
-
-
 class FragmentCreateRequest(BaseModel):
     transcript: str | None = Field(None, description="转写文本")
-    editor_document: EditorDocument | None = Field(None, description="富文本正文文档")
+    body_markdown: str | None = Field(None, description="Markdown 正文")
     source: str = Field("voice", description="来源：voice, manual, video_parse")
     audio_source: str | None = Field(None, description="音频来源：upload, external_link")
     folder_id: str | None = Field(None, description="文件夹 ID")
@@ -35,7 +30,7 @@ class FragmentCreateRequest(BaseModel):
 
 class FragmentUpdateRequest(BaseModel):
     folder_id: str | None = Field(None, description="文件夹 ID，传 null 表示移出文件夹")
-    editor_document: EditorDocument | None = Field(None, description="完整富文本正文文档")
+    body_markdown: str | None = Field(None, description="完整 Markdown 正文")
     media_asset_ids: list[str] | None = Field(None, description="要绑定到碎片的素材 ID 列表")
 
 
@@ -63,7 +58,7 @@ class FragmentItem(BaseModel):
     audio_file_expires_at: str | None = None
     folder_id: str | None = None
     folder: FragmentFolderInfo | None = None
-    editor_document: dict[str, Any] = Field(default_factory=lambda: {"type": "doc", "content": []})
+    body_markdown: str = ""
     plain_text_snapshot: str | None = None
     content_state: str = "empty"
     media_assets: list[MediaAssetItem] = Field(default_factory=list)
@@ -150,26 +145,15 @@ class FragmentVisualizationResponse(BaseModel):
     meta: FragmentVisualizationMeta
 
 
-class AiSelectionRange(BaseModel):
-    from_: int | None = Field(None, alias="from")
-    to: int | None = None
-
-    model_config = {"populate_by_name": True}
-
-
 class FragmentAiEditRequest(BaseModel):
-    editor_document: EditorDocument = Field(..., description="当前富文本正文文档")
+    body_markdown: str = Field(..., description="当前 Markdown 正文")
     selection_text: str | None = Field(None, description="当前选中文本")
-    selection_range: AiSelectionRange | None = Field(None, description="当前选区范围")
     instruction: Literal["polish", "shorten", "expand", "title", "script_seed"]
 
 
 class FragmentAiPatch(BaseModel):
-    op: Literal["replace_range", "insert_block_after_range", "prepend_heading"]
-    range: AiSelectionRange | None = None
-    text: str | None = None
-    block: dict[str, Any] | None = None
-    blocks: list[dict[str, Any]] = Field(default_factory=list)
+    op: Literal["replace_selection", "insert_after_selection", "prepend_document"]
+    markdown_snippet: str = Field(..., description="可直接插入到正文中的 Markdown 片段")
 
 
 class FragmentAiEditResponse(BaseModel):

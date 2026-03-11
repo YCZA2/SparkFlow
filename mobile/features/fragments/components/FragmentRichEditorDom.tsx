@@ -1,65 +1,95 @@
 'use dom';
 
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useDOMImperativeHandle, type DOMProps } from 'expo/dom';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
+import MarkdownIt from 'markdown-it';
 
 import type {
-  EditorDocument,
-  EditorNode,
-  EditorSelectionRange,
   FragmentAiPatch,
+  FragmentEditorSnapshot,
+  MediaAsset,
 } from '@/types/fragment';
 
 import type { FragmentRichEditorHandle } from './FragmentRichEditor';
 import type { AppTheme } from '@/theme/tokens';
 
 import {
-  normalizeDocument,
-  isEditorDocument,
-  toTiptapDocument,
-  toTiptapContent,
-} from '@/components/editor/types/editorTypes';
-
+  extractAssetIdsFromMarkdown,
+  extractPlainTextFromMarkdown,
+  normalizeBodyMarkdown,
+} from '@/features/fragments/bodyMarkdown';
 import {
   createEditorCssVars,
   createEditorBaseCss,
   createToolbarButtonCss,
 } from '@/components/editor/styles/editorTheme';
 
-interface SelectionPayload {
-  range: EditorSelectionRange | null;
-  text: string;
-}
+const SNAPSHOT_DEBOUNCE_MS = 180;
 
 interface FragmentRichEditorDomProps {
   ref?: React.Ref<FragmentRichEditorHandle>;
   dom?: DOMProps;
-  document: EditorDocument;
+  initialBodyMarkdown: string;
+  mediaAssets: MediaAsset[];
   theme: AppTheme;
   onReady?: () => void;
-  onDocumentChange?: (document: EditorDocument) => void;
-  onSelectionChange?: (payload: SelectionPayload) => void;
+  onSnapshotChange?: (snapshot: FragmentEditorSnapshot) => void;
+  onSelectionChange?: (text: string) => void;
 }
+
+const SparkFlowImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      assetId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-asset-id'),
+        renderHTML: (attributes) => (attributes.assetId ? { 'data-asset-id': attributes.assetId } : {}),
+      },
+      width: {
+        default: null,
+        parseHTML: (element) => {
+          const width = element.getAttribute('data-width');
+          return width ? Number(width) : null;
+        },
+        renderHTML: (attributes) => (attributes.width ? { 'data-width': String(attributes.width) } : {}),
+      },
+      height: {
+        default: null,
+        parseHTML: (element) => {
+          const height = element.getAttribute('data-height');
+          return height ? Number(height) : null;
+        },
+        renderHTML: (attributes) => (attributes.height ? { 'data-height': String(attributes.height) } : {}),
+      },
+    };
+  },
+});
 
 export default function FragmentRichEditorDom({
   ref,
-  document,
+  initialBodyMarkdown,
+  mediaAssets,
   theme,
   onReady,
-  onDocumentChange,
+  onSnapshotChange,
   onSelectionChange,
 }: FragmentRichEditorDomProps) {
-  /** 中文注释：在 DOM 侧挂载 Tiptap，并通过 imperative handle 暴露桥接命令。 */
-  const lastSerializedDocumentRef = useRef('');
+  /** 中文注释：在 DOM 侧维护编辑器唯一 live state，并只向原生层发节流后的 Markdown 快照。 */
+  const snapshotTimerRef = useRef<number | null>(null);
+  const lastSnapshotRef = useRef<string>('');
   const lastSelectionRef = useRef('');
+  const latestSnapshotRef = useRef<FragmentEditorSnapshot | null>(null);
 
-  // 中文注释：使用类型安全的方式规范化文档，并转换为 Tiptap 兼容格式
-  const tiptapDocument = useMemo(() => toTiptapDocument(normalizeDocument(document)), [document]);
+  const markdownRenderer = useMemo(() => createMarkdownRenderer(mediaAssets), [mediaAssets]);
+  const initialHtml = useMemo(
+    () => markdownRenderer.render(normalizeBodyMarkdown(initialBodyMarkdown)),
+    [initialBodyMarkdown, markdownRenderer]
+  );
 
-  // 中文注释：生成 CSS 变量和样式
   const cssVars = useMemo(() => createEditorCssVars(theme), [theme]);
   const baseCss = useMemo(() => createEditorBaseCss(), []);
   const toolbarCss = useMemo(() => createToolbarButtonCss(), []);
@@ -68,103 +98,112 @@ export default function FragmentRichEditorDom({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1] },
+        code: false,
+        codeBlock: false,
+        horizontalRule: false,
       }),
-      Image.configure({
+      SparkFlowImage.configure({
         inline: false,
         allowBase64: true,
       }),
     ],
-    content: tiptapDocument,
+    content: initialHtml,
     editorProps: {
       attributes: {
         class: 'sparkflow-editor',
       },
     },
     onCreate: ({ editor }) => {
-      lastSerializedDocumentRef.current = serializeDocumentSnapshot(editor.getJSON());
+      const snapshot = buildEditorSnapshot(editor.getJSON() as Record<string, unknown>);
+      latestSnapshotRef.current = snapshot;
+      lastSnapshotRef.current = JSON.stringify(snapshot);
       onReady?.();
+      onSnapshotChange?.(snapshot);
       emitSelection(editor);
     },
     onUpdate: ({ editor }) => {
-      const nextDocument = editor.getJSON();
-      if (isEditorDocument(nextDocument)) {
-        const serialized = serializeDocumentSnapshot(nextDocument);
-        if (serialized === lastSerializedDocumentRef.current) return;
-        lastSerializedDocumentRef.current = serialized;
-        onDocumentChange?.(nextDocument);
-      }
+      scheduleSnapshot(editor.getJSON() as Record<string, unknown>);
     },
     onSelectionUpdate: ({ editor }) => {
       emitSelection(editor);
     },
   });
 
-  function emitSelection(currentEditor: NonNullable<typeof editor>): void {
-    /** 中文注释：把当前选区位置和文本同步回原生层。 */
-    const { from, to } = currentEditor.state.selection;
-    const text = currentEditor.state.doc.textBetween(from, to, '\n', '\n');
-    const serialized = JSON.stringify({ from, to, text });
-    if (serialized === lastSelectionRef.current) return;
-    lastSelectionRef.current = serialized;
-    onSelectionChange?.({
-      range: { from, to },
-      text,
-    });
+  useEffect(() => {
+    return () => {
+      if (snapshotTimerRef.current !== null) window.clearTimeout(snapshotTimerRef.current);
+    };
+  }, []);
+
+  function scheduleSnapshot(document: Record<string, unknown>): void {
+    /** 中文注释：输入时在 DOM 内构造 Markdown 快照，并以短延迟节流后再过桥。 */
+    const snapshot = buildEditorSnapshot(document);
+    latestSnapshotRef.current = snapshot;
+    const serialized = JSON.stringify(snapshot);
+    if (serialized === lastSnapshotRef.current) return;
+    if (snapshotTimerRef.current !== null) window.clearTimeout(snapshotTimerRef.current);
+    snapshotTimerRef.current = window.setTimeout(() => {
+      lastSnapshotRef.current = serialized;
+      onSnapshotChange?.(snapshot);
+    }, SNAPSHOT_DEBOUNCE_MS);
   }
 
-  useEffect(() => {
-    /** 中文注释：当原生层文档变化时回灌到 Tiptap，避免本地草稿或远端更新失真。 */
-    if (!editor) return;
-    const serialized = serializeDocumentSnapshot(document);
-    if (serialized === lastSerializedDocumentRef.current) return;
-    const nextDocument = toTiptapDocument(normalizeDocument(document));
-    lastSerializedDocumentRef.current = serialized;
-    editor.commands.setContent(nextDocument, { emitUpdate: false });
-    emitSelection(editor);
-  }, [document, editor]);
+  function emitSelection(currentEditor: NonNullable<typeof editor>): void {
+    /** 中文注释：只把当前选中文本同步回原生层，避免桥接传整份文档。 */
+    const { from, to } = currentEditor.state.selection;
+    const text = currentEditor.state.doc.textBetween(from, to, '\n', '\n').trim();
+    if (text === lastSelectionRef.current) return;
+    lastSelectionRef.current = text;
+    onSelectionChange?.(text);
+  }
+
+  function buildEditorSnapshot(document: Record<string, unknown>): FragmentEditorSnapshot {
+    /** 中文注释：把当前编辑器文档序列化为稳定 Markdown 快照。 */
+    const bodyMarkdown = serializeDocumentToMarkdown(document);
+    return {
+      body_markdown: bodyMarkdown,
+      plain_text: extractPlainTextFromMarkdown(bodyMarkdown),
+      asset_ids: extractAssetIdsFromMarkdown(bodyMarkdown),
+    };
+  }
 
   useDOMImperativeHandle<FragmentRichEditorHandle>(ref ?? null, () => ({
-    setDocument(nextDocument: EditorDocument) {
-      if (!editor) return;
-      const normalized = toTiptapDocument(normalizeDocument(nextDocument));
-      lastSerializedDocumentRef.current = serializeDocumentSnapshot(nextDocument);
-      editor.commands.setContent(normalized, { emitUpdate: false });
-      emitSelection(editor);
+    getSnapshot() {
+      return latestSnapshotRef.current;
     },
     focus() {
       editor?.commands.focus();
     },
-    insertImage(node: EditorNode) {
-      if (!editor) return;
-      const attrs = {
-        src: String(node.attrs?.src ?? ''),
-        alt: typeof node.attrs?.alt === 'string' ? node.attrs.alt : undefined,
-        assetId: typeof node.attrs?.assetId === 'string' ? node.attrs.assetId : undefined,
-        width: typeof node.attrs?.width === 'number' ? node.attrs.width : undefined,
-        height: typeof node.attrs?.height === 'number' ? node.attrs.height : undefined,
-      };
-      if (!attrs.src) return;
-      editor.chain().focus().setImage(attrs).run();
+    insertImage(asset: MediaAsset) {
+      if (!editor || !asset.file_url) return;
+      editor.chain().focus().insertContent({
+        type: 'image',
+        attrs: {
+          src: asset.file_url,
+          alt: asset.original_filename,
+          assetId: asset.id,
+          width: asset.width ?? undefined,
+          height: asset.height ?? undefined,
+        },
+      }).run();
     },
     applyPatch(patch: FragmentAiPatch) {
       if (!editor) return;
-      if (patch.op === 'prepend_heading' && patch.block) {
-        editor.commands.insertContentAt(0, toTiptapContent(patch.block));
+      const snippet = normalizeBodyMarkdown(patch.markdown_snippet);
+      if (!snippet) return;
+      if (patch.op === 'replace_selection') {
+        const { from, to } = editor.state.selection;
+        editor.commands.insertContentAt({ from, to }, snippet);
         return;
       }
-      if (patch.op === 'insert_block_after_range') {
-        const target = patch.range?.to ?? editor.state.selection.to;
-        const blocks = (patch.blocks ?? []).map(toTiptapContent);
-        editor.commands.insertContentAt(target, blocks);
+      const html = markdownRenderer.render(snippet);
+      if (patch.op === 'prepend_document') {
+        editor.commands.insertContentAt(0, html);
         return;
       }
-      if (patch.op === 'replace_range') {
-        const from = patch.range?.from ?? editor.state.selection.from;
-        const to = patch.range?.to ?? editor.state.selection.to;
-        editor.commands.insertContentAt({ from, to }, patch.text ?? '');
-      }
+      editor.commands.insertContentAt(editor.state.selection.to, html);
     },
-  }), [editor]);
+  }), [editor, markdownRenderer]);
 
   if (!editor) {
     return (
@@ -194,9 +233,119 @@ export default function FragmentRichEditorDom({
   );
 }
 
-function serializeDocumentSnapshot(document: EditorDocument | Record<string, unknown>): string {
-  /** 中文注释：统一规整文档快照，避免 props 与 editor JSON 格式差异导致误判回灌。 */
-  return JSON.stringify(normalizeDocument(document as EditorDocument));
+function createMarkdownRenderer(mediaAssets: MediaAsset[]): MarkdownIt {
+  /** 中文注释：把 asset:// 图片引用渲染为可显示的实际地址，并保留 assetId 元数据。 */
+  const assetMap = new Map(mediaAssets.map((item) => [item.id, item]));
+  const markdown = new MarkdownIt({
+    html: false,
+    linkify: false,
+    breaks: false,
+  });
+  const defaultImageRule = markdown.renderer.rules.image;
+  markdown.renderer.rules.image = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const source = token.attrGet('src') ?? '';
+    if (source.startsWith('asset://')) {
+      const assetId = source.replace('asset://', '').trim();
+      const asset = assetMap.get(assetId);
+      if (asset?.file_url) token.attrSet('src', asset.file_url);
+      token.attrSet('data-asset-id', assetId);
+      if (asset?.width) token.attrSet('data-width', String(asset.width));
+      if (asset?.height) token.attrSet('data-height', String(asset.height));
+    }
+    return defaultImageRule
+      ? defaultImageRule(tokens, idx, options, env, self)
+      : self.renderToken(tokens, idx, options);
+  };
+  return markdown;
+}
+
+function serializeDocumentToMarkdown(document: Record<string, unknown>): string {
+  /** 中文注释：把编辑器 JSON 序列化为轻量 Markdown，只覆盖当前产品支持的块类型。 */
+  const content = Array.isArray(document.content) ? document.content : [];
+  const blocks = content
+    .map((node) => serializeBlock(node as Record<string, unknown>, 1))
+    .filter(Boolean);
+  return normalizeBodyMarkdown(blocks.join('\n\n'));
+}
+
+function serializeBlock(node: Record<string, unknown>, orderedIndex: number): string {
+  /** 中文注释：按块类型输出稳定 Markdown 文本。 */
+  const type = String(node.type ?? '');
+  if (type === 'paragraph') return serializeInlineChildren(node);
+  if (type === 'heading') return `# ${serializeInlineChildren(node).trim()}`.trim();
+  if (type === 'blockquote') {
+    const lines = getNodeContent(node)
+      .map((child) => serializeBlock(child, 1))
+      .filter(Boolean)
+      .flatMap((block) => block.split('\n'))
+      .map((line) => `> ${line}`);
+    return lines.join('\n');
+  }
+  if (type === 'bulletList') {
+    return getNodeContent(node)
+      .map((child) => `- ${serializeListItem(child).trim()}`.trim())
+      .filter(Boolean)
+      .join('\n');
+  }
+  if (type === 'orderedList') {
+    return getNodeContent(node)
+      .map((child, index) => `${index + orderedIndex}. ${serializeListItem(child).trim()}`.trim())
+      .filter(Boolean)
+      .join('\n');
+  }
+  if (type === 'image') {
+    const attrs = (node.attrs as Record<string, unknown> | undefined) ?? {};
+    const alt = escapeInlineText(String(attrs.alt ?? '').trim());
+    const assetId = String(attrs.assetId ?? '').trim();
+    const src = String(attrs.src ?? '').trim();
+    const target = assetId ? `asset://${assetId}` : src;
+    return target ? `![${alt}](${target})` : '';
+  }
+  return '';
+}
+
+function serializeListItem(node: Record<string, unknown>): string {
+  /** 中文注释：列表项仅保留当前支持的单段落内容，避免生成复杂嵌套 Markdown。 */
+  const children = getNodeContent(node);
+  const paragraph = children.find((child) => String(child.type ?? '') === 'paragraph');
+  if (!paragraph) return '';
+  return serializeInlineChildren(paragraph);
+}
+
+function serializeInlineChildren(node: Record<string, unknown>): string {
+  /** 中文注释：递归序列化段落内联内容，并保留粗体与斜体。 */
+  return getNodeContent(node)
+    .map((child) => serializeInlineNode(child))
+    .join('')
+    .trim();
+}
+
+function serializeInlineNode(node: Record<string, unknown>): string {
+  /** 中文注释：当前只支持文本及内联样式，图片作为独立块处理。 */
+  const type = String(node.type ?? '');
+  if (type !== 'text') return '';
+  const marks = Array.isArray(node.marks) ? node.marks : [];
+  const hasBold = marks.some((mark) => mark && typeof mark === 'object' && (mark as { type?: string }).type === 'bold');
+  const hasItalic = marks.some((mark) => mark && typeof mark === 'object' && (mark as { type?: string }).type === 'italic');
+  let text = escapeInlineText(String(node.text ?? ''));
+  if (!text) return '';
+  if (hasBold && hasItalic) return `***${text}***`;
+  if (hasBold) return `**${text}**`;
+  if (hasItalic) return `*${text}*`;
+  return text;
+}
+
+function getNodeContent(node: Record<string, unknown>): Array<Record<string, unknown>> {
+  /** 中文注释：安全读取节点子内容，避免消费到非数组结构。 */
+  return Array.isArray(node.content)
+    ? node.content.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+    : [];
+}
+
+function escapeInlineText(text: string): string {
+  /** 中文注释：转义 Markdown 内联特殊字符，避免正文被误解析。 */
+  return text.replace(/([\\`*_[\]<>])/g, '\\$1');
 }
 
 function ToolbarButton({
@@ -220,9 +369,6 @@ function ToolbarButton({
   );
 }
 
-/**
- * 中文注释：仅保留布局相关样式，颜色由 CSS 变量控制。
- */
 const styles: Record<string, React.CSSProperties> = {
   root: {
     minHeight: 320,

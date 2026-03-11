@@ -9,7 +9,6 @@ from domains.fragments import repository as fragment_repository
 from modules.fragments.mapper import map_fragment
 from modules.shared.audio_ingestion import AudioIngestionRequest
 from modules.shared.audio_ingestion_use_case import AudioIngestionUseCase
-from modules.shared.editor_document import empty_editor_document
 from modules.shared.storage import build_audio_object_key, sanitize_filename, validate_audio_upload
 from modules.shared.ports import FileStorage
 from .schemas import AudioUploadResponse, TranscriptionStatusResponse
@@ -52,7 +51,7 @@ class TranscriptionUseCase:
             audio_mime_type=None,
             audio_file_size=None,
             audio_checksum=None,
-            editor_document=empty_editor_document(),
+            body_markdown="",
             plain_text_snapshot="",
             folder_id=folder_id,
         )

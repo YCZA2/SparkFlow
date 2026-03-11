@@ -2,8 +2,6 @@ import { API_ENDPOINTS } from '@/constants/config';
 import { del, get, patch, post, sendForm } from '@/features/core/api/client';
 import type {
   CreateFragmentRequest,
-  EditorDocument,
-  EditorSelectionRange,
   Fragment,
   FragmentAiPatch,
   FragmentListResponse,
@@ -13,14 +11,13 @@ import type {
 
 export interface UpdateFragmentRequest {
   folder_id?: string | null;
-  editor_document?: EditorDocument;
+  body_markdown?: string;
   media_asset_ids?: string[];
 }
 
 export interface FragmentAiEditRequest {
-  editor_document: EditorDocument;
+  body_markdown: string;
   selection_text?: string;
-  selection_range?: EditorSelectionRange | null;
   instruction: 'polish' | 'shorten' | 'expand' | 'title' | 'script_seed';
 }
 
@@ -49,7 +46,7 @@ export async function deleteFragment(id: string): Promise<void> {
 }
 
 export async function createFragment(data: CreateFragmentRequest, folderId?: string): Promise<Fragment> {
-  /** 中文注释：手动创建碎片时统一走新富文本内容接口。 */
+  /** 中文注释：手动创建碎片时统一走 Markdown 正文接口。 */
   const requestData = folderId ? { ...data, folder_id: folderId } : data;
   return post<Fragment>(API_ENDPOINTS.FRAGMENTS.CONTENT, requestData);
 }
@@ -59,7 +56,7 @@ export async function updateFragment(id: string, data: UpdateFragmentRequest): P
 }
 
 export async function requestAiEdit(id: string, data: FragmentAiEditRequest): Promise<FragmentAiEditResponse> {
-  /** 中文注释：请求后端返回可直接应用到正文文档的 AI patch。 */
+  /** 中文注释：请求后端返回可直接应用到 Markdown 正文的 AI patch。 */
   return post<FragmentAiEditResponse>(API_ENDPOINTS.FRAGMENTS.AI_EDIT(id), data);
 }
 

@@ -9,7 +9,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from models import Fragment, FragmentTag
-from modules.shared.editor_document import build_document_from_text, extract_plain_text_from_document
+from modules.shared.fragment_body_markdown import (
+    extract_plain_text_from_body_markdown,
+    normalize_fragment_body_markdown,
+)
 
 from domains.fragment_tags import repository as fragment_tag_repository
 
@@ -120,7 +123,7 @@ def create(
     audio_mime_type: Optional[str],
     audio_file_size: Optional[int],
     audio_checksum: Optional[str],
-    editor_document: dict | None = None,
+    body_markdown: str | None = None,
     plain_text_snapshot: str = "",
     *,
     folder_id: Optional[str] = None,
@@ -128,8 +131,8 @@ def create(
     tags: Optional[list[str]] = None,
 ) -> Fragment:
     """创建碎片主记录并同步归一化标签。"""
-    normalized_document = editor_document or build_document_from_text(transcript or "")
-    normalized_plain_text = plain_text_snapshot or extract_plain_text_from_document(normalized_document)
+    normalized_body_markdown = normalize_fragment_body_markdown(body_markdown)
+    normalized_plain_text = plain_text_snapshot or extract_plain_text_from_body_markdown(normalized_body_markdown)
     fragment = Fragment(
         user_id=user_id,
         folder_id=folder_id,
@@ -142,7 +145,7 @@ def create(
         audio_mime_type=audio_mime_type,
         audio_file_size=audio_file_size,
         audio_checksum=audio_checksum,
-        editor_document=normalized_document,
+        body_markdown=normalized_body_markdown,
         plain_text_snapshot=normalized_plain_text,
         tags=tags_json,
         source=source,
@@ -205,11 +208,11 @@ def update_content(
     db: Session,
     *,
     fragment: Fragment,
-    editor_document: dict,
+    body_markdown: str,
     plain_text_snapshot: str,
 ) -> Fragment:
     """更新碎片正文真值及派生纯文本快照。"""
-    fragment.editor_document = editor_document
+    fragment.body_markdown = normalize_fragment_body_markdown(body_markdown)
     fragment.plain_text_snapshot = plain_text_snapshot
     db.commit()
     db.refresh(fragment)

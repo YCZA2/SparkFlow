@@ -9,7 +9,6 @@ import pytest
 from core.exceptions import ValidationError
 from domains.fragments import repository as fragment_repository
 from modules.auth.application import TEST_USER_ID
-from modules.shared.editor_document import build_document_from_text
 from modules.scripts.daily_push import DailyPushFragmentSelector, build_fragments_text
 
 
@@ -29,7 +28,7 @@ def _create_fragment(db, transcript: str):
         audio_mime_type=None,
         audio_file_size=None,
         audio_checksum=None,
-        editor_document=build_document_from_text(transcript),
+        body_markdown=transcript,
         plain_text_snapshot=transcript,
     )
     return fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=fragment.id)
@@ -98,4 +97,4 @@ async def test_daily_push_selector_returns_empty_when_candidates_below_minimum(d
 def test_build_fragments_text_requires_available_content() -> None:
     """文本拼接应拒绝没有可用正文快照的输入。"""
     with pytest.raises(ValidationError):
-        build_fragments_text([SimpleNamespace(transcript=None, plain_text_snapshot="", editor_document={"type": "doc", "blocks": []})])
+        build_fragments_text([SimpleNamespace(transcript=None, plain_text_snapshot="", body_markdown="")])

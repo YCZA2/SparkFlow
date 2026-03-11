@@ -5,7 +5,6 @@ from typing import Any
 
 from core.exceptions import ServiceUnavailableError
 from domains.fragments import repository as fragment_repository
-from modules.shared.editor_document import empty_editor_document
 
 from .media_ingestion_persistence import MediaIngestionPersistenceService
 from .media_ingestion_steps import MediaIngestionStepExecutor
@@ -85,7 +84,7 @@ class AudioIngestionUseCase:
                 audio_mime_type=request.audio_file.mime_type if request.audio_file else None,
                 audio_file_size=request.audio_file.file_size if request.audio_file else None,
                 audio_checksum=request.audio_file.checksum if request.audio_file else None,
-                editor_document=empty_editor_document(),
+                body_markdown="",
                 plain_text_snapshot="",
                 folder_id=request.folder_id,
             )
@@ -137,7 +136,7 @@ class AudioIngestionUseCase:
             audio_mime_type=None,
             audio_file_size=None,
             audio_checksum=None,
-            editor_document=empty_editor_document(),
+            body_markdown="",
             plain_text_snapshot="",
             folder_id=folder_id,
         )

@@ -4,37 +4,40 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/Themed';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type {
-  EditorDocument,
-  EditorNode,
-  EditorSelectionRange,
   FragmentAiPatch,
+  FragmentEditorSnapshot,
+  MediaAsset,
 } from '@/types/fragment';
 
 import FragmentRichEditorDom from './FragmentRichEditorDom';
 
 export interface FragmentRichEditorHandle {
   [key: string]: (...args: any[]) => void;
-  setDocument: (document: EditorDocument) => void;
+  getSnapshot: () => FragmentEditorSnapshot | null;
   focus: () => void;
-  insertImage: (node: EditorNode) => void;
+  insertImage: (asset: MediaAsset) => void;
   applyPatch: (patch: FragmentAiPatch) => void;
 }
 
 interface FragmentRichEditorProps {
+  editorKey: string;
   editorRef: React.RefObject<FragmentRichEditorHandle | null>;
-  document: EditorDocument;
+  initialBodyMarkdown: string;
+  mediaAssets: MediaAsset[];
   statusLabel?: string | null;
   onEditorReady: () => void;
-  onDocumentChange: (document: EditorDocument) => void;
-  onSelectionChange: (range: EditorSelectionRange | null, text: string) => void;
+  onSnapshotChange: (snapshot: FragmentEditorSnapshot) => void;
+  onSelectionChange: (text: string) => void;
 }
 
 export function FragmentRichEditor({
+  editorKey,
   editorRef,
-  document,
+  initialBodyMarkdown,
+  mediaAssets,
   statusLabel,
   onEditorReady,
-  onDocumentChange,
+  onSnapshotChange,
   onSelectionChange,
 }: FragmentRichEditorProps) {
   /** 中文注释：渲染编辑器主视图，让正文成为碎片详情页的唯一主内容。 */
@@ -50,12 +53,14 @@ export function FragmentRichEditor({
 
       <View style={[styles.editorShell, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
         <FragmentRichEditorDom
+          key={editorKey}
           ref={editorRef}
-          document={document}
+          initialBodyMarkdown={initialBodyMarkdown}
+          mediaAssets={mediaAssets}
           theme={theme}
           onReady={onEditorReady}
-          onDocumentChange={onDocumentChange}
-          onSelectionChange={(payload) => onSelectionChange(payload.range, payload.text)}
+          onSnapshotChange={onSnapshotChange}
+          onSelectionChange={onSelectionChange}
           dom={{
             matchContents: true,
             style: styles.domSurface,

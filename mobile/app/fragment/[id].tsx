@@ -144,14 +144,20 @@ export default function FragmentDetailScreen() {
       />
 
       <View style={styles.editorStage}>
-        <FragmentRichEditor
-          editorRef={bodyEditor.editorRef}
-          document={bodyEditor.document}
-          statusLabel={bodyEditor.statusLabel}
-          onEditorReady={bodyEditor.onEditorReady}
-          onDocumentChange={bodyEditor.onDocumentChange}
-          onSelectionChange={bodyEditor.onSelectionChange}
-        />
+        {bodyEditor.isDraftHydrated ? (
+          <FragmentRichEditor
+            editorKey={bodyEditor.editorKey}
+            editorRef={bodyEditor.editorRef}
+            initialBodyMarkdown={bodyEditor.initialBodyMarkdown}
+            mediaAssets={bodyEditor.mediaAssets}
+            statusLabel={bodyEditor.statusLabel}
+            onEditorReady={bodyEditor.onEditorReady}
+            onSnapshotChange={bodyEditor.onSnapshotChange}
+            onSelectionChange={bodyEditor.onSelectionChange}
+          />
+        ) : (
+          <LoadingState message="加载正文..." />
+        )}
       </View>
 
       <FragmentDetailSheet

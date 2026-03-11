@@ -8,7 +8,6 @@ from core.exceptions import ValidationError
 from domains.fragments import repository as fragment_repository
 from domains.knowledge import repository as knowledge_repository
 from modules.auth.application import TEST_USER_ID
-from modules.shared.editor_document import build_document_from_text
 from modules.scripts.context_builder import ScriptGenerationContextBuilder
 from tests.support import FakeVectorStore, FakeWebSearchProvider
 
@@ -31,7 +30,7 @@ def _create_fragment(db, transcript: str):
         audio_mime_type=None,
         audio_file_size=None,
         audio_checksum=None,
-        editor_document=build_document_from_text(transcript),
+        body_markdown=transcript,
         plain_text_snapshot=transcript,
     )
     return fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=fragment.id)

@@ -8,7 +8,7 @@ from modules.shared.content_schemas import MediaAssetItem
 from modules.shared.ports import FileStorage, StoredFile
 from utils.serialization import format_iso_datetime, parse_json_list, parse_json_object_list
 
-from .content import read_fragment_editor_document, read_fragment_plain_text, resolve_fragment_content_state
+from .content import read_fragment_body_markdown, read_fragment_plain_text, resolve_fragment_content_state
 from .schemas import FragmentFolderInfo, FragmentItem, SpeakerSegmentItem
 
 
@@ -86,11 +86,11 @@ def build_media_asset_file(asset: MediaAsset) -> StoredFile:
 
 
 def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = None, file_storage: FileStorage | None = None) -> FragmentItem:
-    """将碎片模型映射为含富文本正文的响应结构。"""
+    """将碎片模型映射为含 Markdown 正文的响应结构。"""
     folder = None
     if fragment.folder:
         folder = FragmentFolderInfo(id=fragment.folder.id, name=fragment.folder.name)
-    editor_document = read_fragment_editor_document(fragment)
+    body_markdown = read_fragment_body_markdown(fragment)
     audio_access = None
     if file_storage is not None:
         audio_file = build_fragment_audio_file(fragment)
@@ -117,7 +117,7 @@ def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = 
         audio_file_expires_at=audio_access.expires_at if audio_access else None,
         folder_id=fragment.folder_id,
         folder=folder,
-        editor_document=editor_document,
+        body_markdown=body_markdown,
         plain_text_snapshot=read_fragment_plain_text(fragment) or None,
         content_state=resolve_fragment_content_state(fragment),
         media_assets=mapped_media_assets,

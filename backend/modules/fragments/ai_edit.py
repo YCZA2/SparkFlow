@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from modules.shared.editor_document import build_document_from_text, extract_plain_text_from_document, normalize_editor_document
+from modules.shared.fragment_body_markdown import (
+    extract_plain_text_from_body_markdown,
+    normalize_fragment_body_markdown,
+)
 from modules.shared.ports import TextGenerationProvider
 
 
 class FragmentAiEditService:
-    """封装基于富文本正文的 AI 编辑动作。"""
+    """封装基于 Markdown 正文的 AI 编辑动作。"""
 
     def __init__(self, *, llm_provider: TextGenerationProvider) -> None:
         """装配 AI 编辑依赖。"""
@@ -14,14 +17,13 @@ class FragmentAiEditService:
     async def edit(
         self,
         *,
-        editor_document: dict,
+        body_markdown: str,
         instruction: str,
         selection_text: str | None,
-        selection_range: dict | None,
     ) -> tuple[dict, str]:
-        """基于当前正文生成可直接应用的结构化 patch。"""
-        normalized_document = normalize_editor_document(editor_document)
-        document_text = extract_plain_text_from_document(normalized_document)
+        """基于当前正文生成可直接应用的 Markdown patch。"""
+        normalized_body_markdown = normalize_fragment_body_markdown(body_markdown)
+        document_text = extract_plain_text_from_body_markdown(normalized_body_markdown)
         normalized_selection = (selection_text or "").strip()
         generated_text = await self._generate_text(
             instruction=instruction,
@@ -30,31 +32,27 @@ class FragmentAiEditService:
         )
 
         if instruction == "title":
-            heading_block = build_document_from_text(generated_text, block_type="heading")["content"][0]
             return (
                 {
-                    "op": "prepend_heading",
-                    "block": heading_block,
+                    "op": "prepend_document",
+                    "markdown_snippet": f"# {generated_text}".strip(),
                 },
                 generated_text,
             )
 
         if instruction == "script_seed":
-            script_blocks = build_document_from_text(generated_text, block_type="paragraph")["content"]
             return (
                 {
-                    "op": "insert_block_after_range",
-                    "range": selection_range,
-                    "blocks": script_blocks,
+                    "op": "insert_after_selection",
+                    "markdown_snippet": generated_text.strip(),
                 },
                 generated_text,
             )
 
         return (
             {
-                "op": "replace_range",
-                "range": selection_range,
-                "text": generated_text,
+                "op": "replace_selection",
+                "markdown_snippet": generated_text.strip(),
             },
             generated_text,
         )
@@ -71,7 +69,7 @@ class FragmentAiEditService:
             "title": "请基于全文生成一句简短标题，不要带编号或引号。",
             "script_seed": "请把这段内容整理成适合后续口播脚本生成的草稿段落。",
         }
-        system_prompt = "你是 SparkFlow 的内容编辑助手，只返回用户可直接粘贴到正文中的纯文本。"
+        system_prompt = "你是 SparkFlow 的内容编辑助手，只返回用户可直接粘贴到正文中的 Markdown 片段或纯文本。"
         user_message = (
             f"编辑动作：{instruction_map.get(instruction, instruction)}\n\n"
             f"全文内容：\n{document_text.strip()}\n\n"
