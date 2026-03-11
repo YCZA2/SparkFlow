@@ -99,8 +99,8 @@ flowchart TD
 - `ImportActionSheetProvider` 承载底部 `+` 导入抽屉开关与当前文件夹上下文。
 - `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
-- `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态。
-- `features/fragments/detail/*` 把碎片详情拆成 `resource / body session / screen` 三层：资源层负责缓存和远端刷新，编辑层负责自动保存/草稿/AI patch/插图，页面层只编排 header、抽屉和播放器交互。
+- `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
+- `features/fragments/detail/*` 把碎片详情拆成 `resource / editor session / sheet / screen actions` 四层：资源层负责缓存和远端刷新，编辑会话层继续拆成初始化/自动保存/AI 与插图动作/展示态合成，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
 - `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用。
 
@@ -108,9 +108,9 @@ flowchart TD
 
 当前移动端真正参与主流程的数据持久化是：
 
-- `AsyncStorage`: token、用户信息、后端 base URL、fragment 列表缓存、fragment 详情缓存、未同步正文草稿
+- `AsyncStorage`: token、用户信息、后端 base URL、按范围分桶的 fragment 列表缓存、fragment 详情缓存、未同步正文草稿
 
-当前移动端主流程的本地持久化只使用 `AsyncStorage`，未引入 SQLite 业务存储链路；碎片正文详情采用“本地缓存秒开 + 后台静默刷新”的 stale-while-revalidate 策略，自动保存失败时继续保留本地草稿和详情快照。
+当前移动端主流程的本地持久化只使用 `AsyncStorage`，未引入 SQLite 业务存储链路；碎片正文详情采用“本地缓存秒开 + 后台静默刷新”的 stale-while-revalidate 策略，自动保存失败时继续保留本地草稿和详情快照。碎片列表缓存已按 `all / folder:<id>` 分桶，首页和文件夹页共用同一套“缓存秒开 + 后台刷新 + 订阅回显”行为。
 
 ## 4. Backend Architecture
 
@@ -258,6 +258,7 @@ flowchart TD
 - 非语音碎片必须直接写入 `body_markdown`，不再把 `transcript` 当作正式正文来源
 - 移动端碎片详情正文继续采用 `WebView + Tiptap` 编辑内核，但 DOM 编辑器是唯一 live state；原生层只消费节流后的 Markdown 快照、AI 操作和图片插入命令
 - 移动端碎片详情的本地缓存和展示态真值允许分离：`fragmentRepository` 只持久化 fragment/list 快照与订阅广播，本地草稿覆盖逻辑只存在于 detail resource 层，不直接回写服务端真值
+- 详情编辑会话的纯逻辑已下沉到 `bodySessionState.ts` 和 `fragmentSaveController.ts`：前者统一正文初始化、AI fallback patch、素材去重与乐观展示态合成，后者保证自动保存只串行提交最后一版快照，降低 hook 回归风险
 - `scripts.body_markdown` / `knowledge_docs.body_markdown` 保存统一 Markdown 正文
 - 媒体资源表：`media_assets` / `content_media_links`，对象元数据保存 `storage_provider` / `bucket` / `object_key`
 - 碎片向量 namespace: `fragments_{user_id}`
@@ -500,6 +501,7 @@ sequenceDiagram
 - Frontend app entry: [`mobile/app/_layout.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/_layout.tsx)
 - Frontend home: [`mobile/app/index.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/index.tsx)
 - Session bootstrap: [`mobile/providers/AppSessionProvider.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/providers/AppSessionProvider.tsx)
+- Fragment list screen model: [`mobile/features/fragments/useFragmentListScreenState.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/useFragmentListScreenState.ts)
 - Fragment screen model: [`mobile/features/fragments/useFragmentsScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/useFragmentsScreen.ts)
 - Fragment detail screen model: [`mobile/features/fragments/detail/useFragmentDetailScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/detail/useFragmentDetailScreen.ts)
 - Generate screen model: [`mobile/features/scripts/useGenerateScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/scripts/useGenerateScreen.ts)

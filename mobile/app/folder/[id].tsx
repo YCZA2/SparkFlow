@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
 import {
-  Alert,
   RefreshControl,
   SectionList,
   StyleSheet,
@@ -20,7 +19,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFolderFragments } from '@/features/folders/hooks';
 import { useQuickActionBar } from '@/providers/QuickActionBarProvider';
-import type { Fragment } from '@/types/fragment';
 
 // 返回按钮组件（与全局统一组件保持一致）
 function FolderBackButton({ onPress, color }: { onPress: () => void; color: string }) {
@@ -68,33 +66,6 @@ export default function FolderDetailScreen() {
     router.back();
   }, [router]);
 
-  const handleFragmentPress = useCallback(
-    (fragment: Fragment) => {
-      if (screen.selection.isSelectionMode) {
-        const accepted = screen.selection.toggleSelect(fragment.id);
-        if (!accepted) {
-          Alert.alert('已达上限', `最多选择 ${screen.selection.maxSelection} 条碎片`);
-        }
-        return;
-      }
-
-      router.push(`/fragment/${fragment.id}`);
-    },
-    [router, screen.selection]
-  );
-
-  const handleGenerate = useCallback(() => {
-    if (screen.selection.selectedCount === 0) {
-      Alert.alert('请选择碎片', '请至少选择 1 条碎片');
-      return;
-    }
-
-    router.push({
-      pathname: '/generate',
-      params: { fragmentIds: screen.selection.selectedIds.join(',') },
-    });
-  }, [router, screen.selection.selectedCount, screen.selection.selectedIds]);
-
   if (screen.isLoading && screen.fragments.length === 0) {
     return (
       <ScreenContainer>
@@ -111,7 +82,7 @@ export default function FolderDetailScreen() {
           title="加载失败"
           message={screen.error}
           actionLabel="点击重试"
-          onAction={screen.fetchFragments}
+          onAction={screen.reload}
         />
       </ScreenContainer>
     );
@@ -154,7 +125,7 @@ export default function FolderDetailScreen() {
         renderItem={({ item, index, section }) => (
           <FragmentCard
             fragment={item}
-            onPress={handleFragmentPress}
+            onPress={screen.onFragmentPress}
             selectable={screen.selection.isSelectionMode}
             selected={screen.selection.selectedSet.has(item.id)}
             isFirstInSection={index === 0}
@@ -174,7 +145,7 @@ export default function FolderDetailScreen() {
         refreshControl={
           <RefreshControl
             refreshing={screen.isRefreshing}
-            onRefresh={screen.refreshFragments}
+            onRefresh={screen.refresh}
             tintColor={theme.colors.primary}
           />
         }
@@ -215,7 +186,7 @@ export default function FolderDetailScreen() {
                       : theme.colors.textSubtle,
                 },
               ]}
-              onPress={handleGenerate}
+              onPress={screen.onGenerate}
               activeOpacity={0.85}
             >
               <Text style={styles.generateButtonText}>

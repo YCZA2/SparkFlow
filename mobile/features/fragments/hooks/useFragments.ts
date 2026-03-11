@@ -16,21 +16,29 @@ import {
 import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
 import type { Fragment, FragmentVisualizationResponse } from '@/types/fragment';
 
-export function useFragments() {
+interface UseFragmentsOptions {
+  folderId?: string | null;
+}
+
+export function useFragments({ folderId }: UseFragmentsOptions = {}) {
   /** 中文注释：列表页优先消费本地缓存，再静默刷新远端结果。 */
   const [fragments, setFragments] = useState<Fragment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const resolvedFolderId =
+    typeof folderId === 'string' && folderId.trim() && folderId !== '__all__'
+      ? folderId
+      : undefined;
 
   const applyCachedList = useCallback(async (): Promise<boolean> => {
-    const cached = await readFragmentListCache();
+    const cached = await readFragmentListCache(resolvedFolderId);
     if (!cached) return false;
     setFragments(cached.items);
     setError(null);
     setIsLoading(false);
     return true;
-  }, []);
+  }, [resolvedFolderId]);
 
   const loadFragments = useCallback(
     async (mode: 'load' | 'refresh' | 'silent' = 'load'): Promise<void> => {
@@ -42,11 +50,11 @@ export function useFragments() {
       }
 
       try {
-        const response = await fetchFragmentsRemote();
+        const response = await fetchFragmentsRemote(resolvedFolderId);
         const nextItems = response.items || [];
         setFragments(nextItems);
         setError(null);
-        await writeFragmentListCache(nextItems);
+        await writeFragmentListCache(nextItems, resolvedFolderId);
       } catch (err) {
         const nextError = err instanceof Error ? err.message : '加载失败';
         setError(nextError);
@@ -59,7 +67,7 @@ export function useFragments() {
         }
       }
     },
-    []
+    [resolvedFolderId]
   );
 
   useEffect(() => {
@@ -74,7 +82,7 @@ export function useFragments() {
     void hydrate();
 
     const unsubscribe = subscribeFragmentCache(() => {
-      const cached = peekFragmentListCache();
+      const cached = peekFragmentListCache(resolvedFolderId);
       if (!cached) {
         setFragments([]);
         return;
@@ -88,7 +96,7 @@ export function useFragments() {
       cancelled = true;
       unsubscribe();
     };
-  }, [applyCachedList, loadFragments]);
+  }, [applyCachedList, loadFragments, resolvedFolderId]);
 
   useFocusEffect(
     useCallback(() => {

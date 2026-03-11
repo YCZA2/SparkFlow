@@ -138,6 +138,216 @@ function Section({
   );
 }
 
+function InfoCard({ children }: { children: React.ReactNode }) {
+  /** 中文注释：统一抽屉卡片容器，避免各区块重复拼装主题样式。 */
+  const theme = useAppTheme();
+
+  return (
+    <View
+      style={[
+        styles.infoCard,
+        theme.shadow.card,
+        { backgroundColor: theme.colors.surface },
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+function AudioTranscriptSection({
+  content,
+  activeSegmentIndex,
+  player,
+}: Pick<
+  FragmentDetailSheetProps,
+  'content' | 'activeSegmentIndex' | 'player'
+>) {
+  /** 中文注释：单独渲染原文与音频区块，保持播放器和转写的展示边界。 */
+  const theme = useAppTheme();
+  const hasAudio = Boolean(content.audioFileUrl);
+  const hasTranscript = Boolean(content.transcript?.trim() || content.speakerSegments?.length);
+
+  return (
+    <Section title="原文与音频">
+      {hasAudio ? (
+        <View style={styles.audioSection}>
+          <FragmentAudioPlayerControls
+            isReady={player.isReady}
+            isPlaying={player.isPlaying}
+            positionMs={player.positionMs}
+            durationMs={player.durationMs}
+            playbackRate={player.playbackRate}
+            disabled={player.isResolving}
+            compact={true}
+            onTogglePlay={player.togglePlayback}
+            onSeek={player.seekTo}
+            onSkipForward={player.skipForward}
+            onSkipBackward={player.skipBackward}
+            onChangeRate={player.cyclePlaybackRate}
+          />
+        </View>
+      ) : null}
+
+      {hasTranscript ? (
+        <TranscriptSection
+          transcript={content.transcript}
+          speakerSegments={content.speakerSegments}
+          audioPath={content.audioFileUrl}
+          activeIndex={activeSegmentIndex}
+          activeSegmentId={null}
+          dense={true}
+          onSegmentPress={({ segment }) => {
+            void player.playSegment(segment);
+          }}
+        />
+      ) : (
+        <InfoCard>
+          <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>
+            这条碎片没有可查看的语音原文。
+          </Text>
+        </InfoCard>
+      )}
+    </Section>
+  );
+}
+
+function ToolsSection({ tools }: Pick<FragmentDetailSheetProps, 'tools'>) {
+  /** 中文注释：把正文整理动作收口为独立区块，便于后续增删工具入口。 */
+  return (
+    <Section title="整理工具">
+      <ToolRow
+        icon="photo"
+        title={tools.isUploadingImage ? '正在插图' : '插入图片'}
+        subtitle="把图片插进正文，和笔记内容一起保存。"
+        onPress={() => {
+          void tools.onInsertImage();
+        }}
+        disabled={tools.isUploadingImage}
+      />
+      <ToolRow
+        icon="sparkles"
+        title={tools.isAiRunning ? 'AI 正在润色' : '润色正文'}
+        subtitle="优化当前正文语气和表达清晰度。"
+        onPress={() => {
+          void tools.onAiAction('polish');
+        }}
+        disabled={tools.isAiRunning}
+      />
+      <ToolRow
+        icon="arrow.down.right.and.arrow.up.left"
+        title="压缩内容"
+        subtitle="把当前内容收紧成更精炼的版本。"
+        onPress={() => {
+          void tools.onAiAction('shorten');
+        }}
+        disabled={tools.isAiRunning}
+      />
+      <ToolRow
+        icon="arrow.up.left.and.arrow.down.right"
+        title="扩写内容"
+        subtitle="为当前内容补充更多铺垫和细节。"
+        onPress={() => {
+          void tools.onAiAction('expand');
+        }}
+        disabled={tools.isAiRunning}
+      />
+      <ToolRow
+        icon="textformat.size"
+        title="生成标题"
+        subtitle="基于当前正文给出一条更聚焦的标题。"
+        onPress={() => {
+          void tools.onAiAction('title');
+        }}
+        disabled={tools.isAiRunning}
+      />
+      <ToolRow
+        icon="document.badge.gearshape"
+        title="脚本草稿"
+        subtitle="先生成一版偏口播结构的正文草稿。"
+        onPress={() => {
+          void tools.onAiAction('script_seed');
+        }}
+        disabled={tools.isAiRunning}
+      />
+    </Section>
+  );
+}
+
+function MetadataSection({
+  content,
+  metadata,
+}: Pick<FragmentDetailSheetProps, 'content' | 'metadata'>) {
+  /** 中文注释：把摘要、来源、标签等信息集中在只读区块展示。 */
+  const theme = useAppTheme();
+  const tags = normalizeFragmentTags(content.tags);
+  const sourceLabel = getSourceLabel(metadata.source);
+  const audioSourceLabel = getAudioSourceLabel(metadata.audioSource);
+
+  return (
+    <Section title="碎片信息">
+      {content.summary ? (
+        <InfoCard>
+          <Text style={[styles.infoLabel, { color: theme.colors.textSubtle }]}>AI 摘要</Text>
+          <Text style={[styles.summaryText, { color: theme.colors.text }]}>
+            {content.summary}
+          </Text>
+        </InfoCard>
+      ) : null}
+
+      <InfoCard>
+        <InfoRow label="来源" value={sourceLabel} />
+        {audioSourceLabel ? <InfoRow label="音频来源" value={audioSourceLabel} /> : null}
+        <InfoRow label="创建时间" value={formatDate(metadata.createdAt)} />
+        <InfoRow label="文件夹" value={metadata.folderName} />
+      </InfoCard>
+
+      {tags.length > 0 ? (
+        <InfoCard>
+          <Text style={[styles.infoLabel, { color: theme.colors.textSubtle }]}>标签</Text>
+          <View style={styles.tagsWrap}>
+            {tags.map((tag) => (
+              <View
+                key={tag}
+                style={[styles.tag, { backgroundColor: theme.colors.surfaceMuted }]}
+              >
+                <Text style={[styles.tagText, { color: theme.colors.text }]}>{tag}</Text>
+              </View>
+            ))}
+          </View>
+        </InfoCard>
+      ) : null}
+    </Section>
+  );
+}
+
+function DangerSection({ actions }: Pick<FragmentDetailSheetProps, 'actions'>) {
+  /** 中文注释：把删除入口独立出来，避免和信息区块混排。 */
+  const theme = useAppTheme();
+
+  return (
+    <Section title="危险操作">
+      <TouchableOpacity
+        activeOpacity={0.82}
+        onPress={actions.onDelete}
+        disabled={actions.isDeleting}
+        style={[
+          styles.deleteButton,
+          {
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.danger,
+            opacity: actions.isDeleting ? 0.65 : 1,
+          },
+        ]}
+      >
+        <Text style={[styles.deleteText, { color: theme.colors.danger }]}>
+          {actions.isDeleting ? '删除中...' : '删除这条碎片'}
+        </Text>
+      </TouchableOpacity>
+    </Section>
+  );
+}
+
 export function FragmentDetailSheet({
   visible,
   content,
@@ -147,14 +357,9 @@ export function FragmentDetailSheet({
   tools,
   actions,
 }: FragmentDetailSheetProps) {
-  /** 中文注释：在底部抽屉中收纳原文、音频、整理工具和碎片元信息。 */
+  /** 中文注释：在底部抽屉中收纳原文、音频、整理工具和碎片信息。 */
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
-  const tags = normalizeFragmentTags(content.tags);
-  const hasAudio = Boolean(content.audioFileUrl);
-  const hasTranscript = Boolean(content.transcript?.trim() || content.speakerSegments?.length);
-  const sourceLabel = getSourceLabel(metadata.source);
-  const audioSourceLabel = getAudioSourceLabel(metadata.audioSource);
 
   return (
     <Modal animationType="none" visible={visible} transparent statusBarTranslucent onRequestClose={actions.onClose}>
@@ -191,155 +396,14 @@ export function FragmentDetailSheet({
             contentContainerStyle={styles.sheetContent}
             showsVerticalScrollIndicator={false}
           >
-            <Section title="原文与音频">
-              {hasAudio ? (
-                <View style={styles.audioSection}>
-                  <FragmentAudioPlayerControls
-                    isReady={player.isReady}
-                    isPlaying={player.isPlaying}
-                    positionMs={player.positionMs}
-                    durationMs={player.durationMs}
-                    playbackRate={player.playbackRate}
-                    disabled={player.isResolving}
-                    compact={true}
-                    onTogglePlay={player.togglePlayback}
-                    onSeek={player.seekTo}
-                    onSkipForward={player.skipForward}
-                    onSkipBackward={player.skipBackward}
-                    onChangeRate={player.cyclePlaybackRate}
-                  />
-                </View>
-              ) : null}
-
-              {hasTranscript ? (
-                <TranscriptSection
-                  transcript={content.transcript}
-                  speakerSegments={content.speakerSegments}
-                  audioPath={content.audioFileUrl}
-                  activeIndex={activeSegmentIndex}
-                  activeSegmentId={null}
-                  dense={true}
-                  onSegmentPress={({ segment }) => {
-                    void player.playSegment(segment);
-                  }}
-                />
-              ) : (
-                <View style={[styles.infoCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-                  <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>
-                    这条碎片没有可查看的语音原文。
-                  </Text>
-                </View>
-              )}
-            </Section>
-
-            <Section title="整理工具">
-              <ToolRow
-                icon="photo"
-                title={tools.isUploadingImage ? '正在插图' : '插入图片'}
-                subtitle="把图片插进正文，和笔记内容一起保存。"
-                onPress={() => {
-                  void tools.onInsertImage();
-                }}
-                disabled={tools.isUploadingImage}
-              />
-              <ToolRow
-                icon="sparkles"
-                title={tools.isAiRunning ? 'AI 正在润色' : '润色正文'}
-                subtitle="优化当前正文语气和表达清晰度。"
-                onPress={() => {
-                  void tools.onAiAction('polish');
-                }}
-                disabled={tools.isAiRunning}
-              />
-              <ToolRow
-                icon="arrow.down.right.and.arrow.up.left"
-                title="压缩内容"
-                subtitle="把当前内容收紧成更精炼的版本。"
-                onPress={() => {
-                  void tools.onAiAction('shorten');
-                }}
-                disabled={tools.isAiRunning}
-              />
-              <ToolRow
-                icon="arrow.up.left.and.arrow.down.right"
-                title="扩写内容"
-                subtitle="为当前内容补充更多铺垫和细节。"
-                onPress={() => {
-                  void tools.onAiAction('expand');
-                }}
-                disabled={tools.isAiRunning}
-              />
-              <ToolRow
-                icon="textformat.size"
-                title="生成标题"
-                subtitle="基于当前正文给出一条更聚焦的标题。"
-                onPress={() => {
-                  void tools.onAiAction('title');
-                }}
-                disabled={tools.isAiRunning}
-              />
-              <ToolRow
-                icon="document.badge.gearshape"
-                title="脚本草稿"
-                subtitle="先生成一版偏口播结构的正文草稿。"
-                onPress={() => {
-                  void tools.onAiAction('script_seed');
-                }}
-                disabled={tools.isAiRunning}
-              />
-            </Section>
-
-            <Section title="碎片信息">
-              {content.summary ? (
-                <View style={[styles.infoCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-                  <Text style={[styles.infoLabel, { color: theme.colors.textSubtle }]}>AI 摘要</Text>
-                  <Text style={[styles.summaryText, { color: theme.colors.text }]}>{content.summary}</Text>
-                </View>
-              ) : null}
-
-              <View style={[styles.infoCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-                <InfoRow label="来源" value={sourceLabel} />
-                {audioSourceLabel ? <InfoRow label="音频来源" value={audioSourceLabel} /> : null}
-                <InfoRow label="创建时间" value={formatDate(metadata.createdAt)} />
-                <InfoRow label="文件夹" value={metadata.folderName} />
-              </View>
-
-              {tags.length > 0 ? (
-                <View style={[styles.infoCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-                  <Text style={[styles.infoLabel, { color: theme.colors.textSubtle }]}>标签</Text>
-                  <View style={styles.tagsWrap}>
-                    {tags.map((tag) => (
-                      <View
-                        key={tag}
-                        style={[styles.tag, { backgroundColor: theme.colors.surfaceMuted }]}
-                      >
-                        <Text style={[styles.tagText, { color: theme.colors.text }]}>{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              ) : null}
-            </Section>
-
-            <Section title="危险操作">
-              <TouchableOpacity
-                activeOpacity={0.82}
-                onPress={actions.onDelete}
-                disabled={actions.isDeleting}
-                style={[
-                  styles.deleteButton,
-                  {
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.danger,
-                    opacity: actions.isDeleting ? 0.65 : 1,
-                  },
-                ]}
-              >
-                <Text style={[styles.deleteText, { color: theme.colors.danger }]}>
-                  {actions.isDeleting ? '删除中...' : '删除这条碎片'}
-                </Text>
-              </TouchableOpacity>
-            </Section>
+            <AudioTranscriptSection
+              content={content}
+              activeSegmentIndex={activeSegmentIndex}
+              player={player}
+            />
+            <ToolsSection tools={tools} />
+            <MetadataSection content={content} metadata={metadata} />
+            <DangerSection actions={actions} />
           </ScrollView>
         </Animated.View>
       </View>

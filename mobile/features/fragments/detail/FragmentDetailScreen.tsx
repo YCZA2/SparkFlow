@@ -15,6 +15,7 @@ import { FragmentDetailSheet } from '@/features/fragments/components/FragmentDet
 import { FragmentEditorToolbar } from '@/features/fragments/components/FragmentEditorToolbar';
 import { FragmentRichEditor } from '@/features/fragments/components/FragmentRichEditor';
 import { useAppTheme } from '@/theme/useAppTheme';
+import type { FragmentEditorCommand } from '@/types/fragment';
 
 import { useFragmentDetailScreen } from './useFragmentDetailScreen';
 
@@ -68,12 +69,35 @@ function EditorSkeleton({ dark = false }: { dark?: boolean }) {
   );
 }
 
+function runEditorCommand(
+  editorRef: React.RefObject<{
+    runCommand?: (command: FragmentEditorCommand) => void;
+    focus?: () => void;
+  } | null>,
+  command: FragmentEditorCommand,
+  options?: { focus?: boolean }
+) {
+  /** 中文注释：bridge 方法尚未挂载时跳过命令，避免详情页初始化阶段抛错。 */
+  const runCommand = editorRef.current?.runCommand;
+  if (typeof runCommand !== 'function') return;
+  runCommand(command);
+  if (options?.focus) {
+    const focus = editorRef.current?.focus;
+    if (typeof focus === 'function') {
+      focus();
+    }
+  }
+}
+
 export function FragmentDetailScreen({ fragmentId }: { fragmentId?: string | null }) {
   /** 中文注释：只消费 screen view-model 渲染碎片详情页面，避免页面层混入保存流程细节。 */
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const screen = useFragmentDetailScreen(fragmentId);
-  const fragment = screen.fragment;
+  const fragment = screen.resource.fragment;
+  const editor = screen.editor;
+  const sheet = screen.sheet;
+  const actions = screen.actions;
   const isDark = theme.name === 'dark';
   const noteBackground = isDark ? '#12110F' : '#ECE9E4';
   const noteText = isDark ? '#F7F3ED' : '#23201C';
@@ -81,14 +105,14 @@ export function FragmentDetailScreen({ fragmentId }: { fragmentId?: string | nul
 
   const renderPageHeader = (options?: { disableActions?: boolean }) => (
     <View style={styles.headerRow}>
-      <HeaderCircleButton symbol="chevron.left" dark={isDark} onPress={screen.goBack} />
+      <HeaderCircleButton symbol="chevron.left" dark={isDark} onPress={actions.goBack} />
 
       <View style={styles.headerActions}>
         <HeaderCircleButton
           symbol="arrow.uturn.backward"
           dark={isDark}
-          disabled={options?.disableActions || !screen.bodySession.formattingState?.can_undo}
-          onPress={() => screen.bodySession.editorRef.current?.runCommand('undo')}
+          disabled={options?.disableActions || !editor.formattingState?.can_undo}
+          onPress={() => runEditorCommand(editor.editorRef, 'undo')}
         />
         <View
           style={[
@@ -105,7 +129,7 @@ export function FragmentDetailScreen({ fragmentId }: { fragmentId?: string | nul
             disabled={options?.disableActions}
             style={styles.headerPillButton}
             onPress={() => {
-              void screen.handleShare();
+              void actions.share();
             }}
           >
             <SymbolView name="square.and.arrow.up" size={24} tintColor={noteText} />
@@ -114,7 +138,7 @@ export function FragmentDetailScreen({ fragmentId }: { fragmentId?: string | nul
             activeOpacity={0.86}
             disabled={options?.disableActions}
             style={styles.headerPillButton}
-            onPress={screen.openSheet}
+            onPress={sheet.open}
           >
             <SymbolView name="ellipsis" size={24} tintColor={noteText} />
           </TouchableOpacity>
@@ -124,13 +148,13 @@ export function FragmentDetailScreen({ fragmentId }: { fragmentId?: string | nul
           filled={true}
           dark={isDark}
           disabled={options?.disableActions}
-          onPress={screen.handleDone}
+          onPress={actions.done}
         />
       </View>
     </View>
   );
 
-  if (screen.isLoading) {
+  if (screen.resource.isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: noteBackground }]}>
         <Stack.Screen options={{ title: '', headerShown: false }} />
@@ -156,7 +180,7 @@ export function FragmentDetailScreen({ fragmentId }: { fragmentId?: string | nul
     );
   }
 
-  if (screen.error || !fragment) {
+  if (screen.resource.error || !fragment) {
     return (
       <View style={[styles.container, { backgroundColor: noteBackground }]}>
         <Stack.Screen options={{ title: '', headerShown: false }} />
@@ -166,10 +190,10 @@ export function FragmentDetailScreen({ fragmentId }: { fragmentId?: string | nul
             <ScreenState
               icon="⚠️"
               title="加载失败"
-              message={screen.error || '碎片不存在或已被删除'}
+              message={screen.resource.error || '碎片不存在或已被删除'}
               actionLabel="点击重试"
               onAction={() => {
-                void screen.reload();
+                void screen.resource.reload();
               }}
             />
           </View>
@@ -196,17 +220,17 @@ export function FragmentDetailScreen({ fragmentId }: { fragmentId?: string | nul
           keyboardVerticalOffset={0}
         >
           <View style={styles.editorCanvas}>
-            {screen.bodySession.isDraftHydrated ? (
+            {editor.isDraftHydrated ? (
               <FragmentRichEditor
-                editorKey={screen.bodySession.editorKey}
-                editorRef={screen.bodySession.editorRef}
-                initialBodyMarkdown={screen.bodySession.initialBodyMarkdown}
-                mediaAssets={screen.bodySession.mediaAssets}
-                statusLabel={screen.bodySession.statusLabel}
-                onEditorReady={screen.bodySession.onEditorReady}
-                onSnapshotChange={screen.bodySession.onSnapshotChange}
-                onSelectionChange={screen.bodySession.onSelectionChange}
-                onFormattingStateChange={screen.bodySession.onFormattingStateChange}
+                editorKey={editor.editorKey}
+                editorRef={editor.editorRef}
+                initialBodyMarkdown={editor.initialBodyMarkdown}
+                mediaAssets={editor.mediaAssets}
+                statusLabel={editor.statusLabel}
+                onEditorReady={editor.onEditorReady}
+                onSnapshotChange={editor.onSnapshotChange}
+                onSelectionChange={editor.onSelectionChange}
+                onFormattingStateChange={editor.onFormattingStateChange}
               />
             ) : (
               <EditorSkeleton dark={isDark} />
@@ -214,54 +238,33 @@ export function FragmentDetailScreen({ fragmentId }: { fragmentId?: string | nul
           </View>
 
           <FragmentEditorToolbar
-            formattingState={screen.bodySession.formattingState}
-            statusLabel={screen.bodySession.statusLabel}
-            isUploadingImage={screen.bodySession.isUploadingImage}
-            isAiRunning={screen.bodySession.isAiRunning}
+            formattingState={editor.formattingState}
+            statusLabel={editor.statusLabel}
+            isUploadingImage={editor.isUploadingImage}
+            isAiRunning={editor.isAiRunning}
             bottomInset={insets.bottom}
             onCommand={(command) => {
-              screen.bodySession.editorRef.current?.runCommand(command);
-              screen.bodySession.editorRef.current?.focus();
+              runEditorCommand(editor.editorRef, command, { focus: true });
             }}
             onInsertImage={() => {
-              void screen.bodySession.onInsertImage();
+              void editor.onInsertImage();
             }}
             onAiAction={(instruction) => {
-              void screen.bodySession.onAiAction(instruction);
+              void editor.onAiAction(instruction);
             }}
           />
         </KeyboardAvoidingView>
       </View>
 
-      {screen.isSheetOpen ? (
+      {sheet.isOpen && sheet.content && sheet.metadata ? (
         <FragmentDetailSheet
-          visible={screen.isSheetOpen}
-          content={{
-            audioFileUrl: fragment.audio_file_url,
-            transcript: fragment.transcript,
-            speakerSegments: fragment.speaker_segments,
-            summary: fragment.summary,
-            tags: fragment.tags,
-          }}
-          metadata={{
-            source: fragment.source,
-            audioSource: fragment.audio_source ?? null,
-            createdAt: fragment.created_at,
-            folderName: fragment.folder?.name ?? '未归档',
-          }}
-          activeSegmentIndex={screen.activeSegmentIndex}
-          player={screen.player}
-          tools={{
-            isUploadingImage: screen.bodySession.isUploadingImage,
-            isAiRunning: screen.bodySession.isAiRunning,
-            onInsertImage: screen.bodySession.onInsertImage,
-            onAiAction: screen.bodySession.onAiAction,
-          }}
-          actions={{
-            isDeleting: screen.isDeleting,
-            onClose: screen.closeSheet,
-            onDelete: screen.handleDelete,
-          }}
+          visible={sheet.isOpen}
+          content={sheet.content}
+          metadata={sheet.metadata}
+          activeSegmentIndex={sheet.activeSegmentIndex}
+          player={sheet.player}
+          tools={sheet.tools}
+          actions={sheet.actions}
         />
       ) : null}
     </View>

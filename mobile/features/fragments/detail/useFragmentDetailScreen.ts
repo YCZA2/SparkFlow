@@ -12,14 +12,14 @@ import { useFragmentBodySession } from './useFragmentBodySession';
 import { useFragmentDetailResource } from './useFragmentDetailResource';
 
 export function useFragmentDetailScreen(fragmentId?: string | null) {
-  /** 中文注释：编排碎片详情页交互，把页面动作与数据资源层解耦。 */
+  /** 中文注释：聚合详情页资源、编辑会话、抽屉状态和页面动作，供页面层按分组消费。 */
   const router = useRouter();
   const resource = useFragmentDetailResource(fragmentId);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const fragment = resource.fragment;
 
-  const bodySession = useFragmentBodySession({
+  const editor = useFragmentBodySession({
     fragmentId,
     fragment,
     commitRemoteFragment: resource.commitRemoteFragment,
@@ -27,13 +27,9 @@ export function useFragmentDetailScreen(fragmentId?: string | null) {
   });
   const player = useFragmentAudioPlayer(fragment?.audio_file_url, { enabled: isSheetOpen });
   const activeSegmentIndex = useMemo(() => {
-    if (!isSheetOpen) {
-      return null;
-    }
+    if (!isSheetOpen) return null;
     const segments = fragment?.speaker_segments;
-    if (!segments?.length) {
-      return null;
-    }
+    if (!segments?.length) return null;
     return getActiveSegmentIndex(segments, player.positionMs);
   }, [fragment?.speaker_segments, isSheetOpen, player.positionMs]);
 
@@ -56,7 +52,7 @@ export function useFragmentDetailScreen(fragmentId?: string | null) {
     }
   };
 
-  const handleDelete = () => {
+  const requestDelete = () => {
     /** 中文注释：统一处理跨平台删除确认逻辑，保持页面组件只关心点击事件。 */
     if (Platform.OS === 'web' && typeof window !== 'undefined' && window.confirm) {
       if (window.confirm('删除后将无法恢复，是否继续？')) {
@@ -77,9 +73,10 @@ export function useFragmentDetailScreen(fragmentId?: string | null) {
     ]);
   };
 
-  const handleShare = async () => {
+  const share = async () => {
     /** 中文注释：分享时优先读取编辑器实时快照，避免导出正文落后于当前输入。 */
-    const latestSnapshot = bodySession.editorRef.current?.getSnapshot();
+    const getSnapshot = editor.editorRef.current?.getSnapshot;
+    const latestSnapshot = typeof getSnapshot === 'function' ? getSnapshot() : null;
     const shareText = latestSnapshot?.plain_text || fragment?.plain_text_snapshot || '';
     if (!shareText.trim()) {
       Alert.alert('暂无可分享内容', '先写一点正文再分享。');
@@ -90,10 +87,10 @@ export function useFragmentDetailScreen(fragmentId?: string | null) {
     });
   };
 
-  const handleDone = async () => {
+  const done = async () => {
     /** 中文注释：完成编辑前主动 flush 自动保存，失败时停留在当前页继续保留草稿。 */
     try {
-      await bodySession.saveNow();
+      await editor.saveNow();
       router.back();
     } catch {
       Alert.alert('内容未同步', '内容未同步，已保留本地草稿');
@@ -101,20 +98,53 @@ export function useFragmentDetailScreen(fragmentId?: string | null) {
   };
 
   return {
-    fragment,
-    isLoading: resource.isLoading,
-    error: resource.error,
-    reload: resource.reload,
-    bodySession,
-    player,
-    activeSegmentIndex,
-    isDeleting,
-    isSheetOpen,
-    openSheet: () => setIsSheetOpen(true),
-    closeSheet: () => setIsSheetOpen(false),
-    goBack: () => router.back(),
-    handleShare,
-    handleDone,
-    handleDelete,
+    resource: {
+      fragment,
+      isLoading: resource.isLoading,
+      error: resource.error,
+      reload: resource.reload,
+    },
+    editor,
+    sheet: {
+      isOpen: isSheetOpen,
+      open: () => setIsSheetOpen(true),
+      close: () => setIsSheetOpen(false),
+      activeSegmentIndex,
+      player,
+      content: fragment
+        ? {
+            audioFileUrl: fragment.audio_file_url,
+            transcript: fragment.transcript,
+            speakerSegments: fragment.speaker_segments,
+            summary: fragment.summary,
+            tags: fragment.tags,
+          }
+        : null,
+      metadata: fragment
+        ? {
+            source: fragment.source,
+            audioSource: fragment.audio_source ?? null,
+            createdAt: fragment.created_at,
+            folderName: fragment.folder?.name ?? '未归档',
+          }
+        : null,
+      tools: {
+        isUploadingImage: editor.isUploadingImage,
+        isAiRunning: editor.isAiRunning,
+        onInsertImage: editor.onInsertImage,
+        onAiAction: editor.onAiAction,
+      },
+      actions: {
+        isDeleting,
+        onClose: () => setIsSheetOpen(false),
+        onDelete: requestDelete,
+      },
+    },
+    actions: {
+      goBack: () => router.back(),
+      share,
+      done,
+      requestDelete,
+    },
   };
 }

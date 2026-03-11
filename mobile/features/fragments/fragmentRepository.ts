@@ -21,15 +21,28 @@ export interface FragmentListCacheEntry {
 
 const CACHE_VERSION = 'v1';
 const FRAGMENT_DETAIL_PREFIX = `@fragment_cache:${CACHE_VERSION}:detail:`;
-const FRAGMENT_LIST_KEY = `@fragment_cache:${CACHE_VERSION}:list`;
+const FRAGMENT_LIST_PREFIX = `@fragment_cache:${CACHE_VERSION}:list:`;
+const ALL_LIST_SCOPE_KEY = 'all';
 
 const detailMemoryCache = new Map<string, FragmentCacheEntry | null>();
-let listMemoryCache: FragmentListCacheEntry | null | undefined;
+const listMemoryCache = new Map<string, FragmentListCacheEntry | null>();
 const listeners = new Set<() => void>();
 
 function buildDetailKey(fragmentId: string): string {
   /** 中文注释：按 fragment 维度隔离详情缓存键，便于单条清理。 */
   return `${FRAGMENT_DETAIL_PREFIX}${fragmentId}`;
+}
+
+function resolveListScopeKey(folderId?: string | null): string {
+  /** 中文注释：按 folder 维度拆分列表缓存键，首页和文件夹页共用同一套仓储能力。 */
+  const normalizedFolderId = String(folderId ?? '').trim();
+  if (!normalizedFolderId || normalizedFolderId === '__all__') return ALL_LIST_SCOPE_KEY;
+  return `folder:${normalizedFolderId}`;
+}
+
+function buildListKey(folderId?: string | null): string {
+  /** 中文注释：把列表范围映射到稳定存储键，支持首页和文件夹页分桶缓存。 */
+  return `${FRAGMENT_LIST_PREFIX}${resolveListScopeKey(folderId)}`;
 }
 
 function emitCacheChange(): void {
@@ -69,14 +82,14 @@ async function readPersistedDetailCache(fragmentId: string): Promise<FragmentCac
   }
 }
 
-async function readPersistedListCache(): Promise<FragmentListCacheEntry | null> {
+async function readPersistedListCache(folderId?: string | null): Promise<FragmentListCacheEntry | null> {
   /** 中文注释：从持久层读取列表缓存，并在过期时回收旧快照。 */
   try {
-    const raw = await AsyncStorage.getItem(FRAGMENT_LIST_KEY);
+    const raw = await AsyncStorage.getItem(buildListKey(folderId));
     if (!raw) return null;
     const parsed = sanitizeFragmentListCacheEntry(JSON.parse(raw) as FragmentListCacheEntry);
     if (!parsed) {
-      await AsyncStorage.removeItem(FRAGMENT_LIST_KEY);
+      await AsyncStorage.removeItem(buildListKey(folderId));
       return null;
     }
     return parsed;
@@ -85,15 +98,19 @@ async function readPersistedListCache(): Promise<FragmentListCacheEntry | null> 
   }
 }
 
-async function persistFragmentListEntry(entry: FragmentListCacheEntry | null): Promise<void> {
+async function persistFragmentListEntry(
+  entry: FragmentListCacheEntry | null,
+  folderId?: string | null
+): Promise<void> {
   /** 中文注释：统一处理列表缓存落盘和内存镜像，避免多处状态漂移。 */
-  listMemoryCache = entry;
+  const scopeKey = resolveListScopeKey(folderId);
+  listMemoryCache.set(scopeKey, entry);
   if (!entry) {
-    await AsyncStorage.removeItem(FRAGMENT_LIST_KEY);
+    await AsyncStorage.removeItem(buildListKey(folderId));
     emitCacheChange();
     return;
   }
-  await AsyncStorage.setItem(FRAGMENT_LIST_KEY, JSON.stringify(entry));
+  await AsyncStorage.setItem(buildListKey(folderId), JSON.stringify(entry));
   emitCacheChange();
 }
 
@@ -122,9 +139,9 @@ export function peekFragmentCache(fragmentId: string): FragmentCacheEntry | null
   return sanitizeFragmentCacheEntry(detailMemoryCache.get(fragmentId) ?? null);
 }
 
-export function peekFragmentListCache(): FragmentListCacheEntry | null {
+export function peekFragmentListCache(folderId?: string | null): FragmentListCacheEntry | null {
   /** 中文注释：优先从内存读取列表缓存，供订阅更新时直接回显。 */
-  return sanitizeFragmentListCacheEntry(listMemoryCache ?? null);
+  return sanitizeFragmentListCacheEntry(listMemoryCache.get(resolveListScopeKey(folderId)) ?? null);
 }
 
 export async function readFragmentCache(fragmentId: string): Promise<FragmentCacheEntry | null> {
@@ -136,12 +153,13 @@ export async function readFragmentCache(fragmentId: string): Promise<FragmentCac
   return persisted;
 }
 
-export async function readFragmentListCache(): Promise<FragmentListCacheEntry | null> {
+export async function readFragmentListCache(folderId?: string | null): Promise<FragmentListCacheEntry | null> {
   /** 中文注释：按需读取列表缓存，首次缺内存时再回落到 AsyncStorage。 */
-  const cached = peekFragmentListCache();
+  const scopeKey = resolveListScopeKey(folderId);
+  const cached = peekFragmentListCache(folderId);
   if (cached) return cached;
-  const persisted = await readPersistedListCache();
-  listMemoryCache = persisted;
+  const persisted = await readPersistedListCache(folderId);
+  listMemoryCache.set(scopeKey, persisted);
   return persisted;
 }
 
@@ -151,16 +169,31 @@ export async function writeFragmentCache(fragment: Fragment): Promise<void> {
   detailMemoryCache.set(fragment.id, detailEntry);
   await AsyncStorage.setItem(buildDetailKey(fragment.id), JSON.stringify(detailEntry));
 
-  const currentListEntry = (await readFragmentListCache()) ?? createFragmentListCacheEntry([]);
-  const nextListEntry = createFragmentListCacheEntry(mergeFragmentIntoListItems(currentListEntry.items, fragment));
-  await persistFragmentListEntry(nextListEntry);
+  const cachedLists = Array.from(listMemoryCache.entries());
+  await Promise.all(
+    cachedLists.map(async ([scopeKey, entry]) => {
+      const currentEntry = sanitizeFragmentListCacheEntry(entry);
+      if (!currentEntry) return;
+      const folderScopeId = scopeKey.startsWith('folder:') ? scopeKey.slice('folder:'.length) : null;
+      const nextItems =
+        scopeKey === ALL_LIST_SCOPE_KEY
+          ? mergeFragmentIntoListItems(currentEntry.items, fragment)
+          : folderScopeId === (fragment.folder_id ?? null)
+            ? mergeFragmentIntoListItems(currentEntry.items, fragment)
+            : removeFragmentFromListItems(currentEntry.items, fragment.id);
+      await persistFragmentListEntry(
+        createFragmentListCacheEntry(nextItems),
+        scopeKey === ALL_LIST_SCOPE_KEY ? undefined : folderScopeId
+      );
+    })
+  );
 }
 
-export async function writeFragmentListCache(items: Fragment[]): Promise<void> {
+export async function writeFragmentListCache(items: Fragment[], folderId?: string | null): Promise<void> {
   /** 中文注释：覆盖写入列表缓存，并预热每条 fragment 的详情缓存。 */
   const entry = createFragmentListCacheEntry(items);
-  listMemoryCache = entry;
-  await AsyncStorage.setItem(FRAGMENT_LIST_KEY, JSON.stringify(entry));
+  listMemoryCache.set(resolveListScopeKey(folderId), entry);
+  await AsyncStorage.setItem(buildListKey(folderId), JSON.stringify(entry));
   await Promise.all(
     items.map(async (fragment) => {
       const detailEntry = createFragmentCacheEntry(fragment);
@@ -174,9 +207,23 @@ export async function writeFragmentListCache(items: Fragment[]): Promise<void> {
 export async function prewarmFragmentDetailCache(fragment: Fragment): Promise<void> {
   /** 中文注释：从列表进入详情前先预热单条缓存，减少首次进入白屏。 */
   await persistFragmentDetailEntry(fragment.id, createFragmentCacheEntry(fragment));
-  const currentListEntry = (await readFragmentListCache()) ?? createFragmentListCacheEntry([]);
-  const nextItems = mergeFragmentIntoListItems(currentListEntry.items, fragment);
-  await persistFragmentListEntry(createFragmentListCacheEntry(nextItems));
+  const cachedLists = Array.from(listMemoryCache.entries());
+  await Promise.all(
+    cachedLists.map(async ([scopeKey, entry]) => {
+      const currentEntry = sanitizeFragmentListCacheEntry(entry);
+      if (!currentEntry) return;
+      const folderScopeId = scopeKey.startsWith('folder:') ? scopeKey.slice('folder:'.length) : null;
+      const shouldMerge =
+        scopeKey === ALL_LIST_SCOPE_KEY ||
+        folderScopeId === (fragment.folder_id ?? null) ||
+        currentEntry.items.some((item) => item.id === fragment.id);
+      if (!shouldMerge) return;
+      await persistFragmentListEntry(
+        createFragmentListCacheEntry(mergeFragmentIntoListItems(currentEntry.items, fragment)),
+        scopeKey === ALL_LIST_SCOPE_KEY ? undefined : folderScopeId
+      );
+    })
+  );
 }
 
 export async function removeFragmentCache(fragmentId: string): Promise<void> {
@@ -184,7 +231,16 @@ export async function removeFragmentCache(fragmentId: string): Promise<void> {
   detailMemoryCache.delete(fragmentId);
   await AsyncStorage.removeItem(buildDetailKey(fragmentId));
 
-  const currentListEntry = await readFragmentListCache();
-  const nextItems = removeFragmentFromListItems(currentListEntry?.items ?? [], fragmentId);
-  await persistFragmentListEntry(nextItems.length ? createFragmentListCacheEntry(nextItems) : null);
+  const cachedLists = Array.from(listMemoryCache.entries());
+  await Promise.all(
+    cachedLists.map(async ([scopeKey, entry]) => {
+      const currentEntry = sanitizeFragmentListCacheEntry(entry);
+      if (!currentEntry) return;
+      const nextItems = removeFragmentFromListItems(currentEntry.items, fragmentId);
+      await persistFragmentListEntry(
+        createFragmentListCacheEntry(nextItems),
+        scopeKey === ALL_LIST_SCOPE_KEY ? undefined : scopeKey.slice('folder:'.length)
+      );
+    })
+  );
 }
