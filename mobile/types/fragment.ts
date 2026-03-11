@@ -4,6 +4,8 @@
 
 export type FragmentSource = 'voice' | 'manual' | 'video_parse';
 export type FragmentAudioSource = 'upload' | 'external_link';
+export type EditorMark = 'bold' | 'italic';
+export type EditorBlockType = 'paragraph' | 'heading' | 'blockquote' | 'bullet_list' | 'ordered_list' | 'image';
 
 export interface SpeakerSegment {
   speaker_id: string;
@@ -12,11 +14,38 @@ export interface SpeakerSegment {
   text: string;
 }
 
-export interface FragmentBlock {
+export interface EditorTextNode {
+  text: string;
+  marks: EditorMark[];
+}
+
+export interface EditorImageBlock {
   id: string;
-  type: string;
-  order_index: number;
-  markdown: string | null;
+  type: 'image';
+  asset_id?: string | null;
+  url?: string | null;
+  width?: number | null;
+  height?: number | null;
+  alt?: string | null;
+  children?: EditorTextNode[];
+}
+
+export interface EditorTextBlock {
+  id: string;
+  type: Exclude<EditorBlockType, 'image'>;
+  children: EditorTextNode[];
+  asset_id?: string | null;
+  url?: string | null;
+  width?: number | null;
+  height?: number | null;
+  alt?: string | null;
+}
+
+export type EditorBlock = EditorTextBlock | EditorImageBlock;
+
+export interface EditorDocument {
+  type: 'doc';
+  blocks: EditorBlock[];
 }
 
 export interface MediaAsset {
@@ -39,67 +68,36 @@ export interface MediaAsset {
  * 碎片笔记数据模型
  */
 export interface Fragment {
-  /** 碎片ID */
   id: string;
-  /** 音频下载地址 */
   audio_file_url: string | null;
-  /** 音频地址过期时间 */
   audio_file_expires_at?: string | null;
-  /** 转写文本 */
   transcript: string | null;
-  /** 说话人分段 */
   speaker_segments: SpeakerSegment[] | null;
-  /** AI一句话摘要 */
   summary: string | null;
-  /** AI自动标签 */
   tags: string[] | null;
-  /** 来源: voice | manual | video_parse */
   source: FragmentSource;
-  /** 音频来源: upload | external_link */
   audio_source?: FragmentAudioSource | null;
-  /** 创建时间 */
   created_at: string;
-  /** 正式 Markdown 内容 */
-  compiled_markdown?: string | null;
-  /** 内容状态 */
+  editor_document: EditorDocument;
+  plain_text_snapshot?: string | null;
   content_state?: 'empty' | 'transcript_only' | 'body_present';
-  /** 内容块 */
-  blocks?: FragmentBlock[];
-  /** 关联素材 */
   media_assets?: MediaAsset[];
 }
 
-/**
- * 碎片列表分页响应
- */
 export interface FragmentListResponse {
-  /** 碎片列表 */
   items: Fragment[];
-  /** 总数 */
   total: number;
-  /** 分页限制 */
   limit: number;
-  /** 偏移量 */
   offset: number;
 }
 
-/**
- * 创建碎片请求
- */
 export interface CreateFragmentRequest {
-  /** 转写文本 */
   transcript?: string;
-  /** Markdown 正文 */
-  body_markdown?: string;
-  /** AI摘要 */
+  editor_document?: EditorDocument;
   summary?: string;
-  /** AI标签 */
   tags?: string[];
-  /** 来源 */
   source?: FragmentSource;
-  /** 文件夹ID，不传表示放入"全部"文件夹 */
   folder_id?: string;
-  /** 关联素材 ID */
   media_asset_ids?: string[];
 }
 
@@ -148,4 +146,12 @@ export interface FragmentVisualizationResponse {
   clusters: FragmentVisualizationCluster[];
   stats: FragmentVisualizationStats;
   meta: FragmentVisualizationMeta;
+}
+
+export interface FragmentAiPatch {
+  op: 'replace_selection' | 'insert_after_selection' | 'prepend_heading';
+  target_block_id?: string | null;
+  replacement_text?: string | null;
+  block?: EditorBlock | null;
+  blocks?: EditorBlock[];
 }

@@ -36,6 +36,7 @@ def test_public_api_routes_are_stable() -> None:
         ("/api/fragments/tags", frozenset({"GET"})),
         ("/api/fragments/visualization", frozenset({"GET"})),
         ("/api/fragments/{fragment_id}", frozenset({"GET"})),
+        ("/api/fragments/{fragment_id}/ai-edit", frozenset({"POST"})),
         ("/api/fragments/{fragment_id}", frozenset({"PATCH"})),
         ("/api/fragments/{fragment_id}", frozenset({"DELETE"})),
         ("/api/media-assets", frozenset({"GET"})),

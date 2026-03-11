@@ -14,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -103,6 +104,8 @@ class Fragment(Base):
     audio_checksum = Column(String, nullable=True)
     transcript = Column(Text, nullable=True)  # 转写文本
     speaker_segments = Column(Text, nullable=True)  # JSON数组字符串，说话人分段
+    editor_document = Column(JSON, nullable=False, default=dict)  # 富文本 JSON 正文
+    plain_text_snapshot = Column(Text, nullable=False, default="")  # 由正文派生的纯文本快照
     summary = Column(Text, nullable=True)  # AI一句话摘要
     tags = Column(String, nullable=True)  # JSON数组字符串，AI自动标签
     source = Column(String, default="voice", nullable=False)  # 'voice'|'manual'|'video_parse'

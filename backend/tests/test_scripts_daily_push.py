@@ -7,10 +7,9 @@ from types import SimpleNamespace
 import pytest
 
 from core.exceptions import ValidationError
-from domains.fragment_blocks import repository as fragment_block_repository
 from domains.fragments import repository as fragment_repository
 from modules.auth.application import TEST_USER_ID
-from modules.shared.content_markdown import build_markdown_block_payload
+from modules.shared.editor_document import build_document_from_text
 from modules.scripts.daily_push import DailyPushFragmentSelector, build_fragments_text
 
 
@@ -30,12 +29,8 @@ def _create_fragment(db, transcript: str):
         audio_mime_type=None,
         audio_file_size=None,
         audio_checksum=None,
-    )
-    fragment_block_repository.create_markdown_block(
-        db=db,
-        fragment_id=fragment.id,
-        order_index=0,
-        payload_json=build_markdown_block_payload(transcript),
+        editor_document=build_document_from_text(transcript),
+        plain_text_snapshot=transcript,
     )
     return fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=fragment.id)
 
@@ -101,6 +96,6 @@ async def test_daily_push_selector_returns_empty_when_candidates_below_minimum(d
 
 
 def test_build_fragments_text_requires_available_content() -> None:
-    """文本拼接应拒绝没有正文块的输入。"""
+    """文本拼接应拒绝没有可用正文快照的输入。"""
     with pytest.raises(ValidationError):
-        build_fragments_text([SimpleNamespace(transcript=None, blocks=[])])
+        build_fragments_text([SimpleNamespace(transcript=None, plain_text_snapshot="", editor_document={"type": "doc", "blocks": []})])

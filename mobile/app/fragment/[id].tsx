@@ -12,11 +12,11 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/Themed';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { FragmentAudioPlayer } from '@/features/fragments/components/FragmentAudioPlayer';
-import { FragmentBodyEditor } from '@/features/fragments/components/FragmentBodyEditor';
+import { FragmentRichEditor } from '@/features/fragments/components/FragmentRichEditor';
 import { TranscriptSection } from '@/features/fragments/components/TranscriptSection';
 import { deleteFragment, fetchFragmentDetail } from '@/features/fragments/api';
 import { useFragmentAudioPlayer } from '@/features/fragments/hooks/useFragmentAudioPlayer';
-import { useFragmentBodyEditor } from '@/features/fragments/hooks/useFragmentBodyEditor';
+import { useFragmentRichEditor } from '@/features/fragments/hooks/useFragmentRichEditor';
 import { getActiveSegmentIndex } from '@/features/fragments/presenters/speakerSegments';
 import { normalizeFragmentTags } from '@/features/fragments/utils';
 import { useAppTheme } from '@/theme/useAppTheme';
@@ -72,7 +72,7 @@ export default function FragmentDetailScreen() {
     }
     return getActiveSegmentIndex(segments, player.positionMs);
   }, [fragment?.speaker_segments, player.positionMs]);
-  const bodyEditor = useFragmentBodyEditor({
+  const bodyEditor = useFragmentRichEditor({
     fragment,
     onFragmentChange: setFragment,
   });
@@ -187,10 +187,16 @@ export default function FragmentDetailScreen() {
             </View>
           ) : null}
 
-          <FragmentBodyEditor
-            value={bodyEditor.text}
+          <FragmentRichEditor
+            document={bodyEditor.document}
+            activeBlockId={bodyEditor.activeBlockId}
             statusLabel={bodyEditor.statusLabel}
-            onChangeText={bodyEditor.onChangeText}
+            isUploadingImage={bodyEditor.isUploadingImage}
+            isAiRunning={bodyEditor.isAiRunning}
+            onSelectBlock={bodyEditor.setActiveBlockId}
+            onChangeDocument={bodyEditor.onChangeDocument}
+            onInsertImage={bodyEditor.onInsertImage}
+            onAiAction={bodyEditor.onAiAction}
           />
 
           <TranscriptSection
@@ -226,17 +232,6 @@ export default function FragmentDetailScreen() {
               <Text style={[styles.audioPathText, { color: theme.colors.textSubtle }]}>
                 {fragment.audio_file_url}
               </Text>
-            </View>
-          ) : null}
-
-          {fragment.media_assets?.length ? (
-            <View style={[styles.card, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textSubtle }]}>素材</Text>
-              {fragment.media_assets.map((asset) => (
-                <Text key={asset.id} style={[styles.audioPathText, { color: theme.colors.textSubtle }]}>
-                  {asset.original_filename}
-                </Text>
-              ))}
             </View>
           ) : null}
 

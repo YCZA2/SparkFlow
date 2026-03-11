@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from domains.fragments import repository as fragment_repository
-from modules.fragments.content import read_fragment_effective_text
+from modules.fragments.content import read_fragment_plain_text
 from modules.shared.ports import VectorStore
 from utils.serialization import parse_json_list
 
@@ -26,7 +26,7 @@ async def _backfill_missing_fragment_vectors(
     candidates = fragment_repository.list_vectorizable_by_user(db=db, user_id=user_id)
     created_count = 0
     for fragment in candidates:
-        effective_text = read_fragment_effective_text(fragment)
+        effective_text = read_fragment_plain_text(fragment)
         if not effective_text or fragment.id in existing_vector_ids:
             continue
 
@@ -74,7 +74,7 @@ async def build_fragment_visualization(
         fallback_items = [
             (fragment, build_text_feature_embedding(fragment))
             for fragment in fallback_fragments
-            if read_fragment_effective_text(fragment)
+            if read_fragment_plain_text(fragment)
         ]
         return build_visualization_payload(items=fallback_items, used_vector_source="fallback_text_features")
 
@@ -100,7 +100,7 @@ async def build_fragment_visualization(
         fallback_items = [
             (fragment, build_text_feature_embedding(fragment))
             for fragment in fallback_fragments
-            if read_fragment_effective_text(fragment)
+            if read_fragment_plain_text(fragment)
         ]
         return build_visualization_payload(items=fallback_items, used_vector_source="fallback_text_features")
 

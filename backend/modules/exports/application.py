@@ -9,6 +9,7 @@ from core.exceptions import NotFoundError, ValidationError
 from domains.knowledge import repository as knowledge_repository
 from domains.media_assets import repository as media_asset_repository
 from modules.fragments.application import FragmentCommandService
+from modules.fragments.content import render_fragment_markdown
 from modules.fragments.mapper import build_media_asset_file, map_media_asset
 from modules.scripts.application import ScriptQueryService, map_script
 from modules.shared.content_markdown import (
@@ -44,7 +45,7 @@ class MarkdownExportUseCase:
             "tags": payload.tags or [],
             "folder_id": payload.folder_id,
         }
-        body = self._append_media_section(payload.compiled_markdown or "", payload.media_assets)
+        body = self._append_media_section(render_fragment_markdown(self.fragment_service.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)), payload.media_assets)
         filename = f"fragment-{sanitize_export_stem(payload.summary or payload.id, fallback=payload.id)}.md"
         return MarkdownExportFile(filename=filename, content=render_markdown_document(metadata=metadata, body_markdown=body)), self._asset_files(payload.media_assets, db=db, user_id=user_id, content_type="fragment", content_id=fragment_id)
 

@@ -1,67 +1,48 @@
 from __future__ import annotations
 
-from core.exceptions import ValidationError
-
-from domains.fragment_blocks import repository as fragment_block_repository
-from modules.shared.content_markdown import MARKDOWN_BLOCK_TYPE, build_markdown_block_payload
-from modules.shared.content_schemas import FragmentBlockInput
-
-from .content import read_fragment_effective_text
-
-VALID_FRAGMENT_BLOCK_TYPES = {MARKDOWN_BLOCK_TYPE}
+from domains.fragments import repository as fragment_repository
+from modules.shared.editor_document import (
+    collect_asset_ids_from_document,
+    empty_editor_document,
+    extract_plain_text_from_document,
+    normalize_editor_document,
+)
 
 
 class FragmentContentService:
-    """封装碎片 Markdown 内容块的创建与更新。"""
+    """封装碎片富文本正文的校验、保存与派生读取。"""
 
-    def create_initial_content(self, *, db, fragment_id: str, body_markdown: str | None) -> None:
-        """在首次建碎片时按需初始化 Markdown 块。"""
-        normalized_body = (body_markdown or "").strip()
-        if not normalized_body:
-            return
-        fragment_block_repository.create_markdown_block(
+    def create_initial_content(self, *, db, fragment, editor_document: dict | None) -> None:
+        """在首次建碎片时写入正文真值和纯文本快照。"""
+        normalized_document = normalize_editor_document(editor_document)
+        plain_text_snapshot = extract_plain_text_from_document(normalized_document)
+        fragment_repository.update_content(
             db=db,
-            fragment_id=fragment_id,
-            order_index=0,
-            payload_json=build_markdown_block_payload(normalized_body),
+            fragment=fragment,
+            editor_document=normalized_document,
+            plain_text_snapshot=plain_text_snapshot,
         )
 
-    def replace_content(
-        self,
-        *,
-        db,
-        fragment_id: str,
-        body_markdown: str | None,
-        blocks: list[FragmentBlockInput] | None,
-    ) -> None:
-        """把块更新请求统一替换为 Markdown 块列表。"""
-        markdown_contents = self.normalize_markdown_blocks(blocks=blocks, body_markdown=body_markdown)
-        fragment_block_repository.replace_markdown_blocks(
+    def replace_content(self, *, db, fragment, editor_document: dict | None) -> None:
+        """整体替换碎片正文文档。"""
+        normalized_document = normalize_editor_document(editor_document)
+        plain_text_snapshot = extract_plain_text_from_document(normalized_document)
+        fragment_repository.update_content(
             db=db,
-            fragment_id=fragment_id,
-            markdown_contents=[build_markdown_block_payload(item) for item in markdown_contents],
+            fragment=fragment,
+            editor_document=normalized_document,
+            plain_text_snapshot=plain_text_snapshot,
         )
 
-    @staticmethod
-    def normalize_markdown_blocks(
-        *,
-        blocks: list[FragmentBlockInput] | None,
-        body_markdown: str | None,
-    ) -> list[str]:
-        """把块更新请求规整为 Markdown 文本列表。"""
-        if blocks is not None:
-            markdown_contents: list[str] = []
-            for block in blocks:
-                if block.type not in VALID_FRAGMENT_BLOCK_TYPES:
-                    raise ValidationError(message="暂不支持的碎片块类型", field_errors={"blocks": "当前仅支持 markdown"})
-                markdown_contents.append((block.markdown or "").strip())
-            return markdown_contents
-        if body_markdown is not None:
-            normalized = body_markdown.strip()
-            return [normalized] if normalized else []
-        return []
+    def read_effective_text(self, fragment) -> str:
+        """读取当前碎片正文快照，供摘要和向量链路复用。"""
+        return extract_plain_text_from_document(normalize_editor_document(fragment.editor_document))
+
+    def collect_document_asset_ids(self, *, editor_document: dict | None) -> list[str]:
+        """收集正文内嵌节点引用的素材 ID。"""
+        return collect_asset_ids_from_document(normalize_editor_document(editor_document))
 
     @staticmethod
-    def read_effective_text(fragment) -> str:
-        """读取碎片当前参与衍生计算的正文文本。"""
-        return read_fragment_effective_text(fragment)
+    def empty_document() -> dict:
+        """返回空文档，供无正文语音碎片复用。"""
+        return empty_editor_document()

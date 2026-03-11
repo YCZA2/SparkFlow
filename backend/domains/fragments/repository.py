@@ -8,7 +8,8 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from models import Fragment, FragmentBlock, FragmentTag
+from models import Fragment, FragmentTag
+from modules.shared.editor_document import build_document_from_text, extract_plain_text_from_document
 
 from domains.fragment_tags import repository as fragment_tag_repository
 
@@ -37,7 +38,7 @@ def list_by_user(
     folder_id: Optional[str] = None,
     tag: Optional[str] = None,
 ) -> list[Fragment]:
-    query = db.query(Fragment).options(joinedload(Fragment.folder), joinedload(Fragment.blocks))
+    query = db.query(Fragment).options(joinedload(Fragment.folder))
     query = _apply_fragment_filters(query, user_id=user_id, folder_id=folder_id, tag=tag)
     return (
         query
@@ -57,7 +58,7 @@ def count_by_user(db: Session, user_id: str, *, folder_id: Optional[str] = None,
 def get_by_id(db: Session, user_id: str, fragment_id: str) -> Optional[Fragment]:
     return (
         db.query(Fragment)
-        .options(joinedload(Fragment.folder), joinedload(Fragment.blocks))
+        .options(joinedload(Fragment.folder))
         .filter(Fragment.id == fragment_id, Fragment.user_id == user_id)
         .first()
     )
@@ -69,7 +70,7 @@ def get_by_ids(db: Session, user_id: str, fragment_ids: list[str]) -> list[Fragm
 
     return (
         db.query(Fragment)
-        .options(joinedload(Fragment.folder), joinedload(Fragment.blocks))
+        .options(joinedload(Fragment.folder))
         .filter(Fragment.id.in_(fragment_ids), Fragment.user_id == user_id)
         .all()
     )
@@ -79,7 +80,6 @@ def list_vectorizable_by_user(db: Session, user_id: str) -> list[Fragment]:
     """查询可参与向量化的碎片。"""
     return (
         db.query(Fragment)
-        .options(joinedload(Fragment.blocks))
         .filter(Fragment.user_id == user_id)
         .order_by(Fragment.created_at.asc())
         .all()
@@ -95,15 +95,12 @@ def list_content_ready_in_range(
     """查询指定时间窗内已有可用文本内容的碎片。"""
     return (
         db.query(Fragment)
-        .options(joinedload(Fragment.blocks))
-        .outerjoin(FragmentBlock, FragmentBlock.fragment_id == Fragment.id)
         .filter(
             Fragment.user_id == user_id,
             Fragment.created_at >= start_at,
             Fragment.created_at < end_at,
-            (FragmentBlock.id.isnot(None) | Fragment.transcript.isnot(None)),
+            func.length(func.trim(Fragment.plain_text_snapshot)) > 0,
         )
-        .distinct()
         .order_by(Fragment.created_at.asc())
         .all()
     )
@@ -123,12 +120,16 @@ def create(
     audio_mime_type: Optional[str],
     audio_file_size: Optional[int],
     audio_checksum: Optional[str],
+    editor_document: dict | None = None,
+    plain_text_snapshot: str = "",
     *,
     folder_id: Optional[str] = None,
     tags_json: Optional[str] = None,
     tags: Optional[list[str]] = None,
 ) -> Fragment:
     """创建碎片主记录并同步归一化标签。"""
+    normalized_document = editor_document or build_document_from_text(transcript or "")
+    normalized_plain_text = plain_text_snapshot or extract_plain_text_from_document(normalized_document)
     fragment = Fragment(
         user_id=user_id,
         folder_id=folder_id,
@@ -141,6 +142,8 @@ def create(
         audio_mime_type=audio_mime_type,
         audio_file_size=audio_file_size,
         audio_checksum=audio_checksum,
+        editor_document=normalized_document,
+        plain_text_snapshot=normalized_plain_text,
         tags=tags_json,
         source=source,
         audio_source=audio_source,
@@ -193,6 +196,21 @@ def save_transcription_result(
 
 def update_folder(db: Session, fragment: Fragment, *, folder_id: Optional[str]) -> Fragment:
     fragment.folder_id = folder_id
+    db.commit()
+    db.refresh(fragment)
+    return fragment
+
+
+def update_content(
+    db: Session,
+    *,
+    fragment: Fragment,
+    editor_document: dict,
+    plain_text_snapshot: str,
+) -> Fragment:
+    """更新碎片正文真值及派生纯文本快照。"""
+    fragment.editor_document = editor_document
+    fragment.plain_text_snapshot = plain_text_snapshot
     db.commit()
     db.refresh(fragment)
     return fragment

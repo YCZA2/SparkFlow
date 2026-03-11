@@ -11,7 +11,7 @@ SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Doc
 
 ```bash
 bash ../scripts/postgres-local.sh start dev
-.venv/bin/alembic upgrade head
+.venv/bin/alembic upgrade heads
 uvicorn main:app --reload
 ```
 

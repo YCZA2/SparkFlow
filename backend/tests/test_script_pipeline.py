@@ -11,6 +11,20 @@ from tests.support import FakeWebSearchProvider, FakeWorkflowProvider
 pytestmark = pytest.mark.integration
 
 
+def _editor_document(text: str) -> dict:
+    """构造脚本 pipeline 测试用的最小富文本文档。"""
+    return {
+        "type": "doc",
+        "blocks": [
+            {
+                "id": "test-block-1",
+                "type": "paragraph",
+                "children": [{"text": text, "marks": []}],
+            }
+        ],
+    }
+
+
 async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
     """生成脚本 pipeline 测试使用的鉴权请求头。"""
     return await auth_headers_factory(async_client)
@@ -20,7 +34,7 @@ async def _create_fragment(async_client, auth_headers_factory, transcript: str) 
     """创建手动碎片并返回其 ID。"""
     response = await async_client.post(
         "/api/fragments/content",
-        json={"body_markdown": transcript, "source": "manual"},
+        json={"editor_document": _editor_document(transcript), "source": "manual"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 201

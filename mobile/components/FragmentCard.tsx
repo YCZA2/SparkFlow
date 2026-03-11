@@ -48,6 +48,9 @@ function getTitle(fragment: Fragment): string {
   const summary = getCleanText(fragment.summary);
   if (summary) return truncate(summary, 30);
 
+  const body = getCleanText(fragment.plain_text_snapshot);
+  if (body) return truncate(body, 30);
+
   const transcript = getCleanText(fragment.transcript);
   if (transcript) return truncate(transcript, 30);
 
@@ -55,8 +58,11 @@ function getTitle(fragment: Fragment): string {
 }
 
 function getPreview(fragment: Fragment): string {
+  const body = getCleanText(fragment.plain_text_snapshot);
   const transcript = getCleanText(fragment.transcript);
   const summary = getCleanText(fragment.summary);
+
+  if (body) return truncate(body, 42);
 
   if (summary && transcript && summary !== transcript) {
     return truncate(transcript, 42);

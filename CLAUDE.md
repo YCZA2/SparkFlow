@@ -51,7 +51,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 cd backend
 python -m venv .venv && source .venv/bin/activate
 .venv/bin/pip install -r requirements.txt
-.venv/bin/alembic upgrade head
+.venv/bin/alembic upgrade heads
 .venv/bin/python -m uvicorn main:app --reload   # → http://localhost:8000
 ```
 

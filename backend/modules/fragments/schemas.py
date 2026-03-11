@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field
 
-from modules.shared.content_schemas import FragmentBlockInput, FragmentBlockItem, MediaAssetItem
+from modules.shared.content_schemas import MediaAssetItem
 
 
 class FragmentFolderInfo(BaseModel):
@@ -17,9 +19,30 @@ class SpeakerSegmentItem(BaseModel):
     text: str
 
 
+class EditorTextNode(BaseModel):
+    text: str = ""
+    marks: list[Literal["bold", "italic"]] = Field(default_factory=list)
+
+
+class EditorBlock(BaseModel):
+    id: str
+    type: Literal["paragraph", "heading", "blockquote", "bullet_list", "ordered_list", "image"]
+    children: list[EditorTextNode] = Field(default_factory=list)
+    asset_id: str | None = None
+    url: str | None = None
+    width: int | None = None
+    height: int | None = None
+    alt: str | None = None
+
+
+class EditorDocument(BaseModel):
+    type: Literal["doc"] = "doc"
+    blocks: list[EditorBlock] = Field(default_factory=list)
+
+
 class FragmentCreateRequest(BaseModel):
     transcript: str | None = Field(None, description="转写文本")
-    body_markdown: str | None = Field(None, description="Markdown 正文")
+    editor_document: EditorDocument | None = Field(None, description="富文本正文文档")
     source: str = Field("voice", description="来源：voice, manual, video_parse")
     audio_source: str | None = Field(None, description="音频来源：upload, external_link")
     folder_id: str | None = Field(None, description="文件夹 ID")
@@ -28,8 +51,7 @@ class FragmentCreateRequest(BaseModel):
 
 class FragmentUpdateRequest(BaseModel):
     folder_id: str | None = Field(None, description="文件夹 ID，传 null 表示移出文件夹")
-    body_markdown: str | None = Field(None, description="保存 Markdown 正文时使用")
-    blocks: list[FragmentBlockInput] | None = Field(None, description="完整碎片块列表，当前仅支持 markdown")
+    editor_document: EditorDocument | None = Field(None, description="完整富文本正文文档")
     media_asset_ids: list[str] | None = Field(None, description="要绑定到碎片的素材 ID 列表")
 
 
@@ -57,10 +79,15 @@ class FragmentItem(BaseModel):
     audio_file_expires_at: str | None = None
     folder_id: str | None = None
     folder: FragmentFolderInfo | None = None
-    blocks: list[FragmentBlockItem] = Field(default_factory=list)
-    compiled_markdown: str | None = None
+    editor_document: dict[str, Any] = Field(default_factory=lambda: {"type": "doc", "blocks": []})
+    plain_text_snapshot: str | None = None
     content_state: str = "empty"
     media_assets: list[MediaAssetItem] = Field(default_factory=list)
+
+
+class SimilarFragmentItem(FragmentItem):
+    score: float
+    metadata: dict = Field(default_factory=dict)
 
 
 class FragmentListResponse(BaseModel):
@@ -68,11 +95,6 @@ class FragmentListResponse(BaseModel):
     total: int
     limit: int
     offset: int
-
-
-class SimilarFragmentItem(FragmentItem):
-    score: float
-    metadata: dict = Field(default_factory=dict)
 
 
 class SimilarFragmentListResponse(BaseModel):
@@ -142,3 +164,29 @@ class FragmentVisualizationResponse(BaseModel):
     clusters: list[FragmentVisualizationCluster] = Field(default_factory=list)
     stats: FragmentVisualizationStats
     meta: FragmentVisualizationMeta
+
+
+class AiSelectionRange(BaseModel):
+    start: int | None = None
+    end: int | None = None
+
+
+class FragmentAiEditRequest(BaseModel):
+    editor_document: EditorDocument = Field(..., description="当前富文本正文文档")
+    selection_text: str | None = Field(None, description="当前选中文本")
+    selection_range: AiSelectionRange | None = Field(None, description="当前选区范围")
+    target_block_id: str | None = Field(None, description="当前操作块 ID")
+    instruction: Literal["polish", "shorten", "expand", "title", "script_seed"]
+
+
+class FragmentAiPatch(BaseModel):
+    op: Literal["replace_selection", "insert_after_selection", "prepend_heading"]
+    target_block_id: str | None = None
+    replacement_text: str | None = None
+    block: dict[str, Any] | None = None
+    blocks: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class FragmentAiEditResponse(BaseModel):
+    patch: FragmentAiPatch
+    preview_text: str

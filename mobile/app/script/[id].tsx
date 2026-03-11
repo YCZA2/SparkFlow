@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Text } from '@/components/Themed';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
+import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { fetchScriptDetail } from '@/features/scripts/api';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Script } from '@/types/script';
@@ -77,7 +78,15 @@ export default function ScriptDetailScreen() {
 
         <View style={[styles.contentCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
           <Text style={[styles.contentTitle, { color: theme.colors.text }]}>文案内容</Text>
-          <Text style={[styles.scriptContent, { color: theme.colors.text }]}>{script.body_markdown || '无内容'}</Text>
+          {script.body_markdown ? (
+            <MarkdownRenderer
+              markdown={script.body_markdown}
+              theme={theme}
+              enableLinks={true}
+            />
+          ) : (
+            <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>无内容</Text>
+          )}
         </View>
       </ScrollView>
 
@@ -128,9 +137,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 8,
   },
-  scriptContent: {
+  emptyText: {
     fontSize: 15,
     lineHeight: 24,
+    fontStyle: 'italic',
   },
   bottomBar: {
     position: 'absolute',

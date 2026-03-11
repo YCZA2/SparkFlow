@@ -4,12 +4,11 @@ from pathlib import Path
 from typing import Optional
 
 from models import Fragment, MediaAsset
-from modules.shared.content_markdown import MARKDOWN_BLOCK_TYPE, parse_markdown_block_payload
-from modules.shared.content_schemas import FragmentBlockItem, MediaAssetItem
+from modules.shared.content_schemas import MediaAssetItem
 from modules.shared.ports import FileStorage, StoredFile
 from utils.serialization import format_iso_datetime, parse_json_list, parse_json_object_list
 
-from .content import compile_fragment_body_markdown, resolve_fragment_content_state
+from .content import read_fragment_editor_document, read_fragment_plain_text, resolve_fragment_content_state
 from .schemas import FragmentFolderInfo, FragmentItem, SpeakerSegmentItem
 
 
@@ -86,28 +85,12 @@ def build_media_asset_file(asset: MediaAsset) -> StoredFile:
     )
 
 
-def _map_blocks(fragment: Fragment) -> list[FragmentBlockItem]:
-    """把 ORM 块记录转换为统一块响应。"""
-    blocks: list[FragmentBlockItem] = []
-    for block in sorted(fragment.blocks, key=lambda item: item.order_index):
-        blocks.append(
-            FragmentBlockItem(
-                id=block.id,
-                type=block.block_type,
-                order_index=block.order_index,
-                markdown=parse_markdown_block_payload(block.payload_json) if block.block_type == MARKDOWN_BLOCK_TYPE else None,
-            )
-        )
-    return blocks
-
-
 def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = None, file_storage: FileStorage | None = None) -> FragmentItem:
-    """将碎片模型映射为含 Markdown 内容层的响应结构。"""
+    """将碎片模型映射为含富文本正文的响应结构。"""
     folder = None
     if fragment.folder:
         folder = FragmentFolderInfo(id=fragment.folder.id, name=fragment.folder.name)
-    blocks = _map_blocks(fragment)
-    compiled_markdown = compile_fragment_body_markdown(fragment)
+    editor_document = read_fragment_editor_document(fragment)
     audio_access = None
     if file_storage is not None:
         audio_file = build_fragment_audio_file(fragment)
@@ -134,8 +117,8 @@ def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = 
         audio_file_expires_at=audio_access.expires_at if audio_access else None,
         folder_id=fragment.folder_id,
         folder=folder,
-        blocks=blocks,
-        compiled_markdown=compiled_markdown or None,
+        editor_document=editor_document,
+        plain_text_snapshot=read_fragment_plain_text(fragment) or None,
         content_state=resolve_fragment_content_state(fragment),
         media_assets=mapped_media_assets,
     )

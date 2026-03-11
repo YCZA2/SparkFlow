@@ -20,6 +20,23 @@ from modules.shared.ports import ExternalMediaResolvedAudio
 pytestmark = pytest.mark.integration
 
 
+def _editor_document(text: str) -> dict:
+    """构造测试用的最小富文本文档载荷。"""
+    normalized = text.strip()
+    return {
+        "type": "doc",
+        "blocks": []
+        if not normalized
+        else [
+            {
+                "id": "test-block-1",
+                "type": "paragraph",
+                "children": [{"text": normalized, "marks": []}],
+            }
+        ],
+    }
+
+
 async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
     """生成带 Bearer Token 的请求头。"""
     return await auth_headers_factory(async_client)
@@ -27,8 +44,12 @@ async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
 
 async def _create_fragment(async_client, auth_headers_factory, payload: dict) -> dict:
     """通过 API 创建碎片并返回响应数据。"""
-    endpoint = "/api/fragments/content" if payload.get("body_markdown") is not None else "/api/fragments"
-    response = await async_client.post(endpoint, json=payload, headers=await _auth_headers(async_client, auth_headers_factory))
+    request_payload = dict(payload)
+    body_markdown = request_payload.pop("body_markdown", None)
+    if body_markdown is not None:
+        request_payload["editor_document"] = _editor_document(body_markdown)
+    endpoint = "/api/fragments/content" if request_payload.get("editor_document") is not None else "/api/fragments"
+    response = await async_client.post(endpoint, json=request_payload, headers=await _auth_headers(async_client, auth_headers_factory))
     assert response.status_code == 201
     return response.json()["data"]
 
@@ -162,8 +183,8 @@ def test_startup_hook_recreates_missing_test_user(db_session_factory, monkeypatc
 @pytest.mark.asyncio
 async def test_fragments_collection_detail_similarity_and_visualization(async_client, auth_headers_factory, app) -> None:
     """碎片列表、详情、相似检索和可视化入口应返回一致数据。"""
-    first_id = (await _create_fragment(async_client, auth_headers_factory, {"body_markdown": "定位方法论的第一条碎片", "source": "manual"}))["id"]
-    second_id = (await _create_fragment(async_client, auth_headers_factory, {"body_markdown": "定位方法论的第二条碎片", "source": "manual"}))["id"]
+    first_id = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("定位方法论的第一条碎片"), "source": "manual"}))["id"]
+    second_id = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("定位方法论的第二条碎片"), "source": "manual"}))["id"]
     _seed_fragment_vector(app, first_id, "定位方法论的第一条碎片")
     _seed_fragment_vector(app, second_id, "定位方法论的第二条碎片")
 
@@ -432,9 +453,9 @@ async def test_fragment_folders_crud_filtering_and_moves(async_client, auth_head
     assert folder_counts[folder_a_id] == 0
     assert folder_counts[folder_b_id] == 0
 
-    in_folder = await _create_fragment(async_client, auth_headers_factory, {"body_markdown": "放进文件夹的碎片", "source": "manual", "folder_id": folder_a_id})
-    first_unfiled = (await _create_fragment(async_client, auth_headers_factory, {"body_markdown": "未归类碎片 1", "source": "manual"}))["id"]
-    second_unfiled = (await _create_fragment(async_client, auth_headers_factory, {"body_markdown": "未归类碎片 2", "source": "manual"}))["id"]
+    in_folder = await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("放进文件夹的碎片"), "source": "manual", "folder_id": folder_a_id})
+    first_unfiled = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("未归类碎片 1"), "source": "manual"}))["id"]
+    second_unfiled = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("未归类碎片 2"), "source": "manual"}))["id"]
 
     filtered_response = await async_client.get(f"/api/fragments?folder_id={folder_a_id}", headers=await _auth_headers(async_client, auth_headers_factory))
     assert {item["id"] for item in filtered_response.json()["data"]["items"]} == {in_folder["id"]}
@@ -508,7 +529,7 @@ async def test_fragment_folder_validation_and_conflicts(async_client, auth_heade
 
     invalid_folder_fragment_response = await async_client.post(
         "/api/fragments",
-        json={"body_markdown": "错误文件夹", "source": "manual", "folder_id": "missing-folder"},
+        json={"editor_document": _editor_document("错误文件夹"), "source": "manual", "folder_id": "missing-folder"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert invalid_folder_fragment_response.status_code == 404
@@ -521,11 +542,11 @@ async def test_fragment_folder_validation_and_conflicts(async_client, auth_heade
 async def test_fragment_tags_listing_filtering_and_delete_consistency(async_client, auth_headers_factory, db_session_factory) -> None:
     """标签列表、筛选和删除后的聚合结果应保持一致。"""
     folder_id = await _create_folder(async_client, auth_headers_factory, "Tag 过滤")
-    alpha_in_folder = (await _create_fragment(async_client, auth_headers_factory, {"body_markdown": "alpha in folder", "source": "manual", "folder_id": folder_id}))["id"]
-    alpha_free = (await _create_fragment(async_client, auth_headers_factory, {"body_markdown": "alpha free", "source": "manual"}))["id"]
-    beta_free = (await _create_fragment(async_client, auth_headers_factory, {"body_markdown": "beta free", "source": "manual"}))["id"]
-    zabc_fragment = (await _create_fragment(async_client, auth_headers_factory, {"body_markdown": "zabc free", "source": "manual"}))["id"]
-    cherry_fragment = (await _create_fragment(async_client, auth_headers_factory, {"body_markdown": "cherry free", "source": "manual"}))["id"]
+    alpha_in_folder = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("alpha in folder"), "source": "manual", "folder_id": folder_id}))["id"]
+    alpha_free = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("alpha free"), "source": "manual"}))["id"]
+    beta_free = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("beta free"), "source": "manual"}))["id"]
+    zabc_fragment = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("zabc free"), "source": "manual"}))["id"]
+    cherry_fragment = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("cherry free"), "source": "manual"}))["id"]
 
     _seed_fragment_tags(db_session_factory, alpha_in_folder, ["apple", "abc"])
     _seed_fragment_tags(db_session_factory, alpha_free, ["apple", "abd"])
@@ -555,7 +576,7 @@ async def test_generate_script_success_and_failures(async_client, auth_headers_f
         await _create_fragment(
             async_client,
             auth_headers_factory,
-            {"body_markdown": "一条可用于生成稿件的碎片", "source": "manual"},
+            {"editor_document": _editor_document("一条可用于生成稿件的碎片"), "source": "manual"},
         )
     )["id"]
 
@@ -613,7 +634,7 @@ async def test_generate_script_mode_b_uses_same_dify_flow(async_client, auth_hea
         await _create_fragment(
             async_client,
             auth_headers_factory,
-            {"body_markdown": "一条更自然表达的碎片", "source": "manual"},
+            {"editor_document": _editor_document("一条更自然表达的碎片"), "source": "manual"},
         )
     )["id"]
 
@@ -637,7 +658,7 @@ async def test_generate_script_fails_when_workflow_output_has_no_draft(async_cli
         await _create_fragment(
             async_client,
             auth_headers_factory,
-            {"body_markdown": "一条缺稿测试碎片", "source": "manual"},
+            {"editor_document": _editor_document("一条缺稿测试碎片"), "source": "manual"},
         )
     )["id"]
     app.state.container.script_mode_a_workflow_provider.queue_success(draft="")  # type: ignore[attr-defined]
@@ -667,7 +688,7 @@ async def test_scripts_list_detail_update_and_delete(async_client, auth_headers_
         await _create_fragment(
             async_client,
             auth_headers_factory,
-            {"body_markdown": "用于脚本列表和详情测试", "source": "manual"},
+            {"editor_document": _editor_document("用于脚本列表和详情测试"), "source": "manual"},
         )
     )["id"]
     create_response = await async_client.post(
@@ -705,7 +726,7 @@ async def test_update_script_rejects_invalid_status(async_client, auth_headers_f
         await _create_fragment(
             async_client,
             auth_headers_factory,
-            {"body_markdown": "用于非法状态测试", "source": "manual"},
+            {"editor_document": _editor_document("用于非法状态测试"), "source": "manual"},
         )
     )["id"]
     create_response = await async_client.post(
@@ -914,7 +935,7 @@ async def test_scripts_daily_push_trigger_get_force_trigger_and_idempotency(asyn
             await _create_fragment(
                 async_client,
                 auth_headers_factory,
-                {"body_markdown": f"同主题内容 {index}", "source": "manual"},
+                {"editor_document": _editor_document(f"同主题内容 {index}"), "source": "manual"},
             )
         )["id"]
         for index in range(3)

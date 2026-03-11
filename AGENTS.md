@@ -139,7 +139,7 @@ Run the lightweight backend suite without PostgreSQL with:
 Run migrations with:
 
 ```bash
-.venv/bin/alembic upgrade head
+.venv/bin/alembic upgrade heads
 ```
 
 Run full repository tests from root with:

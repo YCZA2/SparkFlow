@@ -7,8 +7,11 @@ from core import ResponseModel, success_response
 from core.auth import get_current_user
 from modules.shared.container import get_container, get_db_session, ServiceContainer
 
+from .ai_edit import FragmentAiEditService
 from .application import FragmentCommandService, FragmentQueryService
 from .schemas import (
+    FragmentAiEditRequest,
+    FragmentAiEditResponse,
     FragmentBatchMoveRequest,
     FragmentBatchMoveResponse,
     FragmentCreateRequest,
@@ -33,6 +36,11 @@ def get_fragment_command_service(container: ServiceContainer = Depends(get_conta
 
 def get_fragment_query_service(container: ServiceContainer = Depends(get_container)) -> FragmentQueryService:
     return FragmentQueryService(vector_store=container.vector_store, file_storage=container.file_storage)
+
+
+def get_fragment_ai_edit_service(container: ServiceContainer = Depends(get_container)) -> FragmentAiEditService:
+    """构建碎片 AI 编辑服务。"""
+    return FragmentAiEditService(llm_provider=container.llm_provider)
 
 
 @router.get(
@@ -79,7 +87,7 @@ async def create_fragment(
         db=db,
         user_id=current_user["user_id"],
         transcript=data.transcript,
-        body_markdown=data.body_markdown,
+        editor_document=data.editor_document.model_dump() if data.editor_document else None,
         source=data.source,
         audio_source=data.audio_source,
         audio_file=None,
@@ -93,8 +101,8 @@ async def create_fragment(
     "/content",
     status_code=status.HTTP_201_CREATED,
     response_model=ResponseModel[FragmentItem],
-    summary="创建带 Markdown 内容的碎片",
-    description="创建一条可编辑内容碎片，并在首次落库时初始化 Markdown 块。",
+    summary="创建带富文本内容的碎片",
+    description="创建一条可编辑内容碎片，并在首次落库时初始化富文本正文。",
 )
 async def create_fragment_with_content(
     data: FragmentCreateRequest,
@@ -106,7 +114,7 @@ async def create_fragment_with_content(
         db=db,
         user_id=current_user["user_id"],
         transcript=data.transcript,
-        body_markdown=data.body_markdown,
+        editor_document=data.editor_document.model_dump() if data.editor_document else None,
         source=data.source,
         audio_source=data.audio_source,
         audio_file=None,
@@ -214,6 +222,30 @@ async def get_fragment(
     return success_response(data=service.get_fragment_payload(db=db, user_id=current_user["user_id"], fragment_id=fragment_id))
 
 
+@router.post(
+    "/{fragment_id}/ai-edit",
+    response_model=ResponseModel[FragmentAiEditResponse],
+    summary="AI 编辑碎片正文",
+    description="基于当前富文本正文生成可直接应用的结构化 patch。",
+)
+async def ai_edit_fragment(
+    fragment_id: str,
+    data: FragmentAiEditRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    command_service: FragmentCommandService = Depends(get_fragment_command_service),
+    ai_service: FragmentAiEditService = Depends(get_fragment_ai_edit_service),
+):
+    command_service.get_fragment(db=db, user_id=current_user["user_id"], fragment_id=fragment_id)
+    patch, preview_text = await ai_service.edit(
+        editor_document=data.editor_document.model_dump(),
+        instruction=data.instruction,
+        selection_text=data.selection_text,
+        target_block_id=data.target_block_id,
+    )
+    return success_response(data=FragmentAiEditResponse(patch=patch, preview_text=preview_text))
+
+
 @router.patch(
     "/{fragment_id}",
     response_model=ResponseModel[FragmentItem],
@@ -234,8 +266,7 @@ async def update_fragment(
         fragment_id=fragment_id,
         folder_id=payload.get("folder_id"),
         folder_id_provided="folder_id" in payload,
-        body_markdown=payload.get("body_markdown"),
-        blocks=data.blocks if "blocks" in payload else None,
+        editor_document=data.editor_document.model_dump() if "editor_document" in payload and data.editor_document else None,
         media_asset_ids=payload.get("media_asset_ids"),
     )
     return success_response(data=service.get_fragment_payload(db=db, user_id=current_user["user_id"], fragment_id=fragment_id), message="碎片更新成功")

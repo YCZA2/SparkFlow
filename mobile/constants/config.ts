@@ -40,9 +40,11 @@ export const API_ENDPOINTS = {
     LIST: '/api/fragments',
     CONTENT: '/api/fragments/content',
     DETAIL: (id: string) => `/api/fragments/${id}`,
+    AI_EDIT: (id: string) => `/api/fragments/${id}/ai-edit`,
     VISUALIZATION: '/api/fragments/visualization',
     SIMILAR: '/api/fragments/similar',
   },
+  MEDIA_ASSETS: '/api/media-assets',
   TRANSCRIPTIONS: '/api/transcriptions',
   SCRIPTS: {
     LIST: '/api/scripts',

@@ -14,13 +14,13 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 ## 当前移动端已接入的内容能力
 
-- 手动文本碎片会直接走 Markdown 内容创建接口 `POST /api/fragments/content`。
-- 手动文本碎片必须提供 `body_markdown`，不再写 `transcript`。
+- 手动文本碎片会直接走富文本内容创建接口 `POST /api/fragments/content`。
+- 手动文本碎片必须提供 `editor_document`，不再写 `body_markdown`。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
-- 碎片详情页同时展示只读 `transcript` 和可编辑 `compiled_markdown`，正文无保存按钮，改动会自动保存。
+- 碎片详情页同时展示只读 `transcript` 和可编辑 `editor_document`，正文改动会自动保存。
 - 脚本详情页只展示 `body_markdown`，后端负责迁移旧数据。
-- 移动端尚未提供真正的块式编辑器；当前正文编辑仍是单个 Markdown 文本区。
+- 移动端碎片正文已切到 JSON 富文本编辑器，支持标题、列表、引用、粗体、斜体、图片和 AI patch。
 - 知识库移动端仍是占位入口，还没有完整的 Markdown 编辑和素材管理 UI。
 
 ## 一、推荐用法：统一走 `scripts/dev-mobile.sh`
@@ -218,7 +218,7 @@ http://192.168.31.157:8000
 - 外链导入已接入底部 `+` 抽屉与任务态轮询，成功后会进入对应碎片详情
 - 外链导入请求支持透传当前 `folderId`，在文件夹页发起导入时会直接归入该文件夹
 
-### 0.1 Markdown 内容层当前怎么联调
+### 0.1 富文本内容层当前怎么联调
 
 这次内容层改造后，移动端需要区分两类碎片创建：
 
@@ -227,8 +227,9 @@ http://192.168.31.157:8000
 
 当前返回和展示约定：
 
-- 碎片详情正文优先读取 `compiled_markdown`，没有正文时回退 `transcript`
+- 碎片详情正文读取 `editor_document`，列表摘要和生成页预览读取 `plain_text_snapshot`
 - `transcript` 表示机器转写原文，不参与正文编辑
+- AI 编辑接口为 `POST /api/fragments/{id}/ai-edit`
 - 脚本详情只读取 `body_markdown`
 - 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
 - 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`
@@ -364,7 +365,7 @@ bash scripts/postgres-local.sh start dev
 
 ```bash
 cd backend
-.venv/bin/alembic upgrade head
+.venv/bin/alembic upgrade heads
 ```
 
 当前后台任务流水线依赖以下新表已经存在：

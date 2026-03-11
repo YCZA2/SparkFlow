@@ -204,7 +204,7 @@ run_backend_migrations() {
   echo "[dev-mobile] applying backend migrations..."
   (
     cd "${BACKEND_DIR}"
-    "${alembic_cmd[@]}" upgrade head
+    "${alembic_cmd[@]}" upgrade heads
   )
 }
 

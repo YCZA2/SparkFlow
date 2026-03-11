@@ -14,6 +14,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Text } from '@/components/Themed';
 import { createFragment } from '@/features/fragments/api';
+import { buildDocumentFromText } from '@/features/fragments/editorDocument';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 const MIN_LENGTH = 1;
@@ -38,7 +39,7 @@ export default function TextNoteScreen() {
       setIsSubmitting(true);
       const fragment = await createFragment(
         {
-          body_markdown: trimmedContent,
+          editor_document: buildDocumentFromText(trimmedContent),
           source: 'manual',
         },
         params.folderId
