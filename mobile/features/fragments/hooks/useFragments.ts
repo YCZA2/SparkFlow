@@ -5,36 +5,111 @@ import {
   deleteFragment,
   fetchFragmentDetail,
   fetchFragmentVisualization,
-  fetchFragments,
+  fetchFragments as fetchFragmentsRemote,
 } from '@/features/fragments/api';
+import {
+  peekFragmentListCache,
+  readFragmentListCache,
+  subscribeFragmentCache,
+  writeFragmentListCache,
+} from '@/features/fragments/fragmentRepository';
 import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
-import { useAsyncList } from '@/hooks/useAsyncList';
 import type { Fragment, FragmentVisualizationResponse } from '@/types/fragment';
 
 export function useFragments() {
-  const loadFragments = useCallback(async (): Promise<Fragment[]> => {
-    const response = await fetchFragments();
-    return response.items || [];
+  /** 中文注释：列表页优先消费本地缓存，再静默刷新远端结果。 */
+  const [fragments, setFragments] = useState<Fragment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const applyCachedList = useCallback(async (): Promise<boolean> => {
+    const cached = await readFragmentListCache();
+    if (!cached) return false;
+    setFragments(cached.items);
+    setError(null);
+    setIsLoading(false);
+    return true;
   }, []);
 
-  const list = useAsyncList(loadFragments);
+  const loadFragments = useCallback(
+    async (mode: 'load' | 'refresh' | 'silent' = 'load'): Promise<void> => {
+      const isSilent = mode === 'silent';
+      if (mode === 'refresh') {
+        setIsRefreshing(true);
+      } else if (!isSilent) {
+        setIsLoading(true);
+      }
+
+      try {
+        const response = await fetchFragmentsRemote();
+        const nextItems = response.items || [];
+        setFragments(nextItems);
+        setError(null);
+        await writeFragmentListCache(nextItems);
+      } catch (err) {
+        const nextError = err instanceof Error ? err.message : '加载失败';
+        setError(nextError);
+      } finally {
+        if (mode === 'refresh') {
+          setIsRefreshing(false);
+        }
+        if (!isSilent) {
+          setIsLoading(false);
+        }
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrate = async () => {
+      const hasCache = await applyCachedList();
+      if (cancelled) return;
+      await loadFragments(hasCache ? 'silent' : 'load');
+    };
+
+    void hydrate();
+
+    const unsubscribe = subscribeFragmentCache(() => {
+      const cached = peekFragmentListCache();
+      if (!cached) {
+        setFragments([]);
+        return;
+      }
+      setFragments(cached.items);
+      setError(null);
+      setIsLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [applyCachedList, loadFragments]);
 
   useFocusEffect(
     useCallback(() => {
       if (consumeFragmentsStale()) {
-        void list.reload();
+        void loadFragments('load');
       }
-    }, [list])
+    }, [loadFragments])
   );
 
   return {
-    fragments: list.items,
-    isLoading: list.isLoading,
-    isRefreshing: list.isRefreshing,
-    error: list.error,
-    total: list.items.length,
-    fetchFragments: list.reload,
-    refreshFragments: list.refresh,
+    fragments,
+    isLoading,
+    isRefreshing,
+    error,
+    total: fragments.length,
+    fetchFragments: useCallback(async () => {
+      await loadFragments('load');
+    }, [loadFragments]),
+    refreshFragments: useCallback(async () => {
+      await loadFragments('refresh');
+    }, [loadFragments]),
   };
 }
 

@@ -19,6 +19,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
 - 碎片详情页默认进入轻量正文编辑视图，正文改动会自动保存；`transcript`、音频、摘要、标签和 AI 整理工具收口到右上角“更多”底部抽屉。
+- 碎片正文详情和列表已接入本地缓存：已访问过的 fragment 会先秒开缓存，再后台静默刷新；未同步正文会保留本地草稿并显示“未同步”状态。
 - 脚本详情页只展示 `body_markdown`，后端负责迁移旧数据。
 - 移动端碎片正文已切到 `WebView + Tiptap` 编辑器，DOM 编辑器内部维持富文本状态，但持久化真值统一为 `body_markdown`，支持标题、列表、引用、粗体、斜体、图片和 AI patch。
 - 知识库移动端仍是占位入口，还没有完整的 Markdown 编辑和素材管理 UI。
@@ -230,6 +231,7 @@ http://192.168.31.157:8000
 - 碎片详情正文读取 `body_markdown`，列表摘要和生成页预览读取 `plain_text_snapshot`
 - `transcript` 表示机器转写原文，不参与正文编辑
 - 碎片详情默认只把正文编辑器作为主界面；原文时间线、音频播放、摘要、标签、来源和删除操作都从右上角“更多”抽屉进入
+- 碎片正文详情采用 stale-while-revalidate：优先读取本地缓存秒开，再后台刷新远端详情；自动保存失败时会保留本地草稿和缓存快照，重新进入详情仍可继续编辑
 - AI 编辑接口为 `POST /api/fragments/{id}/ai-edit`
 - AI 编辑 patch 现在返回 `replace_selection` / `insert_after_selection` / `prepend_document`，正文片段字段为 `markdown_snippet`
 - 脚本详情只读取 `body_markdown`

@@ -6,3 +6,4 @@ export {
   useSelectedFragments,
 } from './useFragments';
 export { useFragmentSelection } from './useFragmentSelection';
+export { useFragmentDetail } from './useFragmentDetail';

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const FRAGMENT_BODY_DRAFT_PREFIX = '@fragment_body_markdown_draft:';
+const draftCache = new Map<string, string | null>();
 
 interface FragmentBodyDraft {
   markdown: string;
@@ -14,12 +15,21 @@ function buildDraftKey(fragmentId: string): string {
 
 export async function loadFragmentBodyDraft(fragmentId: string): Promise<string | null> {
   /** 中文注释：读取本地 Markdown 正文草稿，异常时静默忽略。 */
+  if (draftCache.has(fragmentId)) {
+    return draftCache.get(fragmentId) ?? null;
+  }
   try {
     const raw = await AsyncStorage.getItem(buildDraftKey(fragmentId));
-    if (!raw) return null;
+    if (!raw) {
+      draftCache.set(fragmentId, null);
+      return null;
+    }
     const parsed = JSON.parse(raw) as FragmentBodyDraft;
-    return typeof parsed.markdown === 'string' ? parsed.markdown : null;
+    const markdown = typeof parsed.markdown === 'string' ? parsed.markdown : null;
+    draftCache.set(fragmentId, markdown);
+    return markdown;
   } catch {
+    draftCache.set(fragmentId, null);
     return null;
   }
 }
@@ -30,10 +40,12 @@ export async function saveFragmentBodyDraft(fragmentId: string, markdown: string
     markdown,
     updated_at: new Date().toISOString(),
   };
+  draftCache.set(fragmentId, markdown);
   await AsyncStorage.setItem(buildDraftKey(fragmentId), JSON.stringify(payload));
 }
 
 export async function clearFragmentBodyDraft(fragmentId: string): Promise<void> {
   /** 中文注释：当服务端同步成功后清除本地草稿。 */
+  draftCache.delete(fragmentId);
   await AsyncStorage.removeItem(buildDraftKey(fragmentId));
 }

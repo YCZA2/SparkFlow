@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -16,12 +16,14 @@ import { ScreenState } from '@/components/ScreenState';
 import { FragmentDetailSheet } from '@/features/fragments/components/FragmentDetailSheet';
 import { FragmentRichEditor } from '@/features/fragments/components/FragmentRichEditor';
 import { FragmentEditorToolbar } from '@/features/fragments/components/FragmentEditorToolbar';
-import { deleteFragment, fetchFragmentDetail } from '@/features/fragments/api';
+import { deleteFragment } from '@/features/fragments/api';
+import { clearFragmentBodyDraft } from '@/features/fragments/bodyDrafts';
 import { useFragmentAudioPlayer } from '@/features/fragments/hooks/useFragmentAudioPlayer';
+import { useFragmentDetail } from '@/features/fragments/hooks/useFragmentDetail';
 import { useFragmentRichEditor } from '@/features/fragments/hooks/useFragmentRichEditor';
 import { getActiveSegmentIndex } from '@/features/fragments/presenters/speakerSegments';
+import { removeFragmentCache } from '@/features/fragments/fragmentRepository';
 import { useAppTheme } from '@/theme/useAppTheme';
-import type { Fragment } from '@/types/fragment';
 
 function HeaderCircleButton({
   symbol,
@@ -79,46 +81,26 @@ export default function FragmentDetailScreen() {
   const router = useRouter();
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
-  const [fragment, setFragment] = useState<Fragment | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const detail = useFragmentDetail(id ?? null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const fragment = detail.fragment;
 
-  useEffect(() => {
-    const load = async () => {
-      if (!id) {
-        setError('无效的碎片ID');
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        setError(null);
-        setIsLoading(true);
-        const data = await fetchFragmentDetail(id);
-        setFragment(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    load();
-  }, [id]);
-
-  const player = useFragmentAudioPlayer(fragment?.audio_file_url);
+  const player = useFragmentAudioPlayer(fragment?.audio_file_url, { enabled: isSheetOpen });
   const activeSegmentIndex = useMemo(() => {
+    if (!isSheetOpen) {
+      return null;
+    }
     const segments = fragment?.speaker_segments;
     if (!segments?.length) {
       return null;
     }
     return getActiveSegmentIndex(segments, player.positionMs);
-  }, [fragment?.speaker_segments, player.positionMs]);
+  }, [fragment?.speaker_segments, isSheetOpen, player.positionMs]);
   const bodyEditor = useFragmentRichEditor({
+    fragmentId: id ?? null,
     fragment,
-    onFragmentChange: setFragment,
+    onFragmentChange: detail.setFragment,
   });
   const isDark = theme.name === 'dark';
   const noteBackground = isDark ? '#12110F' : '#ECE9E4';
@@ -182,6 +164,7 @@ export default function FragmentDetailScreen() {
     try {
       setIsDeleting(true);
       await deleteFragment(id);
+      await Promise.all([removeFragmentCache(id), clearFragmentBodyDraft(id)]);
       setIsSheetOpen(false);
       router.replace({
         pathname: '/',
@@ -230,12 +213,13 @@ export default function FragmentDetailScreen() {
     /** 中文注释：完成编辑前主动 flush 一次保存，降低刚输入内容未落库的风险。 */
     try {
       await bodyEditor.saveNow();
-    } finally {
       router.back();
+    } catch {
+      Alert.alert('内容未同步', '内容未同步，已保留本地草稿');
     }
   };
 
-  if (isLoading) {
+  if (detail.isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: noteBackground }]}>
         <Stack.Screen options={{ title: '', headerShown: false }} />
@@ -261,7 +245,7 @@ export default function FragmentDetailScreen() {
     );
   }
 
-  if (error || !fragment) {
+  if (detail.error || !fragment) {
     return (
       <View style={[styles.container, { backgroundColor: noteBackground }]}>
         <Stack.Screen options={{ title: '', headerShown: false }} />
@@ -271,9 +255,11 @@ export default function FragmentDetailScreen() {
             <ScreenState
               icon="⚠️"
               title="加载失败"
-              message={error || '碎片不存在或已被删除'}
+              message={detail.error || '碎片不存在或已被删除'}
               actionLabel="点击重试"
-              onAction={() => router.replace(`/fragment/${id}`)}
+              onAction={() => {
+                void detail.reload();
+              }}
             />
           </View>
         </View>
@@ -336,19 +322,21 @@ export default function FragmentDetailScreen() {
         </KeyboardAvoidingView>
       </View>
 
-      <FragmentDetailSheet
-        visible={isSheetOpen}
-        fragment={fragment}
-        isDeleting={isDeleting}
-        isUploadingImage={bodyEditor.isUploadingImage}
-        isAiRunning={bodyEditor.isAiRunning}
-        activeSegmentIndex={activeSegmentIndex}
-        player={player}
-        onClose={() => setIsSheetOpen(false)}
-        onDelete={handleDelete}
-        onInsertImage={bodyEditor.onInsertImage}
-        onAiAction={bodyEditor.onAiAction}
-      />
+      {isSheetOpen ? (
+        <FragmentDetailSheet
+          visible={isSheetOpen}
+          fragment={fragment}
+          isDeleting={isDeleting}
+          isUploadingImage={bodyEditor.isUploadingImage}
+          isAiRunning={bodyEditor.isAiRunning}
+          activeSegmentIndex={activeSegmentIndex}
+          player={player}
+          onClose={() => setIsSheetOpen(false)}
+          onDelete={handleDelete}
+          onInsertImage={bodyEditor.onInsertImage}
+          onAiAction={bodyEditor.onAiAction}
+        />
+      ) : null}
     </View>
   );
 }

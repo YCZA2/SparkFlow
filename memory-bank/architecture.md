@@ -107,9 +107,9 @@ flowchart TD
 
 当前移动端真正参与主流程的数据持久化是：
 
-- `AsyncStorage`: token、用户信息、后端 base URL
+- `AsyncStorage`: token、用户信息、后端 base URL、fragment 列表缓存、fragment 详情缓存、未同步正文草稿
 
-当前移动端主流程的本地持久化只使用 `AsyncStorage`，未引入 SQLite 业务存储链路。
+当前移动端主流程的本地持久化只使用 `AsyncStorage`，未引入 SQLite 业务存储链路；碎片正文详情采用“本地缓存秒开 + 后台静默刷新”的 stale-while-revalidate 策略，自动保存失败时继续保留本地草稿和详情快照。
 
 ## 4. Backend Architecture
 

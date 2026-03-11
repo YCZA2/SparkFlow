@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
+import { prewarmFragmentDetailCache } from '@/features/fragments/fragmentRepository';
 import { useFragmentSelection } from '@/features/fragments/hooks';
 import { useFragments } from '@/features/fragments/hooks/useFragments';
 import type { Fragment } from '@/types/fragment';
@@ -89,6 +90,7 @@ export function useFragmentsScreen(): FragmentsScreenState {
         return;
       }
 
+      void prewarmFragmentDetailCache(fragment);
       router.push(`/fragment/${fragment.id}`);
     },
     [router, selection]

@@ -15,11 +15,26 @@ function toMilliseconds(seconds: number): number {
   return Math.max(0, Math.round(seconds * 1000));
 }
 
-export function useFragmentAudioPlayer(audioFileUrl: string | null | undefined) {
+interface UseFragmentAudioPlayerOptions {
+  enabled?: boolean;
+}
+
+export function useFragmentAudioPlayer(
+  audioFileUrl: string | null | undefined,
+  options?: UseFragmentAudioPlayerOptions
+) {
+  /** 中文注释：仅在详情抽屉真正打开时初始化播放器，避免编辑首屏提前占用音频能力。 */
+  const enabled = options?.enabled ?? true;
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
 
   useEffect(() => {
+    if (!enabled) {
+      setAudioUrl(null);
+      setIsResolving(false);
+      return;
+    }
+
     let mounted = true;
 
     async function resolveUrl() {
@@ -45,13 +60,15 @@ export function useFragmentAudioPlayer(audioFileUrl: string | null | undefined) 
     return () => {
       mounted = false;
     };
-  }, [audioFileUrl]);
+  }, [audioFileUrl, enabled]);
 
-  const source = useMemo(() => (audioUrl ? { uri: audioUrl } : null), [audioUrl]);
+  const source = useMemo(() => (enabled && audioUrl ? { uri: audioUrl } : null), [audioUrl, enabled]);
   const player = useAudioPlayer(source, { updateInterval: 250, keepAudioSessionActive: true });
   const status = useAudioPlayerStatus(player);
 
   useEffect(() => {
+    if (!enabled) return;
+
     setAudioModeAsync({
       allowsRecording: false,
       playsInSilentMode: true,
@@ -73,7 +90,7 @@ export function useFragmentAudioPlayer(audioFileUrl: string | null | undefined) 
         console.error('恢复录音音频模式失败:', error);
       });
     };
-  }, []);
+  }, [enabled]);
 
   const durationMs = toMilliseconds(status.duration ?? 0);
   const positionMs = toMilliseconds(status.currentTime ?? 0);
