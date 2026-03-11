@@ -48,6 +48,7 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isAiRunning, setIsAiRunning] = useState(false);
   const [isEditorReady, setIsEditorReady] = useState(false);
+  const [isDraftHydrated, setIsDraftHydrated] = useState(false);
   const hydratedRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightRef = useRef(false);
@@ -57,7 +58,8 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
 
   const fragmentId = fragment?.id ?? null;
   const initialDocument = useMemo(() => resolveInitialDocument(fragment), [fragment]);
-  const attachedMediaAssetIds = useMemo(() => collectDocumentAssetIds(document), [document]);
+  const visibleDocument = isDraftHydrated ? document : initialDocument;
+  const attachedMediaAssetIds = useMemo(() => collectDocumentAssetIds(visibleDocument), [visibleDocument]);
 
   useEffect(() => {
     /** 中文注释：切换 fragment 时优先恢复本地草稿文档。 */
@@ -68,9 +70,14 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
       setSelectionText('');
       setSyncStatus('idle');
       setIsEditorReady(false);
+      setIsDraftHydrated(false);
       lastSyncedDocumentRef.current = '';
       return;
     }
+    setDocument(initialDocument);
+    setSelectionRange(null);
+    setSelectionText('');
+    setIsDraftHydrated(false);
     let cancelled = false;
     void (async () => {
       const draft = await loadFragmentBodyDraft(fragmentId);
@@ -81,6 +88,7 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
       setDocument(nextDocument);
       setSelectionRange(null);
       setSelectionText('');
+      setIsDraftHydrated(true);
       setSyncStatus(JSON.stringify(nextDocument) === JSON.stringify(initialDocument) ? 'synced' : 'idle');
     })();
     return () => {
@@ -211,7 +219,7 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
 
   return {
     editorRef,
-    document,
+    document: visibleDocument,
     attachedMediaAssetIds,
     statusLabel: syncStatus === 'syncing' ? '同步中' : syncStatus === 'synced' ? '已同步' : null,
     isUploadingImage,

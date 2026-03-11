@@ -10,6 +10,7 @@
     "test:state": "node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~6.1.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/native": "^7.1.28",
     "@tiptap/extension-image": "^3.20.1",

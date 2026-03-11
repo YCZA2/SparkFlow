@@ -47,7 +47,6 @@ export default function FragmentRichEditorDom({
   const lastSerializedDocumentRef = useRef('');
   const lastSelectionRef = useRef('');
   const editor = useEditor({
-    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [1] },
