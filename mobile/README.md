@@ -20,7 +20,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
 - 碎片详情页同时展示只读 `transcript` 和可编辑 `editor_document`，正文改动会自动保存。
 - 脚本详情页只展示 `body_markdown`，后端负责迁移旧数据。
-- 移动端碎片正文已切到 JSON 富文本编辑器，支持标题、列表、引用、粗体、斜体、图片和 AI patch。
+- 移动端碎片正文已切到 `WebView + Tiptap` 编辑器，正文真值为 ProseMirror JSON，支持标题、列表、引用、粗体、斜体、图片和 AI patch。
 - 知识库移动端仍是占位入口，还没有完整的 Markdown 编辑和素材管理 UI。
 
 ## 一、推荐用法：统一走 `scripts/dev-mobile.sh`
@@ -227,9 +227,10 @@ http://192.168.31.157:8000
 
 当前返回和展示约定：
 
-- 碎片详情正文读取 `editor_document`，列表摘要和生成页预览读取 `plain_text_snapshot`
+- 碎片详情正文读取 `editor_document` 的 ProseMirror JSON，列表摘要和生成页预览读取 `plain_text_snapshot`
 - `transcript` 表示机器转写原文，不参与正文编辑
 - AI 编辑接口为 `POST /api/fragments/{id}/ai-edit`
+- AI 编辑 patch 现在基于 `selection_range.from/to` 返回 `replace_range` / `insert_block_after_range` / `prepend_heading`
 - 脚本详情只读取 `body_markdown`
 - 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
 - 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`

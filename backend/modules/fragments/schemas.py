@@ -19,25 +19,9 @@ class SpeakerSegmentItem(BaseModel):
     text: str
 
 
-class EditorTextNode(BaseModel):
-    text: str = ""
-    marks: list[Literal["bold", "italic"]] = Field(default_factory=list)
-
-
-class EditorBlock(BaseModel):
-    id: str
-    type: Literal["paragraph", "heading", "blockquote", "bullet_list", "ordered_list", "image"]
-    children: list[EditorTextNode] = Field(default_factory=list)
-    asset_id: str | None = None
-    url: str | None = None
-    width: int | None = None
-    height: int | None = None
-    alt: str | None = None
-
-
 class EditorDocument(BaseModel):
     type: Literal["doc"] = "doc"
-    blocks: list[EditorBlock] = Field(default_factory=list)
+    content: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class FragmentCreateRequest(BaseModel):
@@ -79,7 +63,7 @@ class FragmentItem(BaseModel):
     audio_file_expires_at: str | None = None
     folder_id: str | None = None
     folder: FragmentFolderInfo | None = None
-    editor_document: dict[str, Any] = Field(default_factory=lambda: {"type": "doc", "blocks": []})
+    editor_document: dict[str, Any] = Field(default_factory=lambda: {"type": "doc", "content": []})
     plain_text_snapshot: str | None = None
     content_state: str = "empty"
     media_assets: list[MediaAssetItem] = Field(default_factory=list)
@@ -167,22 +151,23 @@ class FragmentVisualizationResponse(BaseModel):
 
 
 class AiSelectionRange(BaseModel):
-    start: int | None = None
-    end: int | None = None
+    from_: int | None = Field(None, alias="from")
+    to: int | None = None
+
+    model_config = {"populate_by_name": True}
 
 
 class FragmentAiEditRequest(BaseModel):
     editor_document: EditorDocument = Field(..., description="当前富文本正文文档")
     selection_text: str | None = Field(None, description="当前选中文本")
     selection_range: AiSelectionRange | None = Field(None, description="当前选区范围")
-    target_block_id: str | None = Field(None, description="当前操作块 ID")
     instruction: Literal["polish", "shorten", "expand", "title", "script_seed"]
 
 
 class FragmentAiPatch(BaseModel):
-    op: Literal["replace_selection", "insert_after_selection", "prepend_heading"]
-    target_block_id: str | None = None
-    replacement_text: str | None = None
+    op: Literal["replace_range", "insert_block_after_range", "prepend_heading"]
+    range: AiSelectionRange | None = None
+    text: str | None = None
     block: dict[str, Any] | None = None
     blocks: list[dict[str, Any]] = Field(default_factory=list)
 

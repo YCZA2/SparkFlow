@@ -4,17 +4,25 @@ import * as DocumentPicker from 'expo-document-picker';
 import { requestAiEdit, updateFragment, uploadImageAsset } from '@/features/fragments/api';
 import {
   applyAiPatch,
+  buildImageNode,
   collectDocumentAssetIds,
   emptyEditorDocument,
-  insertImageBlock,
   normalizeEditorDocument,
+  normalizeSelectionRange,
 } from '@/features/fragments/editorDocument';
 import {
   clearFragmentBodyDraft,
   loadFragmentBodyDraft,
   saveFragmentBodyDraft,
 } from '@/features/fragments/bodyDrafts';
-import type { EditorDocument, Fragment } from '@/types/fragment';
+import type {
+  EditorDocument,
+  EditorNode,
+  EditorSelectionRange,
+  Fragment,
+  FragmentAiPatch,
+} from '@/types/fragment';
+import type { FragmentRichEditorHandle } from '@/features/fragments/components/FragmentRichEditor';
 
 const AUTOSAVE_DELAY_MS = 800;
 
@@ -32,17 +40,20 @@ function resolveInitialDocument(fragment: Fragment | null): EditorDocument {
 }
 
 export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmentRichEditorOptions) {
-  /** 中文注释：管理富文本正文、本地草稿、自动保存、图片插入和 AI patch。 */
+  /** 中文注释：管理 ProseMirror 正文、本地草稿、自动保存、图片插入和 AI patch。 */
   const [document, setDocument] = useState<EditorDocument>(emptyEditorDocument());
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
-  const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
+  const [selectionRange, setSelectionRange] = useState<EditorSelectionRange | null>(null);
+  const [selectionText, setSelectionText] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isAiRunning, setIsAiRunning] = useState(false);
+  const [isEditorReady, setIsEditorReady] = useState(false);
   const hydratedRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightRef = useRef(false);
   const queuedDocumentRef = useRef<EditorDocument | null>(null);
   const lastSyncedDocumentRef = useRef<string>('');
+  const editorRef = useRef<FragmentRichEditorHandle | null>(null);
 
   const fragmentId = fragment?.id ?? null;
   const initialDocument = useMemo(() => resolveInitialDocument(fragment), [fragment]);
@@ -53,8 +64,10 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
     if (!fragmentId) {
       hydratedRef.current = false;
       setDocument(emptyEditorDocument());
-      setActiveBlockId(null);
+      setSelectionRange(null);
+      setSelectionText('');
       setSyncStatus('idle');
+      setIsEditorReady(false);
       lastSyncedDocumentRef.current = '';
       return;
     }
@@ -66,7 +79,8 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
       hydratedRef.current = true;
       lastSyncedDocumentRef.current = JSON.stringify(initialDocument);
       setDocument(nextDocument);
-      setActiveBlockId(nextDocument.blocks[0]?.id ?? null);
+      setSelectionRange(null);
+      setSelectionText('');
       setSyncStatus(JSON.stringify(nextDocument) === JSON.stringify(initialDocument) ? 'synced' : 'idle');
     })();
     return () => {
@@ -134,6 +148,12 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
     if (syncStatus === 'synced') setSyncStatus('idle');
   }
 
+  function updateSelection(range: EditorSelectionRange | null, text: string): void {
+    /** 中文注释：同步记录当前选区快照，供 AI patch 和图片插入复用。 */
+    setSelectionRange(normalizeSelectionRange(range));
+    setSelectionText(text.trim());
+  }
+
   async function pickAndInsertImage(): Promise<void> {
     /** 中文注释：从系统文件选择器选图、上传并插入正文。 */
     try {
@@ -151,42 +171,54 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
         asset.name ?? 'image.jpg',
         asset.mimeType ?? 'image/jpeg'
       );
-      updateDocument(insertImageBlock(document, uploaded, activeBlockId));
+      const imageNode = buildImageNode(uploaded);
+      editorRef.current?.insertImage(imageNode);
     } finally {
       setIsUploadingImage(false);
     }
   }
 
   async function runAiAction(instruction: 'polish' | 'shorten' | 'expand' | 'title' | 'script_seed'): Promise<void> {
-    /** 中文注释：请求后端生成 patch，并直接应用到本地正文。 */
+    /** 中文注释：请求后端生成 patch，并直接应用到当前编辑器。 */
     if (!fragmentId) return;
     try {
       setIsAiRunning(true);
-      const activeBlock = document.blocks.find((block) => block.id === activeBlockId);
-      const selectionText = activeBlock && activeBlock.type !== 'image'
-        ? activeBlock.children.map((child) => child.text).join('').trim()
-        : undefined;
       const response = await requestAiEdit(fragmentId, {
         editor_document: document,
         instruction,
-        selection_text: selectionText,
-        target_block_id: activeBlockId,
+        selection_text: selectionText || undefined,
+        selection_range: selectionRange,
       });
-      updateDocument(applyAiPatch(document, response.patch));
+      applyPatchToEditor(response.patch);
     } finally {
       setIsAiRunning(false);
     }
   }
 
+  function applyPatchToEditor(patch: FragmentAiPatch): void {
+    /** 中文注释：优先通过编辑器实例应用 patch，桥接不可用时再回退到本地文档。 */
+    if (isEditorReady) {
+      editorRef.current?.applyPatch(patch);
+      return;
+    }
+    updateDocument(applyAiPatch(document, patch));
+  }
+
+  function handleEditorReady(): void {
+    /** 中文注释：记录 DOM 编辑器就绪状态，便于走桥接命令。 */
+    setIsEditorReady(true);
+  }
+
   return {
+    editorRef,
     document,
-    activeBlockId,
     attachedMediaAssetIds,
     statusLabel: syncStatus === 'syncing' ? '同步中' : syncStatus === 'synced' ? '已同步' : null,
     isUploadingImage,
     isAiRunning,
-    setActiveBlockId,
-    onChangeDocument: updateDocument,
+    onEditorReady: handleEditorReady,
+    onDocumentChange: updateDocument,
+    onSelectionChange: updateSelection,
     onInsertImage: pickAndInsertImage,
     onAiAction: runAiAction,
   };

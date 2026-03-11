@@ -241,7 +241,7 @@ async def ai_edit_fragment(
         editor_document=data.editor_document.model_dump(),
         instruction=data.instruction,
         selection_text=data.selection_text,
-        target_block_id=data.target_block_id,
+        selection_range=data.selection_range.model_dump(by_alias=True) if data.selection_range else None,
     )
     return success_response(data=FragmentAiEditResponse(patch=patch, preview_text=preview_text))
 

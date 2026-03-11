@@ -4,8 +4,17 @@
 
 export type FragmentSource = 'voice' | 'manual' | 'video_parse';
 export type FragmentAudioSource = 'upload' | 'external_link';
-export type EditorMark = 'bold' | 'italic';
-export type EditorBlockType = 'paragraph' | 'heading' | 'blockquote' | 'bullet_list' | 'ordered_list' | 'image';
+export type EditorMarkType = 'bold' | 'italic';
+export type EditorNodeType =
+  | 'doc'
+  | 'paragraph'
+  | 'heading'
+  | 'blockquote'
+  | 'bulletList'
+  | 'orderedList'
+  | 'listItem'
+  | 'text'
+  | 'image';
 
 export interface SpeakerSegment {
   speaker_id: string;
@@ -14,38 +23,26 @@ export interface SpeakerSegment {
   text: string;
 }
 
-export interface EditorTextNode {
-  text: string;
-  marks: EditorMark[];
+export interface EditorMark {
+  type: EditorMarkType;
 }
 
-export interface EditorImageBlock {
-  id: string;
-  type: 'image';
-  asset_id?: string | null;
-  url?: string | null;
-  width?: number | null;
-  height?: number | null;
-  alt?: string | null;
-  children?: EditorTextNode[];
+export interface EditorNode {
+  type: EditorNodeType;
+  attrs?: Record<string, unknown> | null;
+  content?: EditorNode[];
+  text?: string;
+  marks?: EditorMark[];
 }
-
-export interface EditorTextBlock {
-  id: string;
-  type: Exclude<EditorBlockType, 'image'>;
-  children: EditorTextNode[];
-  asset_id?: string | null;
-  url?: string | null;
-  width?: number | null;
-  height?: number | null;
-  alt?: string | null;
-}
-
-export type EditorBlock = EditorTextBlock | EditorImageBlock;
 
 export interface EditorDocument {
   type: 'doc';
-  blocks: EditorBlock[];
+  content: EditorNode[];
+}
+
+export interface EditorSelectionRange {
+  from?: number | null;
+  to?: number | null;
 }
 
 export interface MediaAsset {
@@ -149,9 +146,9 @@ export interface FragmentVisualizationResponse {
 }
 
 export interface FragmentAiPatch {
-  op: 'replace_selection' | 'insert_after_selection' | 'prepend_heading';
-  target_block_id?: string | null;
-  replacement_text?: string | null;
-  block?: EditorBlock | null;
-  blocks?: EditorBlock[];
+  op: 'replace_range' | 'insert_block_after_range' | 'prepend_heading';
+  range?: EditorSelectionRange | null;
+  text?: string | null;
+  block?: EditorNode | null;
+  blocks?: EditorNode[];
 }

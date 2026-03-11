@@ -3,6 +3,7 @@ import { del, get, patch, post, sendForm } from '@/features/core/api/client';
 import type {
   CreateFragmentRequest,
   EditorDocument,
+  EditorSelectionRange,
   Fragment,
   FragmentAiPatch,
   FragmentListResponse,
@@ -19,8 +20,7 @@ export interface UpdateFragmentRequest {
 export interface FragmentAiEditRequest {
   editor_document: EditorDocument;
   selection_text?: string;
-  selection_range?: { start?: number | null; end?: number | null } | null;
-  target_block_id?: string | null;
+  selection_range?: EditorSelectionRange | null;
   instruction: 'polish' | 'shorten' | 'expand' | 'title' | 'script_seed';
 }
 

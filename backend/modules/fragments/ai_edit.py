@@ -17,7 +17,7 @@ class FragmentAiEditService:
         editor_document: dict,
         instruction: str,
         selection_text: str | None,
-        target_block_id: str | None,
+        selection_range: dict | None,
     ) -> tuple[dict, str]:
         """基于当前正文生成可直接应用的结构化 patch。"""
         normalized_document = normalize_editor_document(editor_document)
@@ -30,7 +30,7 @@ class FragmentAiEditService:
         )
 
         if instruction == "title":
-            heading_block = build_document_from_text(generated_text, block_type="heading")["blocks"][0]
+            heading_block = build_document_from_text(generated_text, block_type="heading")["content"][0]
             return (
                 {
                     "op": "prepend_heading",
@@ -40,11 +40,11 @@ class FragmentAiEditService:
             )
 
         if instruction == "script_seed":
-            script_blocks = build_document_from_text(generated_text, block_type="paragraph")["blocks"]
+            script_blocks = build_document_from_text(generated_text, block_type="paragraph")["content"]
             return (
                 {
-                    "op": "insert_after_selection",
-                    "target_block_id": target_block_id,
+                    "op": "insert_block_after_range",
+                    "range": selection_range,
                     "blocks": script_blocks,
                 },
                 generated_text,
@@ -52,9 +52,9 @@ class FragmentAiEditService:
 
         return (
             {
-                "op": "replace_selection",
-                "target_block_id": target_block_id,
-                "replacement_text": generated_text,
+                "op": "replace_range",
+                "range": selection_range,
+                "text": generated_text,
             },
             generated_text,
         )

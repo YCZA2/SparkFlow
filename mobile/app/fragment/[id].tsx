@@ -188,13 +188,14 @@ export default function FragmentDetailScreen() {
           ) : null}
 
           <FragmentRichEditor
+            editorRef={bodyEditor.editorRef}
             document={bodyEditor.document}
-            activeBlockId={bodyEditor.activeBlockId}
             statusLabel={bodyEditor.statusLabel}
             isUploadingImage={bodyEditor.isUploadingImage}
             isAiRunning={bodyEditor.isAiRunning}
-            onSelectBlock={bodyEditor.setActiveBlockId}
-            onChangeDocument={bodyEditor.onChangeDocument}
+            onEditorReady={bodyEditor.onEditorReady}
+            onDocumentChange={bodyEditor.onDocumentChange}
+            onSelectionChange={bodyEditor.onSelectionChange}
             onInsertImage={bodyEditor.onInsertImage}
             onAiAction={bodyEditor.onAiAction}
           />
