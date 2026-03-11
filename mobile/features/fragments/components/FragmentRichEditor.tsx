@@ -10,7 +10,7 @@ import type {
   FragmentAiPatch,
 } from '@/types/fragment';
 
-import FragmentRichEditorSurface from './FragmentRichEditorSurface.dom';
+import FragmentRichEditorDom from './FragmentRichEditorDom';
 
 export interface FragmentRichEditorHandle {
   [key: string]: (...args: any[]) => void;
@@ -68,7 +68,7 @@ export function FragmentRichEditor({
       </ScrollView>
 
       <View style={[styles.editorShell, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceMuted }]}>
-        <FragmentRichEditorSurface
+        <FragmentRichEditorDom
           ref={editorRef}
           document={document}
           onReady={onEditorReady}

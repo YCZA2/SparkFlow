@@ -1,5 +1,7 @@
-import React, { forwardRef, useEffect, useRef } from 'react';
-import { useDOMImperativeHandle } from 'expo/dom';
+'use dom';
+
+import React, { useEffect, useRef } from 'react';
+import { useDOMImperativeHandle, type DOMProps } from 'expo/dom';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
@@ -18,15 +20,13 @@ interface SelectionPayload {
   text: string;
 }
 
-interface FragmentRichEditorSurfaceProps {
+interface FragmentRichEditorDomProps {
+  ref?: React.Ref<FragmentRichEditorHandle>;
+  dom?: DOMProps;
   document: EditorDocument;
   onReady?: () => void;
   onDocumentChange?: (document: EditorDocument) => void;
   onSelectionChange?: (payload: SelectionPayload) => void;
-  dom?: {
-    matchContents?: boolean;
-    style?: unknown;
-  };
 }
 
 function normalizeDocument(document: EditorDocument): EditorDocument {
@@ -36,13 +36,13 @@ function normalizeDocument(document: EditorDocument): EditorDocument {
     : { type: 'doc', content: [] };
 }
 
-const FragmentRichEditorSurface = forwardRef<FragmentRichEditorHandle, FragmentRichEditorSurfaceProps>(function FragmentRichEditorSurface({
+export default function FragmentRichEditorDom({
+  ref,
   document,
   onReady,
   onDocumentChange,
   onSelectionChange,
-  dom: _dom,
-}, ref) {
+}: FragmentRichEditorDomProps) {
   /** 中文注释：在 DOM 侧挂载 Tiptap，并通过 imperative handle 暴露桥接命令。 */
   const lastSerializedDocumentRef = useRef('');
   const lastSelectionRef = useRef('');
@@ -104,7 +104,7 @@ const FragmentRichEditorSurface = forwardRef<FragmentRichEditorHandle, FragmentR
     emitSelection(editor);
   }, [document, editor]);
 
-  useDOMImperativeHandle<FragmentRichEditorHandle>(ref, () => ({
+  useDOMImperativeHandle<FragmentRichEditorHandle>(ref ?? null, () => ({
     setDocument(nextDocument: EditorDocument) {
       if (!editor) return;
       const normalized = normalizeDocument(nextDocument);
@@ -165,7 +165,7 @@ const FragmentRichEditorSurface = forwardRef<FragmentRichEditorHandle, FragmentR
       <style>{cssText}</style>
     </div>
   );
-});
+}
 
 function ToolbarButton({
   label,
@@ -260,5 +260,3 @@ const cssText = `
     margin: 12px 0;
   }
 `;
-
-export default FragmentRichEditorSurface;
