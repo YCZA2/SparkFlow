@@ -21,16 +21,16 @@ export interface EditorTheme {
  */
 export function createEditorTheme(theme: AppTheme): EditorTheme {
   return {
-    background: theme.colors.surface,
-    surface: theme.colors.surface,
-    text: theme.colors.text,
-    textMuted: theme.colors.textSubtle,
-    border: theme.colors.border,
-    primary: theme.colors.primary,
+    background: theme.name === 'dark' ? '#12110F' : '#ECE9E4',
+    surface: theme.name === 'dark' ? '#181715' : '#ECE9E4',
+    text: theme.name === 'dark' ? '#F7F3ED' : '#35312C',
+    textMuted: theme.name === 'dark' ? '#A8A097' : '#7C756D',
+    border: theme.name === 'dark' ? '#2A2723' : '#E7E1D8',
+    primary: theme.name === 'dark' ? '#E0BB48' : '#D8B23C',
     primaryText: '#FFFFFF',
     fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif',
-    fontSize: 16,
-    lineHeight: 1.7,
+    fontSize: 18,
+    lineHeight: 1.78,
   };
 }
 
@@ -59,66 +59,47 @@ export function createEditorCssVars(theme: AppTheme): string {
 export function createEditorBaseCss(): string {
   return `
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--editor-background); color: var(--editor-text); font-family: var(--editor-font-family); }
+    html, body { margin: 0; min-height: 100%; background: transparent; color: var(--editor-text); font-family: var(--editor-font-family); }
     .ProseMirror {
-      min-height: 260px;
-      padding: 16px 16px 24px;
+      min-height: 360px;
+      padding: 8px 0 180px;
       outline: none;
       font-size: var(--editor-font-size);
       line-height: var(--editor-line-height);
       color: var(--editor-text);
+      caret-color: var(--editor-primary);
+      word-break: break-word;
     }
-    .ProseMirror p { margin: 0 0 12px; }
-    .ProseMirror h1 { margin: 0 0 16px; font-size: 28px; line-height: 1.25; }
+    .ProseMirror p {
+      margin: 0 0 18px;
+      letter-spacing: 0.1px;
+    }
+    .ProseMirror h1 {
+      margin: 0 0 28px;
+      font-size: 34px;
+      line-height: 1.18;
+      font-weight: 800;
+      letter-spacing: -0.6px;
+    }
     .ProseMirror blockquote {
-      margin: 0 0 12px;
-      padding-left: 14px;
+      margin: 0 0 18px;
+      padding: 2px 0 2px 16px;
       border-left: 3px solid var(--editor-primary);
       color: var(--editor-text-muted);
     }
     .ProseMirror ul, .ProseMirror ol {
-      margin: 0 0 12px;
+      margin: 0 0 18px;
       padding-left: 24px;
     }
+    .ProseMirror li { margin: 0 0 8px; }
+    .ProseMirror strong { font-weight: 760; }
+    .ProseMirror em { font-style: italic; }
     .ProseMirror img {
       max-width: 100%;
-      border-radius: 12px;
+      border-radius: 20px;
       display: block;
-      margin: 12px 0;
-    }
-  `.trim().replace(/\s+/g, ' ');
-}
-
-/**
- * 中文注释：生成工具栏按钮样式，使用 CSS 变量。
- */
-export function createToolbarButtonCss(): string {
-  return `
-    .editor-toolbar {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      padding: 12px 12px 0;
-      border-bottom: 1px solid var(--editor-border);
-      background: var(--editor-background);
-      position: sticky;
-      top: 0;
-      z-index: 2;
-    }
-    .editor-toolbar button {
-      appearance: none;
-      border: none;
-      border-radius: 999px;
-      padding: 8px 12px;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--editor-text);
-      background: var(--editor-surface);
-      cursor: pointer;
-    }
-    .editor-toolbar button.active {
-      color: var(--editor-primary-text);
-      background: var(--editor-primary);
+      margin: 18px 0;
+      box-shadow: 0 14px 36px rgba(36, 31, 26, 0.1);
     }
   `.trim().replace(/\s+/g, ' ');
 }

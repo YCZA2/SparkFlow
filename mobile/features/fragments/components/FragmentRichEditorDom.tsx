@@ -9,6 +9,8 @@ import MarkdownIt from 'markdown-it';
 
 import type {
   FragmentAiPatch,
+  FragmentEditorCommand,
+  FragmentEditorFormattingState,
   FragmentEditorSnapshot,
   MediaAsset,
 } from '@/types/fragment';
@@ -24,7 +26,6 @@ import {
 import {
   createEditorCssVars,
   createEditorBaseCss,
-  createToolbarButtonCss,
 } from '@/components/editor/styles/editorTheme';
 
 const SNAPSHOT_DEBOUNCE_MS = 180;
@@ -38,6 +39,7 @@ interface FragmentRichEditorDomProps {
   onReady?: () => void;
   onSnapshotChange?: (snapshot: FragmentEditorSnapshot) => void;
   onSelectionChange?: (text: string) => void;
+  onFormattingStateChange?: (state: FragmentEditorFormattingState) => void;
 }
 
 const SparkFlowImage = Image.extend({
@@ -77,11 +79,13 @@ export default function FragmentRichEditorDom({
   onReady,
   onSnapshotChange,
   onSelectionChange,
+  onFormattingStateChange,
 }: FragmentRichEditorDomProps) {
   /** 中文注释：在 DOM 侧维护编辑器唯一 live state，并只向原生层发节流后的 Markdown 快照。 */
   const snapshotTimerRef = useRef<number | null>(null);
   const lastSnapshotRef = useRef<string>('');
   const lastSelectionRef = useRef('');
+  const lastToolbarStateRef = useRef('');
   const latestSnapshotRef = useRef<FragmentEditorSnapshot | null>(null);
 
   const markdownRenderer = useMemo(() => createMarkdownRenderer(mediaAssets), [mediaAssets]);
@@ -92,7 +96,6 @@ export default function FragmentRichEditorDom({
 
   const cssVars = useMemo(() => createEditorCssVars(theme), [theme]);
   const baseCss = useMemo(() => createEditorBaseCss(), []);
-  const toolbarCss = useMemo(() => createToolbarButtonCss(), []);
 
   const editor = useEditor({
     extensions: [
@@ -120,12 +123,15 @@ export default function FragmentRichEditorDom({
       onReady?.();
       onSnapshotChange?.(snapshot);
       emitSelection(editor);
+      emitToolbarState(editor);
     },
     onUpdate: ({ editor }) => {
       scheduleSnapshot(editor.getJSON() as Record<string, unknown>);
+      emitToolbarState(editor);
     },
     onSelectionUpdate: ({ editor }) => {
       emitSelection(editor);
+      emitToolbarState(editor);
     },
   });
 
@@ -155,6 +161,15 @@ export default function FragmentRichEditorDom({
     if (text === lastSelectionRef.current) return;
     lastSelectionRef.current = text;
     onSelectionChange?.(text);
+  }
+
+  function emitToolbarState(currentEditor: NonNullable<typeof editor>): void {
+    /** 中文注释：同步当前格式状态，让原生工具栏可以高亮和控制撤销重做。 */
+    const nextState = buildFormattingState(currentEditor);
+    const serialized = JSON.stringify(nextState);
+    if (serialized === lastToolbarStateRef.current) return;
+    lastToolbarStateRef.current = serialized;
+    onFormattingStateChange?.(nextState);
   }
 
   function buildEditorSnapshot(document: Record<string, unknown>): FragmentEditorSnapshot {
@@ -203,6 +218,10 @@ export default function FragmentRichEditorDom({
       }
       editor.commands.insertContentAt(editor.state.selection.to, html);
     },
+    runCommand(command: FragmentEditorCommand) {
+      if (!editor) return;
+      runEditorCommand(editor, command);
+    },
   }), [editor, markdownRenderer]);
 
   if (!editor) {
@@ -216,17 +235,8 @@ export default function FragmentRichEditorDom({
 
   return (
     <>
-      <style>{`:root { ${cssVars} } ${baseCss} ${toolbarCss}`}</style>
+      <style>{`:root { ${cssVars} } ${baseCss}`}</style>
       <div style={styles.root}>
-        <div className="editor-toolbar">
-          <ToolbarButton label="段落" active={editor.isActive('paragraph')} onClick={() => editor.chain().focus().setParagraph().run()} />
-          <ToolbarButton label="标题" active={editor.isActive('heading', { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} />
-          <ToolbarButton label="引用" active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
-          <ToolbarButton label="无序" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} />
-          <ToolbarButton label="有序" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
-          <ToolbarButton label="粗体" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
-          <ToolbarButton label="斜体" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
-        </div>
         <EditorContent editor={editor} />
       </div>
     </>
@@ -348,25 +358,66 @@ function escapeInlineText(text: string): string {
   return text.replace(/([\\`*_[\]<>])/g, '\\$1');
 }
 
-function ToolbarButton({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  /** 中文注释：渲染 DOM 内部格式工具栏按钮，使用 CSS 类名控制样式。 */
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={active ? 'active' : undefined}
-    >
-      {label}
-    </button>
-  );
+function buildFormattingState(editor: NonNullable<ReturnType<typeof useEditor>>): FragmentEditorFormattingState {
+  /** 中文注释：从 Tiptap 当前状态提取原生工具栏需要的最小信息。 */
+  let blockType: FragmentEditorFormattingState['block_type'] = 'paragraph';
+  if (editor.isActive('heading', { level: 1 })) blockType = 'heading';
+  else if (editor.isActive('bulletList')) blockType = 'bulletList';
+  else if (editor.isActive('orderedList')) blockType = 'orderedList';
+  else if (editor.isActive('blockquote')) blockType = 'blockquote';
+  return {
+    block_type: blockType,
+    bold: editor.isActive('bold'),
+    italic: editor.isActive('italic'),
+    bullet_list: editor.isActive('bulletList'),
+    ordered_list: editor.isActive('orderedList'),
+    blockquote: editor.isActive('blockquote'),
+    can_undo: editor.can().chain().focus().undo().run(),
+    can_redo: editor.can().chain().focus().redo().run(),
+  };
+}
+
+function runEditorCommand(
+  editor: NonNullable<ReturnType<typeof useEditor>>,
+  command: FragmentEditorCommand
+): void {
+  /** 中文注释：把原生层命令映射到 Tiptap 操作，保持桥接层只暴露稳定命令枚举。 */
+  const chain = editor.chain().focus();
+  if (command === 'paragraph') {
+    chain.setParagraph().run();
+    return;
+  }
+  if (command === 'heading') {
+    chain.toggleHeading({ level: 1 }).run();
+    return;
+  }
+  if (command === 'blockquote') {
+    chain.toggleBlockquote().run();
+    return;
+  }
+  if (command === 'bulletList') {
+    chain.toggleBulletList().run();
+    return;
+  }
+  if (command === 'orderedList') {
+    chain.toggleOrderedList().run();
+    return;
+  }
+  if (command === 'bold') {
+    chain.toggleBold().run();
+    return;
+  }
+  if (command === 'italic') {
+    chain.toggleItalic().run();
+    return;
+  }
+  if (command === 'undo') {
+    editor.commands.focus();
+    editor.commands.undo();
+    return;
+  }
+  editor.commands.focus();
+  editor.commands.redo();
 }
 
 const styles: Record<string, React.CSSProperties> = {

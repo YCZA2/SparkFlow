@@ -16,6 +16,7 @@ import {
 import type {
   Fragment,
   FragmentAiPatch,
+  FragmentEditorFormattingState,
   FragmentEditorSnapshot,
   MediaAsset,
 } from '@/types/fragment';
@@ -54,6 +55,7 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
   const [isAiRunning, setIsAiRunning] = useState(false);
   const [isEditorReady, setIsEditorReady] = useState(false);
   const [isDraftHydrated, setIsDraftHydrated] = useState(false);
+  const [formattingState, setFormattingState] = useState<FragmentEditorFormattingState | null>(null);
   const [editorKey, setEditorKey] = useState('empty');
   const [runtimeMediaAssets, setRuntimeMediaAssets] = useState<MediaAsset[]>([]);
   const hydratedRef = useRef(false);
@@ -89,6 +91,7 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
       setSyncStatus('idle');
       setIsEditorReady(false);
       setIsDraftHydrated(false);
+      setFormattingState(null);
       setRuntimeMediaAssets([]);
       setEditorKey('empty');
       lastSyncedMarkdownRef.current = '';
@@ -111,6 +114,7 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
       setSnapshot(nextSnapshot);
       setSyncStatus(nextSnapshot.body_markdown === lastSyncedMarkdownRef.current ? 'synced' : 'idle');
       setIsDraftHydrated(true);
+      setFormattingState(null);
       setEditorKey(`${fragmentId}:${Date.now()}`);
     })();
     return () => {
@@ -190,6 +194,11 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
     setSelectionText(text.trim());
   }
 
+  function handleFormattingStateChange(nextState: FragmentEditorFormattingState): void {
+    /** 中文注释：保存工具栏状态，驱动原生页的格式按钮高亮。 */
+    setFormattingState(nextState);
+  }
+
   async function pickAndInsertImage(): Promise<void> {
     /** 中文注释：从系统文件选择器选图、上传并插入正文。 */
     try {
@@ -249,18 +258,31 @@ export function useFragmentRichEditor({ fragment, onFragmentChange }: UseFragmen
     setIsEditorReady(true);
   }
 
+  async function saveNow(): Promise<void> {
+    /** 中文注释：在离开页面或显式完成时立即提交当前正文，避免 debounce 造成最后一次输入丢失。 */
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const latestSnapshot = editorRef.current?.getSnapshot() ?? snapshot;
+    await submitLatestSnapshot(latestSnapshot);
+  }
+
   return {
     editorRef,
     editorKey,
     initialBodyMarkdown: snapshot.body_markdown,
     mediaAssets: visibleMediaAssets,
+    formattingState,
     isDraftHydrated,
     statusLabel: syncStatus === 'syncing' ? '同步中' : syncStatus === 'synced' ? '已同步' : null,
     isUploadingImage,
     isAiRunning,
+    saveNow,
     onEditorReady: handleEditorReady,
     onSnapshotChange: handleSnapshotChange,
     onSelectionChange: handleSelectionChange,
+    onFormattingStateChange: handleFormattingStateChange,
     onInsertImage: pickAndInsertImage,
     onAiAction: runAiAction,
   };

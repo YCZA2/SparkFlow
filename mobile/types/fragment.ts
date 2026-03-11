@@ -129,3 +129,32 @@ export interface FragmentEditorSnapshot {
   plain_text: string;
   asset_ids: string[];
 }
+
+export type FragmentEditorCommand =
+  | 'paragraph'
+  | 'heading'
+  | 'blockquote'
+  | 'bulletList'
+  | 'orderedList'
+  | 'bold'
+  | 'italic'
+  | 'undo'
+  | 'redo';
+
+export type FragmentEditorBlockType =
+  | 'paragraph'
+  | 'heading'
+  | 'blockquote'
+  | 'bulletList'
+  | 'orderedList';
+
+export interface FragmentEditorFormattingState {
+  block_type: FragmentEditorBlockType;
+  bold: boolean;
+  italic: boolean;
+  bullet_list: boolean;
+  ordered_list: boolean;
+  blockquote: boolean;
+  can_undo: boolean;
+  can_redo: boolean;
+}
