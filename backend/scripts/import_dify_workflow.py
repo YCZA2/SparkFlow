@@ -14,8 +14,22 @@ from urllib.parse import urlparse
 
 import httpx
 
-
-DEFAULT_DSL_PATH = Path(__file__).resolve().parent.parent / "dify_dsl" / "sparkflow_script_generation.workflow.yml"
+SCRIPT_MODE_CONFIG = {
+    "mode_a": {
+        "default_dsl_path": Path(__file__).resolve().parent.parent / "dify_dsl" / "sparkflow_script_generation_mode_a.workflow.yml",
+        "base_url_env": "DIFY_MODE_A_BASE_URL",
+        "app_id_env": "DIFY_MODE_A_APP_ID",
+        "api_key_env": "DIFY_MODE_A_API_KEY",
+        "workflow_id_env": "DIFY_MODE_A_WORKFLOW_ID",
+    },
+    "mode_b": {
+        "default_dsl_path": Path(__file__).resolve().parent.parent / "dify_dsl" / "sparkflow_script_generation_mode_b.workflow.yml",
+        "base_url_env": "DIFY_MODE_B_BASE_URL",
+        "app_id_env": "DIFY_MODE_B_APP_ID",
+        "api_key_env": "DIFY_MODE_B_API_KEY",
+        "workflow_id_env": "DIFY_MODE_B_WORKFLOW_ID",
+    },
+}
 DEFAULT_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 DEFAULT_TIMEOUT = 30.0
 
@@ -41,6 +55,14 @@ class ImportResult:
     workflow_id: str
     api_key: str
     runtime_api_base: str
+
+
+def resolve_mode_config(mode: str) -> dict[str, Any]:
+    """返回指定脚本模式对应的 Dify 配置键。"""
+    normalized_mode = str(mode or "").strip()
+    if normalized_mode not in SCRIPT_MODE_CONFIG:
+        raise DifyImportError(f"不支持的脚本模式: {normalized_mode or 'empty'}")
+    return SCRIPT_MODE_CONFIG[normalized_mode]
 
 
 def normalize_runtime_api_base(raw_value: str) -> str:
@@ -316,23 +338,29 @@ def ensure_api_key(session: ConsoleSession, *, app_id: str, reuse_existing: bool
     return token
 
 
-def resolve_runtime_api_base(args: argparse.Namespace, env_map: dict[str, str]) -> str:
-    """按 CLI、环境和 `.env` 的顺序解析 Dify 运行时地址。"""
-    value = args.dify_base_url or os.getenv("DIFY_BASE_URL") or env_map.get("DIFY_BASE_URL") or ""
+def resolve_runtime_api_base(args: argparse.Namespace, env_map: dict[str, str], *, mode: str) -> str:
+    """按 CLI、环境和 `.env` 的顺序解析 mode 对应的 Dify 运行时地址。"""
+    mode_config = resolve_mode_config(mode)
+    base_url_env = mode_config["base_url_env"]
+    value = args.dify_base_url or os.getenv(base_url_env) or env_map.get(base_url_env) or ""
     if not value:
         value = "http://127.0.0.1:18080/v1"
     return normalize_runtime_api_base(value)
 
 
-def resolve_target_app_id(args: argparse.Namespace, env_map: dict[str, str]) -> str | None:
-    """按 CLI、环境和 `.env` 的顺序解析要更新的 Dify app_id。"""
-    value = (
-        args.app_id
-        or os.getenv("DIFY_SCRIPT_APP_ID")
-        or env_map.get("DIFY_SCRIPT_APP_ID")
-        or ""
-    ).strip()
+def resolve_target_app_id(args: argparse.Namespace, env_map: dict[str, str], *, mode: str) -> str | None:
+    """按 CLI、环境和 `.env` 的顺序解析指定 mode 的目标 app_id。"""
+    mode_config = resolve_mode_config(mode)
+    app_id_env = mode_config["app_id_env"]
+    value = (args.app_id or os.getenv(app_id_env) or env_map.get(app_id_env) or "").strip()
     return value or None
+
+
+def resolve_dsl_path(args: argparse.Namespace, *, mode: str) -> Path:
+    """按 CLI 或 mode 默认值解析 DSL 文件路径。"""
+    if args.dsl is not None:
+        return args.dsl
+    return resolve_mode_config(mode)["default_dsl_path"]
 
 
 def resolve_console_api_base(args: argparse.Namespace, runtime_api_base: str) -> str:
@@ -369,10 +397,11 @@ def resolve_session(args: argparse.Namespace, *, console_api_base: str) -> Conso
 def build_import_result(args: argparse.Namespace) -> ImportResult:
     """执行完整导入流程，并提取 SparkFlow 需要回填的值。"""
     env_map = load_env_map(args.env_file)
-    runtime_api_base = resolve_runtime_api_base(args, env_map)
+    runtime_api_base = resolve_runtime_api_base(args, env_map, mode=args.mode)
     console_api_base = resolve_console_api_base(args, runtime_api_base)
-    target_app_id = resolve_target_app_id(args, env_map)
-    dsl_content = args.dsl.read_text(encoding="utf-8")
+    target_app_id = resolve_target_app_id(args, env_map, mode=args.mode)
+    dsl_path = resolve_dsl_path(args, mode=args.mode)
+    dsl_content = dsl_path.read_text(encoding="utf-8")
     session = resolve_session(args, console_api_base=console_api_base)
     try:
         imported = import_dsl_with_fallback(session, dsl_content=dsl_content, app_id=target_app_id)
@@ -397,7 +426,8 @@ def build_import_result(args: argparse.Namespace) -> ImportResult:
 def parse_args() -> argparse.Namespace:
     """解析 CLI 参数。"""
     parser = argparse.ArgumentParser(description="导入 Dify workflow DSL 并回填 SparkFlow backend/.env")
-    parser.add_argument("--dsl", type=Path, default=DEFAULT_DSL_PATH, help="要导入的 DSL 文件路径")
+    parser.add_argument("--mode", required=True, choices=sorted(SCRIPT_MODE_CONFIG.keys()), help="脚本模式：mode_a 或 mode_b")
+    parser.add_argument("--dsl", type=Path, default=None, help="要导入的 DSL 文件路径；未传时按 mode 选择默认模板")
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE, help="要回填的后端环境文件")
     parser.add_argument("--dify-base-url", help="Dify 运行时 API 地址，例如 http://127.0.0.1:18080/v1")
     parser.add_argument("--console-base-url", help="Dify console API 地址或根地址，例如 http://127.0.0.1:18080")
@@ -415,18 +445,20 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     """执行命令行入口，并把结果写回后端环境变量。"""
     args = parse_args()
-    if not args.dsl.exists():
-        raise DifyImportError(f"DSL 文件不存在: {args.dsl}")
+    dsl_path = resolve_dsl_path(args, mode=args.mode)
+    if not dsl_path.exists():
+        raise DifyImportError(f"DSL 文件不存在: {dsl_path}")
     result = build_import_result(args)
+    mode_config = resolve_mode_config(args.mode)
     updates = {
-        "DIFY_BASE_URL": result.runtime_api_base,
-        "DIFY_SCRIPT_APP_ID": result.app_id,
-        "DIFY_API_KEY": result.api_key,
-        "DIFY_SCRIPT_WORKFLOW_ID": result.workflow_id,
+        mode_config["base_url_env"]: result.runtime_api_base,
+        mode_config["app_id_env"]: result.app_id,
+        mode_config["api_key_env"]: result.api_key,
+        mode_config["workflow_id_env"]: result.workflow_id,
     }
     write_env_updates(args.env_file, updates)
-    print(f"Imported app_id={result.app_id}")
-    print(f"Resolved workflow_id={result.workflow_id}")
+    print(f"Imported mode={args.mode} app_id={result.app_id}")
+    print(f"Resolved mode={args.mode} workflow_id={result.workflow_id}")
     print(f"Updated env_file={args.env_file}")
     return 0
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -16,9 +15,14 @@ DEFAULT_TEST_DATABASE_URL = "postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:
 os.environ.setdefault("DEBUG", "false")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("DASHSCOPE_API_KEY", "test-dashscope-key")
-os.environ.setdefault("DIFY_BASE_URL", "https://dify.example.com/v1")
-os.environ.setdefault("DIFY_API_KEY", "test-key")
-os.environ.setdefault("DIFY_SCRIPT_WORKFLOW_ID", "wf-script-001")
+os.environ.setdefault("DIFY_MODE_A_BASE_URL", "https://dify-mode-a.example.com/v1")
+os.environ.setdefault("DIFY_MODE_A_API_KEY", "test-mode-a-key")
+os.environ.setdefault("DIFY_MODE_A_WORKFLOW_ID", "wf-script-mode-a-001")
+os.environ.setdefault("DIFY_MODE_B_BASE_URL", "https://dify-mode-b.example.com/v1")
+os.environ.setdefault("DIFY_MODE_B_API_KEY", "test-mode-b-key")
+os.environ.setdefault("DIFY_MODE_B_WORKFLOW_ID", "wf-script-mode-b-001")
+os.environ.setdefault("DIFY_BASE_URL", "https://dify-daily.example.com/v1")
+os.environ.setdefault("DIFY_API_KEY", "test-daily-default-key")
 os.environ.setdefault("DIFY_DAILY_PUSH_API_KEY", "test-daily-push-key")
 os.environ.setdefault("DIFY_DAILY_PUSH_WORKFLOW_ID", "wf-daily-push-001")
 os.environ.setdefault("DIFY_POLL_INTERVAL_SECONDS", "0")
@@ -28,7 +32,7 @@ os.environ.setdefault("DATABASE_URL", os.environ.get("TEST_DATABASE_URL", DEFAUL
 from main import create_app
 from models import Base, User
 from modules.auth.application import TEST_USER_ID
-from modules.shared.infrastructure import LocalFileStorage, PromptLoader
+from modules.shared.infrastructure import LocalFileStorage
 from tests.support import (
     FakeExternalMediaProvider,
     FakeLLMProvider,
@@ -101,9 +105,22 @@ def stt_provider() -> FakeSTTProvider:
 
 
 @pytest.fixture
-def workflow_provider() -> FakeWorkflowProvider:
-    """提供默认不会出网的外挂工作流 provider。"""
+def script_mode_a_workflow_provider() -> FakeWorkflowProvider:
+    """提供 mode_a 脚本工作流 provider 替身。"""
     provider = FakeWorkflowProvider()
+    provider.provider_workflow_id = "wf-script-mode-a-001"
+    provider.queue_success(draft="生成后的口播稿")
+    return provider
+
+
+@pytest.fixture
+def script_mode_b_workflow_provider() -> FakeWorkflowProvider:
+    """提供 mode_b 脚本工作流 provider 替身。"""
+    provider = FakeWorkflowProvider()
+    provider.provider_workflow_id = "wf-script-mode-b-001"
+    provider.provider_run_id = "provider-run-mode-b"
+    provider.provider_task_id = "task-mode-b"
+    provider.poll_provider_task_id = "task-mode-b"
     provider.queue_success(draft="生成后的口播稿")
     return provider
 
@@ -125,7 +142,8 @@ async def app(
     web_search_provider,
     llm_provider,
     stt_provider,
-    workflow_provider,
+    script_mode_a_workflow_provider,
+    script_mode_b_workflow_provider,
     daily_push_workflow_provider,
 ):
     """创建挂载测试依赖的 FastAPI 应用。"""
@@ -135,16 +153,17 @@ async def app(
     test_app.state.container.vector_store = vector_store
     test_app.state.container.external_media_provider = external_media_provider
     test_app.state.container.web_search_provider = web_search_provider
-    test_app.state.container.prompt_loader = PromptLoader(Path(__file__).resolve().parents[1] / "prompts")
     test_app.state.container.llm_provider = llm_provider
     test_app.state.container.stt_provider = stt_provider
-    test_app.state.container.workflow_provider = workflow_provider
+    test_app.state.container.script_mode_a_workflow_provider = script_mode_a_workflow_provider
+    test_app.state.container.script_mode_b_workflow_provider = script_mode_b_workflow_provider
     test_app.state.container.daily_push_workflow_provider = daily_push_workflow_provider
     yield test_app
     test_app.state.scheduler_service.stop()
     if test_app.state.container.pipeline_dispatcher:
         await test_app.state.container.pipeline_dispatcher.stop()
-    await test_app.state.container.workflow_provider.aclose()
+    await test_app.state.container.script_mode_a_workflow_provider.aclose()
+    await test_app.state.container.script_mode_b_workflow_provider.aclose()
     await test_app.state.container.daily_push_workflow_provider.aclose()
 
 
@@ -156,7 +175,8 @@ async def stateless_app():
     test_app.state.scheduler_service.stop()
     if test_app.state.container.pipeline_dispatcher:
         await test_app.state.container.pipeline_dispatcher.stop()
-    await test_app.state.container.workflow_provider.aclose()
+    await test_app.state.container.script_mode_a_workflow_provider.aclose()
+    await test_app.state.container.script_mode_b_workflow_provider.aclose()
     await test_app.state.container.daily_push_workflow_provider.aclose()
 
 

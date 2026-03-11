@@ -4,8 +4,13 @@
 
 当前提供：
 
-- `sparkflow_script_generation.workflow.yml`
-  - 用途：将 SparkFlow 后端整理后的精简素材上下文转换成结构化口播稿
+- `sparkflow_script_generation_mode_a.workflow.yml`
+  - 用途：生成强结构、可直接拍摄的 mode_a 口播稿
+  - 风格：黄金三秒开头 + 痛点陈述 + 干货正文 + 互动引导结尾
+  - 输出字段：`title`、`outline`、`draft`、`used_sources`、`review_notes`、`model_metadata`
+- `sparkflow_script_generation_mode_b.workflow.yml`
+  - 用途：生成更自然、更像创作者本人表达的 mode_b 口播稿
+  - 风格：优先保留真实口吻、叙事节奏和自然衔接
   - 输出字段：`title`、`outline`、`draft`、`used_sources`、`review_notes`、`model_metadata`
 
 当前仓库还支持独立的每日推盘 workflow，但 DSL 文件暂未内置到仓库：
@@ -21,18 +26,24 @@
 
 1. `Studio`
 2. `Create from DSL file`
-3. 选择 `sparkflow_script_generation.workflow.yml`
+3. 分别导入 `sparkflow_script_generation_mode_a.workflow.yml` 与 `sparkflow_script_generation_mode_b.workflow.yml`
 
 或者直接在仓库里自动导入并回填后端 `.env`：
 
 ```bash
 cd backend
 .venv/bin/python scripts/import_dify_workflow.py \
+  --mode mode_a \
+  --console-email your-email@example.com \
+  --console-password 'your-password'
+
+.venv/bin/python scripts/import_dify_workflow.py \
+  --mode mode_b \
   --console-email your-email@example.com \
   --console-password 'your-password'
 ```
 
-脚本会优先读取 `DIFY_SCRIPT_APP_ID`：
+脚本会优先读取对应 mode 的 app 标识：
 
 - 如果已存在，会对对应 Dify app 执行原地更新
 - 如果不存在，才会创建新的 Dify app
@@ -61,16 +72,20 @@ cd backend
 
 导入后建议把应用名保持为：
 
-- `SparkFlow Script Generation`
+- `SparkFlow Script Generation Mode A`
+- `SparkFlow Script Generation Mode B`
 
-然后将该应用生成的 API Key 填回：
+然后将各自生成的 API Key 填回：
 
-- `DIFY_API_KEY`
+- `DIFY_MODE_A_API_KEY`
+- `DIFY_MODE_B_API_KEY`
 
 再把 Dify 中显示的 workflow/app 标识填回：
 
-- `DIFY_SCRIPT_APP_ID`
-- `DIFY_SCRIPT_WORKFLOW_ID`
+- `DIFY_MODE_A_APP_ID`
+- `DIFY_MODE_A_WORKFLOW_ID`
+- `DIFY_MODE_B_APP_ID`
+- `DIFY_MODE_B_WORKFLOW_ID`
 - `DIFY_DAILY_PUSH_WORKFLOW_ID`
 
 如果 daily push workflow 使用独立应用 API Key，还需要配置：

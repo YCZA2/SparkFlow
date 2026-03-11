@@ -25,11 +25,19 @@ def create_web_search_provider() -> WebSearchProvider:
     return NoopWebSearchProvider()
 
 
-def create_workflow_provider(*, settings: Settings) -> WorkflowProvider:
-    """构造外挂工作流 provider。"""
+def create_script_mode_a_workflow_provider(*, settings: Settings) -> WorkflowProvider:
+    """构造 mode_a 脚本工作流 provider。"""
     return DifyWorkflowProvider(
-        base_url=settings.DIFY_BASE_URL,
-        api_key=settings.DIFY_API_KEY,
+        base_url=settings.DIFY_MODE_A_BASE_URL,
+        api_key=settings.DIFY_MODE_A_API_KEY,
+    )
+
+
+def create_script_mode_b_workflow_provider(*, settings: Settings) -> WorkflowProvider:
+    """构造 mode_b 脚本工作流 provider。"""
+    return DifyWorkflowProvider(
+        base_url=settings.DIFY_MODE_B_BASE_URL,
+        api_key=settings.DIFY_MODE_B_API_KEY,
     )
 
 

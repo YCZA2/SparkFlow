@@ -33,13 +33,11 @@ class ScriptGenerationPipelineService:
     def __init__(
         self,
         *,
-        workflow_provider: WorkflowProvider,
         context_builder: ScriptGenerationContextBuilder,
         persistence_service: ScriptGenerationPersistenceService,
         pipeline_runner,
     ) -> None:
         """装配脚本流水线依赖。"""
-        self.workflow_provider = workflow_provider
         self.context_builder = context_builder
         self.persistence_service = persistence_service
         self.pipeline_runner = pipeline_runner
@@ -72,8 +70,13 @@ class ScriptGenerationPipelineService:
         )
 
     def _runtime_workflow_provider(self, context: PipelineExecutionContext) -> WorkflowProvider:
-        """按当前容器状态读取运行时 provider。"""
-        return context.container.workflow_provider
+        """按 mode 选择脚本工作流 provider。"""
+        mode = str(context.input_payload.get("mode") or "").strip()
+        if mode == "mode_a":
+            return context.container.script_mode_a_workflow_provider
+        if mode == "mode_b":
+            return context.container.script_mode_b_workflow_provider
+        raise ValidationError(message="工作流模式无效", field_errors={"mode": "必须是 mode_a 或 mode_b"})
 
     def build_pipeline_definitions(self) -> list[PipelineStepDefinition]:
         """返回脚本生成流水线的固定步骤。"""
@@ -198,7 +201,6 @@ class ScriptGenerationPipelineService:
 def build_script_generation_pipeline_service(container) -> ScriptGenerationPipelineService:
     """基于容器组装脚本流水线服务。"""
     return ScriptGenerationPipelineService(
-        workflow_provider=container.workflow_provider,
         context_builder=ScriptGenerationContextBuilder(
             vector_store=container.vector_store,
             web_search_provider=container.web_search_provider,

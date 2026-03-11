@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from fastapi import Request
@@ -16,12 +15,12 @@ from services.factory import (
     create_vector_db_service,
 )
 
-from .prompts import PromptLoader, create_prompt_loader
 from .providers import (
     create_daily_push_workflow_provider,
     create_external_media_provider,
+    create_script_mode_a_workflow_provider,
+    create_script_mode_b_workflow_provider,
     create_web_search_provider,
-    create_workflow_provider,
 )
 from .storage import create_file_storage
 from .vector_store import create_vector_store
@@ -49,9 +48,9 @@ class ServiceContainer:
     vector_store: VectorStore
     file_storage: FileStorage
     external_media_provider: ExternalMediaProvider
-    prompt_loader: PromptLoader
     web_search_provider: WebSearchProvider
-    workflow_provider: WorkflowProvider
+    script_mode_a_workflow_provider: WorkflowProvider
+    script_mode_b_workflow_provider: WorkflowProvider
     daily_push_workflow_provider: WorkflowProvider
     pipeline_runner: Any | None = None
     pipeline_dispatcher: Any | None = None
@@ -73,9 +72,9 @@ def build_container() -> ServiceContainer:
         vector_store=create_vector_store(embedding_provider=embedding_provider, vector_db_provider=vector_db_provider),
         file_storage=create_file_storage(settings),
         external_media_provider=create_external_media_provider(),
-        prompt_loader=create_prompt_loader(Path(__file__).resolve().parents[2] / "prompts"),
         web_search_provider=create_web_search_provider(),
-        workflow_provider=create_workflow_provider(settings=settings),
+        script_mode_a_workflow_provider=create_script_mode_a_workflow_provider(settings=settings),
+        script_mode_b_workflow_provider=create_script_mode_b_workflow_provider(settings=settings),
         daily_push_workflow_provider=create_daily_push_workflow_provider(settings=settings),
     )
 

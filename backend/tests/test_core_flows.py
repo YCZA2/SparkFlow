@@ -538,7 +538,7 @@ async def test_generate_script_success_and_failures(async_client, auth_headers_f
     assert pipeline["status"] == "succeeded"
     assert pipeline["output"]["script_id"]
     assert pipeline["output"]["provider"] == {
-        "workflow_id": "wf-script-001",
+        "workflow_id": "wf-script-mode-a-001",
         "provider_run_id": "provider-run-default",
         "provider_task_id": "task-default",
     }
@@ -607,7 +607,7 @@ async def test_generate_script_fails_when_workflow_output_has_no_draft(async_cli
             {"body_markdown": "一条缺稿测试碎片", "source": "manual"},
         )
     )["id"]
-    app.state.container.workflow_provider.queue_success(draft="")  # type: ignore[attr-defined]
+    app.state.container.script_mode_a_workflow_provider.queue_success(draft="")  # type: ignore[attr-defined]
 
     response = await async_client.post(
         "/api/scripts/generation",

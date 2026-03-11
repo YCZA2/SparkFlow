@@ -3,13 +3,13 @@ from __future__ import annotations
 from fastapi import BackgroundTasks
 
 from .ports import JobRunner
-from .prompts import PromptLoader, create_prompt_loader
 from .providers import (
     NoopWebSearchProvider,
     create_daily_push_workflow_provider,
     create_external_media_provider,
+    create_script_mode_a_workflow_provider,
+    create_script_mode_b_workflow_provider,
     create_web_search_provider,
-    create_workflow_provider,
 )
 from .storage import (
     LocalFileStorage,

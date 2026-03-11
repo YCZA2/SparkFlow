@@ -35,9 +35,13 @@ bash scripts/test-all.sh
 如果启用当前默认的 Dify workflow provider adapter，还需要配置：
 
 ```bash
-DIFY_BASE_URL=https://your-dify.example.com/v1
-DIFY_API_KEY=app-xxx
-DIFY_SCRIPT_WORKFLOW_ID=wf-script-generation
+DIFY_MODE_A_BASE_URL=https://your-dify.example.com/v1
+DIFY_MODE_A_API_KEY=app-mode-a-xxx
+DIFY_MODE_A_WORKFLOW_ID=wf-script-mode-a
+DIFY_MODE_B_BASE_URL=https://your-dify.example.com/v1
+DIFY_MODE_B_API_KEY=app-mode-b-xxx
+DIFY_MODE_B_WORKFLOW_ID=wf-script-mode-b
+DIFY_API_KEY=app-daily-default-xxx  # 可选，daily push 未单独配置时复用
 DIFY_DAILY_PUSH_API_KEY=app-daily-push-xxx  # 可选，未配置时复用 DIFY_API_KEY
 DIFY_DAILY_PUSH_WORKFLOW_ID=wf-daily-push
 ```
@@ -59,8 +63,13 @@ bash scripts/dify-local.sh start
 
 ```bash
 DIFY_BASE_URL=http://127.0.0.1:18080/v1
-DIFY_API_KEY=app-xxx
-DIFY_SCRIPT_WORKFLOW_ID=wf-script-generation
+DIFY_MODE_A_BASE_URL=http://127.0.0.1:18080/v1
+DIFY_MODE_A_API_KEY=app-mode-a-xxx
+DIFY_MODE_A_WORKFLOW_ID=wf-script-mode-a
+DIFY_MODE_B_BASE_URL=http://127.0.0.1:18080/v1
+DIFY_MODE_B_API_KEY=app-mode-b-xxx
+DIFY_MODE_B_WORKFLOW_ID=wf-script-mode-b
+DIFY_API_KEY=app-daily-default-xxx
 DIFY_DAILY_PUSH_API_KEY=app-daily-push-xxx
 DIFY_DAILY_PUSH_WORKFLOW_ID=wf-daily-push
 ```
@@ -68,7 +77,8 @@ DIFY_DAILY_PUSH_WORKFLOW_ID=wf-daily-push
 如果不想在 Dify 页面里手工从零搭工作流，仓库已经提供可直接导入的 DSL 模板：
 
 ```bash
-backend/dify_dsl/sparkflow_script_generation.workflow.yml
+backend/dify_dsl/sparkflow_script_generation_mode_a.workflow.yml
+backend/dify_dsl/sparkflow_script_generation_mode_b.workflow.yml
 ```
 
 导入后建议检查两项：
@@ -86,36 +96,44 @@ backend/dify_dsl/sparkflow_script_generation.workflow.yml
 
 其中提示词模板本身保留在 Dify workflow 内部，SparkFlow 后端只负责把碎片正文和实际命中的参考内容整理成尽量精简的文本，不再把大段 JSON 上下文或无意义占位说明塞给 Start 节点。
 
-当前推荐把脚本生成 Dify app 的标识也持久化到后端环境变量：
+当前推荐把两套脚本生成 Dify app 的标识都持久化到后端环境变量：
 
-- `DIFY_SCRIPT_APP_ID`
+- `DIFY_MODE_A_APP_ID`
+- `DIFY_MODE_B_APP_ID`
 
-这样导入脚本在后续再次执行时会默认原地更新同一个 Dify app，而不是新建一份同名副本。
+这样导入脚本在后续再次执行时会按 mode 原地更新对应 app，而不是新建同名副本。
 
 如果想把“导入 DSL + 读取 workflow id + 创建/复用 app API key + 回填 `backend/.env`”串起来，可以直接运行：
 
 ```bash
 cd backend
 .venv/bin/python scripts/import_dify_workflow.py \
+  --mode mode_a \
+  --console-email your-email@example.com \
+  --console-password 'your-password'
+
+.venv/bin/python scripts/import_dify_workflow.py \
+  --mode mode_b \
   --console-email your-email@example.com \
   --console-password 'your-password'
 ```
 
 脚本默认会：
 
-- 导入 `backend/dify_dsl/sparkflow_script_generation.workflow.yml`
-- 调用 Dify `console/api` 导入应用；若存在 `DIFY_SCRIPT_APP_ID`，则优先更新该 app
+- 按 `--mode` 导入对应 DSL 模板
+- 调用 Dify `console/api` 导入应用；若存在该 mode 对应的 `DIFY_MODE_*_APP_ID`，则优先更新该 app
 - 读取应用详情中的 `workflow.id`
 - 复用已有 app API key，没有则自动创建
-- 把 `DIFY_BASE_URL`、`DIFY_SCRIPT_APP_ID`、`DIFY_API_KEY`、`DIFY_SCRIPT_WORKFLOW_ID` 写回 `backend/.env`
+- 把对应 mode 的 `DIFY_MODE_*_BASE_URL`、`DIFY_MODE_*_APP_ID`、`DIFY_MODE_*_API_KEY`、`DIFY_MODE_*_WORKFLOW_ID` 写回 `backend/.env`
 
-脚本后续默认会优先读取 `DIFY_SCRIPT_APP_ID`，因此同一套配置下再次执行时会优先原地更新现有 Dify app，而不是新建。
+脚本后续默认会优先读取对应 mode 的 `DIFY_MODE_*_APP_ID`，因此同一套配置下再次执行时会优先原地更新现有 Dify app，而不是新建。
 
 如果你已经手里有 console token，也可以改用：
 
 ```bash
 cd backend
 .venv/bin/python scripts/import_dify_workflow.py \
+  --mode mode_a \
   --console-access-token <token> \
   --console-csrf-token <csrf-token>
 ```
@@ -167,7 +185,7 @@ cd backend
    - 外部能力抽象与适配层。
    - 负责 LLM、STT、Embedding、VectorStore、FileStorage、WorkflowProvider 等端口与实现。
    - `modules/shared/container.py` 只负责 `ServiceContainer` 和默认依赖装配。
-   - `modules/shared/infrastructure.py` 只保留兼容导出，真实实现拆到 `storage.py`、`vector_store.py`、`providers.py`、`prompts.py`。
+   - `modules/shared/infrastructure.py` 只保留兼容导出，真实实现拆到 `storage.py`、`vector_store.py`、`providers.py`。
    - `modules/shared/audio_ingestion_use_case.py` 负责媒体导入入口编排，`media_ingestion_steps.py` 负责步骤执行，`media_ingestion_persistence.py` 负责落库与终态输出。
    - `modules/shared/audio_ingestion.py` 保留统一入口导出，供现有依赖平滑迁移。
    - `modules/shared/pipeline_runtime.py` 提供持久化后台流水线运行时、worker 抢占、重试与恢复。
@@ -335,7 +353,8 @@ bash scripts/postgres-local.sh stop
 当前仓库附带的 Dify DSL 目录：
 
 - `backend/dify_dsl/README.md`
-- `backend/dify_dsl/sparkflow_script_generation.workflow.yml`
+- `backend/dify_dsl/sparkflow_script_generation_mode_a.workflow.yml`
+- `backend/dify_dsl/sparkflow_script_generation_mode_b.workflow.yml`
 
 ## Frontend Debug Logs
 

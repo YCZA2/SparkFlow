@@ -72,12 +72,11 @@ def test_services_package_does_not_export_business_helpers() -> None:
 
 
 def test_shared_infrastructure_is_split_into_focused_modules() -> None:
-    """共享基础设施应拆分为存储、向量、provider 和 prompt 模块。"""
+    """共享基础设施应拆分为存储、向量和 provider 模块。"""
     expected_files = [
         BACKEND_ROOT / "modules" / "shared" / "storage.py",
         BACKEND_ROOT / "modules" / "shared" / "vector_store.py",
         BACKEND_ROOT / "modules" / "shared" / "providers.py",
-        BACKEND_ROOT / "modules" / "shared" / "prompts.py",
     ]
     for path in expected_files:
         assert path.exists(), f"expected split module missing: {path}"

@@ -58,9 +58,10 @@ def web_search_provider() -> FakeWebSearchProvider:
 
 
 @pytest.fixture
-def workflow_provider() -> FakeWorkflowProvider:
-    """提供可观察结构化上下文的 workflow provider 替身。"""
+def script_mode_a_workflow_provider() -> FakeWorkflowProvider:
+    """提供可观察结构化上下文的 mode_a workflow provider 替身。"""
     provider = FakeWorkflowProvider()
+    provider.provider_workflow_id = "wf-script-mode-a-001"
     provider.queue_success(draft="这是 pipeline 生成的口播稿")
     return provider
 
@@ -71,7 +72,7 @@ async def test_script_generation_pipeline_collects_context_and_persists_script(
     auth_headers_factory,
     app,
     web_search_provider,
-    workflow_provider,
+    script_mode_a_workflow_provider,
 ) -> None:
     """脚本生成应把结构化上下文传给 provider，并在成功后暴露 script 资源。"""
     fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于定位的一条碎片")
@@ -97,7 +98,7 @@ async def test_script_generation_pipeline_collects_context_and_persists_script(
     assert pipeline["resource"]["resource_type"] == "script"
     assert pipeline["resource"]["resource_id"] == pipeline["output"]["script_id"]
     assert pipeline["output"]["provider"] == {
-        "workflow_id": "wf-script-001",
+        "workflow_id": "wf-script-mode-a-001",
         "provider_run_id": "provider-run-default",
         "provider_task_id": "task-default",
     }
@@ -119,7 +120,7 @@ async def test_script_generation_pipeline_collects_context_and_persists_script(
     assert detail_response.json()["data"]["body_markdown"] == "这是 pipeline 生成的口播稿"
 
     assert len(web_search_provider.calls) == 1
-    inputs = workflow_provider.last_submitted_inputs()
+    inputs = script_mode_a_workflow_provider.last_submitted_inputs()
     assert "关于定位的一条碎片" in inputs["fragments_text"]
     assert "定位文档" in inputs["knowledge_context"]
     assert "https://example.com" in inputs["web_context"]
@@ -130,11 +131,11 @@ async def test_script_generation_pipeline_collects_context_and_persists_script(
 async def test_script_generation_pipeline_marks_failed_when_provider_fails(
     async_client,
     auth_headers_factory,
-    workflow_provider,
+    script_mode_a_workflow_provider,
 ) -> None:
     """provider 失败时应把 pipeline 标记为失败并回写错误信息。"""
     fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于选题的一条碎片")
-    workflow_provider.queue_failure()
+    script_mode_a_workflow_provider.queue_failure()
 
     create_response = await async_client.post(
         "/api/scripts/generation",
@@ -152,11 +153,11 @@ async def test_script_generation_pipeline_marks_failed_when_provider_fails(
 async def test_script_generation_pipeline_keeps_submit_task_id_when_poll_response_omits_it(
     async_client,
     auth_headers_factory,
-    workflow_provider,
+    script_mode_a_workflow_provider,
 ) -> None:
     """轮询结果缺少 task_id 时应继续保留提交阶段返回的 provider 句柄。"""
     fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于复盘的一条碎片")
-    workflow_provider.poll_provider_task_id = None
+    script_mode_a_workflow_provider.poll_provider_task_id = None
 
     create_response = await async_client.post(
         "/api/scripts/generation",
@@ -177,3 +178,33 @@ async def test_script_generation_pipeline_keeps_submit_task_id_when_poll_respons
     steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
     assert steps["submit_workflow_run"]["external_ref"]["provider_task_id"] == "task-default"
     assert steps["poll_workflow_run"]["external_ref"]["provider_task_id"] == "task-default"
+
+
+@pytest.mark.asyncio
+async def test_script_generation_pipeline_routes_mode_b_to_mode_b_provider(
+    async_client,
+    auth_headers_factory,
+    app,
+    script_mode_a_workflow_provider,
+    script_mode_b_workflow_provider,
+) -> None:
+    """mode_b 请求应提交到独立的 mode_b workflow provider。"""
+    fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于表达风格的一条碎片")
+    script_mode_b_workflow_provider.queue_success(draft="这是 mode_b 生成的口播稿")
+
+    create_response = await async_client.post(
+        "/api/scripts/generation",
+        json={"fragment_ids": [fragment_id], "mode": "mode_b"},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert create_response.status_code == 201
+
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
+    assert pipeline["status"] == "succeeded"
+    assert pipeline["output"]["provider"] == {
+        "workflow_id": "wf-script-mode-b-001",
+        "provider_run_id": "provider-run-mode-b",
+        "provider_task_id": "task-mode-b",
+    }
+    assert script_mode_a_workflow_provider.submitted_calls() == []
+    assert "关于表达风格的一条碎片" in script_mode_b_workflow_provider.last_submitted_inputs()["fragments_text"]

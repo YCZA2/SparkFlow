@@ -153,11 +153,10 @@ flowchart TD
 - `presentation.py` 应显式声明 `response_model=ResponseModel[...]`，让 OpenAPI 可直接作为前后端并行开发的契约。
 - 删除接口统一返回 `200 + ResponseModel[None]`，成功时 `data` 为 `null`。
 - `backend/modules/shared/container.py`: DI 容器入口，只负责 `ServiceContainer`、默认依赖装配和 FastAPI 依赖读取。
-- `backend/modules/shared/infrastructure.py`: 兼容层，统一转发 `storage` / `vector_store` / `providers` / `prompts` 的导出，避免上层导入点一次性迁移。
+- `backend/modules/shared/infrastructure.py`: 兼容层，统一转发 `storage` / `vector_store` / `providers` 的导出，避免上层导入点一次性迁移。
 - `backend/modules/shared/storage.py`: 本地 / OSS 文件存储实现、对象 key 规则与上传校验。
 - `backend/modules/shared/vector_store.py`: 应用级向量存储适配与 namespace 规则。
 - `backend/modules/shared/providers.py`: 外部媒体、网页搜索与 workflow provider 的默认工厂。
-- `backend/modules/shared/prompts.py`: PromptLoader 与 prompt 读取逻辑。
 - `backend/modules/shared/ports.py`: LLM、STT、Embedding、Vector DB、音频存储、外挂工作流等端口抽象。
 - `backend/modules/shared/enrichment.py`: 摘要与标签增强逻辑。
 - `backend/modules/shared/audio_ingestion.py`: 兼容层，对外保留媒体导入统一入口。
@@ -195,7 +194,6 @@ flowchart TD
 - `backend/domains/`: 仓储目录，按业务实体或聚合划分查询与写入逻辑。
 - `backend/models/`: SQLAlchemy ORM 模型和数据库初始化。
 - `backend/services/`: 外部 provider 的适配实现和实例工厂。
-- `backend/prompts/`: LLM prompt 模板。
 - `backend/alembic/`: 数据库迁移脚本。
 - `backend/tests/`: 后端自动化测试。
 - `docker-compose.postgres.yml`: 本地 PostgreSQL Docker Compose 编排文件。
@@ -218,7 +216,7 @@ flowchart TD
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
 - `exports`: 单条 Markdown 导出与批量 zip 导出。
 - `pipelines`: 后台流水线详情、步骤查询与手动重跑入口。
-- `backend/dify_dsl/`: 仓库内置的 Dify DSL 模板目录，当前提供 `sparkflow_script_generation.workflow.yml` 供导入。
+- `backend/dify_dsl/`: 仓库内置的 Dify DSL 模板目录，当前提供 `sparkflow_script_generation_mode_a.workflow.yml` 与 `sparkflow_script_generation_mode_b.workflow.yml` 供导入。
 - `debug_logs`: 移动端调试日志接收，并复用结构化日志链路落盘。
 - `scheduler`: APScheduler 装配与启停。
 
@@ -238,9 +236,9 @@ flowchart TD
 - STT: 默认 `DashScope`，保留 Aliyun 兼容实现。
 - Embedding: 默认 `Qwen text-embedding-v2`。
 - Vector DB: 默认 `ChromaDB`。
-- Workflow Provider: 当前通过通用 `workflow_provider` 端口接入，默认实现为 `DifyWorkflowProvider`；脚本生成与每日推盘均走 Dify。
-- 脚本生成 workflow 入参已收敛为 `mode`、`query_hint`、`fragments_text`、`knowledge_context`、`web_context`，提示词模板保留在 Dify DSL 内部；后端只传碎片正文和实际参考内容，不再把整包 JSON 研究上下文或无意义元数据暴露给 Start 节点。
-- 仓库内置 `backend/scripts/import_dify_workflow.py` 用于导入或更新脚本生成 DSL，并把 `DIFY_SCRIPT_APP_ID`、`DIFY_API_KEY`、`DIFY_SCRIPT_WORKFLOW_ID` 回填到 `backend/.env`；脚本后续默认优先按 `DIFY_SCRIPT_APP_ID` 对现有 Dify app 执行原地更新。
+- Workflow Provider: 当前通过通用 `workflow_provider` 端口接入，默认实现为 `DifyWorkflowProvider`；脚本生成按 `mode_a` / `mode_b` 路由到两套独立 Dify app，每日推盘继续走独立 Dify 配置。
+- 脚本生成 workflow 入参已收敛为 `mode`、`query_hint`、`fragments_text`、`knowledge_context`、`web_context`，提示词模板仅保留在 Dify DSL 内部；后端只传碎片正文和实际参考内容，不再把整包 JSON 研究上下文或无意义元数据暴露给 Start 节点。
+- 仓库内置 `backend/scripts/import_dify_workflow.py` 用于按 mode 导入或更新脚本生成 DSL，并把 `DIFY_MODE_A_*` / `DIFY_MODE_B_*` 回填到 `backend/.env`；脚本后续默认优先按对应 mode 的 `DIFY_MODE_*_APP_ID` 对现有 Dify app 执行原地更新。
 - Dify adapter 当前采用“streaming 首包建单 + 后续轮询终态”的异步模式：提交时只拿 `workflow_run_id` / `task_id`，最终输出统一在 pipeline 轮询步骤读取。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 统一 `FileStorage` 端口；本地开发默认 `local` provider，线上默认私有阿里云 OSS，通过签名 URL 暴露文件访问。
@@ -369,7 +367,7 @@ sequenceDiagram
 - SparkFlow 后端向 provider 传递结构化上下文；当前 Dify adapter 会在适配层把复杂字段序列化为 JSON 字符串，以兼容 Dify Start 节点。
 - SparkFlow 后端不会把 Dify 原始 SSE 事件流直接暴露给客户端；客户端继续只消费 `pipeline_run_id` 和 `/api/pipelines/*`。
 - `pipeline_runs` / `pipeline_step_runs` 是后台状态唯一事实源；`agent_runs` 与 `/api/agent/*` 已移除。
-- 仓库内置的 DSL 模板位于 `backend/dify_dsl/sparkflow_script_generation.workflow.yml`，可直接导入本地 Dify。
+- 仓库内置的 DSL 模板位于 `backend/dify_dsl/sparkflow_script_generation_mode_a.workflow.yml` 与 `backend/dify_dsl/sparkflow_script_generation_mode_b.workflow.yml`，可直接导入本地 Dify。
 
 ### 5.4 Script Generation Notes
 

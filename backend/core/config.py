@@ -76,21 +76,45 @@ class Settings(BaseSettings):
     )
 
     # Dify 外挂工作流配置
+    DIFY_MODE_A_BASE_URL: Optional[str] = Field(
+        default=None,
+        description="mode_a 脚本工作流的 Dify API 基础地址，例如 https://dify.example.com/v1"
+    )
+    DIFY_MODE_A_APP_ID: Optional[str] = Field(
+        default=None,
+        description="mode_a 脚本工作流所属的 Dify 应用标识，用于后续原地更新"
+    )
+    DIFY_MODE_A_API_KEY: Optional[str] = Field(
+        default=None,
+        description="mode_a 脚本工作流的 Dify 应用 API Key"
+    )
+    DIFY_MODE_A_WORKFLOW_ID: Optional[str] = Field(
+        default=None,
+        description="mode_a 脚本工作流标识，用于本地记录和校验"
+    )
+    DIFY_MODE_B_BASE_URL: Optional[str] = Field(
+        default=None,
+        description="mode_b 脚本工作流的 Dify API 基础地址，例如 https://dify.example.com/v1"
+    )
+    DIFY_MODE_B_APP_ID: Optional[str] = Field(
+        default=None,
+        description="mode_b 脚本工作流所属的 Dify 应用标识，用于后续原地更新"
+    )
+    DIFY_MODE_B_API_KEY: Optional[str] = Field(
+        default=None,
+        description="mode_b 脚本工作流的 Dify 应用 API Key"
+    )
+    DIFY_MODE_B_WORKFLOW_ID: Optional[str] = Field(
+        default=None,
+        description="mode_b 脚本工作流标识，用于本地记录和校验"
+    )
     DIFY_BASE_URL: Optional[str] = Field(
         default=None,
-        description="Dify API 基础地址，例如 https://dify.example.com/v1"
-    )
-    DIFY_SCRIPT_APP_ID: Optional[str] = Field(
-        default=None,
-        description="脚本生成工作流所属的 Dify 应用标识，用于后续原地更新"
+        description="daily push 工作流的 Dify API 基础地址，例如 https://dify.example.com/v1"
     )
     DIFY_API_KEY: Optional[str] = Field(
         default=None,
-        description="Dify 应用 API Key"
-    )
-    DIFY_SCRIPT_WORKFLOW_ID: Optional[str] = Field(
-        default=None,
-        description="脚本研究工作流标识，用于本地记录和校验"
+        description="daily push 工作流默认复用的 Dify 应用 API Key"
     )
     DIFY_DAILY_PUSH_API_KEY: Optional[str] = Field(
         default=None,
@@ -99,6 +123,22 @@ class Settings(BaseSettings):
     DIFY_DAILY_PUSH_WORKFLOW_ID: Optional[str] = Field(
         default=None,
         description="每日推盘工作流标识，用于本地记录和校验"
+    )
+    DIFY_CONSOLE_EMAIL: Optional[str] = Field(
+        default=None,
+        description="Dify console 登录邮箱，仅供本地导入脚本使用"
+    )
+    DIFY_CONSOLE_PASSWORD: Optional[str] = Field(
+        default=None,
+        description="Dify console 登录密码，仅供本地导入脚本使用"
+    )
+    DIFY_CONSOLE_ACCESS_TOKEN: Optional[str] = Field(
+        default=None,
+        description="Dify console access token，仅供本地导入脚本使用"
+    )
+    DIFY_CONSOLE_CSRF_TOKEN: Optional[str] = Field(
+        default=None,
+        description="Dify console csrf token，仅供本地导入脚本使用"
     )
     DIFY_POLL_INTERVAL_SECONDS: int = Field(
         default=2,
@@ -248,7 +288,12 @@ class Settings(BaseSettings):
                 return True
         return value
 
-    @field_validator("DIFY_BASE_URL", mode="before")
+    @field_validator(
+        "DIFY_MODE_A_BASE_URL",
+        "DIFY_MODE_B_BASE_URL",
+        "DIFY_BASE_URL",
+        mode="before",
+    )
     @classmethod
     def normalize_dify_base_url(cls, value):
         if isinstance(value, str):
