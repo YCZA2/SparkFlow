@@ -81,7 +81,7 @@ export default function FragmentRichEditorDom({
   onSelectionChange,
   onFormattingStateChange,
 }: FragmentRichEditorDomProps) {
-  /** 中文注释：在 DOM 侧维护编辑器唯一 live state，并只向原生层发节流后的 Markdown 快照。 */
+  /*在 DOM 侧维护编辑器唯一 live state，并只向原生层发节流后的 Markdown 快照。 */
   const snapshotTimerRef = useRef<number | null>(null);
   const lastSnapshotRef = useRef<string>('');
   const lastSelectionRef = useRef('');
@@ -142,7 +142,7 @@ export default function FragmentRichEditorDom({
   }, []);
 
   function scheduleSnapshot(document: Record<string, unknown>): void {
-    /** 中文注释：输入时在 DOM 内构造 Markdown 快照，并以短延迟节流后再过桥。 */
+    /*输入时在 DOM 内构造 Markdown 快照，并以短延迟节流后再过桥。 */
     const snapshot = buildEditorSnapshot(document);
     latestSnapshotRef.current = snapshot;
     const serialized = JSON.stringify(snapshot);
@@ -155,7 +155,7 @@ export default function FragmentRichEditorDom({
   }
 
   function emitSelection(currentEditor: NonNullable<typeof editor>): void {
-    /** 中文注释：只把当前选中文本同步回原生层，避免桥接传整份文档。 */
+    /*只把当前选中文本同步回原生层，避免桥接传整份文档。 */
     const { from, to } = currentEditor.state.selection;
     const text = currentEditor.state.doc.textBetween(from, to, '\n', '\n').trim();
     if (text === lastSelectionRef.current) return;
@@ -164,7 +164,7 @@ export default function FragmentRichEditorDom({
   }
 
   function emitToolbarState(currentEditor: NonNullable<typeof editor>): void {
-    /** 中文注释：同步当前格式状态，让原生工具栏可以高亮和控制撤销重做。 */
+    /*同步当前格式状态，让原生工具栏可以高亮和控制撤销重做。 */
     const nextState = buildFormattingState(currentEditor);
     const serialized = JSON.stringify(nextState);
     if (serialized === lastToolbarStateRef.current) return;
@@ -173,7 +173,7 @@ export default function FragmentRichEditorDom({
   }
 
   function buildEditorSnapshot(document: Record<string, unknown>): FragmentEditorSnapshot {
-    /** 中文注释：把当前编辑器文档序列化为稳定 Markdown 快照。 */
+    /*把当前编辑器文档序列化为稳定 Markdown 快照。 */
     const bodyMarkdown = serializeDocumentToMarkdown(document);
     return {
       body_markdown: bodyMarkdown,
@@ -244,7 +244,7 @@ export default function FragmentRichEditorDom({
 }
 
 function createMarkdownRenderer(mediaAssets: MediaAsset[]): MarkdownIt {
-  /** 中文注释：把 asset:// 图片引用渲染为可显示的实际地址，并保留 assetId 元数据。 */
+  /*把 asset:// 图片引用渲染为可显示的实际地址，并保留 assetId 元数据。 */
   const assetMap = new Map(mediaAssets.map((item) => [item.id, item]));
   const markdown = new MarkdownIt({
     html: false,
@@ -271,7 +271,7 @@ function createMarkdownRenderer(mediaAssets: MediaAsset[]): MarkdownIt {
 }
 
 function serializeDocumentToMarkdown(document: Record<string, unknown>): string {
-  /** 中文注释：把编辑器 JSON 序列化为轻量 Markdown，只覆盖当前产品支持的块类型。 */
+  /*把编辑器 JSON 序列化为轻量 Markdown，只覆盖当前产品支持的块类型。 */
   const content = Array.isArray(document.content) ? document.content : [];
   const blocks = content
     .map((node) => serializeBlock(node as Record<string, unknown>, 1))
@@ -280,7 +280,7 @@ function serializeDocumentToMarkdown(document: Record<string, unknown>): string 
 }
 
 function serializeBlock(node: Record<string, unknown>, orderedIndex: number): string {
-  /** 中文注释：按块类型输出稳定 Markdown 文本。 */
+  /*按块类型输出稳定 Markdown 文本。 */
   const type = String(node.type ?? '');
   if (type === 'paragraph') return serializeInlineChildren(node);
   if (type === 'heading') return `# ${serializeInlineChildren(node).trim()}`.trim();
@@ -316,7 +316,7 @@ function serializeBlock(node: Record<string, unknown>, orderedIndex: number): st
 }
 
 function serializeListItem(node: Record<string, unknown>): string {
-  /** 中文注释：列表项仅保留当前支持的单段落内容，避免生成复杂嵌套 Markdown。 */
+  /*列表项仅保留当前支持的单段落内容，避免生成复杂嵌套 Markdown。 */
   const children = getNodeContent(node);
   const paragraph = children.find((child) => String(child.type ?? '') === 'paragraph');
   if (!paragraph) return '';
@@ -324,7 +324,7 @@ function serializeListItem(node: Record<string, unknown>): string {
 }
 
 function serializeInlineChildren(node: Record<string, unknown>): string {
-  /** 中文注释：递归序列化段落内联内容，并保留粗体与斜体。 */
+  /*递归序列化段落内联内容，并保留粗体与斜体。 */
   return getNodeContent(node)
     .map((child) => serializeInlineNode(child))
     .join('')
@@ -332,7 +332,7 @@ function serializeInlineChildren(node: Record<string, unknown>): string {
 }
 
 function serializeInlineNode(node: Record<string, unknown>): string {
-  /** 中文注释：当前只支持文本及内联样式，图片作为独立块处理。 */
+  /*当前只支持文本及内联样式，图片作为独立块处理。 */
   const type = String(node.type ?? '');
   if (type !== 'text') return '';
   const marks = Array.isArray(node.marks) ? node.marks : [];
@@ -347,19 +347,19 @@ function serializeInlineNode(node: Record<string, unknown>): string {
 }
 
 function getNodeContent(node: Record<string, unknown>): Array<Record<string, unknown>> {
-  /** 中文注释：安全读取节点子内容，避免消费到非数组结构。 */
+  /*安全读取节点子内容，避免消费到非数组结构。 */
   return Array.isArray(node.content)
     ? node.content.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
     : [];
 }
 
 function escapeInlineText(text: string): string {
-  /** 中文注释：转义 Markdown 内联特殊字符，避免正文被误解析。 */
+  /*转义 Markdown 内联特殊字符，避免正文被误解析。 */
   return text.replace(/([\\`*_[\]<>])/g, '\\$1');
 }
 
 function buildFormattingState(editor: NonNullable<ReturnType<typeof useEditor>>): FragmentEditorFormattingState {
-  /** 中文注释：从 Tiptap 当前状态提取原生工具栏需要的最小信息。 */
+  /*从 Tiptap 当前状态提取原生工具栏需要的最小信息。 */
   let blockType: FragmentEditorFormattingState['block_type'] = 'paragraph';
   if (editor.isActive('heading', { level: 1 })) blockType = 'heading';
   else if (editor.isActive('bulletList')) blockType = 'bulletList';
@@ -381,7 +381,7 @@ function runEditorCommand(
   editor: NonNullable<ReturnType<typeof useEditor>>,
   command: FragmentEditorCommand
 ): void {
-  /** 中文注释：把原生层命令映射到 Tiptap 操作，保持桥接层只暴露稳定命令枚举。 */
+  /*把原生层命令映射到 Tiptap 操作，保持桥接层只暴露稳定命令枚举。 */
   const chain = editor.chain().focus();
   if (command === 'paragraph') {
     chain.setParagraph().run();

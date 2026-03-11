@@ -27,7 +27,7 @@ export function SpeakerTimelineList({
   compact = false,
   onSegmentPress,
 }: SpeakerTimelineListProps) {
-  /** 中文注释：渲染可跟随播放高亮的说话人时间线，支持抽屉内紧凑模式。 */
+  /*渲染可跟随播放高亮的说话人时间线，支持抽屉内紧凑模式。 */
   const theme = useAppTheme();
   const scrollRef = useRef<ScrollView | null>(null);
   const viewportHeightRef = useRef(0);

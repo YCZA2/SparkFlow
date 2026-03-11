@@ -32,7 +32,7 @@ export function FragmentAudioPlayer({
   onSkipBackward,
   onChangeRate,
 }: FragmentAudioPlayerProps) {
-  /** 中文注释：为音频控制区提供固定底栏容器，供旧页面布局继续复用。 */
+  /*为音频控制区提供固定底栏容器，供旧页面布局继续复用。 */
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
 

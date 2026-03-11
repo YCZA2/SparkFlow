@@ -8,7 +8,7 @@ import type { Fragment } from '@/types/fragment';
 import type { ScriptMode } from '@/types/script';
 
 function displayFragmentText(fragment: Fragment): string {
-  /** 中文注释：生成页摘要优先显示正文，其次回退到转写原文。 */
+  /*生成页摘要优先显示正文，其次回退到转写原文。 */
   if (fragment.summary) return fragment.summary;
   if (fragment.plain_text_snapshot) return fragment.plain_text_snapshot.slice(0, 80);
   if (fragment.transcript) return fragment.transcript.slice(0, 80);
@@ -39,7 +39,7 @@ export function useGenerateScreen(): GenerateScreenState {
   const generator = useGenerateScript();
 
   /**
-   * 中文注释：提交脚本生成任务，并在 pipeline 成功后跳转详情页。
+   提交脚本生成任务，并在 pipeline 成功后跳转详情页。
    */
   const generate = useCallback(async () => {
     if (ids.length === 0) {

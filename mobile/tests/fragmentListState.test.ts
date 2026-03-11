@@ -4,7 +4,7 @@ import test from 'node:test';
 import { buildFragmentSections } from '../features/fragments/fragmentListState';
 
 function buildFragment(createdAt: string, id: string) {
-  /** 中文注释：构造最小 fragment 载荷，聚焦列表分组规则。 */
+  /*构造最小 fragment 载荷，聚焦列表分组规则。 */
   return {
     id,
     audio_file_url: null,

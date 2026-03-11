@@ -1,7 +1,7 @@
 import type { AppTheme } from '@/theme/tokens';
 
 /**
- * 中文注释：编辑器主题配置接口，定义编辑器所需的颜色和排版变量。
+ 编辑器主题配置接口，定义编辑器所需的颜色和排版变量。
  */
 export interface EditorTheme {
   background: string;
@@ -17,7 +17,7 @@ export interface EditorTheme {
 }
 
 /**
- * 中文注释：从应用主题映射编辑器主题，供 DOM 层和原生层共用。
+ 从应用主题映射编辑器主题，供 DOM 层和原生层共用。
  */
 export function createEditorTheme(theme: AppTheme): EditorTheme {
   return {
@@ -35,7 +35,7 @@ export function createEditorTheme(theme: AppTheme): EditorTheme {
 }
 
 /**
- * 中文注释：生成 CSS 变量字符串，供 DOM 层编辑器注入到 :root。
+ 生成 CSS 变量字符串，供 DOM 层编辑器注入到 :root。
  */
 export function createEditorCssVars(theme: AppTheme): string {
   const editorTheme = createEditorTheme(theme);
@@ -54,7 +54,7 @@ export function createEditorCssVars(theme: AppTheme): string {
 }
 
 /**
- * 中文注释：生成编辑器基础 CSS，使用 CSS 变量实现主题切换。
+ 生成编辑器基础 CSS，使用 CSS 变量实现主题切换。
  */
 export function createEditorBaseCss(): string {
   return `

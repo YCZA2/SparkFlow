@@ -7,7 +7,7 @@ export function createLatestOnlySaveController<T>({
   submit,
   shouldProcess,
 }: CreateLatestOnlySaveControllerOptions<T>) {
-  /** 中文注释：把连续输入压缩成“只保存最后一版”的串行保存队列。 */
+  /*把连续输入压缩成“只保存最后一版”的串行保存队列。 */
   let inFlight: Promise<void> | null = null;
   let queuedValue: T | null = null;
 

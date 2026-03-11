@@ -20,7 +20,7 @@ interface UseFragmentDetailResourceResult {
 }
 
 async function resolveVisibleFragment(fragmentId: string): Promise<Fragment | null> {
-  /** 中文注释：读取缓存并叠加本地草稿，让详情首屏优先展示用户最近编辑内容。 */
+  /*读取缓存并叠加本地草稿，让详情首屏优先展示用户最近编辑内容。 */
   const [cachedEntry, draftMarkdown] = await Promise.all([
     readFragmentCache(fragmentId),
     loadFragmentBodyDraft(fragmentId),
@@ -29,7 +29,7 @@ async function resolveVisibleFragment(fragmentId: string): Promise<Fragment | nu
 }
 
 export function useFragmentDetailResource(fragmentId?: string | null): UseFragmentDetailResourceResult {
-  /** 中文注释：封装碎片详情的缓存秒开、草稿可见态和远端刷新，供页面层纯消费。 */
+  /*封装碎片详情的缓存秒开、草稿可见态和远端刷新，供页面层纯消费。 */
   const [fragment, setFragment] = useState<Fragment | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(fragmentId));
   const [error, setError] = useState<string | null>(null);

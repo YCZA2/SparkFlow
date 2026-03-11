@@ -52,7 +52,7 @@ export function useFragmentEditorPersistence({
   commitRemoteFragment,
   commitOptimisticFragment,
 }: UseFragmentEditorPersistenceOptions) {
-  /** 中文注释：处理正文初始化、草稿恢复、自动保存和可见素材合成。 */
+  /*处理正文初始化、草稿恢复、自动保存和可见素材合成。 */
   const [snapshot, setSnapshot] = useState<FragmentEditorSnapshot>(
     buildFragmentEditorSnapshot('')
   );
@@ -88,7 +88,7 @@ export function useFragmentEditorPersistence({
   );
 
   const resolveHydrationRevision = useCallback((targetFragment: Fragment): string => {
-    /** 中文注释：用正文、素材和草稿组合出当前会话版本号，避免同一异常快照反复重建。 */
+    /*用正文、素材和草稿组合出当前会话版本号，避免同一异常快照反复重建。 */
     const mediaAssetIds = (targetFragment.media_assets ?? []).map((asset) => asset.id).join(',');
     return [
       targetFragment.id,
@@ -104,7 +104,7 @@ export function useFragmentEditorPersistence({
         normalizeBodyMarkdown(nextSnapshot.body_markdown) !==
         lastSyncedMarkdownRef.current,
       submit: async (nextSnapshot) => {
-        /** 中文注释：把正文保存请求串行化，并在成功后刷新可见 fragment。 */
+        /*把正文保存请求串行化，并在成功后刷新可见 fragment。 */
         const currentFragmentId = resolvedFragmentIdRef.current;
         if (!currentFragmentId || !fragmentRef.current) return;
         if (shouldProtectSuspiciousEmptySnapshot({
@@ -154,25 +154,25 @@ export function useFragmentEditorPersistence({
   );
 
   useEffect(() => {
-    /** 中文注释：保存控制器读取 ref，避免闭包拿到过期 fragment 上下文。 */
+    /*保存控制器读取 ref，避免闭包拿到过期 fragment 上下文。 */
     fragmentRef.current = fragment;
     resolvedFragmentIdRef.current = resolvedFragmentId;
     commitRemoteFragmentRef.current = commitRemoteFragment;
   }, [commitRemoteFragment, fragment, resolvedFragmentId]);
 
   useEffect(() => {
-    /** 中文注释：用 ref 维护当前草稿真值，供保存保护和二段 hydrate 读取最新状态。 */
+    /*用 ref 维护当前草稿真值，供保存保护和二段 hydrate 读取最新状态。 */
     localDraftMarkdownRef.current = draftState.loaded ? draftState.markdown : null;
   }, [draftState.loaded, draftState.markdown]);
 
   useEffect(() => {
-    /** 中文注释：服务端刷新后用最新签名素材覆盖运行态副本。 */
+    /*服务端刷新后用最新签名素材覆盖运行态副本。 */
     if (!fragment?.media_assets) return;
     setRuntimeMediaAssets(fragment.media_assets);
   }, [fragment?.media_assets]);
 
   useEffect(() => {
-    /** 中文注释：按 fragment 维度预取本地草稿，让编辑器首屏优先恢复用户输入。 */
+    /*按 fragment 维度预取本地草稿，让编辑器首屏优先恢复用户输入。 */
     if (!resolvedFragmentId) {
       setDraftState({
         fragmentId: null,
@@ -202,7 +202,7 @@ export function useFragmentEditorPersistence({
   }, [resolvedFragmentId]);
 
   useEffect(() => {
-    /** 中文注释：只有当详情资源和草稿都稳定后，才真正重建编辑会话。 */
+    /*只有当详情资源和草稿都稳定后，才真正重建编辑会话。 */
     if (!resolvedFragmentId) {
       hydratedRef.current = false;
       hydratedFragmentIdRef.current = null;
@@ -277,7 +277,7 @@ export function useFragmentEditorPersistence({
   ]);
 
   useEffect(() => {
-    /** 中文注释：正文变更时先固化本地草稿，再同步详情展示态。 */
+    /*正文变更时先固化本地草稿，再同步详情展示态。 */
     if (!resolvedFragmentId || !hydratedRef.current || !fragment) return;
     if (snapshot.body_markdown === lastSyncedMarkdownRef.current) return;
     if (shouldProtectSuspiciousEmptySnapshot({
@@ -307,7 +307,7 @@ export function useFragmentEditorPersistence({
   ]);
 
   useEffect(() => {
-    /** 中文注释：输入停顿后提交最后一次快照，避免编辑时反复打满请求。 */
+    /*输入停顿后提交最后一次快照，避免编辑时反复打满请求。 */
     if (!resolvedFragmentId || !fragment || !hydratedRef.current) return;
     if (snapshot.body_markdown === lastSyncedMarkdownRef.current) return;
     if (shouldProtectSuspiciousEmptySnapshot({
@@ -331,7 +331,7 @@ export function useFragmentEditorPersistence({
   }, [fragment, resolvedFragmentId, snapshot]);
 
   const onSnapshotChange = useCallback((nextSnapshot: FragmentEditorSnapshot) => {
-    /** 中文注释：DOM 编辑器只把节流后的快照回传给持久化层。 */
+    /*DOM 编辑器只把节流后的快照回传给持久化层。 */
     const builtSnapshot = buildFragmentEditorSnapshot(nextSnapshot.body_markdown);
     if (awaitingInitialSnapshotRef.current) {
       awaitingInitialSnapshotRef.current = false;
@@ -343,7 +343,7 @@ export function useFragmentEditorPersistence({
   }, []);
 
   const onEditorReady = useCallback(() => {
-    /** 中文注释：记录 bridge 已可用，后续优先走原位 patch 和命令。 */
+    /*记录 bridge 已可用，后续优先走原位 patch 和命令。 */
     setIsEditorReady(true);
   }, []);
 
@@ -356,7 +356,7 @@ export function useFragmentEditorPersistence({
   );
 
   const saveNow = useCallback(async () => {
-    /** 中文注释：离页前主动 flush 当前正文，保证最后一版输入尽量落远端。 */
+    /*离页前主动 flush 当前正文，保证最后一版输入尽量落远端。 */
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;

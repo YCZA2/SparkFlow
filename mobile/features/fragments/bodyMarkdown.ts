@@ -3,12 +3,12 @@ import type { FragmentAiPatch } from '@/types/fragment';
 const ASSET_REF_PATTERN = /!\[[^\]]*\]\(asset:\/\/([^)]+)\)/g;
 
 export function normalizeBodyMarkdown(markdown: string | null | undefined): string {
-  /** 中文注释：规整正文 Markdown，统一换行并去掉首尾空白。 */
+  /*规整正文 Markdown，统一换行并去掉首尾空白。 */
   return String(markdown ?? '').replace(/\r\n/g, '\n').trim();
 }
 
 export function extractPlainTextFromMarkdown(markdown: string | null | undefined): string {
-  /** 中文注释：从 Markdown 中提取纯文本快照，供列表预览和保存状态复用。 */
+  /*从 Markdown 中提取纯文本快照，供列表预览和保存状态复用。 */
   const normalized = normalizeBodyMarkdown(markdown);
   if (!normalized) return '';
   return normalized
@@ -26,7 +26,7 @@ export function extractPlainTextFromMarkdown(markdown: string | null | undefined
 }
 
 export function extractAssetIdsFromMarkdown(markdown: string | null | undefined): string[] {
-  /** 中文注释：从 Markdown 中提取 asset:// 图片引用，保持顺序并去重。 */
+  /*从 Markdown 中提取 asset:// 图片引用，保持顺序并去重。 */
   const normalized = normalizeBodyMarkdown(markdown);
   const assetIds: string[] = [];
   for (const match of normalized.matchAll(ASSET_REF_PATTERN)) {
@@ -41,7 +41,7 @@ export function applyAiPatchToMarkdown(
   patch: FragmentAiPatch,
   selectionText: string
 ): string {
-  /** 中文注释：在桥接不可用时退化为基于字符串的 Markdown patch 应用。 */
+  /*在桥接不可用时退化为基于字符串的 Markdown patch 应用。 */
   const current = normalizeBodyMarkdown(currentMarkdown);
   const snippet = normalizeBodyMarkdown(patch.markdown_snippet);
   if (!snippet) return current;

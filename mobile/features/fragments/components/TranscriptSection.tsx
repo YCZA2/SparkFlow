@@ -25,7 +25,7 @@ export function TranscriptSection({
   dense = false,
   onSegmentPress,
 }: TranscriptSectionProps) {
-  /** 中文注释：在抽屉或详情页内渲染原文区，支持紧凑样式复用。 */
+  /*在抽屉或详情页内渲染原文区，支持紧凑样式复用。 */
   const theme = useAppTheme();
   const hasSpeakerSegments = Boolean(speakerSegments && speakerSegments.length > 0);
 

@@ -21,7 +21,7 @@ interface UseFragmentsOptions {
 }
 
 export function useFragments({ folderId }: UseFragmentsOptions = {}) {
-  /** 中文注释：列表页优先消费本地缓存，再静默刷新远端结果。 */
+  /*列表页优先消费本地缓存，再静默刷新远端结果。 */
   const [fragments, setFragments] = useState<Fragment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);

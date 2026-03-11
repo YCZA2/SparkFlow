@@ -44,7 +44,7 @@ export function FragmentRichEditor({
   onSelectionChange,
   onFormattingStateChange,
 }: FragmentRichEditorProps) {
-  /** 中文注释：渲染编辑器主视图，让正文成为碎片详情页的唯一主内容。 */
+  /*渲染编辑器主视图，让正文成为碎片详情页的唯一主内容。 */
   const theme = useAppTheme();
 
   return (

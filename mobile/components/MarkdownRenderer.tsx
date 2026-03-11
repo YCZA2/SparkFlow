@@ -14,7 +14,7 @@ export function MarkdownRenderer({
   theme,
   enableLinks = true,
 }: MarkdownRendererProps) {
-  /** 中文注释：统一渲染 Markdown 正文，避免脚本详情页直接耦合第三方组件。 */
+  /*统一渲染 Markdown 正文，避免脚本详情页直接耦合第三方组件。 */
   return (
     <Markdown
       mergeStyle

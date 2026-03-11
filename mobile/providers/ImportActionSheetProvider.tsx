@@ -10,7 +10,7 @@ interface ImportActionSheetContextValue {
 const ImportActionSheetContext = createContext<ImportActionSheetContextValue | null>(null);
 
 /**
- * 中文注释：管理底部导入抽屉的开关与当前文件夹上下文。
+ 管理底部导入抽屉的开关与当前文件夹上下文。
  */
 export function ImportActionSheetProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -38,7 +38,7 @@ export function ImportActionSheetProvider({ children }: { children: React.ReactN
 }
 
 /**
- * 中文注释：读取底部导入抽屉的全局状态。
+ 读取底部导入抽屉的全局状态。
  */
 export function useImportActionSheet() {
   const context = useContext(ImportActionSheetContext);

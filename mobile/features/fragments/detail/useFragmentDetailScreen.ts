@@ -12,7 +12,7 @@ import { useFragmentBodySession } from './useFragmentBodySession';
 import { useFragmentDetailResource } from './useFragmentDetailResource';
 
 export function useFragmentDetailScreen(fragmentId?: string | null) {
-  /** 中文注释：聚合详情页资源、编辑会话、抽屉状态和页面动作，供页面层按分组消费。 */
+  /*聚合详情页资源、编辑会话、抽屉状态和页面动作，供页面层按分组消费。 */
   const router = useRouter();
   const resource = useFragmentDetailResource(fragmentId);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -34,7 +34,7 @@ export function useFragmentDetailScreen(fragmentId?: string | null) {
   }, [fragment?.speaker_segments, isSheetOpen, player.positionMs]);
 
   const confirmDelete = async () => {
-    /** 中文注释：删除详情时同步清理缓存和本地草稿，避免返回列表后残留旧内容。 */
+    /*删除详情时同步清理缓存和本地草稿，避免返回列表后残留旧内容。 */
     if (!fragmentId) return;
 
     try {
@@ -53,7 +53,7 @@ export function useFragmentDetailScreen(fragmentId?: string | null) {
   };
 
   const requestDelete = () => {
-    /** 中文注释：统一处理跨平台删除确认逻辑，保持页面组件只关心点击事件。 */
+    /*统一处理跨平台删除确认逻辑，保持页面组件只关心点击事件。 */
     if (Platform.OS === 'web' && typeof window !== 'undefined' && window.confirm) {
       if (window.confirm('删除后将无法恢复，是否继续？')) {
         void confirmDelete();
@@ -74,7 +74,7 @@ export function useFragmentDetailScreen(fragmentId?: string | null) {
   };
 
   const share = async () => {
-    /** 中文注释：分享时优先读取编辑器实时快照，避免导出正文落后于当前输入。 */
+    /*分享时优先读取编辑器实时快照，避免导出正文落后于当前输入。 */
     const getSnapshot = editor.editorRef.current?.getSnapshot;
     const latestSnapshot = typeof getSnapshot === 'function' ? getSnapshot() : null;
     const shareText = latestSnapshot?.plain_text || fragment?.plain_text_snapshot || '';
@@ -88,7 +88,7 @@ export function useFragmentDetailScreen(fragmentId?: string | null) {
   };
 
   const done = async () => {
-    /** 中文注释：完成编辑前主动 flush 自动保存，失败时停留在当前页继续保留草稿。 */
+    /*完成编辑前主动 flush 自动保存，失败时停留在当前页继续保留草稿。 */
     try {
       await editor.saveNow();
       router.back();

@@ -15,7 +15,7 @@ export interface FragmentListCacheEntry {
 export const FRAGMENT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function isFragmentCacheExpired(cachedAt: string | null | undefined, now = Date.now()): boolean {
-  /** 中文注释：统一判断缓存是否过期，避免 detail/list 使用不同 TTL 规则。 */
+  /*统一判断缓存是否过期，避免 detail/list 使用不同 TTL 规则。 */
   if (typeof cachedAt !== 'string' || !cachedAt.trim()) return true;
   const timestamp = Date.parse(cachedAt);
   if (Number.isNaN(timestamp)) return true;
@@ -26,7 +26,7 @@ export function sanitizeFragmentCacheEntry(
   entry: FragmentCacheEntry | null | undefined,
   now = Date.now()
 ): FragmentCacheEntry | null {
-  /** 中文注释：读取详情缓存时剔除非法或过期快照，避免脏数据污染编辑链路。 */
+  /*读取详情缓存时剔除非法或过期快照，避免脏数据污染编辑链路。 */
   if (!entry || typeof entry !== 'object') return null;
   if (!entry.fragment || typeof entry.fragment !== 'object') return null;
   if (isFragmentCacheExpired(entry.cachedAt, now)) return null;
@@ -40,7 +40,7 @@ export function sanitizeFragmentListCacheEntry(
   entry: FragmentListCacheEntry | null | undefined,
   now = Date.now()
 ): FragmentListCacheEntry | null {
-  /** 中文注释：读取列表缓存时统一做结构校验，避免列表秒开时崩溃。 */
+  /*读取列表缓存时统一做结构校验，避免列表秒开时崩溃。 */
   if (!entry || typeof entry !== 'object') return null;
   if (!Array.isArray(entry.items)) return null;
   if (isFragmentCacheExpired(entry.cachedAt, now)) return null;
@@ -51,7 +51,7 @@ export function sanitizeFragmentListCacheEntry(
 }
 
 export function mergeFragmentIntoListItems(items: Fragment[], fragment: Fragment): Fragment[] {
-  /** 中文注释：把单条详情快照合并回列表缓存，保持列表预览同步。 */
+  /*把单条详情快照合并回列表缓存，保持列表预览同步。 */
   if (!Array.isArray(items)) return fragment ? [fragment] : [];
   if (!fragment || typeof fragment !== 'object' || !fragment.id) return [...items];
   const nextItems = items.filter((item) => item && item.id !== fragment.id);
@@ -64,7 +64,7 @@ export function mergeFragmentIntoListItems(items: Fragment[], fragment: Fragment
 }
 
 function resolveFragmentBodyLength(fragment: Fragment | null | undefined): number {
-  /** 中文注释：按正文纯文本长度比较详情快照完整度，避免空快照覆盖已有内容。 */
+  /*按正文纯文本长度比较详情快照完整度，避免空快照覆盖已有内容。 */
   if (!fragment) return 0;
   const bodyText = extractPlainTextFromMarkdown(fragment.body_markdown);
   if (bodyText) return bodyText.length;
@@ -75,7 +75,7 @@ export function mergeFragmentDetailForPrewarm(
   existing: Fragment | null | undefined,
   incoming: Fragment
 ): Fragment {
-  /** 中文注释：列表预热详情缓存时优先保留更完整的正文和素材，避免旧列表降级详情。 */
+  /*列表预热详情缓存时优先保留更完整的正文和素材，避免旧列表降级详情。 */
   if (!existing || existing.id !== incoming.id) return incoming;
 
   const keepExistingBody = resolveFragmentBodyLength(existing) > resolveFragmentBodyLength(incoming);
@@ -94,13 +94,13 @@ export function mergeFragmentDetailForPrewarm(
 }
 
 export function removeFragmentFromListItems(items: Fragment[], fragmentId: string): Fragment[] {
-  /** 中文注释：删除详情缓存时同步回收列表项，避免首页残留幽灵卡片。 */
+  /*删除详情缓存时同步回收列表项，避免首页残留幽灵卡片。 */
   if (!Array.isArray(items)) return [];
   return items.filter((item) => item && item.id !== fragmentId);
 }
 
 export function applyDraftToFragment(fragment: Fragment | null, draftMarkdown: string | null): Fragment | null {
-  /** 中文注释：仅把本地草稿叠加到展示态 fragment，不覆盖服务端快照真值。 */
+  /*仅把本地草稿叠加到展示态 fragment，不覆盖服务端快照真值。 */
   if (!fragment || typeof fragment !== 'object') return null;
   const normalizedDraft = normalizeBodyMarkdown(draftMarkdown);
   if (!normalizedDraft) return fragment;

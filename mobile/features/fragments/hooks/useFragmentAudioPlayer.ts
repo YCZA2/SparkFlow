@@ -23,7 +23,7 @@ export function useFragmentAudioPlayer(
   audioFileUrl: string | null | undefined,
   options?: UseFragmentAudioPlayerOptions
 ) {
-  /** 中文注释：仅在详情抽屉真正打开时初始化播放器，避免编辑首屏提前占用音频能力。 */
+  /*仅在详情抽屉真正打开时初始化播放器，避免编辑首屏提前占用音频能力。 */
   const enabled = options?.enabled ?? true;
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);

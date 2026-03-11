@@ -20,7 +20,7 @@ import { waitForPipelineTerminal } from '@/features/pipelines/api';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 /**
- * 中文注释：承接抖音分享链接导入，并在后台任务完成后进入碎片详情。
+ 承接抖音分享链接导入，并在后台任务完成后进入碎片详情。
  */
 export default function ImportLinkScreen() {
   const router = useRouter();

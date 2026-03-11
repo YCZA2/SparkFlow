@@ -22,7 +22,7 @@ export function useFragmentBodySession({
   commitRemoteFragment,
   commitOptimisticFragment,
 }: UseFragmentBodySessionOptions) {
-  /** 中文注释：编排详情正文编辑会话，把持久化层与编辑动作层组装成统一接口。 */
+  /*编排详情正文编辑会话，把持久化层与编辑动作层组装成统一接口。 */
   const [selectionText, setSelectionText] = useState('');
   const [formattingState, setFormattingState] =
     useState<FragmentEditorFormattingState | null>(null);
@@ -51,13 +51,13 @@ export function useFragmentBodySession({
   });
 
   const handleSelectionChange = useCallback((text: string) => {
-    /** 中文注释：同步当前选中文本，供 AI patch 优先围绕局部内容生成。 */
+    /*同步当前选中文本，供 AI patch 优先围绕局部内容生成。 */
     setSelectionText(text.trim());
   }, []);
 
   const handleFormattingStateChange = useCallback(
     (nextState: FragmentEditorFormattingState) => {
-      /** 中文注释：同步工具栏格式态，避免页面层直接理解 DOM 编辑器。 */
+      /*同步工具栏格式态，避免页面层直接理解 DOM 编辑器。 */
       setFormattingState(nextState);
     },
     []

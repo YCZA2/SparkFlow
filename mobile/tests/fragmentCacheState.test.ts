@@ -12,7 +12,7 @@ import {
 } from '../features/fragments/fragmentCacheState';
 
 function buildFragment(overrides = {}) {
-  /** 中文注释：为纯状态测试构造最小 fragment 载荷，聚焦缓存与草稿规则。 */
+  /*为纯状态测试构造最小 fragment 载荷，聚焦缓存与草稿规则。 */
   return {
     id: 'fragment-001',
     audio_file_url: null,

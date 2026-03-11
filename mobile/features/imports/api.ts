@@ -11,7 +11,7 @@ export interface ExternalAudioImportTask {
 }
 
 /**
- * 中文注释：提交抖音外链导入任务，返回异步 pipeline 句柄。
+ 提交抖音外链导入任务，返回异步 pipeline 句柄。
  */
 export async function importExternalAudio(shareUrl: string, folderId?: string): Promise<ExternalAudioImportTask> {
   return post<ExternalAudioImportTask>(

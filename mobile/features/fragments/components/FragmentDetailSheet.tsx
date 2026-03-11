@@ -92,7 +92,7 @@ function ToolRow({
   onPress: () => void;
   disabled?: boolean;
 }) {
-  /** 中文注释：渲染抽屉内的整理工具入口，统一动作密度和视觉层级。 */
+  /*渲染抽屉内的整理工具入口，统一动作密度和视觉层级。 */
   const theme = useAppTheme();
 
   return (
@@ -129,7 +129,7 @@ function Section({
   title: string;
   children: React.ReactNode;
 }) {
-  /** 中文注释：统一抽屉内区块标题和内容间距，减少重复样式。 */
+  /*统一抽屉内区块标题和内容间距，减少重复样式。 */
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -139,7 +139,7 @@ function Section({
 }
 
 function InfoCard({ children }: { children: React.ReactNode }) {
-  /** 中文注释：统一抽屉卡片容器，避免各区块重复拼装主题样式。 */
+  /*统一抽屉卡片容器，避免各区块重复拼装主题样式。 */
   const theme = useAppTheme();
 
   return (
@@ -163,7 +163,7 @@ function AudioTranscriptSection({
   FragmentDetailSheetProps,
   'content' | 'activeSegmentIndex' | 'player'
 >) {
-  /** 中文注释：单独渲染原文与音频区块，保持播放器和转写的展示边界。 */
+  /*单独渲染原文与音频区块，保持播放器和转写的展示边界。 */
   const theme = useAppTheme();
   const hasAudio = Boolean(content.audioFileUrl);
   const hasTranscript = Boolean(content.transcript?.trim() || content.speakerSegments?.length);
@@ -213,7 +213,7 @@ function AudioTranscriptSection({
 }
 
 function ToolsSection({ tools }: Pick<FragmentDetailSheetProps, 'tools'>) {
-  /** 中文注释：把正文整理动作收口为独立区块，便于后续增删工具入口。 */
+  /*把正文整理动作收口为独立区块，便于后续增删工具入口。 */
   return (
     <Section title="整理工具">
       <ToolRow
@@ -278,7 +278,7 @@ function MetadataSection({
   content,
   metadata,
 }: Pick<FragmentDetailSheetProps, 'content' | 'metadata'>) {
-  /** 中文注释：把摘要、来源、标签等信息集中在只读区块展示。 */
+  /*把摘要、来源、标签等信息集中在只读区块展示。 */
   const theme = useAppTheme();
   const tags = normalizeFragmentTags(content.tags);
   const sourceLabel = getSourceLabel(metadata.source);
@@ -322,7 +322,7 @@ function MetadataSection({
 }
 
 function DangerSection({ actions }: Pick<FragmentDetailSheetProps, 'actions'>) {
-  /** 中文注释：把删除入口独立出来，避免和信息区块混排。 */
+  /*把删除入口独立出来，避免和信息区块混排。 */
   const theme = useAppTheme();
 
   return (
@@ -357,7 +357,7 @@ export function FragmentDetailSheet({
   tools,
   actions,
 }: FragmentDetailSheetProps) {
-  /** 中文注释：在底部抽屉中收纳原文、音频、整理工具和碎片信息。 */
+  /*在底部抽屉中收纳原文、音频、整理工具和碎片信息。 */
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
 
@@ -412,7 +412,7 @@ export function FragmentDetailSheet({
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
-  /** 中文注释：展示单行碎片元信息，保持标签和值的对齐关系。 */
+  /*展示单行碎片元信息，保持标签和值的对齐关系。 */
   const theme = useAppTheme();
 
   return (

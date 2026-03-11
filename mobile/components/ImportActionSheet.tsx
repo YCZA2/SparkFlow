@@ -57,7 +57,7 @@ function ActionCard({
 }
 
 /**
- * 中文注释：展示底部导入操作抽屉，承接链接导入与文件占位入口。
+ 展示底部导入操作抽屉，承接链接导入与文件占位入口。
  */
 export function ImportActionSheet() {
   const router = useRouter();

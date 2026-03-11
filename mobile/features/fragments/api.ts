@@ -46,7 +46,7 @@ export async function deleteFragment(id: string): Promise<void> {
 }
 
 export async function createFragment(data: CreateFragmentRequest, folderId?: string): Promise<Fragment> {
-  /** 中文注释：手动创建碎片时统一走 Markdown 正文接口。 */
+  /*手动创建碎片时统一走 Markdown 正文接口。 */
   const requestData = folderId ? { ...data, folder_id: folderId } : data;
   return post<Fragment>(API_ENDPOINTS.FRAGMENTS.CONTENT, requestData);
 }
@@ -56,12 +56,12 @@ export async function updateFragment(id: string, data: UpdateFragmentRequest): P
 }
 
 export async function requestAiEdit(id: string, data: FragmentAiEditRequest): Promise<FragmentAiEditResponse> {
-  /** 中文注释：请求后端返回可直接应用到 Markdown 正文的 AI patch。 */
+  /*请求后端返回可直接应用到 Markdown 正文的 AI patch。 */
   return post<FragmentAiEditResponse>(API_ENDPOINTS.FRAGMENTS.AI_EDIT(id), data);
 }
 
 export async function uploadImageAsset(uri: string, fileName: string, mimeType: string): Promise<MediaAsset> {
-  /** 中文注释：上传图片素材后返回带访问地址的统一媒体资源。 */
+  /*上传图片素材后返回带访问地址的统一媒体资源。 */
   const formData = new FormData();
   formData.append('file', {
     uri,

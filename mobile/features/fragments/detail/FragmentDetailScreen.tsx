@@ -32,7 +32,7 @@ function HeaderCircleButton({
   disabled?: boolean;
   onPress: () => void | Promise<void>;
 }) {
-  /** 中文注释：统一顶部圆形操作按钮，保持详情页主视图的备忘录式视觉密度。 */
+  /*统一顶部圆形操作按钮，保持详情页主视图的备忘录式视觉密度。 */
   const backgroundColor = filled ? '#D8B23C' : dark ? '#1B1916' : '#EFECE6';
   const borderColor = filled ? '#E9CC68' : dark ? '#2A2723' : '#F7F4EF';
   const tintColor = filled ? '#FFF6C9' : dark ? '#F7F3ED' : '#23201C';
@@ -52,7 +52,7 @@ function HeaderCircleButton({
 }
 
 function EditorSkeleton({ dark = false }: { dark?: boolean }) {
-  /** 中文注释：在详情资源或 DOM 编辑器未就绪时渲染纸张骨架，减少首屏空白感。 */
+  /*在详情资源或 DOM 编辑器未就绪时渲染纸张骨架，减少首屏空白感。 */
   const lineColor = dark ? '#1E1C19' : '#DFDAD2';
 
   return (
@@ -77,7 +77,7 @@ function runEditorCommand(
   command: FragmentEditorCommand,
   options?: { focus?: boolean }
 ) {
-  /** 中文注释：bridge 方法尚未挂载时跳过命令，避免详情页初始化阶段抛错。 */
+  /*bridge 方法尚未挂载时跳过命令，避免详情页初始化阶段抛错。 */
   const runCommand = editorRef.current?.runCommand;
   if (typeof runCommand !== 'function') return;
   runCommand(command);
@@ -90,7 +90,7 @@ function runEditorCommand(
 }
 
 export function FragmentDetailScreen({ fragmentId }: { fragmentId?: string | null }) {
-  /** 中文注释：只消费 screen view-model 渲染碎片详情页面，避免页面层混入保存流程细节。 */
+  /*只消费 screen view-model 渲染碎片详情页面，避免页面层混入保存流程细节。 */
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const screen = useFragmentDetailScreen(fragmentId);

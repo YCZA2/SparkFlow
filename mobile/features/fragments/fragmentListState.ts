@@ -6,7 +6,7 @@ export interface FragmentSection {
 }
 
 export function buildFragmentSections(fragments: Fragment[]): FragmentSection[] {
-  /** 中文注释：把碎片按日期分段，统一首页与文件夹页的列表展示结构。 */
+  /*把碎片按日期分段，统一首页与文件夹页的列表展示结构。 */
   const sectionMap = new Map<string, Fragment[]>();
 
   for (const fragment of fragments) {
@@ -20,7 +20,7 @@ export function buildFragmentSections(fragments: Fragment[]): FragmentSection[] 
 }
 
 function getSectionLabel(dateString: string): string {
-  /** 中文注释：把创建时间映射为列表分组标题，保持首页与文件夹页一致。 */
+  /*把创建时间映射为列表分组标题，保持首页与文件夹页一致。 */
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return '更早';
 

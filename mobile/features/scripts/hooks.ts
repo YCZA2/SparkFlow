@@ -16,7 +16,7 @@ export function useGenerateScript() {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * 中文注释：创建脚本任务后轮询 pipeline，成功时返回最终脚本 ID。
+   创建脚本任务后轮询 pipeline，成功时返回最终脚本 ID。
    */
   const run = async (fragmentIds: string[], mode: ScriptMode): Promise<string> => {
     try {
@@ -52,7 +52,7 @@ export function useGenerateScript() {
 
 export function useScripts() {
   /**
-   * 中文注释：拉取脚本列表并适配给通用异步列表状态。
+   拉取脚本列表并适配给通用异步列表状态。
    */
   const loadScripts = useCallback(async (): Promise<Script[]> => {
     const response = await fetchScripts();
@@ -68,7 +68,7 @@ export function useTodayDailyPush() {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * 中文注释：重新加载今日推盘脚本。
+   重新加载今日推盘脚本。
    */
   const reload = useCallback(async () => {
     try {
@@ -96,7 +96,7 @@ export function useDailyPushTrigger() {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * 中文注释：触发一次今日推盘生成。
+   触发一次今日推盘生成。
    */
   const run = useCallback(async () => {
     try {
@@ -124,7 +124,7 @@ export function useForceDailyPushTrigger() {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * 中文注释：强制触发今日推盘生成。
+   强制触发今日推盘生成。
    */
   const run = useCallback(async () => {
     try {

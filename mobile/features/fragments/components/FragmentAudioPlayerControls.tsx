@@ -40,7 +40,7 @@ export function FragmentAudioPlayerControls({
   onSkipBackward,
   onChangeRate,
 }: FragmentAudioPlayerControlsProps) {
-  /** 中文注释：渲染可复用的音频控制区，支持详情页抽屉和固定底栏两种容器。 */
+  /*渲染可复用的音频控制区，支持详情页抽屉和固定底栏两种容器。 */
   const theme = useAppTheme();
   const [trackWidth, setTrackWidth] = useState(0);
   const progress = durationMs > 0 ? Math.min(1, positionMs / durationMs) : 0;

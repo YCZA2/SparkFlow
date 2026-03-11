@@ -32,7 +32,7 @@ export function useFragmentListScreenState({
   folderId,
   enableRefreshParam = false,
 }: UseFragmentListScreenStateOptions = {}): FragmentListScreenState {
-  /** 中文注释：统一首页与文件夹页的碎片列表 view-model，避免页面各写一套选择与跳转逻辑。 */
+  /*统一首页与文件夹页的碎片列表 view-model，避免页面各写一套选择与跳转逻辑。 */
   const router = useRouter();
   const params = useLocalSearchParams<{ refresh?: string }>();
   const { fragments, isLoading, isRefreshing, error, refreshFragments, fetchFragments } =

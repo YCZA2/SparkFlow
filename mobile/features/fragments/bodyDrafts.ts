@@ -9,12 +9,12 @@ interface FragmentBodyDraft {
 }
 
 function buildDraftKey(fragmentId: string): string {
-  /** 中文注释：按 fragment 维度隔离正文草稿。 */
+  /*按 fragment 维度隔离正文草稿。 */
   return `${FRAGMENT_BODY_DRAFT_PREFIX}${fragmentId}`;
 }
 
 export async function loadFragmentBodyDraft(fragmentId: string): Promise<string | null> {
-  /** 中文注释：读取本地 Markdown 正文草稿，异常时静默忽略。 */
+  /*读取本地 Markdown 正文草稿，异常时静默忽略。 */
   if (draftCache.has(fragmentId)) {
     return draftCache.get(fragmentId) ?? null;
   }
@@ -35,7 +35,7 @@ export async function loadFragmentBodyDraft(fragmentId: string): Promise<string 
 }
 
 export async function saveFragmentBodyDraft(fragmentId: string, markdown: string): Promise<void> {
-  /** 中文注释：把最新 Markdown 草稿持久化到本地，保证离页后可恢复。 */
+  /*把最新 Markdown 草稿持久化到本地，保证离页后可恢复。 */
   const payload: FragmentBodyDraft = {
     markdown,
     updated_at: new Date().toISOString(),
@@ -45,7 +45,7 @@ export async function saveFragmentBodyDraft(fragmentId: string, markdown: string
 }
 
 export async function clearFragmentBodyDraft(fragmentId: string): Promise<void> {
-  /** 中文注释：当服务端同步成功后清除本地草稿。 */
+  /*当服务端同步成功后清除本地草稿。 */
   draftCache.delete(fragmentId);
   await AsyncStorage.removeItem(buildDraftKey(fragmentId));
 }

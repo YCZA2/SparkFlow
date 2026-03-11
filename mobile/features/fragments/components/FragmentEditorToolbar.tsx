@@ -36,7 +36,7 @@ function ToolbarButton({
   compactText = false,
   onPress,
 }: ToolbarButtonProps) {
-  /** 中文注释：把编辑命令统一渲染成胶囊按钮，保持底部工具条密度一致。 */
+  /*把编辑命令统一渲染成胶囊按钮，保持底部工具条密度一致。 */
   const theme = useAppTheme();
   const isDark = theme.name === 'dark';
 
@@ -83,7 +83,7 @@ export function FragmentEditorToolbar({
   onInsertImage,
   onAiAction,
 }: FragmentEditorToolbarProps) {
-  /** 中文注释：渲染接近备忘录风格的悬浮工具条，并把格式操作映射到原生按钮。 */
+  /*渲染接近备忘录风格的悬浮工具条，并把格式操作映射到原生按钮。 */
   const theme = useAppTheme();
   const isDark = theme.name === 'dark';
   const titleModeActive = formattingState?.block_type === 'heading';

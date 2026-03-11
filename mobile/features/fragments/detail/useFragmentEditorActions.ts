@@ -40,7 +40,7 @@ export function useFragmentEditorActions({
   onSnapshotFallback,
   appendMediaAsset,
 }: UseFragmentEditorActionsOptions) {
-  /** 中文注释：收拢图片上传与 AI patch，避免保存链路混入动作细节。 */
+  /*收拢图片上传与 AI patch，避免保存链路混入动作细节。 */
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isAiRunning, setIsAiRunning] = useState(false);
 
@@ -72,7 +72,7 @@ export function useFragmentEditorActions({
 
   const applyPatch = useCallback(
     (patch: FragmentAiPatch) => {
-      /** 中文注释：bridge 可用时优先改 DOM，不可用时回退到本地快照。 */
+      /*bridge 可用时优先改 DOM，不可用时回退到本地快照。 */
       if (isEditorReady) {
         const applyPatch = editorRef.current?.applyPatch;
         if (typeof applyPatch === 'function') {

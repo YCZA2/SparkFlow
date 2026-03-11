@@ -23,7 +23,7 @@ export function resolveSaveOutcome({
   savedMarkdown,
   attemptedMarkdown,
 }: ResolveSaveOutcomeInput): ResolveSaveOutcomeResult {
-  /** 中文注释：把保存结果统一映射成编辑器同步态，减少页面层条件分支。 */
+  /*把保存结果统一映射成编辑器同步态，减少页面层条件分支。 */
   if (ok) {
     return {
       syncStatus: 'synced',
@@ -40,7 +40,7 @@ export function resolveSaveOutcome({
 }
 
 export function resolveDoneAction(error: unknown): ResolveDoneActionResult {
-  /** 中文注释：收敛“完成编辑”动作的导航与提示语义，保证失败时停留本地草稿。 */
+  /*收敛“完成编辑”动作的导航与提示语义，保证失败时停留本地草稿。 */
   if (!error) {
     return {
       ok: true,
