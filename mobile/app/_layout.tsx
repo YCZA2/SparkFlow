@@ -139,6 +139,10 @@ function RootLayoutNav() {
             name="record-audio"
             options={{ title: '录音', headerShown: false, gestureEnabled: false }}
           />
+          <Stack.Screen
+            name="text-note"
+            options={{ title: '写下灵感', headerShown: false }}
+          />
           <Stack.Screen name="import-link" options={{ title: '导入链接', headerShown: true }} />
           <Stack.Screen name="knowledge" options={{ title: '知识库', headerShown: true }} />
           <Stack.Screen

@@ -55,7 +55,7 @@ flowchart LR
 
 - `index.tsx`: 实际首页，展示碎片列表、分组、选择态和底部快捷操作。
 - `record-audio.tsx`: 录音与上传页。
-- `text-note.tsx`: 手动文本碎片录入页。
+- `text-note.tsx`: 手动文本碎片创建入口页；进入后会先创建本地 draft 并立即挂载碎片详情编辑器，再后台静默建单与收敛远端。
 - `fragment/[id].tsx`: 单条碎片详情。
 - `fragment-cloud.tsx`: 灵感云图。
 - `generate.tsx`: AI 编导生成确认页。
@@ -108,9 +108,9 @@ flowchart TD
 
 当前移动端真正参与主流程的数据持久化是：
 
-- `AsyncStorage`: token、用户信息、后端 base URL、按范围分桶的 fragment 列表缓存、fragment 详情缓存、未同步正文草稿
+- `AsyncStorage`: token、用户信息、后端 base URL、按范围分桶的 fragment 列表缓存、fragment 详情缓存、本地 `LocalFragmentDraft` 草稿和待上传图片队列
 
-当前移动端主流程的本地持久化只使用 `AsyncStorage`，未引入 SQLite 业务存储链路；碎片正文详情采用“本地缓存秒开 + 后台静默刷新”的 stale-while-revalidate 策略，自动保存失败时继续保留本地草稿和详情快照。碎片列表缓存已按 `all / folder:<id>` 分桶，首页和文件夹页共用同一套“缓存秒开 + 后台刷新 + 订阅回显”行为。
+当前移动端主流程的本地持久化只使用 `AsyncStorage`，未引入 SQLite 业务存储链路；“写下灵感”文本链路已经改为 local-first：详情首屏优先读取本地 draft，再叠加已绑定 remote cache，最后静默刷新远端详情。碎片列表缓存已按 `all / folder:<id>` 分桶，首页和文件夹页会把本地 draft 聚合到远端列表顶部，并通过本地同步队列在应用启动、输入停顿和页面聚焦时持续收敛到远端。
 
 ## 4. Backend Architecture
 

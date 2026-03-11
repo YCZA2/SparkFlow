@@ -75,11 +75,6 @@ class FragmentCommandService:
         normalized_body_markdown = normalize_fragment_body_markdown(body_markdown)
         plain_text_snapshot = extract_plain_text_from_body_markdown(normalized_body_markdown)
         normalized_transcript = self._normalize_transcript(transcript=transcript, source=source)
-        if source != "voice" and not plain_text_snapshot:
-            raise ValidationError(
-                message="正文不能为空",
-                field_errors={"body_markdown": "非语音碎片必须提供正文"},
-            )
         fragment = fragment_repository.create(
             db=db,
             user_id=user_id,

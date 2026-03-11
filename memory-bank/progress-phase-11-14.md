@@ -64,7 +64,7 @@
 ### 已落地能力
 
 - 转写完成后自动生成 embedding 并写入 `fragments_{user_id}`。
-- `fragment_blocks` 编译结果和 `body_markdown` 已能进入脚本上下文、daily push 与知识库消费链路。
+- `body_markdown` 已能进入脚本上下文、daily push 与知识库消费链路；移动端文本编辑链路已改为 local-first。
 - 可按语义查询相似碎片，并回表补齐摘要、标签、来源和时间。
 - 灵感云图可批量读取用户向量，做 PCA / 聚类 / fallback projection。
 - 知识库文档创建时会同步写入 `knowledge_{user_id}`。
@@ -127,14 +127,16 @@
 - `backend/tests/test_route_contracts.py`
 - `backend/tests/test_core_flows.py`
 - `mobile/package.json` 中的 `npm run test:state`
+- `mobile/tests/localFragmentDraftState.test.ts`
 - `bash scripts/test-all.sh` 全量测试已通过
 
 ### 当前仍缺的验证
 
 - 真机完整冒烟：录音 -> 转写 -> 合稿 -> 拍摄 -> 相册保存。
+- 真机 local-first 文本链路冒烟：离线进入编辑器 -> 杀进程恢复 -> 远端建单绑定 -> 本地图片收敛。
 - daily push 前端主路径验证。
 - 知识库移动端真实入口验证。
-- `backend/dify_dsl/README.md`、`CLAUDE.md`、移动端使用说明和 onboarding 口径还需要继续收口。
+- `backend/dify_dsl/README.md` 和 onboarding 口径还需要继续收口。
 
 ## 当前结论
 

@@ -33,6 +33,42 @@ export interface FragmentFolder {
   name: string;
 }
 
+export type LocalFragmentSyncStatus =
+  | 'creating'
+  | 'syncing'
+  | 'synced'
+  | 'failed_pending_retry';
+
+export type LocalPendingImageUploadStatus =
+  | 'pending'
+  | 'uploading'
+  | 'uploaded'
+  | 'failed_pending_retry';
+
+export interface LocalPendingImageAsset {
+  local_asset_id: string;
+  local_fragment_id: string;
+  local_uri: string;
+  mime_type: string;
+  file_name: string;
+  remote_asset_id?: string | null;
+  upload_status: LocalPendingImageUploadStatus;
+}
+
+export interface LocalFragmentDraft {
+  local_id: string;
+  remote_id?: string | null;
+  folder_id?: string | null;
+  body_markdown: string;
+  plain_text_snapshot: string;
+  created_at: string;
+  sync_status: LocalFragmentSyncStatus;
+  last_sync_attempt_at?: string | null;
+  next_retry_at?: string | null;
+  retry_count?: number;
+  pending_image_assets?: LocalPendingImageAsset[];
+}
+
 /**
  * 碎片笔记数据模型
  */
@@ -53,6 +89,12 @@ export interface Fragment {
   plain_text_snapshot?: string | null;
   content_state?: 'empty' | 'transcript_only' | 'body_present';
   media_assets?: MediaAsset[];
+  /*前端本地优先视图字段，不属于后端 DTO。 */
+  local_id?: string | null;
+  remote_id?: string | null;
+  is_local_draft?: boolean;
+  local_sync_status?: LocalFragmentSyncStatus | null;
+  display_source_label?: string | null;
 }
 
 export interface FragmentListResponse {

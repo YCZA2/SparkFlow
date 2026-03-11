@@ -5,7 +5,7 @@
 ## 当前已落地
 
 - 数据库继续作为事实源。
-- `fragments` 已移除 `capture_text`，正文统一收敛到 `fragment_blocks`。
+- `fragments` 已移除 `capture_text`，正文对外统一收敛到 `body_markdown`。
 - `scripts`、`knowledge_docs` 新增 `body_markdown`。
 - 新增统一 `media_assets` / `content_media_links`，用于图片、录音和通用素材引用。
 - 新增 Markdown 导出接口，支持单条 `.md` 和批量 zip。
@@ -14,12 +14,12 @@
 
 - `.md` 文件只在导出时生成，不做持续镜像。
 - 外部直接编辑 `.md` 后回写系统仍不支持。
-- `fragment_blocks` 第一阶段仅支持 `markdown` 类型。
+- 移动端正文编辑真值目前仍是单字段 `body_markdown`，本期优先保障 local-first 会话与远端最终收敛。
 - `knowledge` 和 `scripts` 先保持单正文模型，后续如需富媒体编排再演进到 block 模型。
 
 ## 下一步建议
 
-1. 把碎片详情页的单正文自动保存编辑继续演进成完整 block 编辑器。
+1. 在 local-first 文本链路稳定后，再评估碎片详情页是否继续演进成完整 block 编辑器。
 2. 为 `media_assets` 增加图片尺寸、音频时长等元信息提取。
 3. 将知识库页面从占位入口升级为 Markdown + 素材管理页。
 4. 评估脚本页是否也升级到 block 编辑器容器。

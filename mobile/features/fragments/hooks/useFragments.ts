@@ -8,13 +8,23 @@ import {
   fetchFragments as fetchFragmentsRemote,
 } from '@/features/fragments/api';
 import {
+  listLocalFragmentDrafts,
+  mergeLocalDraftsIntoFragments,
+  subscribeLocalFragmentDrafts,
+} from '@/features/fragments/localDrafts';
+import { wakeLocalFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
+import {
   peekFragmentListCache,
   readFragmentListCache,
   subscribeFragmentCache,
   writeFragmentListCache,
 } from '@/features/fragments/fragmentRepository';
 import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
-import type { Fragment, FragmentVisualizationResponse } from '@/types/fragment';
+import type {
+  Fragment,
+  FragmentVisualizationResponse,
+  LocalFragmentDraft,
+} from '@/types/fragment';
 
 interface UseFragmentsOptions {
   folderId?: string | null;
@@ -22,7 +32,8 @@ interface UseFragmentsOptions {
 
 export function useFragments({ folderId }: UseFragmentsOptions = {}) {
   /*列表页优先消费本地缓存，再静默刷新远端结果。 */
-  const [fragments, setFragments] = useState<Fragment[]>([]);
+  const [remoteFragments, setRemoteFragments] = useState<Fragment[]>([]);
+  const [localDrafts, setLocalDrafts] = useState<LocalFragmentDraft[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,13 +42,24 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
       ? folderId
       : undefined;
 
+  const fragments = useMemo(() => {
+    const remoteById = new Map(remoteFragments.map((item) => [item.id, item]));
+    return mergeLocalDraftsIntoFragments(remoteFragments, localDrafts, remoteById);
+  }, [localDrafts, remoteFragments]);
+
   const applyCachedList = useCallback(async (): Promise<boolean> => {
     const cached = await readFragmentListCache(resolvedFolderId);
     if (!cached) return false;
-    setFragments(cached.items);
+    setRemoteFragments(cached.items);
     setError(null);
     setIsLoading(false);
     return true;
+  }, [resolvedFolderId]);
+
+  const hydrateLocalDrafts = useCallback(async () => {
+    const drafts = await listLocalFragmentDrafts(resolvedFolderId);
+    setLocalDrafts(drafts);
+    return drafts;
   }, [resolvedFolderId]);
 
   const loadFragments = useCallback(
@@ -52,7 +74,7 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
       try {
         const response = await fetchFragmentsRemote(resolvedFolderId);
         const nextItems = response.items || [];
-        setFragments(nextItems);
+        setRemoteFragments(nextItems);
         setError(null);
         await writeFragmentListCache(nextItems, resolvedFolderId);
       } catch (err) {
@@ -74,7 +96,7 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
     let cancelled = false;
 
     const hydrate = async () => {
-      const hasCache = await applyCachedList();
+      const [hasCache] = await Promise.all([applyCachedList(), hydrateLocalDrafts()]);
       if (cancelled) return;
       await loadFragments(hasCache ? 'silent' : 'load');
     };
@@ -84,22 +106,28 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
     const unsubscribe = subscribeFragmentCache(() => {
       const cached = peekFragmentListCache(resolvedFolderId);
       if (!cached) {
-        setFragments([]);
+        setRemoteFragments([]);
         return;
       }
-      setFragments(cached.items);
+      setRemoteFragments(cached.items);
       setError(null);
       setIsLoading(false);
+    });
+
+    const unsubscribeLocalDrafts = subscribeLocalFragmentDrafts(() => {
+      void hydrateLocalDrafts();
     });
 
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeLocalDrafts();
     };
-  }, [applyCachedList, loadFragments, resolvedFolderId]);
+  }, [applyCachedList, hydrateLocalDrafts, loadFragments, resolvedFolderId]);
 
   useFocusEffect(
     useCallback(() => {
+      void wakeLocalFragmentSyncQueue().catch(() => undefined);
       if (consumeFragmentsStale()) {
         void loadFragments('load');
       }

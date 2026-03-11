@@ -106,9 +106,9 @@ mobile/
 
 1. **Voice Capture** → Record voice → Receive `pipeline_run_id` → Poll task → Stored in fragment library
    - Voice fragments keep machine transcription in `transcript`
-   - User-edited body content lives in `fragment_blocks` and is auto-saved from the detail screen
-2. **Manual Fragment Capture** → Create text fragment directly in Markdown → Stored in fragment library
-   - Manual fragments now require `body_markdown` and no longer write `transcript`
+   - User-edited body content persists as `body_markdown`; detail view prefers local cache/draft, then silently refreshes remote data
+2. **Manual Fragment Capture** → Enter `/text-note` → Create local draft immediately → Edit locally first → Background sync creates/patches remote fragment
+   - Manual fragments no longer write `transcript`; AI actions stay disabled until the draft has a real `remote_id`
 2. **AI Script Generation** → Select multiple fragments → Receive `pipeline_run_id` → Poll task → Generate script
    - Backend assembles structured context, then calls the workflow provider through a shared port
    - Current provider adapter is Dify; script generation is publicly exposed through `/api/scripts/generation` + `/api/pipelines/{run_id}`
@@ -126,7 +126,6 @@ mobile/
 
 - `users` - User accounts (with RBAC: user/creator roles)
 - `fragments` - Fragment containers (source, summary, tags, `transcript`)
-- `fragment_blocks` - Ordered editable fragment content blocks (current v1: Markdown only)
 - `scripts` - Generated scripts (mode, status, linked fragment IDs, `body_markdown`)
 - `pipeline_runs` - Persistent async pipeline run records
 - `pipeline_step_runs` - Step-level execution, retries, and external refs

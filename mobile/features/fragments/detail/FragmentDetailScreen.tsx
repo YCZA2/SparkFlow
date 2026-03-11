@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { type Href, Stack } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -89,11 +89,17 @@ function runEditorCommand(
   }
 }
 
-export function FragmentDetailScreen({ fragmentId }: { fragmentId?: string | null }) {
+export function FragmentDetailScreen({
+  fragmentId,
+  exitTo,
+}: {
+  fragmentId?: string | null;
+  exitTo?: Href | null;
+}) {
   /*只消费 screen view-model 渲染碎片详情页面，避免页面层混入保存流程细节。 */
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
-  const screen = useFragmentDetailScreen(fragmentId);
+  const screen = useFragmentDetailScreen(fragmentId, { exitTo });
   const fragment = screen.resource.fragment;
   const editor = screen.editor;
   const sheet = screen.sheet;

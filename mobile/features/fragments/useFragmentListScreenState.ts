@@ -52,6 +52,10 @@ export function useFragmentListScreenState({
   const onFragmentPress = useCallback(
     (fragment: Fragment) => {
       if (selection.isSelectionMode) {
+        if (fragment.is_local_draft && !fragment.remote_id) {
+          Alert.alert('暂不可选择', '本地草稿尚未同步完成，暂时不能用于 AI 编导。');
+          return;
+        }
         const accepted = selection.toggleSelect(fragment.id);
         if (!accepted) {
           Alert.alert('已达上限', `最多选择 ${selection.maxSelection} 条碎片`);
@@ -59,7 +63,9 @@ export function useFragmentListScreenState({
         return;
       }
 
-      void prewarmFragmentDetailCache(fragment);
+      if (!fragment.is_local_draft) {
+        void prewarmFragmentDetailCache(fragment);
+      }
       router.push(`/fragment/${fragment.id}`);
     },
     [router, selection]
@@ -71,11 +77,21 @@ export function useFragmentListScreenState({
       return;
     }
 
+    const selectedRemoteIds = selection.selectedIds
+      .map((selectedId) => fragments.find((item) => item.id === selectedId) ?? null)
+      .map((item) => item?.remote_id ?? item?.id ?? null)
+      .filter((item): item is string => Boolean(item));
+
+    if (selectedRemoteIds.length !== selection.selectedCount) {
+      Alert.alert('请稍后重试', '仍有本地草稿未完成同步，暂时不能进入 AI 编导。');
+      return;
+    }
+
     router.push({
       pathname: '/generate',
-      params: { fragmentIds: selection.selectedIds.join(',') },
+      params: { fragmentIds: selectedRemoteIds.join(',') },
     });
-  }, [router, selection.selectedCount, selection.selectedIds]);
+  }, [fragments, router, selection.selectedCount, selection.selectedIds]);
 
   return {
     fragments,

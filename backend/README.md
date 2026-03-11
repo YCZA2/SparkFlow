@@ -343,8 +343,8 @@ bash scripts/postgres-local.sh stop
 - `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 返回 `pipeline_run_id`、`pipeline_type`、`status`
 - 文件类响应不再暴露 `audio_path` / `storage_path`，统一返回签名 `*_file_url` 与过期时间
 - `fragments` 列表 / 详情与 `GET /api/transcriptions/{fragment_id}` 不再返回 `sync_status`
-- `fragments.transcript` 表示机器转写原文，`compiled_markdown` 表示用户整理后的正式正文；正文消费统一按 `compiled_markdown -> transcript` 回退
-- 非语音碎片创建必须提供 `body_markdown`；`transcript` 仅保留给语音转写链路
+- `fragments.transcript` 表示机器转写原文，`body_markdown` 表示用户整理后的正式正文；正文消费统一按 `body_markdown -> transcript` 回退
+- 非语音碎片创建走 `POST /api/fragments/content`；当前允许先创建空 `body_markdown`，再由客户端后续 patch 正文，`transcript` 仅保留给语音转写链路
 - 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`
 - 如需排查 Dify 侧问题，优先查看 `GET /api/pipelines/{run_id}/steps` 中 `submit_workflow_run` / `poll_workflow_run` 的 `external_ref`，其中会暴露 `provider_run_id` / `provider_task_id`
 - 外链导入成功后的 `platform`、`share_url`、`media_id`、`title`、`author`、`cover_url`、`content_type`、`audio_file_url` 统一从 `GET /api/pipelines/{run_id}` 的 `output` 读取

@@ -9,6 +9,7 @@ import {
   saveUserInfo,
   type UserInfo,
 } from '@/features/auth/api';
+import { restoreLocalFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
 
 interface AppSessionContextValue {
   isReady: boolean;
@@ -72,6 +73,11 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     bootstrap();
+  }, []);
+
+  useEffect(() => {
+    /*应用启动后恢复本地草稿同步队列，保证离线编辑可在后续静默收敛。 */
+    void restoreLocalFragmentSyncQueue().catch(() => undefined);
   }, []);
 
   const login = async () => {

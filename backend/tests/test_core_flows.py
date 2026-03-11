@@ -540,6 +540,22 @@ async def test_fragment_folder_validation_and_conflicts(async_client, auth_heade
 
 
 @pytest.mark.asyncio
+async def test_manual_fragment_can_start_with_empty_body(async_client, auth_headers_factory) -> None:
+    """手动碎片应允许空正文建单，供移动端直接进入正文编辑器。"""
+    response = await async_client.post(
+        "/api/fragments/content",
+        json={"body_markdown": "", "source": "manual"},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert response.status_code == 201
+    payload = response.json()["data"]
+    assert payload["source"] == "manual"
+    assert payload["body_markdown"] == ""
+    assert payload["plain_text_snapshot"] is None
+    assert payload["content_state"] == "empty"
+
+
+@pytest.mark.asyncio
 async def test_fragment_tags_listing_filtering_and_delete_consistency(async_client, auth_headers_factory, db_session_factory) -> None:
     """标签列表、筛选和删除后的聚合结果应保持一致。"""
     folder_id = await _create_folder(async_client, auth_headers_factory, "Tag 过滤")

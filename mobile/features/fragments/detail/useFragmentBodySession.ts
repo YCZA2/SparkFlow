@@ -41,7 +41,7 @@ export function useFragmentBodySession({
   );
 
   const actions = useFragmentEditorActions({
-    fragmentId,
+    fragment,
     editorRef: persistence.editorRef,
     isEditorReady: persistence.isEditorReady,
     selectionText,
@@ -70,7 +70,10 @@ export function useFragmentBodySession({
     mediaAssets: persistence.mediaAssets,
     formattingState,
     isDraftHydrated: persistence.isDraftHydrated,
-    statusLabel: persistence.statusLabel,
+    statusLabel:
+      persistence.isDraftHydrated && persistence.isEditorReady
+        ? persistence.statusLabel
+        : null,
     isUploadingImage: actions.isUploadingImage,
     isAiRunning: actions.isAiRunning,
     saveNow: persistence.saveNow,

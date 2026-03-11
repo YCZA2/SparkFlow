@@ -7,6 +7,8 @@ import {
   saveFragmentBodyDraft,
 } from '@/features/fragments/bodyDrafts';
 import { normalizeBodyMarkdown } from '@/features/fragments/bodyMarkdown';
+import { enqueueLocalFragmentSync } from '@/features/fragments/localFragmentSyncQueue';
+import { saveLocalFragmentDraft } from '@/features/fragments/localDrafts';
 import { peekFragmentCache } from '@/features/fragments/fragmentRepository';
 import {
   resolveDoneAction,
@@ -32,6 +34,17 @@ import {
 import { createLatestOnlySaveController } from './fragmentSaveController';
 
 const AUTOSAVE_DELAY_MS = 800;
+
+function resolveLocalDraftSyncStatus(fragment: Fragment | null): FragmentSyncStatus {
+  /*把本地草稿同步态映射为统一的编辑器保存状态。 */
+  if (!fragment?.is_local_draft) return 'idle';
+  if (fragment.local_sync_status === 'synced') return 'synced';
+  if (fragment.local_sync_status === 'syncing' || fragment.local_sync_status === 'creating') {
+    return 'syncing';
+  }
+  if (fragment.local_sync_status === 'failed_pending_retry') return 'unsynced';
+  return 'idle';
+}
 
 interface UseFragmentEditorPersistenceOptions {
   fragmentId?: string | null;
@@ -82,6 +95,7 @@ export function useFragmentEditorPersistence({
   const commitRemoteFragmentRef = useRef(commitRemoteFragment);
 
   const resolvedFragmentId = fragmentId ?? fragment?.id ?? null;
+  const isLocalFirstFragment = Boolean(fragment?.is_local_draft && fragment.local_id);
   const visibleMediaAssets = useMemo(
     () => mergeVisibleMediaAssets(fragment?.media_assets, runtimeMediaAssets),
     [fragment?.media_assets, runtimeMediaAssets]
@@ -118,6 +132,22 @@ export function useFragmentEditorPersistence({
         const normalizedMarkdown = normalizeBodyMarkdown(nextSnapshot.body_markdown);
         setSyncStatus('syncing');
         try {
+          if (fragmentRef.current.is_local_draft) {
+            await saveLocalFragmentDraft(currentFragmentId, {
+              body_markdown: normalizedMarkdown,
+              plain_text_snapshot: nextSnapshot.plain_text,
+              sync_status: fragmentRef.current.remote_id ? 'syncing' : 'creating',
+              next_retry_at: null,
+            });
+            localDraftMarkdownRef.current = normalizedMarkdown;
+            lastSyncedMarkdownRef.current = normalizedMarkdown;
+            hydratedSnapshotMarkdownRef.current = normalizedMarkdown;
+            hasConfirmedLocalEditRef.current = false;
+            void enqueueLocalFragmentSync(currentFragmentId, { delayMs: AUTOSAVE_DELAY_MS }).catch(
+              () => undefined
+            );
+            return;
+          }
           const updated = await updateFragment(currentFragmentId, {
             body_markdown: normalizedMarkdown,
             media_asset_ids: nextSnapshot.asset_ids,
@@ -188,6 +218,15 @@ export function useFragmentEditorPersistence({
       loaded: false,
     });
     void (async () => {
+      if (isLocalFirstFragment) {
+        if (cancelled) return;
+        setDraftState({
+          fragmentId: resolvedFragmentId,
+          markdown: fragment?.body_markdown ?? '',
+          loaded: true,
+        });
+        return;
+      }
       const draft = await loadFragmentBodyDraft(resolvedFragmentId);
       if (cancelled) return;
       setDraftState({
@@ -199,7 +238,7 @@ export function useFragmentEditorPersistence({
     return () => {
       cancelled = true;
     };
-  }, [resolvedFragmentId]);
+  }, [fragment?.body_markdown, isLocalFirstFragment, resolvedFragmentId]);
 
   useEffect(() => {
     /*只有当详情资源和草稿都稳定后，才真正重建编辑会话。 */
@@ -248,7 +287,9 @@ export function useFragmentEditorPersistence({
       fragment,
       draftMarkdown: draftState.markdown,
       cachedBodyMarkdown:
-        peekFragmentCache(resolvedFragmentId)?.fragment.body_markdown ?? null,
+        fragment.remote_id
+          ? peekFragmentCache(fragment.remote_id)?.fragment.body_markdown ?? null
+          : peekFragmentCache(resolvedFragmentId)?.fragment.body_markdown ?? null,
     });
     hydratedRef.current = true;
     if (hydrationRevisionRef.current !== nextHydrationRevision) {
@@ -262,7 +303,7 @@ export function useFragmentEditorPersistence({
     awaitingInitialSnapshotRef.current = true;
     hasConfirmedLocalEditRef.current = localDraftMarkdownRef.current !== null;
     setSnapshot(hydrated.snapshot);
-    setSyncStatus(hydrated.syncStatus);
+    setSyncStatus(isLocalFirstFragment ? resolveLocalDraftSyncStatus(fragment) : hydrated.syncStatus);
     setIsDraftHydrated(true);
     setEditorKey(`${resolvedFragmentId}:${Date.now()}`);
   }, [
@@ -270,11 +311,18 @@ export function useFragmentEditorPersistence({
     draftState.loaded,
     draftState.markdown,
     fragment,
+    isLocalFirstFragment,
     resolvedFragmentId,
     resolveHydrationRevision,
     snapshot,
     visibleMediaAssets,
   ]);
+
+  useEffect(() => {
+    /*本地草稿的同步状态由资源层回流，这里只负责同步到底部状态文案。 */
+    if (!isLocalFirstFragment) return;
+    setSyncStatus(resolveLocalDraftSyncStatus(fragment));
+  }, [fragment, isLocalFirstFragment]);
 
   useEffect(() => {
     /*正文变更时先固化本地草稿，再同步详情展示态。 */
@@ -292,6 +340,20 @@ export function useFragmentEditorPersistence({
       return;
     }
     localDraftMarkdownRef.current = snapshot.body_markdown;
+    if (isLocalFirstFragment) {
+      void Promise.all([
+        saveLocalFragmentDraft(resolvedFragmentId, {
+          body_markdown: snapshot.body_markdown,
+          plain_text_snapshot: snapshot.plain_text,
+          sync_status: fragment.remote_id ? 'syncing' : 'creating',
+          next_retry_at: null,
+        }),
+        commitOptimisticFragment(
+          buildOptimisticFragmentSnapshot(fragment, snapshot, visibleMediaAssets)
+        ),
+      ]).catch(() => undefined);
+      return;
+    }
     void Promise.all([
       saveFragmentBodyDraft(resolvedFragmentId, snapshot.body_markdown),
       commitOptimisticFragment(
@@ -301,6 +363,7 @@ export function useFragmentEditorPersistence({
   }, [
     commitOptimisticFragment,
     fragment,
+    isLocalFirstFragment,
     resolvedFragmentId,
     snapshot,
     visibleMediaAssets,
@@ -339,8 +402,11 @@ export function useFragmentEditorPersistence({
       hasConfirmedLocalEditRef.current = true;
     }
     setSnapshot(builtSnapshot);
-    setSyncStatus((current) => (current === 'synced' ? 'idle' : current));
-  }, []);
+    setSyncStatus((current) => {
+      if (isLocalFirstFragment) return 'syncing';
+      return current === 'synced' ? 'idle' : current;
+    });
+  }, [isLocalFirstFragment]);
 
   const onEditorReady = useCallback(() => {
     /*记录 bridge 已可用，后续优先走原位 patch 和命令。 */
@@ -374,6 +440,7 @@ export function useFragmentEditorPersistence({
         return;
       }
       await saveControllerRef.current.submitLatest(latestSnapshot);
+      if (isLocalFirstFragment) return;
       const doneAction = resolveDoneAction(null);
       if (!doneAction.ok) {
         throw new Error(doneAction.message ?? '内容未同步');
@@ -382,7 +449,7 @@ export function useFragmentEditorPersistence({
       const doneAction = resolveDoneAction(error);
       throw new Error(doneAction.message ?? '内容未同步');
     }
-  }, [snapshot]);
+  }, [isLocalFirstFragment, snapshot]);
 
   return {
     editorRef,

@@ -3,6 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchFragmentDetail } from '@/features/fragments/api';
 import { loadFragmentBodyDraft } from '@/features/fragments/bodyDrafts';
 import {
+  buildFragmentFromLocalDraft,
+  isLocalFragmentId,
+  loadLocalFragmentDraft,
+  subscribeLocalFragmentDrafts,
+} from '@/features/fragments/localDrafts';
+import { refreshLocalDraftRemoteSnapshot, wakeLocalFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
+import {
+  peekFragmentCache,
   readFragmentCache,
   subscribeFragmentCache,
   writeFragmentCache,
@@ -21,6 +29,12 @@ interface UseFragmentDetailResourceResult {
 
 async function resolveVisibleFragment(fragmentId: string): Promise<Fragment | null> {
   /*读取缓存并叠加本地草稿，让详情首屏优先展示用户最近编辑内容。 */
+  if (isLocalFragmentId(fragmentId)) {
+    const draft = await loadLocalFragmentDraft(fragmentId);
+    if (!draft) return null;
+    const remoteFragment = draft.remote_id ? peekFragmentCache(draft.remote_id)?.fragment ?? null : null;
+    return buildFragmentFromLocalDraft(draft, remoteFragment);
+  }
   const [cachedEntry, draftMarkdown] = await Promise.all([
     readFragmentCache(fragmentId),
     loadFragmentBodyDraft(fragmentId),
@@ -39,6 +53,7 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
     hasVisibleFragmentRef.current = true;
     setFragment(nextFragment);
     setError(null);
+    if (nextFragment.is_local_draft) return;
     await writeFragmentCache(nextFragment);
   }, []);
 
@@ -57,6 +72,21 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
       }
 
       try {
+        if (isLocalFragmentId(fragmentId)) {
+          await wakeLocalFragmentSyncQueue().catch(() => undefined);
+          const draft = await loadLocalFragmentDraft(fragmentId);
+          if (!draft) {
+            throw new Error('本地草稿不存在或已被删除');
+          }
+          if (draft.remote_id) {
+            await refreshLocalDraftRemoteSnapshot(fragmentId).catch(() => undefined);
+          }
+          const nextFragment = await resolveVisibleFragment(fragmentId);
+          hasVisibleFragmentRef.current = true;
+          setError(null);
+          setFragment(nextFragment);
+          return;
+        }
         const [remoteFragment, draftMarkdown] = await Promise.all([
           fetchFragmentDetail(fragmentId),
           loadFragmentBodyDraft(fragmentId),
@@ -117,9 +147,21 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
       })();
     });
 
+    const unsubscribeLocalDrafts = subscribeLocalFragmentDrafts(() => {
+      void (async () => {
+        const cached = await resolveVisibleFragment(fragmentId);
+        if (!cached || cancelled) return;
+        hasVisibleFragmentRef.current = true;
+        setFragment(cached);
+        setError(null);
+        setIsLoading(false);
+      })();
+    });
+
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeLocalDrafts();
     };
   }, [fragmentId, loadRemote]);
 

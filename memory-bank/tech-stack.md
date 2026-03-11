@@ -16,7 +16,7 @@
 | Camera | expo-camera | 提词拍摄页 |
 | Media | expo-media-library | 视频保存到系统相册 |
 | Network | fetch + 自建 API client | 统一 token、错误处理 |
-| Local persistence | AsyncStorage | token / user / backend base URL |
+| Local persistence | AsyncStorage | token / user / backend base URL / fragment cache / local drafts |
 | Backend | FastAPI 0.135 + Uvicorn 0.41 | 模块化单体 |
 | ORM | SQLAlchemy 2.0 + Alembic | PostgreSQL migrations |
 | Scheduling | APScheduler 3.11 | 每日推盘 cron |
@@ -54,7 +54,7 @@
 - `expo-camera`: 拍摄页预览与视频录制。
 - `expo-media-library`: 视频写入系统相册。
 - `expo-document-picker`: 为后续知识库上传预留。
-- `AsyncStorage`: 当前真正参与主流程的本地持久化。
+- `AsyncStorage`: 当前真正参与主流程的本地持久化，承载 fragment cache、`LocalFragmentDraft` 与待上传图片队列。
 
 ### 2.3 Current frontend architecture choice
 

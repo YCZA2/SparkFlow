@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.exceptions import NotFoundError
+from modules.fragments.application import FragmentCommandService
 from modules.fragments.asset_binding_service import FragmentAssetBindingService
 from modules.fragments.derivative_service import FragmentDerivativeService
 from tests.support import FakeLLMProvider, FakeVectorStore
@@ -33,6 +34,14 @@ class ExplodingVectorStore:
         raise RuntimeError("vector unavailable")
 
 
+class StubFileStorage:
+    """提供最小删除接口的文件存储替身。"""
+
+    def delete(self, stored_file) -> None:
+        """删除在本测试中不需要产生副作用。"""
+        return None
+
+
 @pytest.mark.asyncio
 async def test_derivative_service_skips_enrichment_for_small_edits() -> None:
     """小改动时应复用已有摘要标签，只同步向量。"""
@@ -54,6 +63,47 @@ async def test_derivative_service_skips_enrichment_for_small_edits() -> None:
     assert db.commit_calls == 0
     assert vector_store.fragment_docs[fragment.id]["summary"] == "已有摘要"
     assert vector_store.fragment_docs[fragment.id]["tags"] == ["旧标签"]
+
+
+def test_fragment_command_service_allows_empty_manual_body(monkeypatch) -> None:
+    """手动碎片应允许空正文创建，供移动端直接进入编辑器。"""
+    captured_create_kwargs: dict[str, object] = {}
+    create_initial_calls: list[str | None] = []
+
+    def _fake_create(**kwargs):
+        """记录创建载荷并返回最小碎片对象。"""
+        captured_create_kwargs.update(kwargs)
+        return SimpleNamespace(id="frag-empty")
+
+    monkeypatch.setattr("modules.fragments.application.fragment_repository.create", _fake_create)
+
+    service = FragmentCommandService(
+        file_storage=StubFileStorage(),
+        vector_store=FakeVectorStore(),
+        llm_provider=FakeLLMProvider(),
+    )
+    monkeypatch.setattr(service, "_validate_folder_exists", lambda **_: None)
+    monkeypatch.setattr(service.content_service, "collect_body_asset_ids", lambda **_: [])
+    monkeypatch.setattr(
+        service.content_service,
+        "create_initial_content",
+        lambda *, db, fragment, body_markdown: create_initial_calls.append(body_markdown),
+    )
+
+    fragment = service.create_fragment(
+        db=object(),
+        user_id="test-user-001",
+        transcript=None,
+        body_markdown="",
+        source="manual",
+        audio_source=None,
+        audio_file=None,
+    )
+
+    assert fragment.id == "frag-empty"
+    assert captured_create_kwargs["body_markdown"] == ""
+    assert captured_create_kwargs["plain_text_snapshot"] == ""
+    assert create_initial_calls == [""]
 
 
 @pytest.mark.asyncio

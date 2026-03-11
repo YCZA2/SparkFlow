@@ -14,14 +14,14 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 ## 当前移动端已接入的内容能力
 
-- 手动文本碎片会直接走正文内容创建接口 `POST /api/fragments/content`。
-- 手动文本碎片必须提供 `body_markdown`，不再写 `editor_document`。
+- “写下灵感”文本链路已切到 local-first：进入 `/text-note` 时先创建本地 `LocalFragmentDraft`，立即进入编辑器，再后台静默建远端碎片。
+- 本地草稿会聚合进首页/文件夹页列表顶部；若后续绑定了 `remote_id`，列表会自动对远端卡片去重。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
 - 碎片详情页默认进入轻量正文编辑视图，正文改动会自动保存；`transcript`、音频、摘要、标签和 AI 整理工具收口到右上角“更多”底部抽屉。
 - 碎片详情内部已拆成 `detail resource / editor session / sheet / screen actions` 四层：缓存和远端刷新、正文编辑会话、更多内容抽屉、页面动作分别维护；页面层统一只消费 `resource / editor / sheet / actions` 四组 view-model。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
-- 碎片正文详情和列表已接入本地缓存：已访问过的 fragment 会先秒开缓存，再后台静默刷新；未同步正文会保留本地草稿并显示“未同步”状态。
+- 碎片正文详情和列表已接入本地缓存与本地草稿聚合：详情会优先读本地 draft，再叠加远端缓存；未同步正文和待上传图片会在应用启动、输入停顿和页面聚焦时静默重试。
 - 脚本详情页只展示 `body_markdown`，后端负责迁移旧数据。
 - 移动端碎片正文已切到 `WebView + Tiptap` 编辑器，DOM 编辑器内部维持富文本状态，但持久化真值统一为 `body_markdown`，支持标题、列表、引用、粗体、斜体、图片和 AI patch。
 - 碎片详情里的正文初始化、自动保存队列、AI fallback patch 和素材去重都已下沉为独立 helper / hook，纯状态回归统一由 `mobile/tests/*.test.ts` 覆盖。
@@ -228,14 +228,14 @@ http://192.168.31.157:8000
 这次内容层改造后，移动端需要区分两类碎片创建：
 
 - 语音上传：继续走 `POST /api/transcriptions`
-- 手动文本碎片：走 `POST /api/fragments/content`
+- 手动文本碎片：本地先创建 `LocalFragmentDraft`，同步队列再调用 `POST /api/fragments/content` 创建远端空白碎片并 patch 正文
 
 当前返回和展示约定：
 
 - 碎片详情正文读取 `body_markdown`，列表摘要和生成页预览读取 `plain_text_snapshot`
 - `transcript` 表示机器转写原文，不参与正文编辑
 - 碎片详情默认只把正文编辑器作为主界面；原文时间线、音频播放、摘要、标签、来源和删除操作都从右上角“更多”抽屉进入
-- 碎片正文详情采用 stale-while-revalidate：优先读取本地缓存秒开，再后台刷新远端详情；自动保存失败时会保留本地草稿和缓存快照，重新进入详情仍可继续编辑
+- 碎片正文详情采用 local-first + stale-while-revalidate：优先读取本地 draft / 缓存秒开，再后台刷新远端详情；自动保存和图片上传失败时会保留本地草稿与待上传状态，重新进入详情仍可继续编辑
 - AI 编辑接口为 `POST /api/fragments/{id}/ai-edit`
 - AI 编辑 patch 现在返回 `replace_selection` / `insert_after_selection` / `prepend_document`，正文片段字段为 `markdown_snippet`
 - 脚本详情只读取 `body_markdown`
