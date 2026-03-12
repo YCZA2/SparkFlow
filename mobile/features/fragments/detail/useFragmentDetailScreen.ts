@@ -176,10 +176,9 @@ export function useFragmentDetailScreen(
           }
         : null,
       tools: {
+        supportsImages: true,
         isUploadingImage: editor.isUploadingImage,
-        isAiRunning: editor.isAiRunning,
         onInsertImage: editor.onInsertImage,
-        onAiAction: editor.onAiAction,
       },
       actions: {
         isDeleting,

@@ -15,8 +15,14 @@ import {
   appendImageToSnapshot,
   createInitialEditorSessionState,
   reduceEditorSession,
-  shouldPublishOptimisticFragment,
-} from '@/features/fragments/detail/editorSessionState';
+  shouldPublishOptimisticDocument,
+} from '@/features/editor/sessionState';
+import type {
+  EditorDocumentSnapshot,
+  EditorFormattingState,
+  EditorMediaAsset,
+  EditorSurfaceHandle,
+} from '@/features/editor/types';
 import {
   enqueueLocalFragmentSync,
   enqueueRemoteFragmentBodySync,
@@ -31,13 +37,7 @@ import { peekFragmentCache } from '@/features/fragments/fragmentRepository';
 import {
   buildOptimisticFragmentSnapshot,
 } from '@/features/fragments/detail/bodySessionState';
-import type {
-  Fragment,
-  FragmentEditorFormattingState,
-  FragmentEditorSnapshot,
-  MediaAsset,
-} from '@/types/fragment';
-import type { FragmentRichEditorHandle } from '@/features/fragments/components/FragmentRichEditor';
+import type { Fragment, MediaAsset } from '@/types/fragment';
 
 interface UseFragmentBodySessionOptions {
   fragmentId?: string | null;
@@ -61,7 +61,7 @@ function buildLocalMediaAssetFromPendingImage(input: {
   asset: DocumentPicker.DocumentPickerAsset;
   pendingAssetId: string;
   uploadStatus: string;
-}): MediaAsset {
+}): EditorMediaAsset {
   /*把本地待上传图片映射成编辑器运行时可见的媒体素材。 */
   return {
     id: input.pendingAssetId,
@@ -94,11 +94,10 @@ export function useFragmentBodySession({
   const [state, dispatch] = useReducer(
     reduceEditorSession,
     resolvedFragmentId,
-    createInitialEditorSessionState
+    (initialId) => createInitialEditorSessionState(initialId, 'local-first')
   );
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [isAiRunning, setIsAiRunning] = useState(false);
-  const editorRef = useRef<FragmentRichEditorHandle | null>(null);
+  const editorRef = useRef<EditorSurfaceHandle | null>(null);
   const stateRef = useRef(state);
   const fragmentRef = useRef(fragment);
   const commitOptimisticFragmentRef = useRef(commitOptimisticFragment);
@@ -116,12 +115,16 @@ export function useFragmentBodySession({
 
   useEffect(() => {
     /*切换 fragment 时重置整段编辑会话，但保持同页 UI 壳层不变。 */
-    dispatch({ type: 'RESET_SESSION', fragmentId: resolvedFragmentId });
+    dispatch({
+      type: 'RESET_SESSION',
+      documentId: resolvedFragmentId,
+      persistenceMode: 'local-first',
+    });
   }, [resolvedFragmentId]);
 
   useEffect(() => {
     /*远端详情一旦刷新，就把 fragment 和缓存基线一起送入会话状态机。 */
-    dispatch({ type: 'REMOTE_LOADED', fragment });
+    dispatch({ type: 'REMOTE_LOADED', document: fragment });
     dispatch({
       type: 'CACHE_LOADED',
       html: resolveCachedBodyHtml(resolvedFragmentId, fragment),
@@ -153,7 +156,7 @@ export function useFragmentBodySession({
     const currentFragmentId = resolvedFragmentIdRef.current;
     const currentLocalDraftId = localDraftIdRef.current;
     if (!currentFragment || !currentFragmentId) return;
-    if (!shouldPublishOptimisticFragment(state)) return;
+    if (!shouldPublishOptimisticDocument(state)) return;
 
     const optimisticFragment = buildOptimisticFragmentSnapshot(
       currentFragment,
@@ -183,7 +186,7 @@ export function useFragmentBodySession({
     ]).catch(() => undefined);
   }, [state]);
 
-  const getLiveSnapshot = useCallback((): FragmentEditorSnapshot => {
+  const getLiveSnapshot = useCallback((): EditorDocumentSnapshot => {
     /*保存与分享优先读取 bridge 当前快照，避免丢掉去抖窗口内输入。 */
     const snapshot = editorRef.current?.getSnapshot?.();
     return snapshot ?? stateRef.current.snapshot;
@@ -191,7 +194,7 @@ export function useFragmentBodySession({
 
   const persistSnapshotLocally = useCallback(
     async (
-      snapshot: FragmentEditorSnapshot,
+      snapshot: EditorDocumentSnapshot,
       options?: { enqueueRemote?: boolean; forceRemote?: boolean }
     ): Promise<void> => {
       /*把最新快照先稳稳落到本地，再按触发点决定是否进入远端同步队列。 */
@@ -255,17 +258,17 @@ export function useFragmentBodySession({
     []
   );
 
-  const onSnapshotChange = useCallback((snapshot: FragmentEditorSnapshot) => {
+  const onSnapshotChange = useCallback((snapshot: EditorDocumentSnapshot) => {
     /*bridge 输出的标准化快照直接进入会话状态机。 */
     dispatch({ type: 'SNAPSHOT_CHANGED', snapshot });
   }, []);
 
   const onSelectionChange = useCallback((text: string) => {
-    /*只同步当前选区纯文本，供 AI patch 围绕局部上下文工作。 */
+    /*只同步当前选区纯文本，保持会话层选区状态与编辑器一致。 */
     dispatch({ type: 'SELECTION_CHANGED', text });
   }, []);
 
-  const onFormattingStateChange = useCallback((formattingState: FragmentEditorFormattingState) => {
+  const onFormattingStateChange = useCallback((formattingState: EditorFormattingState) => {
     /*把 DOM 工具栏态收敛进 session，页面层只消费当前 view-model。 */
     dispatch({ type: 'FORMATTING_CHANGED', formattingState });
   }, []);
@@ -334,11 +337,6 @@ export function useFragmentBodySession({
     }
   }, [getLiveSnapshot]);
 
-  const onAiAction = useCallback(async (_instruction: 'polish' | 'shorten' | 'expand' | 'title' | 'script_seed') => {
-    /*AI patch 本期停用，保留异步签名避免页面层额外分支。 */
-    setIsAiRunning(false);
-  }, []);
-
   const saveNow = useCallback(async () => {
     /*离页前先落本地，再把需要上云的内容交给后台同步队列。 */
     const latestSnapshot = getLiveSnapshot();
@@ -401,7 +399,6 @@ export function useFragmentBodySession({
     isDraftHydrated: state.isDraftHydrated,
     statusLabel,
     isUploadingImage,
-    isAiRunning,
     saveNow,
     onEditorBlur,
     onEditorReady,
@@ -409,6 +406,5 @@ export function useFragmentBodySession({
     onSelectionChange,
     onFormattingStateChange,
     onInsertImage,
-    onAiAction,
   };
 }

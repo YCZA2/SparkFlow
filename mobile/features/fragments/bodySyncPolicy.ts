@@ -1,7 +1,7 @@
-import { normalizeBodyHtml } from '@/features/fragments/bodyMarkdown';
+import { normalizeBodyHtml } from '@/features/editor/html';
+import type { EditorDocumentSnapshot } from '@/features/editor/types';
 import type {
   Fragment,
-  FragmentEditorSnapshot,
   LocalFragmentDraft,
   LocalFragmentSyncStatus,
   MediaAsset,
@@ -20,7 +20,7 @@ function areAssetIdsEqual(left: string[], right: string[]): boolean {
 /*只在正文或素材真正偏离远端基线时，才允许触发远端同步。 */
 export function shouldTriggerRemoteSync(input: {
   fragment: Fragment;
-  snapshot: FragmentEditorSnapshot;
+  snapshot: EditorDocumentSnapshot;
   mediaAssets: MediaAsset[];
   baselineRemoteHtml?: string | null;
   baselineMediaAssets?: MediaAsset[] | null;

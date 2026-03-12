@@ -12,18 +12,62 @@ export interface ManagedAppFile {
   source: ManagedAppFileSource;
 }
 
+interface ManagedNativeFile {
+  uri: string;
+  name: string;
+  parentDirectoryUri: string;
+}
+
+interface NativeDirectoryHandle {
+  uri: string;
+  exists: boolean;
+  create: (options?: { idempotent?: boolean; intermediates?: boolean; overwrite?: boolean }) => void;
+  list: () => (Directory | File)[];
+}
+
+interface NativeFileHandle extends ManagedNativeFile {
+  exists: boolean;
+  create: (options?: { intermediates?: boolean; overwrite?: boolean }) => void;
+  write: (content: string | Uint8Array, options?: { encoding?: 'utf8' | 'base64' }) => void;
+  text: () => Promise<string>;
+  delete: () => void;
+  copy: (destination: Directory | File) => void;
+  size: number | null;
+}
+
 const ROOT_DIRECTORY = new Directory(Paths.document, 'sparkflow');
 const FRAGMENTS_DIRECTORY = new Directory(ROOT_DIRECTORY, 'fragments');
 const STAGING_DIRECTORY = new Directory(Paths.cache, 'sparkflow', 'staging');
 const STAGING_IMAGE_DIRECTORY = new Directory(STAGING_DIRECTORY, 'images');
 const STAGING_AUDIO_DIRECTORY = new Directory(STAGING_DIRECTORY, 'audio');
 
+const ROOT_DIRECTORY_URI = `${toDirectoryHandle(ROOT_DIRECTORY).uri}`;
+const FRAGMENTS_DIRECTORY_URI = `${toDirectoryHandle(FRAGMENTS_DIRECTORY).uri}`;
+const STAGING_DIRECTORY_URI = `${toDirectoryHandle(STAGING_DIRECTORY).uri}`;
+const STAGING_IMAGE_DIRECTORY_URI = `${STAGING_DIRECTORY_URI}images/`;
+const STAGING_AUDIO_DIRECTORY_URI = `${STAGING_DIRECTORY_URI}audio/`;
+
+/*确保目录 URI 以 `/` 结尾，避免字符串拼接时出现歧义。 */
+function ensureTrailingSlash(uri: string): string {
+  return uri.endsWith('/') ? uri : `${uri}/`;
+}
+
 /*确保目标目录存在，避免文件读写时反复做空判断。 */
-function ensureDirectory(directory: Directory): Directory {
+function toDirectoryHandle(directory: Directory): NativeDirectoryHandle {
+  return directory as unknown as NativeDirectoryHandle;
+}
+
+function toFileHandle(file: File): NativeFileHandle {
+  return file as unknown as NativeFileHandle;
+}
+
+function ensureDirectoryAsync(directoryUri: string): Promise<string> {
+  const normalizedUri = ensureTrailingSlash(directoryUri);
+  const directory = toDirectoryHandle(new Directory(normalizedUri));
   if (!directory.exists) {
     directory.create({ idempotent: true, intermediates: true });
   }
-  return directory;
+  return Promise.resolve(normalizedUri);
 }
 
 /*把输入名称规整为稳定文件名，避免空格与特殊字符污染路径。 */
@@ -34,54 +78,67 @@ function sanitizeFileName(name: string, fallback: string): string {
 }
 
 /*按片段 id 生成持久化目录，统一承接正文与元信息文件。 */
-function getFragmentDirectory(fragmentId: string): Directory {
-  return ensureDirectory(new Directory(FRAGMENTS_DIRECTORY, fragmentId));
+function getFragmentDirectoryUri(fragmentId: string): string {
+  return `${FRAGMENTS_DIRECTORY_URI}${fragmentId}/`;
 }
 
 /*为单条片段创建 meta 子目录，用于放置草稿和辅助文件。 */
-function getFragmentMetaDirectory(fragmentId: string): Directory {
-  return ensureDirectory(new Directory(getFragmentDirectory(fragmentId), 'meta'));
+function getFragmentMetaDirectoryUri(fragmentId: string): string {
+  return `${getFragmentDirectoryUri(fragmentId)}meta/`;
+}
+
+/*用 URI 构造受管文件句柄，统一原生与 Web 端接口形状。 */
+function createManagedNativeFile(parentDirectoryUri: string, fileName: string): ManagedNativeFile {
+  const normalizedParentUri = ensureTrailingSlash(parentDirectoryUri);
+  return {
+    uri: `${normalizedParentUri}${fileName}`,
+    name: fileName,
+    parentDirectoryUri: normalizedParentUri,
+  };
 }
 
 /*返回片段正式正文文件句柄，供本地镜像持久化基线正文。 */
-export function getFragmentBodyFile(fragmentId: string): File {
-  return new File(getFragmentDirectory(fragmentId), 'body.html');
+export function getFragmentBodyFile(fragmentId: string): ManagedNativeFile {
+  return createManagedNativeFile(getFragmentDirectoryUri(fragmentId), 'body.html');
 }
 
 /*返回远端正文草稿文件句柄，供未同步编辑内容临时落盘。 */
-export function getFragmentDraftBodyFile(fragmentId: string): File {
-  return new File(getFragmentMetaDirectory(fragmentId), 'draft.html');
+export function getFragmentDraftBodyFile(fragmentId: string): ManagedNativeFile {
+  return createManagedNativeFile(getFragmentMetaDirectoryUri(fragmentId), 'draft.html');
 }
 
 /*返回片段目录下的元数据目录，便于后续扩展调试文件。 */
 export function getFragmentMetaPath(fragmentId: string): string {
-  return getFragmentMetaDirectory(fragmentId).uri;
+  return getFragmentMetaDirectoryUri(fragmentId);
 }
 
 /*把文本写入指定文件，并确保父目录已提前准备好。 */
-export async function writeTextFile(file: File, content: string): Promise<string> {
-  ensureDirectory(file.parentDirectory);
-  if (!file.exists) {
-    file.create({ intermediates: true, overwrite: true });
+export async function writeTextFile(file: ManagedNativeFile, content: string): Promise<string> {
+  await ensureDirectoryAsync(file.parentDirectoryUri);
+  const handle = toFileHandle(new File(file.uri));
+  if (!handle.exists) {
+    handle.create({ intermediates: true, overwrite: true });
   }
-  file.write(content);
+  handle.write(content);
   return file.uri;
 }
 
 /*读取文本文件内容，文件缺失时返回 null 而不是抛异常。 */
-export async function readTextFile(file: File): Promise<string | null> {
-  if (!file.exists) {
+export async function readTextFile(file: ManagedNativeFile): Promise<string | null> {
+  const handle = toFileHandle(new File(file.uri));
+  if (!handle.exists) {
     return null;
   }
-  return await file.text();
+  return await handle.text();
 }
 
 /*删除指定文件，供草稿清理和同步成功后的回收使用。 */
-export async function deleteFileIfExists(file: File): Promise<void> {
-  if (!file.exists) {
+export async function deleteFileIfExists(file: ManagedNativeFile): Promise<void> {
+  const handle = toFileHandle(new File(file.uri));
+  if (!handle.exists) {
     return;
   }
-  file.delete();
+  handle.delete();
 }
 
 /*把正式正文写入片段目录，供详情与列表镜像消费。 */
@@ -111,12 +168,12 @@ export async function clearFragmentDraftBodyFile(fragmentId: string): Promise<vo
 
 /*枚举当前本地存在正文草稿的片段 id，用于启动时恢复同步。 */
 export async function listFragmentDraftBodyIds(): Promise<string[]> {
-  ensureDirectory(FRAGMENTS_DIRECTORY);
-  const entries = FRAGMENTS_DIRECTORY.list();
+  await ensureDirectoryAsync(FRAGMENTS_DIRECTORY_URI);
+  const entries = toDirectoryHandle(FRAGMENTS_DIRECTORY).list();
   return entries
     .filter((entry): entry is Directory => entry instanceof Directory)
     .map((directory) => directory.name)
-    .filter((fragmentId) => getFragmentDraftBodyFile(fragmentId).exists);
+    .filter((fragmentId) => toFileHandle(new File(getFragmentDraftBodyFile(fragmentId).uri)).exists);
 }
 
 /*把外部 URI 复制到 staging 目录，统一转换成可控的 app sandbox 文件。 */
@@ -127,21 +184,26 @@ export async function stageExternalFile(input: {
   mimeType: string;
   source: ManagedAppFileSource;
 }): Promise<ManagedAppFile> {
-  const targetDirectory = input.kind === 'audio'
-    ? ensureDirectory(STAGING_AUDIO_DIRECTORY)
-    : ensureDirectory(STAGING_IMAGE_DIRECTORY);
-  const uniqueName = `${Date.now()}-${sanitizeFileName(input.fileName, input.kind === 'audio' ? 'audio.bin' : 'image.bin')}`;
-  const targetFile = new File(targetDirectory, uniqueName);
-  if (targetFile.exists) {
-    targetFile.delete();
+  const targetDirectoryUri = input.kind === 'audio'
+    ? await ensureDirectoryAsync(STAGING_AUDIO_DIRECTORY_URI)
+    : await ensureDirectoryAsync(STAGING_IMAGE_DIRECTORY_URI);
+  const uniqueName = `${Date.now()}-${sanitizeFileName(
+    input.fileName,
+    input.kind === 'audio' ? 'audio.bin' : 'image.bin'
+  )}`;
+  const targetFile = createManagedNativeFile(targetDirectoryUri, uniqueName);
+  const targetHandle = toFileHandle(new File(targetFile.uri));
+  if (targetHandle.exists) {
+    targetHandle.delete();
   }
-  const sourceFile = new File(input.uri);
-  sourceFile.copy(targetFile);
+  const sourceFile = toFileHandle(new File(input.uri));
+  sourceFile.copy(new File(targetFile.uri));
+  const copiedHandle = toFileHandle(new File(targetFile.uri));
   return {
     uri: targetFile.uri,
     name: targetFile.name,
     mimeType: input.mimeType,
-    size: targetFile.size,
+    size: copiedHandle.size ?? 0,
     kind: input.kind,
     source: input.source,
   };
@@ -163,7 +225,10 @@ export async function prepareManagedAudioFile(
   mimeType = 'audio/m4a',
   source: ManagedAppFileSource = 'recording'
 ): Promise<ManagedAppFile> {
-  const normalizedName = sanitizeFileName(fileName ?? uri.split('/').pop() ?? 'recording.m4a', 'recording.m4a');
+  const normalizedName = sanitizeFileName(
+    fileName ?? uri.split('/').pop() ?? 'recording.m4a',
+    'recording.m4a'
+  );
   return await stageExternalFile({
     kind: 'audio',
     uri,
@@ -190,9 +255,11 @@ export async function prepareManagedImageFile(
 
 /*确保根目录与 staging 目录在启动阶段就绪，减少首写时的抖动。 */
 export async function ensureFileRuntimeReady(): Promise<void> {
-  ensureDirectory(ROOT_DIRECTORY);
-  ensureDirectory(FRAGMENTS_DIRECTORY);
-  ensureDirectory(STAGING_DIRECTORY);
-  ensureDirectory(STAGING_IMAGE_DIRECTORY);
-  ensureDirectory(STAGING_AUDIO_DIRECTORY);
+  await Promise.all([
+    ensureDirectoryAsync(ROOT_DIRECTORY_URI),
+    ensureDirectoryAsync(FRAGMENTS_DIRECTORY_URI),
+    ensureDirectoryAsync(STAGING_DIRECTORY_URI),
+    ensureDirectoryAsync(STAGING_IMAGE_DIRECTORY_URI),
+    ensureDirectoryAsync(STAGING_AUDIO_DIRECTORY_URI),
+  ]);
 }

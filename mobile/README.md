@@ -21,11 +21,12 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
 - 碎片详情页默认进入轻量正文编辑视图，正文改动会优先写本地 HTML 草稿；`transcript`、音频、摘要、标签收口到右上角“更多”底部抽屉，AI patch 本期已下线。
-- 碎片详情内部已拆成 `detail resource / editor session / sheet / screen actions` 四层：资源层只负责首次加载远端基线和缓存叠加，编辑会话层以 reducer 驱动的单一 session 内核统一编排 hydrate、本地保存、后台同步、图片插入和桥接状态，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
+- 移动端编辑器已抽出 `features/editor/*` 共享底座：统一承载 HTML helper、editor session reducer、`react-native-enriched` 富文本桥接、toolbar 和页面 scaffold，fragment 与 script 详情共用同一套正文编辑协议。
+- 碎片详情内部现在只保留 `detail resource / local-first editor session / sheet / screen actions` 四层：资源层只负责首次加载远端基线和缓存叠加，编辑会话层只处理本地保存、后台同步和图片插入，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
 - 碎片正文详情和列表已接入本地缓存与本地草稿聚合：详情会优先读本地 HTML draft，再叠加远端缓存；未同步正文和待上传图片会在应用启动、输入停顿、离页和页面聚焦时静默重试。
-- 脚本详情页当前读取 `body_html`，展示层先提取纯文本，后端在导出链路里再负责转换 Markdown。
-- 移动端碎片正文已切到 `react-native-enriched` 原生富文本输入，运行时与本地草稿真值统一为 `body_html`，支持标题、列表、引用、粗体、斜体和图片；Android 与 iOS 16+ 默认通过系统原生编辑菜单触发格式操作，图片和 AI 工具入口收口到右上角“更多”抽屉；AI patch 与 WebView/Tiptap 旧桥接层本期已移除。
+- 脚本详情页已从只读改为 `remote-only` 正文编辑：页面内维持内存态，`blur`、显式完成和应用退后台时会尝试调用 `PATCH /api/scripts/{id}` 保存最新 `body_html`，失败时会停留当前页并提示重试。
+- 移动端正文输入统一使用 `react-native-enriched` 原生富文本；fragment 支持标题、列表、引用、粗体、斜体和图片，script 支持相同文本格式但不支持图片和“更多”抽屉；Android 与 iOS 16+ 默认通过系统原生编辑菜单触发格式操作。
 - 碎片详情里的正文基线解析、自动保存队列、AI fallback patch、图片 fallback 插入和素材去重都已下沉为独立 session helper / reducer，纯状态回归统一由 `mobile/tests/*.test.ts` 覆盖。
 - fragments 列表现在统一从 SQLite 本地镜像读取；首页与文件夹页共享同一套“本地镜像秒开 + 后台刷新 + 订阅回显”策略。
 - 知识库移动端仍是占位入口，还没有完整的 Markdown 编辑和素材管理 UI。
@@ -277,7 +278,7 @@ http://192.168.31.157:8000
 - 碎片详情默认只把正文编辑器作为主界面；原文时间线、音频播放、摘要、标签、来源和删除操作都从右上角“更多”抽屉进入
 - 碎片正文详情采用 local-first：优先读取本地 draft / SQLite 镜像，编辑中不再自动远端刷新当前会话；本地保存和图片上传失败时会保留草稿与待上传状态，重新进入详情仍可继续编辑
 - AI 编辑接口本期停用，不再参与正文链路
-- 脚本详情只读取 `body_html`
+- 脚本详情直接编辑 `body_html`，并保留“一键去拍摄”入口消费当前最新正文
 - 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
 - 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`
 

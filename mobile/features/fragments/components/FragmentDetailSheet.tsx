@@ -19,8 +19,6 @@ import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
 import { formatDate } from '@/utils/date';
 
-type AiInstruction = 'polish' | 'shorten' | 'expand' | 'title' | 'script_seed';
-
 interface FragmentDetailSheetProps {
   visible: boolean;
   content: {
@@ -52,10 +50,9 @@ interface FragmentDetailSheetProps {
     playSegment: (segment: NonNullable<Fragment['speaker_segments']>[number]) => Promise<void>;
   };
   tools: {
+    supportsImages: boolean;
     isUploadingImage: boolean;
-    isAiRunning: boolean;
     onInsertImage: () => Promise<void>;
-    onAiAction: (instruction: AiInstruction) => Promise<void>;
   };
   actions: {
     isDeleting: boolean;
@@ -213,7 +210,9 @@ function AudioTranscriptSection({
 }
 
 function ToolsSection({ tools }: Pick<FragmentDetailSheetProps, 'tools'>) {
-  /*把正文整理动作收口为独立区块，便于后续增删工具入口。 */
+  /*把当前仍真实可用的正文工具收口为独立区块。 */
+  if (!tools.supportsImages) return null;
+
   return (
     <Section title="整理工具">
       <ToolRow
@@ -224,51 +223,6 @@ function ToolsSection({ tools }: Pick<FragmentDetailSheetProps, 'tools'>) {
           void tools.onInsertImage();
         }}
         disabled={tools.isUploadingImage}
-      />
-      <ToolRow
-        icon="sparkles"
-        title={tools.isAiRunning ? 'AI 正在润色' : '润色正文'}
-        subtitle="优化当前正文语气和表达清晰度。"
-        onPress={() => {
-          void tools.onAiAction('polish');
-        }}
-        disabled={tools.isAiRunning}
-      />
-      <ToolRow
-        icon="arrow.down.right.and.arrow.up.left"
-        title="压缩内容"
-        subtitle="把当前内容收紧成更精炼的版本。"
-        onPress={() => {
-          void tools.onAiAction('shorten');
-        }}
-        disabled={tools.isAiRunning}
-      />
-      <ToolRow
-        icon="arrow.up.left.and.arrow.down.right"
-        title="扩写内容"
-        subtitle="为当前内容补充更多铺垫和细节。"
-        onPress={() => {
-          void tools.onAiAction('expand');
-        }}
-        disabled={tools.isAiRunning}
-      />
-      <ToolRow
-        icon="textformat.size"
-        title="生成标题"
-        subtitle="基于当前正文给出一条更聚焦的标题。"
-        onPress={() => {
-          void tools.onAiAction('title');
-        }}
-        disabled={tools.isAiRunning}
-      />
-      <ToolRow
-        icon="document.badge.gearshape"
-        title="脚本草稿"
-        subtitle="先生成一版偏口播结构的正文草稿。"
-        onPress={() => {
-          void tools.onAiAction('script_seed');
-        }}
-        disabled={tools.isAiRunning}
       />
     </Section>
   );

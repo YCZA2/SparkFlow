@@ -107,10 +107,11 @@ flowchart TD
 - `ImportActionSheetProvider` 承载底部 `+` 导入抽屉开关与当前文件夹上下文。
 - `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
+- `features/editor/*` 提供共享正文编辑底座：HTML helper、session reducer、富文本桥接、toolbar 和页面 scaffold；fragment 与 script 详情统一复用这套协议。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
-- `features/fragments/detail/*` 把碎片详情拆成 `resource / editor session / sheet / screen actions` 四层：资源层负责首次远端基线加载与缓存叠加，编辑会话层以 reducer 驱动的单一 session 内核统一编排 hydrate、本地实时保存、后台同步、图片插入和桥接状态，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
+- `features/fragments/detail/*` 把碎片详情拆成 `resource / local-first editor session / sheet / screen actions` 四层：资源层负责首次远端基线加载与缓存叠加，编辑会话层只保留本地草稿、图片插入和后台同步策略，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
-- `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用。
+- `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用；其中 `features/scripts/detail/*` 通过共享 editor 底座实现 `remote-only` 正文编辑与拍摄跳转。
 
 ### 3.4 Local Persistence
 

@@ -24,6 +24,20 @@ export async function fetchScriptDetail(id: string): Promise<Script> {
 }
 
 /**
+ 更新脚本正文、标题或状态。
+ */
+export async function updateScript(
+  id: string,
+  patchPayload: {
+    body_html?: string;
+    title?: string;
+    status?: 'draft' | 'ready' | 'filmed';
+  }
+): Promise<Script> {
+  return patch<Script>(API_ENDPOINTS.SCRIPTS.DETAIL(id), patchPayload);
+}
+
+/**
  读取今日推盘，没有时返回 null。
  */
 export async function fetchDailyPush(): Promise<Script | null> {
@@ -58,5 +72,5 @@ export async function updateScriptStatus(
   id: string,
   status: 'draft' | 'ready' | 'filmed'
 ): Promise<Script> {
-  return patch<Script>(API_ENDPOINTS.SCRIPTS.DETAIL(id), { status });
+  return updateScript(id, { status });
 }
