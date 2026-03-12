@@ -231,6 +231,7 @@ export function FragmentDetailScreen({
                 editorKey={editor.editorKey}
                 editorRef={editor.editorRef}
                 initialBodyMarkdown={editor.initialBodyMarkdown}
+                autoFocus={editor.shouldAutoFocus}
                 mediaAssets={editor.mediaAssets}
                 statusLabel={editor.statusLabel}
                 onEditorReady={editor.onEditorReady}

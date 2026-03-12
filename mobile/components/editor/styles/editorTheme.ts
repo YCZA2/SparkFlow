@@ -62,9 +62,11 @@ export function createEditorBaseCss(): string {
     html, body { margin: 0; min-height: 100%; height: 100%; background: transparent; color: var(--editor-text); font-family: var(--editor-font-family); }
     .tiptap {
       min-height: 100%;
+      height: 100%;
     }
     .ProseMirror {
       min-height: max(360px, 100%);
+      height: 100%;
       padding: 8px 0 180px;
       outline: none;
       font-size: var(--editor-font-size);

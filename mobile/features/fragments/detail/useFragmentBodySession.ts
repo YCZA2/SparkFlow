@@ -67,6 +67,7 @@ export function useFragmentBodySession({
     editorRef: persistence.editorRef,
     editorKey: persistence.editorKey,
     initialBodyMarkdown: persistence.snapshot.body_markdown,
+    shouldAutoFocus: Boolean(fragment?.is_local_draft && !persistence.snapshot.body_markdown.trim()),
     mediaAssets: persistence.mediaAssets,
     formattingState,
     isDraftHydrated: persistence.isDraftHydrated,

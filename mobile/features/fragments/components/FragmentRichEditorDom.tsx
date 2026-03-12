@@ -34,6 +34,7 @@ interface FragmentRichEditorDomProps {
   ref?: React.Ref<FragmentRichEditorHandle>;
   dom?: DOMProps;
   initialBodyMarkdown: string;
+  autoFocus?: boolean;
   mediaAssets: MediaAsset[];
   theme: AppTheme;
   onReady?: () => void;
@@ -74,6 +75,7 @@ const SparkFlowImage = Image.extend({
 export default function FragmentRichEditorDom({
   ref,
   initialBodyMarkdown,
+  autoFocus = false,
   mediaAssets,
   theme,
   onReady,
@@ -117,6 +119,12 @@ export default function FragmentRichEditorDom({
       },
     },
     onCreate: ({ editor }) => {
+      /*新建空白正文时在 DOM ready 后主动聚焦，避免首击落在宿主空白区却看不到光标。 */
+      if (autoFocus) {
+        window.requestAnimationFrame(() => {
+          editor.commands.focus('end', { scrollIntoView: false });
+        });
+      }
       const snapshot = buildEditorSnapshot(editor.getJSON() as Record<string, unknown>);
       latestSnapshotRef.current = snapshot;
       lastSnapshotRef.current = JSON.stringify(snapshot);
@@ -134,6 +142,14 @@ export default function FragmentRichEditorDom({
       emitToolbarState(editor);
     },
   });
+
+  useEffect(() => {
+    /*异步 hydrate 后若仍处在自动聚焦场景，再补一次 focus 保证首屏可输入。 */
+    if (!editor || !autoFocus) return;
+    window.requestAnimationFrame(() => {
+      editor.commands.focus('end', { scrollIntoView: false });
+    });
+  }, [autoFocus, editor]);
 
   useEffect(() => {
     return () => {

@@ -25,6 +25,7 @@ interface FragmentRichEditorProps {
   editorKey: string;
   editorRef: React.RefObject<FragmentRichEditorHandle | null>;
   initialBodyMarkdown: string;
+  autoFocus?: boolean;
   mediaAssets: MediaAsset[];
   statusLabel?: string | null;
   onEditorReady: () => void;
@@ -37,6 +38,7 @@ export function FragmentRichEditor({
   editorKey,
   editorRef,
   initialBodyMarkdown,
+  autoFocus = false,
   mediaAssets,
   statusLabel,
   onEditorReady,
@@ -54,6 +56,7 @@ export function FragmentRichEditor({
           key={editorKey}
           ref={editorRef}
           initialBodyMarkdown={initialBodyMarkdown}
+          autoFocus={autoFocus}
           mediaAssets={mediaAssets}
           theme={theme}
           onReady={onEditorReady}
