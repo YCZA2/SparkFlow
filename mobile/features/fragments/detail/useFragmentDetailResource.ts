@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { fetchFragmentDetail } from '@/features/fragments/api';
-import { loadFragmentBodyDraft } from '@/features/fragments/bodyDrafts';
 import {
   buildFragmentFromLocalDraft,
-  isLocalFragmentId,
-  loadLocalFragmentDraft,
-  subscribeLocalFragmentDrafts,
-} from '@/features/fragments/localDrafts';
+} from '@/features/fragments/localDraftState';
 import { refreshLocalDraftRemoteSnapshot, wakeLocalFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
 import {
-  peekFragmentCache,
-  readFragmentCache,
-  subscribeFragmentCache,
-  writeFragmentCache,
-} from '@/features/fragments/fragmentRepository';
+  isLocalFragmentId,
+  loadLocalFragmentDraft,
+  loadRemoteBodyDraft,
+  peekRemoteFragmentSnapshot,
+  readRemoteFragmentSnapshot,
+  subscribeFragmentStore,
+  subscribeLocalFragmentDrafts,
+  upsertRemoteFragmentSnapshot,
+} from '@/features/fragments/store';
 import { applyDraftToFragment } from '@/features/fragments/fragmentCacheState';
 import type { Fragment } from '@/types/fragment';
 
@@ -32,14 +32,14 @@ async function resolveVisibleFragment(fragmentId: string): Promise<Fragment | nu
   if (isLocalFragmentId(fragmentId)) {
     const draft = await loadLocalFragmentDraft(fragmentId);
     if (!draft) return null;
-    const remoteFragment = draft.remote_id ? peekFragmentCache(draft.remote_id)?.fragment ?? null : null;
+    const remoteFragment = draft.remote_id ? peekRemoteFragmentSnapshot(draft.remote_id) ?? null : null;
     return buildFragmentFromLocalDraft(draft, remoteFragment);
   }
   const [cachedEntry, draftHtml] = await Promise.all([
-    readFragmentCache(fragmentId),
-    loadFragmentBodyDraft(fragmentId),
+    readRemoteFragmentSnapshot(fragmentId),
+    loadRemoteBodyDraft(fragmentId),
   ]);
-  return applyDraftToFragment(cachedEntry?.fragment ?? null, draftHtml);
+  return applyDraftToFragment(cachedEntry ?? null, draftHtml);
 }
 
 export function useFragmentDetailResource(fragmentId?: string | null): UseFragmentDetailResourceResult {
@@ -61,7 +61,7 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
     setFragment(nextFragment);
     setError(null);
     if (nextFragment.is_local_draft) return;
-    await writeFragmentCache(nextFragment);
+    await upsertRemoteFragmentSnapshot(nextFragment);
   }, []);
 
   const loadRemote = useCallback(
@@ -96,9 +96,9 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
         }
         const [remoteFragment, draftHtml] = await Promise.all([
           fetchFragmentDetail(fragmentId),
-          loadFragmentBodyDraft(fragmentId),
+          loadRemoteBodyDraft(fragmentId),
         ]);
-        await writeFragmentCache(remoteFragment);
+        await upsertRemoteFragmentSnapshot(remoteFragment);
         hasVisibleFragmentRef.current = true;
         setError(null);
         setFragment(applyDraftToFragment(remoteFragment, draftHtml));
@@ -142,7 +142,7 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
 
     void hydrate();
 
-    const unsubscribe = subscribeFragmentCache(() => {
+    const unsubscribe = subscribeFragmentStore(() => {
       void (async () => {
         const cached = await resolveVisibleFragment(fragmentId);
         if (!cached || cancelled) return;

@@ -6,7 +6,7 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import type { Script, ScriptMode, ScriptStatus } from '@/types/script';
-import { extractPlainTextFromHtml } from '@/features/fragments/bodyMarkdown';
+import { extractPlainTextFromHtml } from '@/features/editor/html';
 import { formatDate } from '@/utils/date';
 import { useAppTheme } from '@/theme/useAppTheme';
 

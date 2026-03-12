@@ -8,18 +8,18 @@ import {
   fetchFragments as fetchFragmentsRemote,
 } from '@/features/fragments/api';
 import {
-  listLocalFragmentDrafts,
   mergeLocalDraftsIntoFragments,
-  subscribeLocalFragmentDrafts,
-} from '@/features/fragments/localDrafts';
+} from '@/features/fragments/localDraftState';
 import { wakeLocalFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
 import {
-  readFragmentCache,
-  readFragmentListCache,
-  subscribeFragmentCache,
-  writeFragmentCache,
-  writeFragmentListCache,
-} from '@/features/fragments/fragmentRepository';
+  listLocalFragmentDrafts,
+  readCachedRemoteFragmentList,
+  readRemoteFragmentSnapshot,
+  subscribeFragmentStore,
+  subscribeLocalFragmentDrafts,
+  upsertRemoteFragmentSnapshot,
+  writeCachedRemoteFragmentList,
+} from '@/features/fragments/store';
 import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
 import type {
   Fragment,
@@ -49,7 +49,7 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
   }, [localDrafts, remoteFragments]);
 
   const applyCachedList = useCallback(async (): Promise<boolean> => {
-    const cached = await readFragmentListCache(resolvedFolderId);
+    const cached = await readCachedRemoteFragmentList(resolvedFolderId);
     if (!cached) return false;
     setRemoteFragments(cached.items);
     setError(null);
@@ -77,7 +77,7 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
         const nextItems = response.items || [];
         setRemoteFragments(nextItems);
         setError(null);
-        await writeFragmentListCache(nextItems, resolvedFolderId);
+        await writeCachedRemoteFragmentList(nextItems, resolvedFolderId);
       } catch (err) {
         const nextError = err instanceof Error ? err.message : '加载失败';
         setError(nextError);
@@ -104,9 +104,9 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
 
     void hydrate();
 
-    const unsubscribe = subscribeFragmentCache(() => {
+    const unsubscribe = subscribeFragmentStore(() => {
       void (async () => {
-        const cached = await readFragmentListCache(resolvedFolderId);
+        const cached = await readCachedRemoteFragmentList(resolvedFolderId);
         if (!cached || cancelled) {
           return;
         }
@@ -186,12 +186,12 @@ export function useSelectedFragments(fragmentIds?: string | string[]) {
         setError(null);
         const detailList = await Promise.all(
           ids.map(async (id) => {
-            const cached = await readFragmentCache(id);
-            if (cached?.fragment) {
-              return cached.fragment;
+            const cached = await readRemoteFragmentSnapshot(id);
+            if (cached) {
+              return cached;
             }
             const fragment = await fetchFragmentDetail(id);
-            await writeFragmentCache(fragment);
+            await upsertRemoteFragmentSnapshot(fragment);
             return fragment;
           })
         );

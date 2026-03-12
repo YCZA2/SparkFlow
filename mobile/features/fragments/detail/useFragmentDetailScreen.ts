@@ -3,12 +3,15 @@ import { Alert, Platform, Share } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 
 import { deleteFragment } from '@/features/fragments/api';
-import { clearFragmentBodyDraft } from '@/features/fragments/bodyDrafts';
 import { useFragmentAudioPlayer } from '@/features/fragments/hooks/useFragmentAudioPlayer';
-import { deleteLocalFragmentDraft, isLocalFragmentId } from '@/features/fragments/localDrafts';
 import { shouldIgnoreMissingRemoteDeleteError } from '@/features/fragments/localDraftSession';
 import { getActiveSegmentIndex } from '@/features/fragments/presenters/speakerSegments';
-import { removeFragmentCache } from '@/features/fragments/fragmentRepository';
+import {
+  clearRemoteBodyDraft,
+  deleteLocalFragmentDraft,
+  isLocalFragmentId,
+  removeRemoteFragmentSnapshot,
+} from '@/features/fragments/store';
 
 import { useFragmentBodySession } from './useFragmentBodySession';
 import { useFragmentDetailResource } from './useFragmentDetailResource';
@@ -87,14 +90,17 @@ export function useFragmentDetailScreen(
             }
           }
           await Promise.all([
-            removeFragmentCache(fragment.remote_id),
-            clearFragmentBodyDraft(fragment.remote_id),
+            removeRemoteFragmentSnapshot(fragment.remote_id),
+            clearRemoteBodyDraft(fragment.remote_id),
           ]);
         }
         await deleteLocalFragmentDraft(fragmentId);
       } else {
         await deleteFragment(fragmentId);
-        await Promise.all([removeFragmentCache(fragmentId), clearFragmentBodyDraft(fragmentId)]);
+        await Promise.all([
+          removeRemoteFragmentSnapshot(fragmentId),
+          clearRemoteBodyDraft(fragmentId),
+        ]);
       }
       setIsSheetOpen(false);
       exitAfterDelete();

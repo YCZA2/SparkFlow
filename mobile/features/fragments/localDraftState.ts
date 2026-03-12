@@ -1,4 +1,4 @@
-import { extractPlainTextFromHtml } from '@/features/fragments/bodyMarkdown';
+import { extractPlainTextFromHtml } from '@/features/editor/html';
 import type {
   Fragment,
   LocalFragmentDraft,

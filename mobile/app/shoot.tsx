@@ -12,7 +12,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Text } from '@/components/Themed';
 import { TeleprompterOverlay } from '@/components/TeleprompterOverlay';
 import { useVideoRecorder } from '@/features/recording/hooks';
-import { extractPlainTextFromHtml } from '@/features/fragments/bodyMarkdown';
+import { extractPlainTextFromHtml } from '@/features/editor/html';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 const FALLBACK_TEXT =

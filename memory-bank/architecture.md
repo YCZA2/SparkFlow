@@ -57,7 +57,7 @@ flowchart LR
 
 当前主要页面：
 
-- `index.tsx`: 实际首页，展示碎片列表、分组、选择态和底部快捷操作。
+- `index.tsx`: 当前实际首页，展示文件夹列表与“全部”系统视图入口；碎片列表主视图下沉到 `folder/[id].tsx`。
 - `record-audio.tsx`: 录音与上传页。
 - `text-note.tsx`: 手动文本碎片创建入口页；进入后会先创建本地 draft 并立即挂载碎片详情编辑器，再后台静默建单与收敛远端。
 - `fragment/[id].tsx`: 单条碎片详情。
@@ -109,6 +109,7 @@ flowchart TD
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
 - `features/editor/*` 提供共享正文编辑底座：HTML helper、session reducer、富文本桥接、toolbar 和页面 scaffold；fragment 与 script 详情统一复用这套协议。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
+- `features/fragments/store/*` 是 fragment 本地数据的唯一入口：`remoteFragments` 负责远端快照与订阅，`localDraftStore` 负责本地草稿，`remoteBodyDrafts` 负责远端正文草稿，`pendingOperations` 负责同步队列状态，`legacyMigration` / `runtime` 负责旧缓存迁移与启动准备。
 - `features/fragments/detail/*` 把碎片详情拆成 `resource / local-first editor session / sheet / screen actions` 四层：资源层负责首次远端基线加载与缓存叠加，编辑会话层只保留本地草稿、图片插入和后台同步策略，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
 - `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用；其中 `features/scripts/detail/*` 通过共享 editor 底座实现 `remote-only` 正文编辑与拍摄跳转。
@@ -268,7 +269,7 @@ flowchart TD
 - `fragments.transcript` 保存机器转写原文，`fragments.body_html` 保存唯一正式正文的 HTML，`fragments.plain_text_snapshot` 保存派生纯文本快照
 - 非语音碎片必须直接写入 `body_html`，不再把 `transcript` 当作正式正文来源
 - 移动端碎片详情正文改为 `react-native-enriched` 原生富文本输入；前端运行时、本地草稿和同步队列统一消费 HTML 快照，AI patch 本期停用
-- 移动端碎片详情的本地缓存和展示态真值允许分离：`fragmentRepository` 只持久化 fragment/list 快照与订阅广播，本地草稿覆盖逻辑只存在于 detail resource 层，不直接回写服务端真值
+- 移动端碎片详情的本地缓存和展示态真值允许分离：`features/fragments/store/*` 统一持久化 fragment/list 快照、远端正文草稿、本地 draft 和 pending ops；detail resource 只负责把这些本地真值组合成当前可见态，不直接回写服务端真值
 - 详情编辑会话的纯逻辑已下沉到 `editorSessionState.ts`、`bodySessionState.ts` 和 `fragmentSaveController.ts`：`editorSessionState.ts` 负责 session reducer、基线解析、自动保存触发条件与图片 fallback 规则，`bodySessionState.ts` 继续承载 Markdown 快照构建、远端刷新判定、AI fallback patch 和乐观展示态合成，`fragmentSaveController.ts` 保证自动保存只串行提交最后一版快照
 - `scripts.body_html` / `knowledge_docs.body_markdown` 分别保存脚本 HTML 正文与知识库 Markdown 正文
 - 媒体资源表：`media_assets` / `content_media_links`，对象元数据保存 `storage_provider` / `bucket` / `object_key`
@@ -538,7 +539,7 @@ sequenceDiagram
 - 碎片管理现在分为“真实文件夹 + 全部系统视图”两层：文件夹模块负责容器管理，碎片模块负责内容与归类变更。
 - `GET /api/fragments` 当前已支持按 `folder_id` 和单个 `tag` 精确过滤；`GET /api/fragments/tags` 提供热门 Tag 与模糊建议能力。
 - Tag 对外仍通过 `fragments.tags` 返回，后端使用 `fragment_tags` 作为 Tag 聚合、建议与过滤的查询主表。
-- 移动端当前是“碎片列表优先”的首页结构，不是 PRD 里最初设想的 tab 首页。
+- 移动端当前是“文件夹入口优先”的首页结构，不是 PRD 里最初设想的 tab 首页；碎片列表主视图仍是核心工作区，但入口已经下沉到文件夹页。
 - 知识库后端已可用，移动端入口仍是占位页。
 - 每日推盘后端已可运行并带有定时任务，但前端主入口尚未完整消费这条能力。
 - 当前最稳定的本地开发方式是根目录执行 `bash scripts/dev-mobile.sh`，脚本会自动确保 Docker PostgreSQL、后端和 Expo 依次就绪。

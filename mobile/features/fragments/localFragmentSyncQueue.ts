@@ -2,36 +2,28 @@ import {
   extractAssetIdsFromHtml,
   extractPlainTextFromHtml,
   normalizeBodyHtml,
-} from '@/features/fragments/bodyMarkdown';
+} from '@/features/editor/html';
 import { createFragment, fetchFragmentDetail, updateFragment, uploadImageAsset } from '@/features/fragments/api';
 import {
-  clearFragmentBodyDraft,
-  listFragmentBodyDraftIds,
-  loadFragmentBodyDraft,
-} from '@/features/fragments/bodyDrafts';
+  clearRemoteBodyDraft,
+  ensureFragmentStoreReady,
+  listLocalFragmentDrafts,
+  listRemoteBodyDraftIds,
+  loadLocalFragmentDraft,
+  loadRemoteBodyDraft,
+  peekRemoteFragmentSnapshot,
+  removeRemoteFragmentSnapshot,
+  saveLocalFragmentDraft,
+  updatePendingOperationStatus,
+  upsertPendingOperation,
+  upsertRemoteFragmentSnapshot,
+  bindRemoteFragmentId,
+  markPendingImageUploaded,
+  updateLocalFragmentSyncState,
+} from '@/features/fragments/store';
 import { resolveRetryDelayMs } from '@/features/fragments/localDraftState';
 import { shouldRestoreLocalDraftOnLaunch } from '@/features/fragments/bodySyncPolicy';
 import { shouldRecoverMissingRemoteBinding } from '@/features/fragments/localDraftSession';
-import {
-  peekFragmentCache,
-  removeFragmentCache,
-  writeFragmentCache,
-} from '@/features/fragments/fragmentRepository';
-import {
-  bindRemoteFragmentId,
-  listLocalFragmentDrafts,
-  loadLocalFragmentDraft,
-  markPendingImageUploaded,
-  saveLocalFragmentDraft,
-  updateLocalFragmentSyncState,
-} from '@/features/fragments/localDrafts';
-import {
-  updatePendingOperationStatus,
-  upsertPendingOperation,
-} from '@/features/core/sync';
-import {
-  ensureFragmentLocalMirrorReady,
-} from '@/features/fragments/store/localMirror';
 
 const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const runningDraftIds = new Set<string>();
@@ -80,7 +72,7 @@ async function ensureRemoteFragment(localId: string): Promise<string> {
     },
     draft.folder_id ?? undefined
   );
-  await writeFragmentCache(fragment);
+  await upsertRemoteFragmentSnapshot(fragment);
   await bindRemoteFragmentId(localId, fragment.id);
   return fragment.id;
 }
@@ -92,7 +84,7 @@ async function recoverMissingRemoteBinding(localId: string, staleRemoteId: strin
     sync_status: 'creating',
     next_retry_at: null,
   });
-  await removeFragmentCache(staleRemoteId);
+  await removeRemoteFragmentSnapshot(staleRemoteId);
   return await ensureRemoteFragment(localId);
 }
 
@@ -173,7 +165,7 @@ async function syncLocalFragmentDraft(localId: string): Promise<void> {
         remoteId = await recoverMissingRemoteBinding(localId, remoteId);
       }
     }
-    await writeFragmentCache(updatedFragment);
+    await upsertRemoteFragmentSnapshot(updatedFragment);
     await updateLocalFragmentSyncState(localId, 'synced', {
       body_html: nextHtml,
       plain_text_snapshot: extractPlainTextFromHtml(nextHtml),
@@ -219,7 +211,7 @@ function scheduleRemoteDraftRetry(fragmentId: string, delayMs: number): void {
 
 async function syncRemoteFragmentBodyDraft(fragmentId: string): Promise<void> {
   /*把远端碎片的本地 HTML 草稿静默推到服务端，并在成功后清理草稿。 */
-  const html = await loadFragmentBodyDraft(fragmentId);
+  const html = await loadRemoteBodyDraft(fragmentId);
   if (!html) return;
   await upsertPendingOperation({
     id: buildRemoteBodyPendingOpId(fragmentId),
@@ -233,8 +225,8 @@ async function syncRemoteFragmentBodyDraft(fragmentId: string): Promise<void> {
     body_html: html,
     media_asset_ids: extractAssetIdsFromHtml(html),
   });
-  await writeFragmentCache(updatedFragment);
-  await clearFragmentBodyDraft(fragmentId);
+  await upsertRemoteFragmentSnapshot(updatedFragment);
+  await clearRemoteBodyDraft(fragmentId);
   await updatePendingOperationStatus(buildRemoteBodyPendingOpId(fragmentId), 'succeeded', {
     retryCount: 0,
     nextRetryAt: null,
@@ -275,7 +267,7 @@ export async function enqueueRemoteFragmentBodySync(
   options?: { delayMs?: number; force?: boolean }
 ): Promise<void> {
   /*把远端碎片正文草稿加入后台同步队列，不阻塞当前编辑会话。 */
-  const html = await loadFragmentBodyDraft(fragmentId);
+  const html = await loadRemoteBodyDraft(fragmentId);
   if (!html) return;
   const delayMs = options?.force ? 0 : options?.delayMs ?? 0;
   if (delayMs > 0) {
@@ -303,7 +295,7 @@ export async function enqueueRemoteFragmentBodySync(
 
 export async function restoreLocalFragmentSyncQueue(): Promise<void> {
   /*应用启动时恢复未收敛草稿和待上传图片的后台同步。 */
-  await ensureFragmentLocalMirrorReady();
+  await ensureFragmentStoreReady();
   const drafts = await listLocalFragmentDrafts();
   await Promise.all(
     drafts.map(async (draft) => {
@@ -315,8 +307,8 @@ export async function restoreLocalFragmentSyncQueue(): Promise<void> {
 
 export async function restoreRemoteFragmentBodySyncQueue(): Promise<void> {
   /*应用启动时恢复远端碎片的本地正文草稿同步。 */
-  await ensureFragmentLocalMirrorReady();
-  const fragmentIds = await listFragmentBodyDraftIds();
+  await ensureFragmentStoreReady();
+  const fragmentIds = await listRemoteBodyDraftIds();
   await Promise.all(
     fragmentIds.map(async (fragmentId) => {
       await enqueueRemoteFragmentBodySync(fragmentId, { delayMs: 1200 });
@@ -326,7 +318,7 @@ export async function restoreRemoteFragmentBodySyncQueue(): Promise<void> {
 
 export async function wakeLocalFragmentSyncQueue(): Promise<void> {
   /*列表和详情聚焦时只唤醒到期草稿，避免每次进入页面都全量重试。 */
-  await ensureFragmentLocalMirrorReady();
+  await ensureFragmentStoreReady();
   const drafts = await listLocalFragmentDrafts();
   await Promise.all(
     drafts.map(async (draft) => {
@@ -340,8 +332,8 @@ export async function wakeLocalFragmentSyncQueue(): Promise<void> {
 
 export async function wakeRemoteFragmentBodySyncQueue(): Promise<void> {
   /*页面回前台或离页时尝试收敛远端正文草稿，不覆盖当前编辑输入。 */
-  await ensureFragmentLocalMirrorReady();
-  const fragmentIds = await listFragmentBodyDraftIds();
+  await ensureFragmentStoreReady();
+  const fragmentIds = await listRemoteBodyDraftIds();
   await Promise.all(
     fragmentIds.map(async (fragmentId) => {
       await enqueueRemoteFragmentBodySync(fragmentId, { force: true });
@@ -353,10 +345,10 @@ export async function refreshLocalDraftRemoteSnapshot(localId: string): Promise<
   /*已绑定 remote_id 的本地草稿允许静默刷新远端详情，供详情页后台收敛。 */
   const draft = await loadLocalFragmentDraft(localId);
   if (!draft?.remote_id) return;
-  const cached = peekFragmentCache(draft.remote_id)?.fragment;
+  const cached = peekRemoteFragmentSnapshot(draft.remote_id);
   if (cached) {
-    await writeFragmentCache(cached);
+    await upsertRemoteFragmentSnapshot(cached);
   }
   const remoteFragment = await fetchFragmentDetail(draft.remote_id);
-  await writeFragmentCache(remoteFragment);
+  await upsertRemoteFragmentSnapshot(remoteFragment);
 }

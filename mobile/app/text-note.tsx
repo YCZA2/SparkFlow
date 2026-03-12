@@ -4,7 +4,7 @@ import { type Href, Stack, useLocalSearchParams } from 'expo-router';
 
 import { ScreenState } from '@/components/ScreenState';
 import { FragmentDetailScreen } from '@/features/fragments/detail/FragmentDetailScreen';
-import { createLocalFragmentDraft } from '@/features/fragments/localDrafts';
+import { createLocalFragmentDraft } from '@/features/fragments/store';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 export default function TextNoteScreen() {

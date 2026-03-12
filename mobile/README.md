@@ -35,8 +35,8 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 - `mobile/features/core/db/`：SQLite 连接、schema、迁移和 Drizzle 查询入口
 - `mobile/features/core/files/`：fragment 正文文件、远端正文草稿和图片/音频 staging 文件管理
-- `mobile/features/core/sync/`：pending ops 写入与同步状态更新入口
-- `mobile/features/fragments/store/`：fragments 本地镜像仓储，负责旧 `AsyncStorage` 缓存迁移、SQLite upsert 和文件正文读写
+- `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `remoteFragments / localDrafts / remoteBodyDrafts / pendingOperations / legacyMigration / runtime` 拆分职责，并统一从 `store/index.ts` 对外导出
+- `mobile/features/editor/html.ts`：唯一 HTML / 纯文本快照 helper 真值源，fragment 与 script 共用
 
 当前 fragments 读写规则：
 
@@ -44,6 +44,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 详情页先读 SQLite 元数据与本地 `body.html`
 - 远端碎片未同步正文继续写入独立草稿文件，不覆盖远端基线正文文件
 - 本地 manual fragment 正文直接写本地文件，后台同步成功后回填 `remote_id`
+- pending ops 不再额外经过 `features/core/sync/*` 包装层，而是直接由 `features/fragments/store/*` 统一维护
 
 ## 一、推荐用法：统一走 `scripts/dev-mobile.sh`
 

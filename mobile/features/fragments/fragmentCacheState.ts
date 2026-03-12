@@ -1,6 +1,6 @@
 import type { Fragment } from '@/types/fragment';
 
-import { extractPlainTextFromHtml, normalizeBodyHtml } from './bodyMarkdown';
+import { extractPlainTextFromHtml, normalizeBodyHtml } from '@/features/editor/html';
 
 export function applyDraftToFragment(fragment: Fragment | null, draftHtml: string | null): Fragment | null {
   /*仅把本地草稿叠加到展示态 fragment，不覆盖本地镜像里的远端基线。 */

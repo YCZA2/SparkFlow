@@ -4,9 +4,9 @@ import * as DocumentPicker from 'expo-document-picker';
 
 import { uploadImageAsset } from '@/features/fragments/api';
 import {
-  loadFragmentBodyDraft,
-  saveFragmentBodyDraft,
-} from '@/features/fragments/bodyDrafts';
+  loadRemoteBodyDraft,
+  saveRemoteBodyDraft,
+} from '@/features/fragments/store';
 import {
   resolveLocalDraftPersistStatus,
   shouldTriggerRemoteSync,
@@ -30,10 +30,10 @@ import {
 import {
   attachPendingLocalImage,
   loadLocalFragmentDraft,
+  peekRemoteFragmentSnapshot,
   saveLocalFragmentDraft,
-} from '@/features/fragments/localDrafts';
+} from '@/features/fragments/store';
 import { resolveLocalDraftSession } from '@/features/fragments/localDraftSession';
-import { peekFragmentCache } from '@/features/fragments/fragmentRepository';
 import {
   buildOptimisticFragmentSnapshot,
 } from '@/features/fragments/detail/bodySessionState';
@@ -52,9 +52,9 @@ function resolveCachedBodyHtml(
   /*按当前会话和已绑定远端 id 读取最近一次可用的正文缓存。 */
   if (!fragmentId || !fragment) return null;
   if (fragment.remote_id) {
-    return peekFragmentCache(fragment.remote_id)?.fragment.body_html ?? null;
+    return peekRemoteFragmentSnapshot(fragment.remote_id)?.body_html ?? null;
   }
-  return peekFragmentCache(fragmentId)?.fragment.body_html ?? null;
+  return peekRemoteFragmentSnapshot(fragmentId)?.body_html ?? null;
 }
 
 function buildLocalMediaAssetFromPendingImage(input: {
@@ -141,7 +141,7 @@ export function useFragmentBodySession({
     void (async () => {
       const nextDraftHtml = localDraftSession.localDraftId
         ? (await loadLocalFragmentDraft(localDraftSession.localDraftId))?.body_html ?? null
-        : await loadFragmentBodyDraft(resolvedFragmentId);
+        : await loadRemoteBodyDraft(resolvedFragmentId);
       if (cancelled) return;
       dispatch({ type: 'LOCAL_DRAFT_LOADED', html: nextDraftHtml });
     })();
@@ -181,7 +181,7 @@ export function useFragmentBodySession({
     }
 
     void Promise.all([
-      saveFragmentBodyDraft(currentFragmentId, state.snapshot.body_html),
+      saveRemoteBodyDraft(currentFragmentId, state.snapshot.body_html),
       commitOptimisticFragmentRef.current(optimisticFragment),
     ]).catch(() => undefined);
   }, [state]);
@@ -242,7 +242,7 @@ export function useFragmentBodySession({
         return;
       }
 
-      await saveFragmentBodyDraft(currentFragmentId, snapshot.body_html);
+      await saveRemoteBodyDraft(currentFragmentId, snapshot.body_html);
       await commitOptimisticFragmentRef.current({
         ...currentFragment,
         body_html: snapshot.body_html,

@@ -5,7 +5,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { buildFragmentSections, type FragmentSection } from '@/features/fragments/fragmentListState';
 import { useFragmentSelection } from '@/features/fragments/hooks';
 import { useFragments } from '@/features/fragments/hooks/useFragments';
-import { prewarmFragmentDetailCache } from '@/features/fragments/fragmentRepository';
+import { prewarmRemoteFragmentSnapshot } from '@/features/fragments/store';
 import type { Fragment } from '@/types/fragment';
 
 interface UseFragmentListScreenStateOptions {
@@ -64,7 +64,7 @@ export function useFragmentListScreenState({
       }
 
       if (!fragment.is_local_draft) {
-        void prewarmFragmentDetailCache(fragment);
+        void prewarmRemoteFragmentSnapshot(fragment);
       }
       router.push(`/fragment/${fragment.id}`);
     },
