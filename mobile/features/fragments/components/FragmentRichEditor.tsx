@@ -61,7 +61,6 @@ export function FragmentRichEditor({
           onSelectionChange={onSelectionChange}
           onFormattingStateChange={onFormattingStateChange}
           dom={{
-            matchContents: true,
             style: styles.domSurface,
           }}
         />
@@ -79,7 +78,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   domSurface: {
+    flex: 1,
     minHeight: 520,
+    height: '100%',
     width: '100%',
     backgroundColor: 'transparent',
   },

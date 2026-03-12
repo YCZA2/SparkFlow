@@ -59,9 +59,12 @@ export function createEditorCssVars(theme: AppTheme): string {
 export function createEditorBaseCss(): string {
   return `
     * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; background: transparent; color: var(--editor-text); font-family: var(--editor-font-family); }
+    html, body { margin: 0; min-height: 100%; height: 100%; background: transparent; color: var(--editor-text); font-family: var(--editor-font-family); }
+    .tiptap {
+      min-height: 100%;
+    }
     .ProseMirror {
-      min-height: 360px;
+      min-height: max(360px, 100%);
       padding: 8px 0 180px;
       outline: none;
       font-size: var(--editor-font-size);

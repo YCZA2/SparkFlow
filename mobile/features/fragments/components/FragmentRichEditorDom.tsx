@@ -141,6 +141,21 @@ export default function FragmentRichEditorDom({
     };
   }, []);
 
+  function handleSurfacePress(event: React.SyntheticEvent<HTMLDivElement>): void {
+    /*点击编辑器空白区域时补 focus，让空白纸面与已有文字区域拥有一致输入行为。 */
+    if (!editor) return;
+    const target = event.target;
+    const targetElement =
+      target instanceof HTMLElement
+        ? target
+        : target instanceof Node
+          ? target.parentElement
+          : null;
+    const proseMirrorElement = targetElement?.closest('.ProseMirror');
+    if (proseMirrorElement && targetElement && targetElement !== proseMirrorElement) return;
+    editor.commands.focus('end', { scrollIntoView: false });
+  }
+
   function scheduleSnapshot(document: Record<string, unknown>): void {
     /*输入时在 DOM 内构造 Markdown 快照，并以短延迟节流后再过桥。 */
     const snapshot = buildEditorSnapshot(document);
@@ -236,8 +251,14 @@ export default function FragmentRichEditorDom({
   return (
     <>
       <style>{`:root { ${cssVars} } ${baseCss}`}</style>
-      <div style={styles.root}>
-        <EditorContent editor={editor} />
+      <div
+        style={styles.root}
+        onMouseDown={handleSurfacePress}
+        onTouchStart={handleSurfacePress}
+      >
+        <div style={styles.surface}>
+          <EditorContent editor={editor} />
+        </div>
       </div>
     </>
   );
@@ -422,8 +443,13 @@ function runEditorCommand(
 
 const styles: Record<string, React.CSSProperties> = {
   root: {
-    minHeight: 320,
+    minHeight: '100%',
+    height: '100%',
     background: 'var(--editor-background)',
+  },
+  surface: {
+    minHeight: '100%',
+    height: '100%',
   },
   loading: {
     minHeight: 320,
