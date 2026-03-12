@@ -4,11 +4,11 @@ import test from 'node:test';
 import {
   appendRuntimeMediaAsset,
   applyAiPatchFallbackToSnapshot,
-  buildFragmentEditorSnapshot,
   resolveHydratedBodySession,
   shouldProtectSuspiciousEmptySnapshot,
   shouldRehydrateBodySession,
 } from '../features/fragments/detail/bodySessionState';
+import { buildEditorDocumentSnapshot } from '../features/editor/sessionState';
 import type { Fragment, MediaAsset } from '../types/fragment';
 
 function buildFragment(overrides: Partial<Fragment> = {}): Fragment {
@@ -58,7 +58,7 @@ test('shouldRehydrateBodySession allows remote detail to replace stale empty sna
       media_assets: [],
     }),
     draftHtml: null,
-    currentSnapshot: buildFragmentEditorSnapshot(''),
+    currentSnapshot: buildEditorDocumentSnapshot(''),
     remoteBaseline: '',
     visibleMediaAssets: [],
     hasConfirmedLocalEdit: false,
@@ -75,7 +75,7 @@ test('shouldRehydrateBodySession blocks remote reset when local draft exists', (
       media_assets: [],
     }),
     draftHtml: '<p>本地草稿</p>',
-    currentSnapshot: buildFragmentEditorSnapshot('<p>本地草稿</p>'),
+    currentSnapshot: buildEditorDocumentSnapshot('<p>本地草稿</p>'),
     remoteBaseline: '服务端正文',
     visibleMediaAssets: [],
     hasConfirmedLocalEdit: true,
@@ -86,7 +86,7 @@ test('shouldRehydrateBodySession blocks remote reset when local draft exists', (
 
 test('shouldProtectSuspiciousEmptySnapshot blocks accidental empty commit without local edits', () => {
   const shouldProtect = shouldProtectSuspiciousEmptySnapshot({
-    snapshot: buildFragmentEditorSnapshot(''),
+    snapshot: buildEditorDocumentSnapshot(''),
     remoteBaseline: '可信远端正文',
     hasLocalDraft: false,
     hasConfirmedLocalEdit: false,
@@ -97,7 +97,7 @@ test('shouldProtectSuspiciousEmptySnapshot blocks accidental empty commit withou
 
 test('shouldProtectSuspiciousEmptySnapshot allows intentional empty commit after local edits', () => {
   const shouldProtect = shouldProtectSuspiciousEmptySnapshot({
-    snapshot: buildFragmentEditorSnapshot(''),
+    snapshot: buildEditorDocumentSnapshot(''),
     remoteBaseline: '可信远端正文',
     hasLocalDraft: false,
     hasConfirmedLocalEdit: true,
@@ -107,7 +107,7 @@ test('shouldProtectSuspiciousEmptySnapshot allows intentional empty commit after
 });
 
 test('applyAiPatchFallbackToSnapshot keeps html-derived snapshot fields aligned', () => {
-  const snapshot = buildFragmentEditorSnapshot('<p>原始正文</p>');
+  const snapshot = buildEditorDocumentSnapshot('<p>原始正文</p>');
   const nextSnapshot = applyAiPatchFallbackToSnapshot(
     snapshot,
     {
