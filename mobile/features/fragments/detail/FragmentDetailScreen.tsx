@@ -21,7 +21,7 @@ export function FragmentDetailScreen({
   fragmentId?: string | null;
   exitTo?: Href | null;
 }) {
-  /*碎片详情页只组装共享编辑壳层和 fragment 专属抽屉内容。 */
+  /*碎片详情页只组装共享编辑壳层和 fragment 专属抽屉内容，接收来源路径用于删除后返回。 */
   const screen = useFragmentDetailScreen(fragmentId, { exitTo });
   const fragment = screen.resource.fragment;
   const editor = screen.editor;

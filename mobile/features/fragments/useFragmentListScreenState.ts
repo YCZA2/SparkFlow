@@ -10,6 +10,7 @@ import type { Fragment } from '@/types/fragment';
 
 interface UseFragmentListScreenStateOptions {
   folderId?: string | null;
+  folderName?: string | null;
   enableRefreshParam?: boolean;
 }
 
@@ -30,6 +31,7 @@ export interface FragmentListScreenState {
 
 export function useFragmentListScreenState({
   folderId,
+  folderName,
   enableRefreshParam = false,
 }: UseFragmentListScreenStateOptions = {}): FragmentListScreenState {
   /*统一首页与文件夹页的碎片列表 view-model，避免页面各写一套选择与跳转逻辑。 */
@@ -66,9 +68,13 @@ export function useFragmentListScreenState({
       if (!fragment.is_local_draft) {
         void prewarmRemoteFragmentSnapshot(fragment);
       }
-      router.push(`/fragment/${fragment.id}`);
+      // 跳转到详情页时，传递来源文件夹ID和名称（如果有）
+      router.push({
+        pathname: `/fragment/${fragment.id}`,
+        params: folderId ? { folderId, folderName: folderName || '' } : {},
+      });
     },
-    [router, selection]
+    [router, selection, folderId, folderName]
   );
 
   const onGenerate = useCallback(() => {

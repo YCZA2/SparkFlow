@@ -6,6 +6,7 @@ import { deleteFragment } from '@/features/fragments/api';
 import { useFragmentAudioPlayer } from '@/features/fragments/hooks/useFragmentAudioPlayer';
 import { shouldIgnoreMissingRemoteDeleteError } from '@/features/fragments/localDraftSession';
 import { getActiveSegmentIndex } from '@/features/fragments/presenters/speakerSegments';
+import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import {
   clearRemoteBodyDraft,
   deleteLocalFragmentDraft,
@@ -52,20 +53,12 @@ export function useFragmentDetailScreen(
       Alert.alert('本地保存失败', '请稍后重试，当前页会继续保留输入内容。');
       return;
     }
-    if (options?.exitTo) {
-      router.replace(options.exitTo);
-      return;
-    }
     router.back();
   };
 
   const exitAfterDelete = () => {
-    /*删除后默认回首页刷新，仅在特殊入口下复用覆盖路径。 */
-    if (options?.exitTo) {
-      router.replace(options.exitTo);
-      return;
-    }
-    router.replace({ pathname: '/', params: { refresh: 'true' } });
+    /*删除后返回上一页，列表页会在聚焦时自动刷新。 */
+    router.back();
   };
 
   const confirmDelete = async () => {
@@ -102,6 +95,8 @@ export function useFragmentDetailScreen(
           clearRemoteBodyDraft(fragmentId),
         ]);
       }
+      // 标记碎片列表需要刷新
+      markFragmentsStale();
       setIsSheetOpen(false);
       exitAfterDelete();
     } catch (err) {

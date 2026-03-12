@@ -54,7 +54,7 @@ export default function FolderDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
-  const screen = useFolderFragments(id);
+  const screen = useFolderFragments(id, name);
   const { setVisible } = useQuickActionBar();
 
   // 选择模式下隐藏 QuickActionBar，退出时恢复显示

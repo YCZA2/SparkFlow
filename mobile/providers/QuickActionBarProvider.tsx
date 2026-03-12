@@ -23,7 +23,8 @@ const QuickActionBarContext = createContext<QuickActionBarContextValue | null>(n
  * 需要在 _layout.tsx 的顶层包裹应用，确保按钮组件可以访问上下文
  */
 export function QuickActionBarProvider({ children }: { children: React.ReactNode }) {
-  const [visible, setVisible] = useState(false);
+  // 默认显示底部按钮，在主页和碎片列表页面自动显示
+  const [visible, setVisible] = useState(true);
   const [folderId, setFolderId] = useState<string | undefined>(undefined);
 
   const handleSetVisible = useCallback((v: boolean) => setVisible(v), []);
