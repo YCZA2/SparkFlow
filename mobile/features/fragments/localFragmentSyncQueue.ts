@@ -10,7 +10,12 @@ import {
   loadFragmentBodyDraft,
 } from '@/features/fragments/bodyDrafts';
 import { resolveRetryDelayMs } from '@/features/fragments/localDraftState';
-import { peekFragmentCache, writeFragmentCache } from '@/features/fragments/fragmentRepository';
+import { shouldRecoverMissingRemoteBinding } from '@/features/fragments/localDraftSession';
+import {
+  peekFragmentCache,
+  removeFragmentCache,
+  writeFragmentCache,
+} from '@/features/fragments/fragmentRepository';
 import {
   bindRemoteFragmentId,
   listLocalFragmentDrafts,
@@ -79,6 +84,17 @@ async function ensureRemoteFragment(localId: string): Promise<string> {
   return fragment.id;
 }
 
+async function recoverMissingRemoteBinding(localId: string, staleRemoteId: string): Promise<string> {
+  /*已失效的 remote_id 先解绑并清理本地镜像，再重建远端碎片绑定。 */
+  await saveLocalFragmentDraft(localId, {
+    remote_id: null,
+    sync_status: 'creating',
+    next_retry_at: null,
+  });
+  await removeFragmentCache(staleRemoteId);
+  return await ensureRemoteFragment(localId);
+}
+
 async function uploadPendingImages(localId: string, bodyHtml: string): Promise<string> {
   /*远端 id 就绪后按顺序上传本地图片，并回写 asset:// 引用。 */
   let nextHtml = normalizeBodyHtml(bodyHtml);
@@ -131,7 +147,7 @@ async function syncLocalFragmentDraft(localId: string): Promise<void> {
     next_retry_at: null,
   });
   try {
-    const remoteId = await ensureRemoteFragment(localId);
+    let remoteId = await ensureRemoteFragment(localId);
     const latestDraft = await loadLocalFragmentDraft(localId);
     if (!latestDraft) return;
     const nextHtml = await uploadPendingImages(localId, latestDraft.body_html);
@@ -139,10 +155,23 @@ async function syncLocalFragmentDraft(localId: string): Promise<void> {
       body_html: nextHtml,
       plain_text_snapshot: extractPlainTextFromHtml(nextHtml),
     });
-    const updatedFragment = await updateFragment(remoteId, {
-      body_html: nextHtml,
-      media_asset_ids: extractAssetIdsFromHtml(nextHtml),
-    });
+    let recoveryAttempted = false;
+    let updatedFragment: Awaited<ReturnType<typeof updateFragment>>;
+    while (true) {
+      try {
+        updatedFragment = await updateFragment(remoteId, {
+          body_html: nextHtml,
+          media_asset_ids: extractAssetIdsFromHtml(nextHtml),
+        });
+        break;
+      } catch (error) {
+        if (!shouldRecoverMissingRemoteBinding({ error, remoteId, recoveryAttempted })) {
+          throw error;
+        }
+        recoveryAttempted = true;
+        remoteId = await recoverMissingRemoteBinding(localId, remoteId);
+      }
+    }
     await writeFragmentCache(updatedFragment);
     await updateLocalFragmentSyncState(localId, 'synced', {
       body_html: nextHtml,

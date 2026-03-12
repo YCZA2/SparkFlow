@@ -53,6 +53,26 @@ test('buildFragmentFromLocalDraft marks local-first fragment metadata', () => {
   assert.equal(fragment.local_sync_status, 'syncing');
 });
 
+test('buildFragmentFromLocalDraft keeps local body over empty bound remote snapshot', () => {
+  const fragment = buildFragmentFromLocalDraft(
+    buildLocalDraft({
+      remote_id: 'fragment-001',
+      body_html: '<p>本地正文</p>',
+      plain_text_snapshot: '本地正文',
+    }) as any,
+    buildRemoteFragment({
+      id: 'fragment-001',
+      body_html: '',
+      plain_text_snapshot: '',
+    }) as any
+  );
+
+  assert.equal(fragment.id, 'local:fragment:001');
+  assert.equal(fragment.remote_id, 'fragment-001');
+  assert.equal(fragment.body_html, '<p>本地正文</p>');
+  assert.equal(fragment.plain_text_snapshot, '本地正文');
+});
+
 test('mergeLocalDraftsIntoFragments hides remote duplicate after local draft binds remote id', () => {
   const merged = mergeLocalDraftsIntoFragments(
     [

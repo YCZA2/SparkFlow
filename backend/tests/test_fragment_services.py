@@ -42,6 +42,23 @@ class StubFileStorage:
         return None
 
 
+class StubLogger:
+    """记录 warning/debug 调用，供日志限频断言复用。"""
+
+    def __init__(self) -> None:
+        """初始化日志记录容器。"""
+        self.warning_calls: list[tuple[str, dict[str, object]]] = []
+        self.debug_calls: list[tuple[str, dict[str, object]]] = []
+
+    def warning(self, event: str, **kwargs) -> None:
+        """记录 warning 级别日志。"""
+        self.warning_calls.append((event, kwargs))
+
+    def debug(self, event: str, **kwargs) -> None:
+        """记录 debug 级别日志。"""
+        self.debug_calls.append((event, kwargs))
+
+
 @pytest.mark.asyncio
 async def test_derivative_service_skips_enrichment_for_small_edits() -> None:
     """小改动时应复用已有摘要标签，只同步向量。"""
@@ -167,6 +184,39 @@ async def test_derivative_service_degrades_when_vector_sync_fails(monkeypatch) -
     assert db.commit_calls == 1
     assert replaced_tags == ["编辑", "整理"]
     assert json.loads(fragment.tags) == ["编辑", "整理"]
+
+
+@pytest.mark.asyncio
+async def test_derivative_service_throttles_duplicate_vector_sync_warnings(monkeypatch) -> None:
+    """同一条向量同步错误在冷却窗口内应只保留一次 warning。"""
+    fragment = SimpleNamespace(id="frag-4", source="manual", summary="已有摘要", tags=json.dumps(["旧标签"], ensure_ascii=False))
+    service = FragmentDerivativeService(vector_store=ExplodingVectorStore(), llm_provider=FakeLLMProvider())
+    stub_logger = StubLogger()
+    monotonic_values = iter([100.0, 100.0, 110.0, 110.0])
+
+    monkeypatch.setattr("modules.fragments.derivative_service.logger", stub_logger)
+    monkeypatch.setattr("modules.fragments.derivative_service.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr("modules.fragments.derivative_service._vector_sync_warning_last_seen", {})
+
+    await service.refresh_fragment_derivatives(
+        db=StubDbSession(),
+        user_id="test-user-001",
+        fragment=fragment,
+        previous_effective_text="这是一段足够长的原始内容，用来验证小改动不会触发重算。",
+        current_effective_text="这是一段足够长的原始内容，用来验证小改动不会触发重算。!",
+    )
+    await service.refresh_fragment_derivatives(
+        db=StubDbSession(),
+        user_id="test-user-001",
+        fragment=fragment,
+        previous_effective_text="这是一段足够长的原始内容，用来验证小改动不会触发重算。",
+        current_effective_text="这是一段足够长的原始内容，用来验证小改动不会触发重算。!",
+    )
+
+    assert len(stub_logger.warning_calls) == 1
+    assert stub_logger.warning_calls[0][0] == "fragment_vector_sync_failed"
+    assert len(stub_logger.debug_calls) == 1
+    assert stub_logger.debug_calls[0][0] == "fragment_vector_sync_failed_suppressed"
 
 
 def test_asset_binding_service_replace_media_assets_is_idempotent(monkeypatch) -> None:

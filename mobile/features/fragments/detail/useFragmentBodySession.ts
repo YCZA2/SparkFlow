@@ -21,8 +21,10 @@ import {
 } from '@/features/fragments/localFragmentSyncQueue';
 import {
   attachPendingLocalImage,
+  loadLocalFragmentDraft,
   saveLocalFragmentDraft,
 } from '@/features/fragments/localDrafts';
+import { resolveLocalDraftSession } from '@/features/fragments/localDraftSession';
 import { peekFragmentCache } from '@/features/fragments/fragmentRepository';
 import {
   buildOptimisticFragmentSnapshot,
@@ -85,6 +87,10 @@ export function useFragmentBodySession({
 }: UseFragmentBodySessionOptions) {
   /*用单一 reducer 编排正文会话，让 hydrate、保存和工具动作共享同一真值。 */
   const resolvedFragmentId = fragmentId ?? fragment?.id ?? null;
+  const localDraftSession = useMemo(
+    () => resolveLocalDraftSession({ routeFragmentId: fragmentId, fragment }),
+    [fragment, fragmentId]
+  );
   const [state, dispatch] = useReducer(
     reduceEditorSession,
     resolvedFragmentId,
@@ -98,6 +104,7 @@ export function useFragmentBodySession({
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitOptimisticFragmentRef = useRef(commitOptimisticFragment);
   const resolvedFragmentIdRef = useRef(resolvedFragmentId);
+  const localDraftIdRef = useRef(localDraftSession.localDraftId);
 
   useEffect(() => {
     /*同步 ref，保证保存和工具动作总是读取最新上下文。 */
@@ -105,7 +112,8 @@ export function useFragmentBodySession({
     fragmentRef.current = fragment;
     commitOptimisticFragmentRef.current = commitOptimisticFragment;
     resolvedFragmentIdRef.current = resolvedFragmentId;
-  }, [commitOptimisticFragment, fragment, resolvedFragmentId, state]);
+    localDraftIdRef.current = localDraftSession.localDraftId;
+  }, [commitOptimisticFragment, fragment, localDraftSession.localDraftId, resolvedFragmentId, state]);
 
   useEffect(() => {
     /*切换 fragment 时重置整段编辑会话，但保持同页 UI 壳层不变。 */
@@ -129,8 +137,8 @@ export function useFragmentBodySession({
     }
     let cancelled = false;
     void (async () => {
-      const nextDraftHtml = fragment?.is_local_draft
-        ? fragment.body_html
+      const nextDraftHtml = localDraftSession.localDraftId
+        ? (await loadLocalFragmentDraft(localDraftSession.localDraftId))?.body_html ?? null
         : await loadFragmentBodyDraft(resolvedFragmentId);
       if (cancelled) return;
       dispatch({ type: 'LOCAL_DRAFT_LOADED', html: nextDraftHtml });
@@ -138,12 +146,13 @@ export function useFragmentBodySession({
     return () => {
       cancelled = true;
     };
-  }, [fragment?.body_html, fragment?.is_local_draft, resolvedFragmentId]);
+  }, [localDraftSession.localDraftId, resolvedFragmentId]);
 
   useEffect(() => {
     /*本地输入应立即反映到详情资源与草稿存储，但不等待远端保存完成。 */
     const currentFragment = fragmentRef.current;
     const currentFragmentId = resolvedFragmentIdRef.current;
+    const currentLocalDraftId = localDraftIdRef.current;
     if (!currentFragment || !currentFragmentId) return;
     if (!shouldPublishOptimisticFragment(state)) return;
 
@@ -153,9 +162,9 @@ export function useFragmentBodySession({
       state.mediaAssets
     );
 
-    if (currentFragment.is_local_draft) {
+    if (currentLocalDraftId) {
       void Promise.all([
-        saveLocalFragmentDraft(currentFragmentId, {
+        saveLocalFragmentDraft(currentLocalDraftId, {
           body_html: state.snapshot.body_html,
           plain_text_snapshot: state.snapshot.plain_text,
           sync_status: currentFragment.remote_id ? 'syncing' : 'creating',
@@ -189,19 +198,20 @@ export function useFragmentBodySession({
         /*把保存流程串行化，并在成功后统一回流 session 与资源层。 */
         const currentFragment = fragmentRef.current;
         const currentFragmentId = resolvedFragmentIdRef.current;
+        const currentLocalDraftId = localDraftIdRef.current;
         if (!currentFragment || !currentFragmentId) return;
 
         dispatch({ type: 'SAVE_STARTED' });
 
         try {
-          if (currentFragment.is_local_draft) {
-            await saveLocalFragmentDraft(currentFragmentId, {
+          if (currentLocalDraftId) {
+            await saveLocalFragmentDraft(currentLocalDraftId, {
               body_html: snapshot.body_html,
               plain_text_snapshot: snapshot.plain_text,
               sync_status: currentFragment.remote_id ? 'syncing' : 'creating',
               next_retry_at: null,
             });
-            void enqueueLocalFragmentSync(currentFragmentId, { delayMs: AUTOSAVE_DELAY_MS }).catch(
+            void enqueueLocalFragmentSync(currentLocalDraftId, { delayMs: AUTOSAVE_DELAY_MS }).catch(
               () => undefined
             );
             dispatch({
@@ -297,10 +307,11 @@ export function useFragmentBodySession({
       const asset = result.assets[0];
       const currentFragment = fragmentRef.current;
       const currentFragmentId = resolvedFragmentIdRef.current;
+      const currentLocalDraftId = localDraftIdRef.current;
       if (!asset?.uri || !currentFragment || !currentFragmentId) return;
 
-      if (currentFragment.is_local_draft && currentFragment.local_id) {
-        const pendingAsset = await attachPendingLocalImage(currentFragment.local_id, {
+      if (currentLocalDraftId) {
+        const pendingAsset = await attachPendingLocalImage(currentLocalDraftId, {
           local_uri: asset.uri,
           file_name: asset.name ?? 'image.jpg',
           mime_type: asset.mimeType ?? 'image/jpeg',
@@ -320,7 +331,7 @@ export function useFragmentBodySession({
             snapshot: appendImageToSnapshot(getLiveSnapshot(), localMediaAsset),
           });
         }
-        void enqueueLocalFragmentSync(currentFragment.local_id, { delayMs: AUTOSAVE_DELAY_MS }).catch(
+        void enqueueLocalFragmentSync(currentLocalDraftId, { delayMs: AUTOSAVE_DELAY_MS }).catch(
           () => undefined
         );
         return;
@@ -359,16 +370,17 @@ export function useFragmentBodySession({
     const latestSnapshot = getLiveSnapshot();
     const currentFragment = fragmentRef.current;
     const currentFragmentId = resolvedFragmentIdRef.current;
+    const currentLocalDraftId = localDraftIdRef.current;
     if (!currentFragment || !currentFragmentId) return;
 
-    if (currentFragment.is_local_draft) {
-      await saveLocalFragmentDraft(currentFragmentId, {
+    if (currentLocalDraftId) {
+      await saveLocalFragmentDraft(currentLocalDraftId, {
         body_html: latestSnapshot.body_html,
         plain_text_snapshot: latestSnapshot.plain_text,
         sync_status: currentFragment.remote_id ? 'syncing' : 'creating',
         next_retry_at: null,
       });
-      void enqueueLocalFragmentSync(currentFragmentId, { delayMs: AUTOSAVE_DELAY_MS }).catch(
+      void enqueueLocalFragmentSync(currentLocalDraftId, { delayMs: AUTOSAVE_DELAY_MS }).catch(
         () => undefined
       );
       return;
@@ -401,7 +413,7 @@ export function useFragmentBodySession({
     editorRef,
     editorKey: state.editorKey,
     initialBodyHtml: state.snapshot.body_html,
-    shouldAutoFocus: Boolean(fragment?.is_local_draft && !state.snapshot.body_html.trim()),
+    shouldAutoFocus: Boolean(localDraftSession.isLocalDraftSession && !state.snapshot.body_html.trim()),
     mediaAssets: state.mediaAssets,
     formattingState: state.formattingState,
     isDraftHydrated: state.isDraftHydrated,

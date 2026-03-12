@@ -38,4 +38,3 @@ export async function getLocalDatabase(): Promise<
 export async function ensureLocalDatabaseReady(): Promise<void> {
   await getLocalDatabase();
 }
-

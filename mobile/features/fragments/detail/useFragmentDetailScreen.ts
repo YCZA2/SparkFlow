@@ -6,6 +6,7 @@ import { deleteFragment } from '@/features/fragments/api';
 import { clearFragmentBodyDraft } from '@/features/fragments/bodyDrafts';
 import { useFragmentAudioPlayer } from '@/features/fragments/hooks/useFragmentAudioPlayer';
 import { deleteLocalFragmentDraft, isLocalFragmentId } from '@/features/fragments/localDrafts';
+import { shouldIgnoreMissingRemoteDeleteError } from '@/features/fragments/localDraftSession';
 import { getActiveSegmentIndex } from '@/features/fragments/presenters/speakerSegments';
 import { removeFragmentCache } from '@/features/fragments/fragmentRepository';
 
@@ -66,8 +67,23 @@ export function useFragmentDetailScreen(
       setIsDeleting(true);
       if (isLocalFragmentId(fragmentId)) {
         if (fragment?.remote_id) {
-          await deleteFragment(fragment.remote_id);
-          await removeFragmentCache(fragment.remote_id);
+          try {
+            await deleteFragment(fragment.remote_id);
+          } catch (error) {
+            if (
+              !shouldIgnoreMissingRemoteDeleteError({
+                error,
+                isLocalDraftSession: true,
+                remoteId: fragment.remote_id,
+              })
+            ) {
+              throw error;
+            }
+          }
+          await Promise.all([
+            removeFragmentCache(fragment.remote_id),
+            clearFragmentBodyDraft(fragment.remote_id),
+          ]);
         }
         await deleteLocalFragmentDraft(fragmentId);
       } else {
