@@ -3,12 +3,10 @@ import { StyleSheet, View, type NativeSyntheticEvent } from 'react-native';
 import {
   EnrichedTextInput,
   type EnrichedTextInputInstance,
-  type HtmlStyle,
   type OnChangeSelectionEvent,
   type OnChangeStateEvent,
 } from 'react-native-enriched';
 
-import { useAppTheme } from '@/theme/useAppTheme';
 import type {
   EditorBridgeAdapter,
   FragmentAiPatch,
@@ -106,7 +104,6 @@ export function FragmentRichEditor({
   onFormattingStateChange,
 }: FragmentRichEditorProps) {
   /*用原生富文本输入替换 WebView 编辑器，并维持页面层既有桥接接口。 */
-  const theme = useAppTheme();
   const nativeRef = React.useRef<EnrichedTextInputInstance | null>(null);
   const [seededEditorHtml, setSeededEditorHtml] = React.useState(() =>
     replaceAssetIdsWithDisplayUrls(initialBodyHtml, mediaAssets)
@@ -118,33 +115,52 @@ export function FragmentRichEditor({
   });
   const snapshotTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const formattingStateRef = React.useRef<FragmentEditorFormattingState | null>(null);
-
-  const htmlStyle = React.useMemo<HtmlStyle>(
-    () => ({
-      h1: {
-        fontSize: 28,
-        bold: true,
+  const contextMenuItems = React.useMemo(
+    () => [
+      {
+        text: '正文',
+        onPress: () => {
+          runCommand(nativeRef.current, formattingStateRef.current, 'paragraph');
+        },
       },
-      blockquote: {
-        borderColor: theme.colors.primary,
-        borderWidth: 3,
-        gapWidth: 12,
-        color: theme.colors.textSubtle,
+      {
+        text: '标题',
+        onPress: () => {
+          runCommand(nativeRef.current, formattingStateRef.current, 'heading');
+        },
       },
-      ol: {
-        gapWidth: 8,
-        marginLeft: 14,
-        markerColor: theme.colors.textSubtle,
-        markerFontWeight: '600',
+      {
+        text: '粗体',
+        onPress: () => {
+          runCommand(nativeRef.current, formattingStateRef.current, 'bold');
+        },
       },
-      ul: {
-        gapWidth: 8,
-        marginLeft: 14,
-        bulletColor: theme.colors.textSubtle,
-        bulletSize: 6,
+      {
+        text: '斜体',
+        onPress: () => {
+          runCommand(nativeRef.current, formattingStateRef.current, 'italic');
+        },
       },
-    }),
-    [theme.colors.primary, theme.colors.textSubtle]
+      {
+        text: '列表',
+        onPress: () => {
+          runCommand(nativeRef.current, formattingStateRef.current, 'bulletList');
+        },
+      },
+      {
+        text: '编号',
+        onPress: () => {
+          runCommand(nativeRef.current, formattingStateRef.current, 'orderedList');
+        },
+      },
+      {
+        text: '引用',
+        onPress: () => {
+          runCommand(nativeRef.current, formattingStateRef.current, 'blockquote');
+        },
+      },
+    ],
+    []
   );
 
   React.useImperativeHandle(
@@ -200,31 +216,16 @@ export function FragmentRichEditor({
 
   return (
     <View style={styles.container}>
-      <View
-        style={[
-          styles.editorShell,
-          {
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.border,
-          },
-        ]}
-      >
+      <View style={styles.editorShell}>
         <EnrichedTextInput
           key={editorKey}
           ref={nativeRef}
           autoFocus={autoFocus}
           defaultValue={seededEditorHtml}
-          htmlStyle={htmlStyle}
           placeholder="把灵感整理成可用正文..."
-          placeholderTextColor={theme.colors.textSubtle}
-          cursorColor={theme.colors.primary}
-          selectionColor={`${theme.colors.primary}33`}
           autoCapitalize="sentences"
-          style={{
-            ...styles.input,
-            color: theme.colors.text,
-            backgroundColor: 'transparent',
-          }}
+          style={styles.input}
+          contextMenuItems={contextMenuItems}
           onChangeHtml={(event) => {
             handleHtmlChange(event.nativeEvent.value);
           }}
@@ -293,17 +294,9 @@ const styles = StyleSheet.create({
   },
   editorShell: {
     flex: 1,
-    borderRadius: 24,
-    borderWidth: 1,
-    overflow: 'hidden',
   },
   input: {
     flex: 1,
-    minHeight: 520,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    fontSize: 18,
-    lineHeight: 28,
   },
   hiddenStatus: {
     width: 0,

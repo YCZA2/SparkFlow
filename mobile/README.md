@@ -25,7 +25,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
 - 碎片正文详情和列表已接入本地缓存与本地草稿聚合：详情会优先读本地 HTML draft，再叠加远端缓存；未同步正文和待上传图片会在应用启动、输入停顿、离页和页面聚焦时静默重试。
 - 脚本详情页当前读取 `body_html`，展示层先提取纯文本，后端在导出链路里再负责转换 Markdown。
-- 移动端碎片正文已切到 `react-native-enriched` 原生富文本输入，运行时与本地草稿真值统一为 `body_html`，支持标题、列表、引用、粗体、斜体和图片；AI patch 与 WebView/Tiptap 旧桥接层本期已移除。
+- 移动端碎片正文已切到 `react-native-enriched` 原生富文本输入，运行时与本地草稿真值统一为 `body_html`，支持标题、列表、引用、粗体、斜体和图片；Android 与 iOS 16+ 默认通过系统原生编辑菜单触发格式操作，图片和 AI 工具入口收口到右上角“更多”抽屉；AI patch 与 WebView/Tiptap 旧桥接层本期已移除。
 - 碎片详情里的正文基线解析、自动保存队列、AI fallback patch、图片 fallback 插入和素材去重都已下沉为独立 session helper / reducer，纯状态回归统一由 `mobile/tests/*.test.ts` 覆盖。
 - fragments 列表现在统一从 SQLite 本地镜像读取；首页与文件夹页共享同一套“本地镜像秒开 + 后台刷新 + 订阅回显”策略。
 - 知识库移动端仍是占位入口，还没有完整的 Markdown 编辑和素材管理 UI。

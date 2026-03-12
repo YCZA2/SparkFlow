@@ -19,6 +19,17 @@ import type { FragmentEditorCommand } from '@/types/fragment';
 
 import { useFragmentDetailScreen } from './useFragmentDetailScreen';
 
+function supportsNativeFormattingMenu() {
+  /*原生格式菜单仅在 Android 和 iOS 16+ 可用，其余平台继续走页面内兜底工具条。 */
+  if (Platform.OS === 'android') return true;
+  if (Platform.OS !== 'ios') return false;
+  const version =
+    typeof Platform.Version === 'string'
+      ? Number.parseInt(Platform.Version, 10)
+      : Platform.Version;
+  return Number.isFinite(version) && version >= 16;
+}
+
 function HeaderCircleButton({
   symbol,
   filled = false,
@@ -108,6 +119,7 @@ export function FragmentDetailScreen({
   const noteBackground = isDark ? '#12110F' : '#ECE9E4';
   const noteText = isDark ? '#F7F3ED' : '#23201C';
   const chromePill = isDark ? '#181715' : '#F1EEEA';
+  const useNativeFormattingMenu = supportsNativeFormattingMenu();
 
   const renderPageHeader = (options?: { disableActions?: boolean }) => (
     <View style={styles.headerRow}>
@@ -170,16 +182,18 @@ export function FragmentDetailScreen({
             <View style={styles.editorCanvas}>
               <EditorSkeleton dark={isDark} />
             </View>
-            <FragmentEditorToolbar
-              formattingState={null}
-              statusLabel={null}
-              isUploadingImage={false}
-              isAiRunning={false}
-              bottomInset={insets.bottom}
-              onCommand={() => undefined}
-              onInsertImage={() => undefined}
-              onAiAction={() => undefined}
-            />
+            {useNativeFormattingMenu ? null : (
+              <FragmentEditorToolbar
+                formattingState={null}
+                statusLabel={null}
+                isUploadingImage={false}
+                isAiRunning={false}
+                bottomInset={insets.bottom}
+                onCommand={() => undefined}
+                onInsertImage={() => undefined}
+                onAiAction={() => undefined}
+              />
+            )}
           </View>
         </View>
       </View>
@@ -245,22 +259,24 @@ export function FragmentDetailScreen({
             )}
           </View>
 
-          <FragmentEditorToolbar
-            formattingState={editor.formattingState}
-            statusLabel={editor.statusLabel}
-            isUploadingImage={editor.isUploadingImage}
-            isAiRunning={editor.isAiRunning}
-            bottomInset={insets.bottom}
-            onCommand={(command) => {
-              runEditorCommand(editor.editorRef, command, { focus: true });
-            }}
-            onInsertImage={() => {
-              void editor.onInsertImage();
-            }}
-            onAiAction={(instruction) => {
-              void editor.onAiAction(instruction);
-            }}
-          />
+          {useNativeFormattingMenu ? null : (
+            <FragmentEditorToolbar
+              formattingState={editor.formattingState}
+              statusLabel={editor.statusLabel}
+              isUploadingImage={editor.isUploadingImage}
+              isAiRunning={editor.isAiRunning}
+              bottomInset={insets.bottom}
+              onCommand={(command) => {
+                runEditorCommand(editor.editorRef, command, { focus: true });
+              }}
+              onInsertImage={() => {
+                void editor.onInsertImage();
+              }}
+              onAiAction={(instruction) => {
+                void editor.onAiAction(instruction);
+              }}
+            />
+          )}
         </KeyboardAvoidingView>
       </View>
 
