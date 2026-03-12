@@ -10,8 +10,6 @@ import {
 } from '@/features/core/files/runtime';
 import { normalizeBodyHtml } from '@/features/editor/html';
 
-import { emitFragmentStoreChange } from './shared';
-
 /*把远端碎片正文草稿写入文件层，供后台同步与离页恢复复用。 */
 export async function saveRemoteBodyDraft(fragmentId: string, html: string): Promise<void> {
   const normalizedHtml = normalizeBodyHtml(html);
@@ -24,7 +22,7 @@ export async function saveRemoteBodyDraft(fragmentId: string, html: string): Pro
       updatedAt: new Date().toISOString(),
     })
     .where(eq(fragmentsTable.id, fragmentId));
-  emitFragmentStoreChange();
+  /*Zustand 自动响应式，无需手动触发*/
 }
 
 /*读取远端碎片的本地正文草稿，统一从文件层恢复未同步输入。 */
@@ -43,7 +41,7 @@ export async function clearRemoteBodyDraft(fragmentId: string): Promise<void> {
       updatedAt: new Date().toISOString(),
     })
     .where(eq(fragmentsTable.id, fragmentId));
-  emitFragmentStoreChange();
+  /*Zustand 自动响应式，无需手动触发*/
 }
 
 /*枚举仍存在未同步正文草稿的远端碎片 id。 */

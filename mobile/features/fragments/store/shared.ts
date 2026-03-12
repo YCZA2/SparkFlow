@@ -34,9 +34,6 @@ export const LOCAL_IMAGE_ASSET_ID_PREFIX = 'local:image:';
 export type FragmentRow = typeof fragmentsTable.$inferSelect;
 export type MediaAssetRow = typeof mediaAssetsTable.$inferSelect;
 
-export const detailMemoryCache = new Map<string, Fragment>();
-export const fragmentStoreListeners = new Set<() => void>();
-
 /*为本地草稿生成稳定的本地主键，避免真机多次重启后冲突。 */
 export function generateLocalId(prefix: string): string {
   return `${prefix}${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
@@ -87,11 +84,6 @@ export function deserializeSpeakerSegments(
   } catch {
     return null;
   }
-}
-
-/*统一发送本地镜像变化通知，让列表和详情在写入后及时刷新。 */
-export function emitFragmentStoreChange(): void {
-  fragmentStoreListeners.forEach((listener) => listener());
 }
 
 /*按 SQLite 行还原媒体资源，供详情与编辑器直接消费。 */

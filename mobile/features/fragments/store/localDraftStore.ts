@@ -12,8 +12,6 @@ import type {
 
 import {
   buildLocalDraftRowPatch,
-  detailMemoryCache,
-  emitFragmentStoreChange,
   generateLocalId,
   isLocalFragmentId,
   loadFragmentRowByIdOrRemoteId,
@@ -25,14 +23,9 @@ import {
   readFragmentRows,
   stagePendingImage,
 } from './shared';
-import { subscribeFragmentStore } from './remoteFragments';
+import { useFragmentStore } from './fragmentStore';
 
 export { isLocalFragmentId };
-
-/*把本地镜像变更广播给列表与详情，让上层继续复用订阅接口。 */
-export function subscribeLocalFragmentDrafts(listener: () => void): () => void {
-  return subscribeFragmentStore(listener);
-}
 
 /*创建新的本地 manual fragment，并立即返回可进入编辑器的草稿结构。 */
 export async function createLocalFragmentDraft(
@@ -73,7 +66,7 @@ export async function createLocalFragmentDraft(
     contentState: 'empty',
     cachedAt: createdAt,
   });
-  emitFragmentStoreChange();
+  /*Zustand 自动响应式，无需手动触发*/
   return (await loadLocalFragmentDraft(localId)) as LocalFragmentDraft;
 }
 
@@ -172,7 +165,7 @@ export async function saveLocalFragmentDraft(
     }
   }
 
-  emitFragmentStoreChange();
+  /*Zustand 自动响应式，无需手动触发*/
   return await loadLocalFragmentDraft(localId);
 }
 
@@ -182,8 +175,9 @@ export async function deleteLocalFragmentDraft(localId: string): Promise<void> {
   await database.delete(mediaAssetsTable).where(eq(mediaAssetsTable.fragmentId, localId));
   await database.delete(fragmentsTable).where(eq(fragmentsTable.id, localId));
   await deleteFileIfExists(getFragmentBodyFile(localId));
-  detailMemoryCache.delete(localId);
-  emitFragmentStoreChange();
+  /*删除缓存并清空列表缓存，Zustand 自动响应式*/
+  useFragmentStore.getState().deleteDetail(localId);
+  useFragmentStore.getState().clearCache();
 }
 
 /*回填本地草稿绑定的 remote_id，维持去重和跳详情的主键映射。 */

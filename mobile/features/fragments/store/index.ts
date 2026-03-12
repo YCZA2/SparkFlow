@@ -7,7 +7,6 @@ export {
   loadLocalFragmentDraft,
   markPendingImageUploaded,
   saveLocalFragmentDraft,
-  subscribeLocalFragmentDrafts,
   updateLocalFragmentSyncState,
   attachPendingLocalImage,
 } from './localDraftStore';
@@ -32,7 +31,6 @@ export {
   readRemoteFragmentSnapshot,
   refreshRemoteSnapshotMemory,
   removeRemoteFragmentSnapshot,
-  subscribeFragmentStore,
   upsertRemoteFragmentSnapshot,
   upsertRemoteFragmentSnapshots,
   writeCachedRemoteFragmentList,

@@ -15,11 +15,10 @@ import {
   listLocalFragmentDrafts,
   readCachedRemoteFragmentList,
   readRemoteFragmentSnapshot,
-  subscribeFragmentStore,
-  subscribeLocalFragmentDrafts,
   upsertRemoteFragmentSnapshot,
   writeCachedRemoteFragmentList,
 } from '@/features/fragments/store';
+import { useFragmentStore, useFragmentList, useLocalDrafts } from '@/features/fragments/store/fragmentStore';
 import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
 import type {
   Fragment,
@@ -33,8 +32,6 @@ interface UseFragmentsOptions {
 
 export function useFragments({ folderId }: UseFragmentsOptions = {}) {
   /*列表页优先消费本地缓存，再静默刷新远端结果。 */
-  const [remoteFragments, setRemoteFragments] = useState<Fragment[]>([]);
-  const [localDrafts, setLocalDrafts] = useState<LocalFragmentDraft[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +39,10 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
     typeof folderId === 'string' && folderId.trim() && folderId !== '__all__'
       ? folderId
       : undefined;
+
+  /*从 Zustand Store 读取缓存，自动响应式*/
+  const remoteFragments = useFragmentList(resolvedFolderId ?? null) ?? [];
+  const localDrafts = useLocalDrafts(resolvedFolderId ?? null) ?? [];
 
   const fragments = useMemo(() => {
     const remoteById = new Map(remoteFragments.map((item) => [item.id, item]));
@@ -51,7 +52,7 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
   const applyCachedList = useCallback(async (): Promise<boolean> => {
     const cached = await readCachedRemoteFragmentList(resolvedFolderId);
     if (!cached) return false;
-    setRemoteFragments(cached.items);
+    /*Zustand Store 自动更新，无需手动 setState*/
     setError(null);
     setIsLoading(false);
     return true;
@@ -59,7 +60,8 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
 
   const hydrateLocalDrafts = useCallback(async () => {
     const drafts = await listLocalFragmentDrafts(resolvedFolderId);
-    setLocalDrafts(drafts);
+    /*更新 Zustand Store*/
+    useFragmentStore.getState().setLocalDrafts(resolvedFolderId ?? null, drafts);
     return drafts;
   }, [resolvedFolderId]);
 
@@ -75,9 +77,9 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
       try {
         const response = await fetchFragmentsRemote(resolvedFolderId);
         const nextItems = response.items || [];
-        setRemoteFragments(nextItems);
-        setError(null);
+        /*Zustand Store 自动更新列表缓存*/
         await writeCachedRemoteFragmentList(nextItems, resolvedFolderId);
+        setError(null);
       } catch (err) {
         const nextError = err instanceof Error ? err.message : '加载失败';
         setError(nextError);
@@ -104,26 +106,10 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
 
     void hydrate();
 
-    const unsubscribe = subscribeFragmentStore(() => {
-      void (async () => {
-        const cached = await readCachedRemoteFragmentList(resolvedFolderId);
-        if (!cached || cancelled) {
-          return;
-        }
-        setRemoteFragments(cached.items);
-        setError(null);
-        setIsLoading(false);
-      })();
-    });
-
-    const unsubscribeLocalDrafts = subscribeLocalFragmentDrafts(() => {
-      void hydrateLocalDrafts();
-    });
+    /*Zustand 自动响应式，无需手动订阅*/
 
     return () => {
       cancelled = true;
-      unsubscribe();
-      unsubscribeLocalDrafts();
     };
   }, [applyCachedList, hydrateLocalDrafts, loadFragments, resolvedFolderId]);
 

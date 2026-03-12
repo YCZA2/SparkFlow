@@ -1,15 +1,8 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useEffect } from 'react';
 import { AppState } from 'react-native';
+
 import { initApiBaseUrl } from '@/constants/config';
-import {
-  getToken,
-  getUserInfo,
-  loginWithTestUser,
-  logout as logoutService,
-  parseUserFromToken,
-  saveUserInfo,
-  type UserInfo,
-} from '@/features/auth/api';
+import { useAuthStore } from '@/features/auth/authStore';
 import {
   restoreLocalFragmentSyncQueue,
   restoreRemoteFragmentBodySyncQueue,
@@ -18,91 +11,40 @@ import {
 } from '@/features/fragments/localFragmentSyncQueue';
 import { ensureFragmentStoreReady } from '@/features/fragments/store';
 
-interface AppSessionContextValue {
-  isReady: boolean;
-  isAuthenticated: boolean;
-  user: UserInfo | null;
-  error: string | null;
-  loginWithTestUser: () => Promise<UserInfo>;
-  logout: () => Promise<void>;
-  refreshUserInfo: () => Promise<void>;
-}
-
-const AppSessionContext = createContext<AppSessionContextValue | null>(null);
-
+/**
+ * App Session Provider
+ * 负责：
+ * 1. 初始化本地镜像
+ * 2. 初始化 API 基础 URL
+ * 3. 启动时恢复同步队列
+ * 4. 前后台切换时唤醒同步队列
+ *
+ * 认证状态由 useAuthStore 管理，无需 Context
+ */
 export function AppSessionProvider({ children }: { children: React.ReactNode }) {
-  const [isReady, setIsReady] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<UserInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const bootstrap = useAuthStore((state) => state.bootstrap);
+  const isReady = useAuthStore((state) => state.isReady);
 
-  const refreshUserInfo = async () => {
-    const token = await getToken();
-    if (!token) {
-      setUser(null);
-      setIsAuthenticated(false);
-      return;
-    }
-
-    const nextUser = parseUserFromToken(token);
-    await saveUserInfo(nextUser);
-    setUser(nextUser);
-    setIsAuthenticated(true);
-  };
-
-  const bootstrap = async () => {
-    /*启动时先准备本地镜像与认证态，避免 UI 抢先读取未迁移的数据层。 */
-    try {
-      setError(null);
+  useEffect(() => {
+    /*启动时初始化本地镜像、API URL、认证态，并恢复同步队列。*/
+    const init = async () => {
       await ensureFragmentStoreReady();
       await initApiBaseUrl();
-      const token = await getToken();
-      const storedUser = await getUserInfo();
+      await bootstrap();
 
-      if (token) {
-        if (storedUser) {
-          setUser(storedUser);
-          setIsAuthenticated(true);
-        } else {
-          await refreshUserInfo();
-        }
-      } else {
-        const nextUser = await loginWithTestUser();
-        setUser(nextUser);
-        setIsAuthenticated(true);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '初始化失败');
-      setUser(null);
-      setIsAuthenticated(false);
-    } finally {
-      setIsReady(true);
-    }
-  };
+      /*恢复本地草稿同步队列，保证离线编辑可在后续静默收敛。*/
+      await restoreLocalFragmentSyncQueue();
+      await restoreRemoteFragmentBodySyncQueue();
+    };
+
+    void init();
+  }, [bootstrap]);
 
   useEffect(() => {
-    bootstrap();
-  }, []);
-
-  useEffect(() => {
-    /*应用启动后恢复本地草稿同步队列，保证离线编辑可在后续静默收敛。 */
-    void ensureFragmentStoreReady()
-      .then(async () => {
-        await restoreLocalFragmentSyncQueue();
-        await restoreRemoteFragmentBodySyncQueue();
-      })
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    /*前后台切换时主动唤醒同步队列，避免正文草稿长期停留本地。 */
+    /*前后台切换时主动唤醒同步队列，避免正文草稿长期停留本地。*/
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'background' || nextState === 'inactive') {
-        void wakeLocalFragmentSyncQueue().catch(() => undefined);
-        void wakeRemoteFragmentBodySyncQueue().catch(() => undefined);
-        return;
-      }
-      if (nextState === 'active') {
+      /*仅在 background 和 active 状态时唤醒，减少冗余调用*/
+      if (nextState === 'background' || nextState === 'active') {
         void wakeLocalFragmentSyncQueue().catch(() => undefined);
         void wakeRemoteFragmentBodySyncQueue().catch(() => undefined);
       }
@@ -112,41 +54,33 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
     };
   }, []);
 
-  const login = async () => {
-    const nextUser = await loginWithTestUser();
-    setUser(nextUser);
-    setIsAuthenticated(true);
-    setError(null);
-    return nextUser;
-  };
+  if (!isReady) {
+    return null;
+  }
 
-  const logout = async () => {
-    await logoutService();
-    setUser(null);
-    setIsAuthenticated(false);
-    setError(null);
-  };
-
-  const value = useMemo<AppSessionContextValue>(
-    () => ({
-      isReady,
-      isAuthenticated,
-      user,
-      error,
-      loginWithTestUser: login,
-      logout,
-      refreshUserInfo,
-    }),
-    [error, isAuthenticated, isReady, user]
-  );
-
-  return <AppSessionContext.Provider value={value}>{children}</AppSessionContext.Provider>;
+  return <>{children}</>;
 }
 
+/**
+ * Hook to access auth state
+ * 直接使用 Zustand Store，无需 Context
+ */
 export function useAppSession() {
-  const context = useContext(AppSessionContext);
-  if (!context) {
-    throw new Error('useAppSession must be used within AppSessionProvider');
-  }
-  return context;
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isReady = useAuthStore((state) => state.isReady);
+  const error = useAuthStore((state) => state.error);
+  const loginWithTestUser = useAuthStore((state) => state.loginWithTestUser);
+  const logout = useAuthStore((state) => state.logout);
+  const refreshUserInfo = useAuthStore((state) => state.refreshUserInfo);
+
+  return {
+    isReady,
+    isAuthenticated,
+    user,
+    error,
+    loginWithTestUser,
+    logout,
+    refreshUserInfo,
+  };
 }

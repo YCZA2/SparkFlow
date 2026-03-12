@@ -8,43 +8,22 @@ import type { Fragment } from '@/types/fragment';
 
 import {
   buildRemoteFragmentRow,
-  detailMemoryCache,
-  emitFragmentStoreChange,
-  fragmentStoreListeners,
   loadMediaRowsByFragmentIds,
   mapRemoteRowToFragment,
   persistBodyHtml,
   readFragmentRows,
   replaceRemoteMediaAssets,
 } from './shared';
-
-const listMemoryCache = new Map<string, { items: Fragment[]; cachedAt: string } | null>();
-
-/*把 folder 维度归一成稳定 scope key，供列表内存镜像复用。 */
-function resolveListScopeKey(folderId?: string | null): string {
-  const normalizedFolderId = String(folderId ?? '').trim();
-  if (!normalizedFolderId || normalizedFolderId === '__all__') {
-    return 'all';
-  }
-  return `folder:${normalizedFolderId}`;
-}
-
-/*订阅 fragment store 变化，让列表和详情继续复用最小广播模型。 */
-export function subscribeFragmentStore(listener: () => void): () => void {
-  fragmentStoreListeners.add(listener);
-  return () => {
-    fragmentStoreListeners.delete(listener);
-  };
-}
+import { useFragmentStore } from './fragmentStore';
 
 /*同步读取最近一次内存中的远端快照，供编辑器 hydrate 与局部预热使用。 */
 export function peekRemoteFragmentSnapshot(fragmentId: string): Fragment | null {
-  return detailMemoryCache.get(fragmentId) ?? null;
+  return useFragmentStore.getState().getDetail(fragmentId) ?? null;
 }
 
 /*读取 SQLite 中的远端详情镜像，并把它预热进详情内存缓存。 */
 export async function readRemoteFragmentSnapshot(fragmentId: string): Promise<Fragment | null> {
-  const cached = detailMemoryCache.get(fragmentId);
+  const cached = useFragmentStore.getState().getDetail(fragmentId);
   if (cached) {
     return cached;
   }
@@ -60,7 +39,7 @@ export async function readRemoteFragmentSnapshot(fragmentId: string): Promise<Fr
   }
   const mediaRows = await loadMediaRowsByFragmentIds([fragmentId]);
   const fragment = await mapRemoteRowToFragment(row, mediaRows.get(fragmentId) ?? []);
-  detailMemoryCache.set(fragmentId, fragment);
+  useFragmentStore.getState().setDetail(fragmentId, fragment);
   return fragment;
 }
 
@@ -68,13 +47,15 @@ export async function readRemoteFragmentSnapshot(fragmentId: string): Promise<Fr
 export async function readRemoteFragmentList(folderId?: string | null): Promise<Fragment[]> {
   const rows = await readFragmentRows(folderId, false);
   const mediaRowsByFragmentId = await loadMediaRowsByFragmentIds(rows.map((row) => row.id));
-  return await Promise.all(
+  const fragments = await Promise.all(
     rows.map(async (row) => {
       const fragment = await mapRemoteRowToFragment(row, mediaRowsByFragmentId.get(row.id) ?? []);
-      detailMemoryCache.set(row.id, fragment);
       return fragment;
     })
   );
+  /*批量更新详情缓存*/
+  useFragmentStore.getState().batchUpdateDetails(fragments);
+  return fragments;
 }
 
 /*把单条远端碎片持久化到本地镜像，并更新详情内存快照。 */
@@ -93,14 +74,14 @@ export async function upsertRemoteFragmentSnapshot(
       set: row,
     });
   await replaceRemoteMediaAssets(fragment.id, fragment.media_assets);
-  detailMemoryCache.set(fragment.id, {
+  /*更新 Zustand 详情缓存*/
+  useFragmentStore.getState().setDetail(fragment.id, {
     ...fragment,
     body_html: normalizeBodyHtml(fragment.body_html),
     plain_text_snapshot: String(
       fragment.plain_text_snapshot ?? extractPlainTextFromHtml(fragment.body_html)
     ),
   });
-  emitFragmentStoreChange();
 }
 
 /*批量持久化远端列表结果，供首页和文件夹页直接读取 SQLite。 */
@@ -119,19 +100,24 @@ export async function removeRemoteFragmentSnapshot(fragmentId: string): Promise<
   await database.delete(mediaAssetsTable).where(eq(mediaAssetsTable.fragmentId, fragmentId));
   await database.delete(fragmentsTable).where(eq(fragmentsTable.id, fragmentId));
   await deleteFileIfExists(getFragmentBodyFile(fragmentId));
-  detailMemoryCache.delete(fragmentId);
-  listMemoryCache.clear();
-  emitFragmentStoreChange();
+  /*删除详情缓存并清空列表缓存*/
+  useFragmentStore.getState().deleteDetail(fragmentId);
+  useFragmentStore.getState().clearCache();
 }
 
 /*读取远端列表时顺手更新内存快照，供页面二次进入秒开。 */
 export async function readCachedRemoteFragmentList(
   folderId?: string | null
 ): Promise<{ items: Fragment[]; cachedAt: string } | null> {
+  /*优先从 Zustand 缓存读取，避免重复查询 SQLite*/
+  const cached = useFragmentStore.getState().getList(folderId ?? null);
+  if (cached && cached.length > 0) {
+    return { items: cached, cachedAt: new Date().toISOString() };
+  }
+
+  /*缓存未命中时从 SQLite 读取*/
   const items = await readRemoteFragmentList(folderId);
-  const entry = { items, cachedAt: new Date().toISOString() };
-  listMemoryCache.set(resolveListScopeKey(folderId), entry);
-  return entry;
+  return { items, cachedAt: new Date().toISOString() };
 }
 
 /*批量写入远端列表后同步刷新列表级内存镜像。 */
@@ -140,15 +126,13 @@ export async function writeCachedRemoteFragmentList(
   folderId?: string | null
 ): Promise<void> {
   await upsertRemoteFragmentSnapshots(items);
-  listMemoryCache.set(resolveListScopeKey(folderId), {
-    items,
-    cachedAt: new Date().toISOString(),
-  });
+  /*更新列表缓存*/
+  useFragmentStore.getState().setList(folderId ?? null, items);
 }
 
 /*把远端详情镜像重新从 SQLite 刷到内存，供编辑器会话比较远端基线。 */
 export async function refreshRemoteSnapshotMemory(remoteId: string): Promise<Fragment | null> {
-  detailMemoryCache.delete(remoteId);
+  useFragmentStore.getState().deleteDetail(remoteId);
   return await readRemoteFragmentSnapshot(remoteId);
 }
 

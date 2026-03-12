@@ -11,10 +11,9 @@ import {
   loadRemoteBodyDraft,
   peekRemoteFragmentSnapshot,
   readRemoteFragmentSnapshot,
-  subscribeFragmentStore,
-  subscribeLocalFragmentDrafts,
   upsertRemoteFragmentSnapshot,
 } from '@/features/fragments/store';
+import { useFragmentStore } from '@/features/fragments/store/fragmentStore';
 import { applyDraftToFragment } from '@/features/fragments/fragmentCacheState';
 import type { Fragment } from '@/types/fragment';
 
@@ -142,18 +141,8 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
 
     void hydrate();
 
-    const unsubscribe = subscribeFragmentStore(() => {
-      void (async () => {
-        const cached = await resolveVisibleFragment(fragmentId);
-        if (!cached || cancelled) return;
-        hasVisibleFragmentRef.current = true;
-        setFragment(cached);
-        setError(null);
-        setIsLoading(false);
-      })();
-    });
-
-    const unsubscribeLocalDrafts = subscribeLocalFragmentDrafts(() => {
+    /*使用 Zustand 订阅状态变化*/
+    const unsubscribe = useFragmentStore.subscribe(() => {
       void (async () => {
         const cached = await resolveVisibleFragment(fragmentId);
         if (!cached || cancelled) return;
@@ -167,7 +156,6 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
     return () => {
       cancelled = true;
       unsubscribe();
-      unsubscribeLocalDrafts();
     };
   }, [fragmentId, loadRemote]);
 
