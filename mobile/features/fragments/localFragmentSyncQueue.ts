@@ -10,6 +10,7 @@ import {
   loadFragmentBodyDraft,
 } from '@/features/fragments/bodyDrafts';
 import { resolveRetryDelayMs } from '@/features/fragments/localDraftState';
+import { shouldRestoreLocalDraftOnLaunch } from '@/features/fragments/bodySyncPolicy';
 import { shouldRecoverMissingRemoteBinding } from '@/features/fragments/localDraftSession';
 import {
   peekFragmentCache,
@@ -306,12 +307,7 @@ export async function restoreLocalFragmentSyncQueue(): Promise<void> {
   const drafts = await listLocalFragmentDrafts();
   await Promise.all(
     drafts.map(async (draft) => {
-      if (draft.sync_status === 'synced') {
-        const hasPendingImages = (draft.pending_image_assets ?? []).some(
-          (item) => item.upload_status !== 'uploaded'
-        );
-        if (!hasPendingImages) return;
-      }
+      if (!shouldRestoreLocalDraftOnLaunch(draft)) return;
       await enqueueLocalFragmentSync(draft.local_id, { force: true });
     })
   );

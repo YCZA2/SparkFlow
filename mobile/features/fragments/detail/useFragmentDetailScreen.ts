@@ -41,8 +41,14 @@ export function useFragmentDetailScreen(
     return getActiveSegmentIndex(segments, player.positionMs);
   }, [fragment?.speaker_segments, isSheetOpen, player.positionMs]);
 
-  const exitScreen = () => {
-    /*允许特定入口覆盖离开路径，避免写下灵感回退到录音页。 */
+  const exitScreen = async () => {
+    /*离开详情前先保证最新输入已落本地，并把上云动作交给后台收敛。 */
+    try {
+      await editor.saveNow();
+    } catch {
+      Alert.alert('本地保存失败', '请稍后重试，当前页会继续保留输入内容。');
+      return;
+    }
     if (options?.exitTo) {
       router.replace(options.exitTo);
       return;
@@ -134,13 +140,8 @@ export function useFragmentDetailScreen(
   };
 
   const done = async () => {
-    /*完成编辑前主动 flush 自动保存，失败时停留在当前页继续保留草稿。 */
-    try {
-      await editor.saveNow();
-      exitScreen();
-    } catch {
-      Alert.alert('内容未同步', '内容未同步，已保留本地草稿');
-    }
+    /*完成编辑与直接返回都复用同一套“先本地保存、再后台同步”的退出策略。 */
+    await exitScreen();
   };
 
   return {
@@ -187,7 +188,9 @@ export function useFragmentDetailScreen(
       },
     },
     actions: {
-      goBack: exitScreen,
+      goBack: () => {
+        void exitScreen();
+      },
       share,
       done,
       requestDelete,

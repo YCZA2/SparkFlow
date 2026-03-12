@@ -115,6 +115,42 @@ test('save success advances baseline and clears local edit marker', () => {
   assert.equal(state.hasConfirmedLocalEdit, false);
 });
 
+test('no-op snapshot change keeps local draft sync status stable after sync success', () => {
+  let state = createInitialEditorSessionState('local:fragment:1');
+  state = reduceEditorSession(state, {
+    type: 'REMOTE_LOADED',
+    fragment: buildFragment({
+      id: 'local:fragment:1',
+      local_id: 'local:fragment:1',
+      is_local_draft: true,
+      local_sync_status: 'synced',
+      body_html: '<p>已同步正文</p>',
+    } as Partial<Fragment>),
+  });
+  state = reduceEditorSession(state, {
+    type: 'CACHE_LOADED',
+    html: '<p>已同步正文</p>',
+  });
+  state = reduceEditorSession(state, {
+    type: 'LOCAL_DRAFT_LOADED',
+    html: '<p>已同步正文</p>',
+  });
+
+  assert.equal(state.syncStatus, 'synced');
+
+  state = reduceEditorSession(state, {
+    type: 'SNAPSHOT_CHANGED',
+    snapshot: {
+      body_html: '<p>已同步正文</p>',
+      plain_text: '已同步正文',
+      asset_ids: [],
+    },
+  });
+
+  assert.equal(state.syncStatus, 'synced');
+  assert.equal(state.hasConfirmedLocalEdit, true);
+});
+
 test('appendImageToSnapshot appends asset markdown without breaking order', () => {
   const imageAsset: MediaAsset = {
     id: 'asset-1',

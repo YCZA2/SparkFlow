@@ -34,6 +34,7 @@ interface FragmentRichEditorProps {
   autoFocus?: boolean;
   mediaAssets: MediaAsset[];
   statusLabel?: string | null;
+  onBlur?: () => void;
   onEditorReady: () => void;
   onSnapshotChange: (snapshot: FragmentEditorSnapshot) => void;
   onSelectionChange: (text: string) => void;
@@ -98,6 +99,7 @@ export function FragmentRichEditor({
   autoFocus = false,
   mediaAssets,
   statusLabel,
+  onBlur,
   onEditorReady,
   onSnapshotChange,
   onSelectionChange,
@@ -106,6 +108,9 @@ export function FragmentRichEditor({
   /*用原生富文本输入替换 WebView 编辑器，并维持页面层既有桥接接口。 */
   const theme = useAppTheme();
   const nativeRef = React.useRef<EnrichedTextInputInstance | null>(null);
+  const [seededEditorHtml, setSeededEditorHtml] = React.useState(() =>
+    replaceAssetIdsWithDisplayUrls(initialBodyHtml, mediaAssets)
+  );
   const latestSnapshotRef = React.useRef<FragmentEditorSnapshot>({
     body_html: normalizeBodyHtml(initialBodyHtml),
     plain_text: extractPlainTextFromHtml(initialBodyHtml),
@@ -113,11 +118,6 @@ export function FragmentRichEditor({
   });
   const snapshotTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const formattingStateRef = React.useRef<FragmentEditorFormattingState | null>(null);
-
-  const initialEditorHtml = React.useMemo(
-    () => replaceAssetIdsWithDisplayUrls(initialBodyHtml, mediaAssets),
-    [initialBodyHtml, mediaAssets]
-  );
 
   const htmlStyle = React.useMemo<HtmlStyle>(
     () => ({
@@ -171,8 +171,11 @@ export function FragmentRichEditor({
   );
 
   React.useEffect(() => {
-    latestSnapshotRef.current = buildSnapshotFromHtml(initialEditorHtml, mediaAssets);
-  }, [initialEditorHtml, mediaAssets]);
+    /*只在真正切换编辑会话时重置初始正文，避免输入中被新 defaultValue 回灌。 */
+    const nextSeededHtml = replaceAssetIdsWithDisplayUrls(initialBodyHtml, mediaAssets);
+    setSeededEditorHtml(nextSeededHtml);
+    latestSnapshotRef.current = buildSnapshotFromHtml(nextSeededHtml, mediaAssets);
+  }, [editorKey]);
 
   React.useEffect(() => {
     onEditorReady();
@@ -186,11 +189,10 @@ export function FragmentRichEditor({
 
   const handleHtmlChange = React.useCallback(
     (nextHtml: string) => {
+      latestSnapshotRef.current = buildSnapshotFromHtml(nextHtml, mediaAssets);
       if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
       snapshotTimerRef.current = setTimeout(() => {
-        const snapshot = buildSnapshotFromHtml(nextHtml, mediaAssets);
-        latestSnapshotRef.current = snapshot;
-        onSnapshotChange(snapshot);
+        onSnapshotChange(latestSnapshotRef.current);
       }, 120);
     },
     [mediaAssets, onSnapshotChange]
@@ -211,7 +213,7 @@ export function FragmentRichEditor({
           key={editorKey}
           ref={nativeRef}
           autoFocus={autoFocus}
-          defaultValue={initialEditorHtml}
+          defaultValue={seededEditorHtml}
           htmlStyle={htmlStyle}
           placeholder="把灵感整理成可用正文..."
           placeholderTextColor={theme.colors.textSubtle}
@@ -225,6 +227,9 @@ export function FragmentRichEditor({
           }}
           onChangeHtml={(event) => {
             handleHtmlChange(event.nativeEvent.value);
+          }}
+          onBlur={() => {
+            onBlur?.();
           }}
           onChangeSelection={(event: NativeSyntheticEvent<OnChangeSelectionEvent>) => {
             onSelectionChange(event.nativeEvent.text ?? '');

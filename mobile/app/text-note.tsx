@@ -4,7 +4,6 @@ import { type Href, Stack, useLocalSearchParams } from 'expo-router';
 
 import { ScreenState } from '@/components/ScreenState';
 import { FragmentDetailScreen } from '@/features/fragments/detail/FragmentDetailScreen';
-import { enqueueLocalFragmentSync } from '@/features/fragments/localFragmentSyncQueue';
 import { createLocalFragmentDraft } from '@/features/fragments/localDrafts';
 import { useAppTheme } from '@/theme/useAppTheme';
 
@@ -16,14 +15,13 @@ export default function TextNoteScreen() {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    /*进入写下灵感时先创建本地草稿并立即进入编辑器，再静默触发远端建单。 */
+    /*进入写下灵感时只创建本地草稿，远端建单延后到离页或后台同步。 */
     let cancelled = false;
 
     const bootstrap = async () => {
       try {
         setError(null);
         const draft = await createLocalFragmentDraft(params.folderId);
-        void enqueueLocalFragmentSync(draft.local_id).catch(() => undefined);
         if (cancelled) return;
         setFragmentId(draft.local_id);
       } catch (err) {

@@ -27,6 +27,7 @@ interface FragmentRichEditorProps {
   autoFocus?: boolean;
   mediaAssets: MediaAsset[];
   statusLabel?: string | null;
+  onBlur?: () => void;
   onEditorReady: () => void;
   onSnapshotChange: (snapshot: FragmentEditorSnapshot) => void;
   onSelectionChange: (text: string) => void;
@@ -50,6 +51,7 @@ export function FragmentRichEditor({
   autoFocus = false,
   mediaAssets,
   statusLabel,
+  onBlur,
   onEditorReady,
   onSnapshotChange,
   onSelectionChange,
@@ -62,10 +64,11 @@ export function FragmentRichEditor({
   const latestSnapshotRef = React.useRef<FragmentEditorSnapshot>(buildSnapshotFromHtml(initialBodyHtml));
 
   React.useEffect(() => {
+    /*只在切换到另一条会话时重置输入值，避免本地输入被父层新 props 覆盖。 */
     const nextValue = normalizeBodyHtml(initialBodyHtml);
     setValue(nextValue);
     latestSnapshotRef.current = buildSnapshotFromHtml(nextValue);
-  }, [editorKey, initialBodyHtml, mediaAssets]);
+  }, [editorKey]);
 
   React.useEffect(() => {
     onFormattingStateChange({
@@ -106,9 +109,9 @@ export function FragmentRichEditor({
   const handleChangeText = React.useCallback(
     (nextValue: string) => {
       const normalized = normalizeBodyHtml(nextValue);
+      const snapshot = buildSnapshotFromHtml(normalized);
       setValue(normalized);
       onSelectionChange(normalized);
-      const snapshot = buildSnapshotFromHtml(normalized);
       latestSnapshotRef.current = snapshot;
       onSnapshotChange(snapshot);
     },
@@ -142,6 +145,9 @@ export function FragmentRichEditor({
           ]}
           value={value}
           onChangeText={handleChangeText}
+          onBlur={() => {
+            onBlur?.();
+          }}
         />
       </View>
       {statusLabel ? <View style={styles.hiddenStatus} accessible={false} /> : null}

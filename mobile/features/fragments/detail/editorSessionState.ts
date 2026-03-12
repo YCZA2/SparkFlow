@@ -310,11 +310,13 @@ export function reduceEditorSession(
       ...state,
       snapshot: event.snapshot,
       hasConfirmedLocalEdit: hasMeaningfulChange ? true : state.hasConfirmedLocalEdit,
-      syncStatus: state.source.fragment?.is_local_draft
-        ? 'syncing'
-        : state.syncStatus === 'synced'
-          ? 'idle'
-          : state.syncStatus,
+      syncStatus: hasMeaningfulChange
+        ? state.source.fragment?.is_local_draft
+          ? 'syncing'
+          : state.syncStatus === 'synced'
+            ? 'idle'
+            : state.syncStatus
+        : state.syncStatus,
       errorMessage: null,
       phase: state.phase === 'saving' ? 'saving' : resolveSessionPhase(state),
     };

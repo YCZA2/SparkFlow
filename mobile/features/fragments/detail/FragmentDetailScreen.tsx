@@ -234,6 +234,7 @@ export function FragmentDetailScreen({
                 autoFocus={editor.shouldAutoFocus}
                 mediaAssets={editor.mediaAssets}
                 statusLabel={editor.statusLabel}
+                onBlur={editor.onEditorBlur}
                 onEditorReady={editor.onEditorReady}
                 onSnapshotChange={editor.onSnapshotChange}
                 onSelectionChange={editor.onSelectionChange}

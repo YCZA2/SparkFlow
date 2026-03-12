@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 
 import { uploadImageAsset } from '@/features/fragments/api';
@@ -6,15 +7,16 @@ import {
   loadFragmentBodyDraft,
   saveFragmentBodyDraft,
 } from '@/features/fragments/bodyDrafts';
-import { normalizeBodyHtml } from '@/features/fragments/bodyMarkdown';
+import {
+  resolveLocalDraftPersistStatus,
+  shouldTriggerRemoteSync,
+} from '@/features/fragments/bodySyncPolicy';
 import {
   appendImageToSnapshot,
   createInitialEditorSessionState,
   reduceEditorSession,
   shouldPublishOptimisticFragment,
-  shouldQueueAutosave,
 } from '@/features/fragments/detail/editorSessionState';
-import { createLatestOnlySaveController } from '@/features/fragments/detail/fragmentSaveController';
 import {
   enqueueLocalFragmentSync,
   enqueueRemoteFragmentBodySync,
@@ -36,8 +38,6 @@ import type {
   MediaAsset,
 } from '@/types/fragment';
 import type { FragmentRichEditorHandle } from '@/features/fragments/components/FragmentRichEditor';
-
-const AUTOSAVE_DELAY_MS = 800;
 
 interface UseFragmentBodySessionOptions {
   fragmentId?: string | null;
@@ -101,7 +101,6 @@ export function useFragmentBodySession({
   const editorRef = useRef<FragmentRichEditorHandle | null>(null);
   const stateRef = useRef(state);
   const fragmentRef = useRef(fragment);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitOptimisticFragmentRef = useRef(commitOptimisticFragment);
   const resolvedFragmentIdRef = useRef(resolvedFragmentId);
   const localDraftIdRef = useRef(localDraftSession.localDraftId);
@@ -167,7 +166,10 @@ export function useFragmentBodySession({
         saveLocalFragmentDraft(currentLocalDraftId, {
           body_html: state.snapshot.body_html,
           plain_text_snapshot: state.snapshot.plain_text,
-          sync_status: currentFragment.remote_id ? 'syncing' : 'creating',
+          sync_status: resolveLocalDraftPersistStatus({
+            fragment: currentFragment,
+            queueRemote: false,
+          }),
           next_retry_at: null,
         }),
         commitOptimisticFragmentRef.current(optimisticFragment),
@@ -187,92 +189,71 @@ export function useFragmentBodySession({
     return snapshot ?? stateRef.current.snapshot;
   }, []);
 
-  const saveControllerRef = useRef(
-    createLatestOnlySaveController<FragmentEditorSnapshot>({
-      shouldProcess: (snapshot) => {
-        /*只有正文真正偏离当前基线时才落保存任务。 */
-        const remoteBaseline = stateRef.current.baseline?.remote_baseline ?? '';
-        return normalizeBodyHtml(snapshot.body_html) !== normalizeBodyHtml(remoteBaseline);
-      },
-      submit: async (snapshot) => {
-        /*把保存流程串行化，并在成功后统一回流 session 与资源层。 */
-        const currentFragment = fragmentRef.current;
-        const currentFragmentId = resolvedFragmentIdRef.current;
-        const currentLocalDraftId = localDraftIdRef.current;
-        if (!currentFragment || !currentFragmentId) return;
+  const persistSnapshotLocally = useCallback(
+    async (
+      snapshot: FragmentEditorSnapshot,
+      options?: { enqueueRemote?: boolean; forceRemote?: boolean }
+    ): Promise<void> => {
+      /*把最新快照先稳稳落到本地，再按触发点决定是否进入远端同步队列。 */
+      const currentFragment = fragmentRef.current;
+      const currentFragmentId = resolvedFragmentIdRef.current;
+      const currentLocalDraftId = localDraftIdRef.current;
+      if (!currentFragment || !currentFragmentId) return;
 
-        dispatch({ type: 'SAVE_STARTED' });
+      const shouldEnqueueRemote = Boolean(
+        options?.enqueueRemote &&
+          shouldTriggerRemoteSync({
+            fragment: currentFragment,
+            snapshot,
+            mediaAssets: stateRef.current.mediaAssets,
+            baselineRemoteHtml: stateRef.current.baseline?.remote_baseline ?? null,
+            baselineMediaAssets: stateRef.current.baseline?.media_assets ?? [],
+          })
+      );
 
-        try {
-          if (currentLocalDraftId) {
-            await saveLocalFragmentDraft(currentLocalDraftId, {
-              body_html: snapshot.body_html,
-              plain_text_snapshot: snapshot.plain_text,
-              sync_status: currentFragment.remote_id ? 'syncing' : 'creating',
-              next_retry_at: null,
-            });
-            void enqueueLocalFragmentSync(currentLocalDraftId, { delayMs: AUTOSAVE_DELAY_MS }).catch(
-              () => undefined
-            );
-            dispatch({
-              type: 'SAVE_SUCCEEDED',
-              fragment: {
-                ...currentFragment,
-                body_html: snapshot.body_html,
-                plain_text_snapshot: snapshot.plain_text,
-                media_assets: stateRef.current.mediaAssets,
-              },
-              savedHtml: snapshot.body_html,
-            });
-            return;
-          }
-
-          await saveFragmentBodyDraft(currentFragmentId, snapshot.body_html);
-          void enqueueRemoteFragmentBodySync(currentFragmentId, {
-            delayMs: AUTOSAVE_DELAY_MS,
+      if (currentLocalDraftId) {
+        await saveLocalFragmentDraft(currentLocalDraftId, {
+          body_html: snapshot.body_html,
+          plain_text_snapshot: snapshot.plain_text,
+          sync_status: resolveLocalDraftPersistStatus({
+            fragment: currentFragment,
+            queueRemote: shouldEnqueueRemote,
+          }),
+          next_retry_at: null,
+        });
+        await commitOptimisticFragmentRef.current({
+          ...currentFragment,
+          body_html: snapshot.body_html,
+          plain_text_snapshot: snapshot.plain_text,
+          media_assets: stateRef.current.mediaAssets,
+          local_sync_status: resolveLocalDraftPersistStatus({
+            fragment: currentFragment,
+            queueRemote: shouldEnqueueRemote,
+          }),
+        });
+        if (shouldEnqueueRemote) {
+          void enqueueLocalFragmentSync(currentLocalDraftId, {
+            force: options?.forceRemote ?? true,
           }).catch(() => undefined);
-          const optimisticFragment = {
-            ...currentFragment,
-            body_html: snapshot.body_html,
-            plain_text_snapshot: snapshot.plain_text,
-            media_assets: stateRef.current.mediaAssets,
-          };
-          await commitOptimisticFragmentRef.current(optimisticFragment);
-          dispatch({
-            type: 'LOCAL_SAVE_SUCCEEDED',
-            fragment: optimisticFragment,
-            savedHtml: snapshot.body_html,
-          });
-        } catch (error) {
-          dispatch({
-            type: 'SAVE_FAILED',
-            attemptedHtml: snapshot.body_html,
-            message: error instanceof Error ? error.message : '内容未同步',
-          });
-          throw error;
         }
-      },
-    })
+        return;
+      }
+
+      await saveFragmentBodyDraft(currentFragmentId, snapshot.body_html);
+      await commitOptimisticFragmentRef.current({
+        ...currentFragment,
+        body_html: snapshot.body_html,
+        plain_text_snapshot: snapshot.plain_text,
+        media_assets: stateRef.current.mediaAssets,
+      });
+      if (shouldEnqueueRemote) {
+        void enqueueRemoteFragmentBodySync(currentFragmentId, {
+          force: options?.forceRemote ?? true,
+        }).catch(() => undefined);
+      }
+    },
+    []
   );
-
-  useEffect(() => {
-    /*输入停顿后只提交最后一版正文，避免一连串重复保存。 */
-    if (!shouldQueueAutosave(state)) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      dispatch({ type: 'SAVE_REQUESTED' });
-    }, AUTOSAVE_DELAY_MS);
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, [state]);
-
-  useEffect(() => {
-    /*保存请求由 effect 统一消费，保持 reducer 本身无副作用。 */
-    if (state.saveRequestId === 0) return;
-    const latestSnapshot = getLiveSnapshot();
-    void saveControllerRef.current.submitLatest(latestSnapshot).catch(() => undefined);
-  }, [getLiveSnapshot, state.saveRequestId]);
 
   const onSnapshotChange = useCallback((snapshot: FragmentEditorSnapshot) => {
     /*bridge 输出的标准化快照直接进入会话状态机。 */
@@ -295,7 +276,7 @@ export function useFragmentBodySession({
   }, []);
 
   const onInsertImage = useCallback(async () => {
-    /*图片插入统一回流 session，再由自动保存收敛到本地或远端。 */
+    /*图片插入先回流本地会话，远端收敛延后到离页、失焦或后台触发。 */
     try {
       setIsUploadingImage(true);
       const result = await DocumentPicker.getDocumentAsync({
@@ -331,9 +312,6 @@ export function useFragmentBodySession({
             snapshot: appendImageToSnapshot(getLiveSnapshot(), localMediaAsset),
           });
         }
-        void enqueueLocalFragmentSync(currentLocalDraftId, { delayMs: AUTOSAVE_DELAY_MS }).catch(
-          () => undefined
-        );
         return;
       }
 
@@ -362,52 +340,56 @@ export function useFragmentBodySession({
   }, []);
 
   const saveNow = useCallback(async () => {
-    /*离页前只保证本地草稿已落盘，远端同步继续后台收敛。 */
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
+    /*离页前先落本地，再把需要上云的内容交给后台同步队列。 */
     const latestSnapshot = getLiveSnapshot();
-    const currentFragment = fragmentRef.current;
-    const currentFragmentId = resolvedFragmentIdRef.current;
-    const currentLocalDraftId = localDraftIdRef.current;
-    if (!currentFragment || !currentFragmentId) return;
-
-    if (currentLocalDraftId) {
-      await saveLocalFragmentDraft(currentLocalDraftId, {
-        body_html: latestSnapshot.body_html,
-        plain_text_snapshot: latestSnapshot.plain_text,
-        sync_status: currentFragment.remote_id ? 'syncing' : 'creating',
-        next_retry_at: null,
-      });
-      void enqueueLocalFragmentSync(currentLocalDraftId, { delayMs: AUTOSAVE_DELAY_MS }).catch(
-        () => undefined
-      );
-      return;
-    }
-
-    await saveFragmentBodyDraft(currentFragmentId, latestSnapshot.body_html);
-    void enqueueRemoteFragmentBodySync(currentFragmentId, { force: true }).catch(() => undefined);
-    dispatch({
-      type: 'LOCAL_SAVE_SUCCEEDED',
-      fragment: {
-        ...currentFragment,
-        body_html: latestSnapshot.body_html,
-        plain_text_snapshot: latestSnapshot.plain_text,
-        media_assets: stateRef.current.mediaAssets,
-      },
-      savedHtml: latestSnapshot.body_html,
+    await persistSnapshotLocally(latestSnapshot, {
+      enqueueRemote: true,
+      forceRemote: true,
     });
-  }, [getLiveSnapshot]);
+  }, [getLiveSnapshot, persistSnapshotLocally]);
+
+  const onEditorBlur = useCallback(() => {
+    /*编辑器失焦时做一次本地 flush，并把远端同步交给后台静默收敛。 */
+    void saveNow().catch(() => undefined);
+  }, [saveNow]);
+
+  useEffect(() => {
+    /*应用退到后台前先 flush 当前编辑器，避免最后几次输入停留在 bridge 内存里。 */
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        void saveNow().catch(() => undefined);
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [saveNow]);
+
+  useEffect(() => {
+    /*详情页卸载前补一次非阻塞 flush，保证返回列表时本地和后台同步都已接力。 */
+    return () => {
+      void saveNow().catch(() => undefined);
+    };
+  }, [saveNow]);
 
   const statusLabel = useMemo(() => {
-    /*把内部同步态映射成页面展示文案。 */
+    /*详情页默认保持安静，只在明确失败时提示“已保存在本地”。 */
     if (!state.isDraftHydrated || !state.isEditorReady) return null;
-    if (state.syncStatus === 'syncing' || state.phase === 'saving') return '同步中';
-    if (state.syncStatus === 'synced') return '已同步';
-    if (state.syncStatus === 'unsynced') return '未同步';
+    if (fragment?.is_local_draft && fragment.local_sync_status === 'failed_pending_retry') {
+      return '已保存在本地，稍后同步';
+    }
+    if (state.errorMessage || state.syncStatus === 'unsynced') {
+      return '已保存在本地，稍后同步';
+    }
     return null;
-  }, [state.isDraftHydrated, state.isEditorReady, state.phase, state.syncStatus]);
+  }, [
+    fragment?.is_local_draft,
+    fragment?.local_sync_status,
+    state.errorMessage,
+    state.isDraftHydrated,
+    state.isEditorReady,
+    state.syncStatus,
+  ]);
 
   return {
     editorRef,
@@ -421,6 +403,7 @@ export function useFragmentBodySession({
     isUploadingImage,
     isAiRunning,
     saveNow,
+    onEditorBlur,
     onEditorReady,
     onSnapshotChange,
     onSelectionChange,

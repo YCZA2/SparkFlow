@@ -44,20 +44,6 @@ function getSourceLabel(source: string): string {
   return labels[source] || source;
 }
 
-function getSyncLabel(fragment: Fragment): string | null {
-  /*本地草稿卡片展示轻量同步状态，避免用户误以为内容已上云。 */
-  if (!fragment.is_local_draft) return null;
-  if (fragment.local_sync_status === 'synced') return null;
-  if (
-    fragment.local_sync_status === 'syncing' ||
-    fragment.local_sync_status === 'creating'
-  ) {
-    return '同步中';
-  }
-  if (fragment.local_sync_status === 'failed_pending_retry') return '未同步';
-  return null;
-}
-
 function getTitle(fragment: Fragment): string {
   const summary = getCleanText(fragment.summary);
   if (summary) return truncate(summary, 30);
@@ -97,7 +83,6 @@ export function FragmentCard({
   isLastInSection = false,
 }: FragmentCardProps) {
   const theme = useAppTheme();
-  const syncLabel = getSyncLabel(fragment);
 
   return (
     <TouchableOpacity
@@ -143,11 +128,6 @@ export function FragmentCard({
           <Text style={[styles.source, { color: theme.colors.textSubtle }]} numberOfLines={1}>
             {fragment.display_source_label || getSourceLabel(fragment.source)}
           </Text>
-          {syncLabel ? (
-            <Text style={[styles.syncLabel, { color: theme.colors.textSubtle }]} numberOfLines={1}>
-              {syncLabel}
-            </Text>
-          ) : null}
         </View>
       </View>
     </TouchableOpacity>
@@ -201,12 +181,7 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 8,
-  },
-  syncLabel: {
-    fontSize: 12,
-    lineHeight: 16,
   },
   checkbox: {
     width: 22,
