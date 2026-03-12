@@ -16,6 +16,7 @@ import {
   wakeLocalFragmentSyncQueue,
   wakeRemoteFragmentBodySyncQueue,
 } from '@/features/fragments/localFragmentSyncQueue';
+import { ensureFragmentLocalMirrorReady } from '@/features/fragments/store/localMirror';
 
 interface AppSessionContextValue {
   isReady: boolean;
@@ -50,8 +51,10 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
   };
 
   const bootstrap = async () => {
+    /*启动时先准备本地镜像与认证态，避免 UI 抢先读取未迁移的数据层。 */
     try {
       setError(null);
+      await ensureFragmentLocalMirrorReady();
       await initApiBaseUrl();
       const token = await getToken();
       const storedUser = await getUserInfo();
@@ -83,8 +86,12 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     /*应用启动后恢复本地草稿同步队列，保证离线编辑可在后续静默收敛。 */
-    void restoreLocalFragmentSyncQueue().catch(() => undefined);
-    void restoreRemoteFragmentBodySyncQueue().catch(() => undefined);
+    void ensureFragmentLocalMirrorReady()
+      .then(async () => {
+        await restoreLocalFragmentSyncQueue();
+        await restoreRemoteFragmentBodySyncQueue();
+      })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {

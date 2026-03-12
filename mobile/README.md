@@ -14,6 +14,8 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 ## 当前移动端已接入的内容能力
 
+- fragments 主链路已切到 local-first 镜像：列表/详情索引使用 `expo-sqlite + drizzle-orm`，正文和 staging 文件使用 `expo-file-system`
+- 远端快照、本地草稿、待上传图片和 pending ops 不再混放在 `AsyncStorage`；`AsyncStorage` 仅保留 token、用户信息、后端地址和少量轻量配置
 - “写下灵感”文本链路已切到 local-first：进入 `/text-note` 时先创建本地 `LocalFragmentDraft`，立即进入编辑器，再后台静默建远端碎片。
 - 本地草稿会聚合进首页/文件夹页列表顶部；若后续绑定了 `remote_id`，列表会自动对远端卡片去重。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
@@ -25,8 +27,22 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 脚本详情页当前读取 `body_html`，展示层先提取纯文本，后端在导出链路里再负责转换 Markdown。
 - 移动端碎片正文已切到 `react-native-enriched` 原生富文本输入，运行时与本地草稿真值统一为 `body_html`，支持标题、列表、引用、粗体、斜体和图片；AI patch 与 WebView/Tiptap 旧桥接层本期已移除。
 - 碎片详情里的正文基线解析、自动保存队列、AI fallback patch、图片 fallback 插入和素材去重都已下沉为独立 session helper / reducer，纯状态回归统一由 `mobile/tests/*.test.ts` 覆盖。
-- 碎片列表缓存已按首页 `all` 和文件夹 `folder:<id>` 分桶，首页/文件夹页都采用一致的“缓存秒开 + 后台刷新 + 缓存订阅回显”策略。
+- fragments 列表现在统一从 SQLite 本地镜像读取；首页与文件夹页共享同一套“本地镜像秒开 + 后台刷新 + 订阅回显”策略。
 - 知识库移动端仍是占位入口，还没有完整的 Markdown 编辑和素材管理 UI。
+
+## 本地数据层说明
+
+- `mobile/features/core/db/`：SQLite 连接、schema、迁移和 Drizzle 查询入口
+- `mobile/features/core/files/`：fragment 正文文件、远端正文草稿和图片/音频 staging 文件管理
+- `mobile/features/core/sync/`：pending ops 写入与同步状态更新入口
+- `mobile/features/fragments/store/`：fragments 本地镜像仓储，负责旧 `AsyncStorage` 缓存迁移、SQLite upsert 和文件正文读写
+
+当前 fragments 读写规则：
+
+- 列表页先读 SQLite 本地镜像，再后台刷新远端
+- 详情页先读 SQLite 元数据与本地 `body.html`
+- 远端碎片未同步正文继续写入独立草稿文件，不覆盖远端基线正文文件
+- 本地 manual fragment 正文直接写本地文件，后台同步成功后回填 `remote_id`
 
 ## 一、推荐用法：统一走 `scripts/dev-mobile.sh`
 
@@ -259,7 +275,7 @@ http://192.168.31.157:8000
 - 碎片详情正文读取 `body_html`，列表摘要和生成页预览读取 `plain_text_snapshot`
 - `transcript` 表示机器转写原文，不参与正文编辑
 - 碎片详情默认只把正文编辑器作为主界面；原文时间线、音频播放、摘要、标签、来源和删除操作都从右上角“更多”抽屉进入
-- 碎片正文详情采用 local-first：优先读取本地 draft / 缓存秒开，编辑中不再自动远端刷新当前会话；本地保存和图片上传失败时会保留草稿与待上传状态，重新进入详情仍可继续编辑
+- 碎片正文详情采用 local-first：优先读取本地 draft / SQLite 镜像，编辑中不再自动远端刷新当前会话；本地保存和图片上传失败时会保留草稿与待上传状态，重新进入详情仍可继续编辑
 - AI 编辑接口本期停用，不再参与正文链路
 - 脚本详情只读取 `body_html`
 - 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入

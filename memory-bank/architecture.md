@@ -11,6 +11,8 @@ flowchart LR
     U["用户"]
     M["Mobile App<br/>Expo Router + React Native"]
     S["AsyncStorage<br/>token / user / backend base url"]
+    LDB[("SQLite Local Mirror<br/>expo-sqlite + drizzle")]
+    LFS[("Local Files<br/>expo-file-system")]
     API["FastAPI API<br/>模块化单体"]
     DB[("PostgreSQL<br/>SQLAlchemy")]
     FS[("File Storage<br/>local uploads / Aliyun OSS")]
@@ -24,6 +26,8 @@ flowchart LR
 
     U --> M
     M --> S
+    M --> LDB
+    M --> LFS
     M -->|HTTP| API
     API --> DB
     API --> FS
@@ -79,13 +83,17 @@ flowchart TD
         C["HTTP client<br/>features/core/api/client.ts"]
         CFG["config + networkConfig"]
         AS["AsyncStorage"]
-        NATIVE["Expo native APIs<br/>Audio / Camera / MediaLibrary / DocumentPicker"]
+        LDB["Local mirror DB<br/>expo-sqlite + drizzle"]
+        LFS["Local files<br/>expo-file-system"]
+        NATIVE["Expo native APIs<br/>Audio / Camera / MediaLibrary / DocumentPicker / SQLite"]
     end
 
     R --> P
     R --> SM
     SM --> H
     H --> C
+    H --> LDB
+    H --> LFS
     H --> NATIVE
     C --> CFG
     C --> AS
@@ -108,9 +116,11 @@ flowchart TD
 
 当前移动端真正参与主流程的数据持久化是：
 
-- `AsyncStorage`: token、用户信息、后端 base URL、按范围分桶的 fragment 列表缓存、fragment 详情缓存、本地 `LocalFragmentDraft` 草稿和待上传图片队列
+- `AsyncStorage`: token、用户信息、后端 base URL、少量调试/配置键值
+- `expo-sqlite + drizzle-orm`: fragments 本地镜像索引、媒体资源索引、pending ops、同步状态
+- `expo-file-system`: fragment `body.html`、远端正文草稿、图片/音频 staging 文件
 
-当前移动端主流程的本地持久化只使用 `AsyncStorage`，未引入 SQLite 业务存储链路；“写下灵感”文本链路已经改为 local-first：详情首屏优先读取本地 draft，再叠加已绑定 remote cache，最后静默刷新远端详情。碎片列表缓存已按 `all / folder:<id>` 分桶，首页和文件夹页会把本地 draft 聚合到远端列表顶部，并通过本地同步队列在应用启动、输入停顿和页面聚焦时持续收敛到远端。
+当前移动端主流程已经切到 local-first 镜像：列表和详情的远端快照真值落在 SQLite，本地大文本和待上传文件落在 app sandbox 文件系统；页面优先读取本地镜像，后台同步层再把本地改动收敛到服务端，并把远端刷新结果回写到本地镜像。`AsyncStorage` 不再承载 fragments 主流程缓存与草稿真值。
 
 ## 4. Backend Architecture
 

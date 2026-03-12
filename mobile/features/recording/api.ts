@@ -1,4 +1,8 @@
 import { API_ENDPOINTS } from '@/constants/config';
+import {
+  buildMultipartFilePart,
+  prepareManagedAudioFile,
+} from '@/features/core/files/runtime';
 import { fetchApi, sendForm } from '@/features/core/api/client';
 
 export interface UploadAudioResponse {
@@ -22,13 +26,10 @@ export interface TranscribeStatusResponse {
 }
 
 export async function uploadAudio(uri: string, folderId?: string): Promise<UploadAudioResponse> {
-  const filename = uri.split('/').pop() || 'recording.m4a';
+  /*录音上传前先统一落到 staging，保证文件名、路径和重试语义稳定。 */
+  const managedFile = await prepareManagedAudioFile(uri, uri.split('/').pop() || 'recording.m4a');
   const formData = new FormData();
-  formData.append('audio', {
-    uri,
-    name: filename,
-    type: 'audio/m4a',
-  } as never);
+  formData.append('audio', buildMultipartFilePart(managedFile) as never);
 
   // 如果指定了文件夹ID，添加到表单中
   if (folderId) {

@@ -14,9 +14,10 @@ import {
 } from '@/features/fragments/localDrafts';
 import { wakeLocalFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
 import {
-  peekFragmentListCache,
+  readFragmentCache,
   readFragmentListCache,
   subscribeFragmentCache,
+  writeFragmentCache,
   writeFragmentListCache,
 } from '@/features/fragments/fragmentRepository';
 import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
@@ -104,14 +105,15 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
     void hydrate();
 
     const unsubscribe = subscribeFragmentCache(() => {
-      const cached = peekFragmentListCache(resolvedFolderId);
-      if (!cached) {
-        setRemoteFragments([]);
-        return;
-      }
-      setRemoteFragments(cached.items);
-      setError(null);
-      setIsLoading(false);
+      void (async () => {
+        const cached = await readFragmentListCache(resolvedFolderId);
+        if (!cached || cancelled) {
+          return;
+        }
+        setRemoteFragments(cached.items);
+        setError(null);
+        setIsLoading(false);
+      })();
     });
 
     const unsubscribeLocalDrafts = subscribeLocalFragmentDrafts(() => {
@@ -182,7 +184,17 @@ export function useSelectedFragments(fragmentIds?: string | string[]) {
       try {
         setIsLoading(true);
         setError(null);
-        const detailList = await Promise.all(ids.map((id) => fetchFragmentDetail(id)));
+        const detailList = await Promise.all(
+          ids.map(async (id) => {
+            const cached = await readFragmentCache(id);
+            if (cached?.fragment) {
+              return cached.fragment;
+            }
+            const fragment = await fetchFragmentDetail(id);
+            await writeFragmentCache(fragment);
+            return fragment;
+          })
+        );
         if (!cancelled) {
           setFragments(detailList);
         }

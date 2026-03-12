@@ -49,7 +49,14 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
   const [error, setError] = useState<string | null>(null);
   const hasVisibleFragmentRef = useRef(false);
 
-  const commitFragment = useCallback(async (nextFragment: Fragment) => {
+  const commitVisibleFragment = useCallback(async (nextFragment: Fragment) => {
+    hasVisibleFragmentRef.current = true;
+    setFragment(nextFragment);
+    setError(null);
+  }, []);
+
+  const commitRemoteFragment = useCallback(async (nextFragment: Fragment) => {
+    /*只有服务端确认后的碎片才回写远端镜像，避免 optimistic 本地输入污染基线。 */
     hasVisibleFragmentRef.current = true;
     setFragment(nextFragment);
     setError(null);
@@ -91,10 +98,10 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
           fetchFragmentDetail(fragmentId),
           loadFragmentBodyDraft(fragmentId),
         ]);
+        await writeFragmentCache(remoteFragment);
         hasVisibleFragmentRef.current = true;
         setError(null);
         setFragment(applyDraftToFragment(remoteFragment, draftHtml));
-        await writeFragmentCache(remoteFragment);
       } catch (err) {
         const nextError = err instanceof Error ? err.message : '加载失败';
         if (!hasVisibleFragmentRef.current) {
@@ -171,7 +178,7 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
     reload: useCallback(async () => {
       await loadRemote();
     }, [loadRemote]),
-    commitRemoteFragment: commitFragment,
-    commitOptimisticFragment: commitFragment,
+    commitRemoteFragment,
+    commitOptimisticFragment: commitVisibleFragment,
   };
 }
