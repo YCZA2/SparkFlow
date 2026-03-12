@@ -6,25 +6,25 @@ import { resolveDoneAction, resolveSaveOutcome } from '../features/fragments/fra
 test('resolveSaveOutcome marks synced save as clearable draft', () => {
   const outcome = resolveSaveOutcome({
     ok: true,
-    savedMarkdown: '服务端最新正文',
-    attemptedMarkdown: '本地正文',
+    savedHtml: '<p>服务端最新正文</p>',
+    attemptedHtml: '<p>本地正文</p>',
   });
 
   assert.equal(outcome.syncStatus, 'synced');
   assert.equal(outcome.shouldClearDraft, true);
-  assert.equal(outcome.lastSyncedMarkdown, '服务端最新正文');
+  assert.equal(outcome.lastSyncedHtml, '<p>服务端最新正文</p>');
 });
 
 test('resolveSaveOutcome keeps unsynced state on save failure', () => {
   const outcome = resolveSaveOutcome({
     ok: false,
-    savedMarkdown: '旧正文',
-    attemptedMarkdown: '本地未同步正文',
+    savedHtml: '<p>旧正文</p>',
+    attemptedHtml: '<p>本地未同步正文</p>',
   });
 
   assert.equal(outcome.syncStatus, 'unsynced');
   assert.equal(outcome.shouldClearDraft, false);
-  assert.equal(outcome.lastSyncedMarkdown, '本地未同步正文');
+  assert.equal(outcome.lastSyncedHtml, '<p>本地未同步正文</p>');
 });
 
 test('resolveDoneAction blocks navigation when saveNow fails', () => {

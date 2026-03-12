@@ -1,3 +1,4 @@
+import { extractPlainTextFromHtml } from '@/features/fragments/bodyMarkdown';
 import type {
   Fragment,
   LocalFragmentDraft,
@@ -56,9 +57,9 @@ export function buildFragmentFromLocalDraft(
     created_at: draft.created_at,
     folder_id: draft.folder_id ?? remote?.folder_id ?? null,
     folder: remote?.folder ?? null,
-    body_markdown: draft.body_markdown,
-    plain_text_snapshot: draft.plain_text_snapshot,
-    content_state: draft.body_markdown.trim() ? 'body_present' : remote?.content_state ?? 'empty',
+    body_html: draft.body_html,
+    plain_text_snapshot: draft.plain_text_snapshot || extractPlainTextFromHtml(draft.body_html),
+    content_state: draft.body_html.trim() ? 'body_present' : remote?.content_state ?? 'empty',
     media_assets: mergeVisibleMediaAssets(remote?.media_assets, draft.pending_image_assets),
   };
 }

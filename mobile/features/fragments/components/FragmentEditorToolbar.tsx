@@ -161,12 +161,6 @@ export function FragmentEditorToolbar({
             disabled={isUploadingImage}
             onPress={onInsertImage}
           />
-          <ToolbarButton
-            label="润色"
-            symbol="sparkles"
-            disabled={isAiRunning}
-            onPress={() => onAiAction('polish')}
-          />
         </ScrollView>
       </View>
     </View>

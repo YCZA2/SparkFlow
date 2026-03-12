@@ -4,8 +4,8 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Text } from '@/components/Themed';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
-import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { fetchScriptDetail } from '@/features/scripts/api';
+import { extractPlainTextFromHtml } from '@/features/fragments/bodyMarkdown';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Script } from '@/types/script';
 import { formatDate } from '@/utils/date';
@@ -78,12 +78,10 @@ export default function ScriptDetailScreen() {
 
         <View style={[styles.contentCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
           <Text style={[styles.contentTitle, { color: theme.colors.text }]}>文案内容</Text>
-          {script.body_markdown ? (
-            <MarkdownRenderer
-              markdown={script.body_markdown}
-              theme={theme}
-              enableLinks={true}
-            />
+          {script.body_html ? (
+            <Text style={[styles.bodyText, { color: theme.colors.text }]}>
+              {extractPlainTextFromHtml(script.body_html)}
+            </Text>
           ) : (
             <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>无内容</Text>
           )}
@@ -99,7 +97,7 @@ export default function ScriptDetailScreen() {
               pathname: '/shoot',
               params: {
                 script_id: script.id,
-                body_markdown: script.body_markdown ?? '',
+                body_html: script.body_html ?? '',
               },
             })
           }
@@ -141,6 +139,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 24,
     fontStyle: 'italic',
+  },
+  bodyText: {
+    fontSize: 15,
+    lineHeight: 26,
   },
   bottomBar: {
     position: 'absolute',

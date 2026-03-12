@@ -129,7 +129,7 @@ async def get_script(
     "/{script_id}",
     response_model=ResponseModel[ScriptDetail],
     summary="更新口播稿",
-    description="更新口播稿标题或状态，状态仅支持 draft、ready、filmed。",
+    description="更新口播稿标题、HTML 正文或状态，状态仅支持 draft、ready、filmed。",
 )
 async def update_script(
     script_id: str,
@@ -143,7 +143,7 @@ async def update_script(
         script_id=script_id,
         status_value=data.status,
         title=data.title,
-        body_markdown=data.body_markdown,
+        body_html=data.body_html,
     )
     return success_response(data=map_script(script), message="口播稿更新成功")
 

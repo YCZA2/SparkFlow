@@ -11,9 +11,9 @@ from domains.fragment_folders import repository as fragment_folder_repository
 from domains.fragment_tags import repository as fragment_tag_repository
 from domains.fragments import repository as fragment_repository
 from domains.media_assets import repository as media_asset_repository
-from modules.shared.fragment_body_markdown import (
-    extract_plain_text_from_body_markdown,
-    normalize_fragment_body_markdown,
+from modules.shared.content_html import (
+    extract_plain_text_from_html,
+    normalize_body_html,
 )
 from modules.shared.ports import FileStorage, StoredFile, TextGenerationProvider, VectorStore
 
@@ -53,14 +53,14 @@ class FragmentCommandService:
         db: Session,
         user_id: str,
         transcript: Optional[str],
-        body_markdown: str | None,
+        body_html: str | None,
         source: str,
         audio_source: Optional[str],
         audio_file: StoredFile | None,
         folder_id: Optional[str] = None,
         media_asset_ids: list[str] | None = None,
     ) -> Fragment:
-        """创建碎片，并按需初始化 Markdown 正文和素材关联。"""
+        """创建碎片，并按需初始化 HTML 正文和素材关联。"""
         if source not in VALID_FRAGMENT_SOURCES:
             raise ValidationError(
                 message="无效的 source 值",
@@ -72,8 +72,8 @@ class FragmentCommandService:
                 field_errors={"audio_source": f"必须是以下之一: {', '.join(sorted(VALID_AUDIO_SOURCES))}"},
             )
         self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
-        normalized_body_markdown = normalize_fragment_body_markdown(body_markdown)
-        plain_text_snapshot = extract_plain_text_from_body_markdown(normalized_body_markdown)
+        normalized_body_html = normalize_body_html(body_html)
+        plain_text_snapshot = extract_plain_text_from_html(normalized_body_html)
         normalized_transcript = self._normalize_transcript(transcript=transcript, source=source)
         fragment = fragment_repository.create(
             db=db,
@@ -89,14 +89,14 @@ class FragmentCommandService:
             audio_mime_type=audio_file.mime_type if audio_file else None,
             audio_file_size=audio_file.file_size if audio_file else None,
             audio_checksum=audio_file.checksum if audio_file else None,
-            body_markdown=normalized_body_markdown,
+            body_html=normalized_body_html,
             plain_text_snapshot=plain_text_snapshot,
             folder_id=folder_id,
             tags=[],
         )
         merged_asset_ids = self._merge_media_asset_ids(
             media_asset_ids=media_asset_ids,
-            document_asset_ids=self.content_service.collect_body_asset_ids(body_markdown=normalized_body_markdown),
+            document_asset_ids=self.content_service.collect_body_asset_ids(body_html=normalized_body_html),
         )
         if merged_asset_ids:
             self.asset_binding_service.attach_media_assets(
@@ -106,7 +106,7 @@ class FragmentCommandService:
                 content_id=fragment.id,
                 media_asset_ids=merged_asset_ids,
             )
-        self.content_service.create_initial_content(db=db, fragment=fragment, body_markdown=normalized_body_markdown)
+        self.content_service.create_initial_content(db=db, fragment=fragment, body_html=normalized_body_html)
         return fragment
 
     def create_fragment_with_content(
@@ -115,7 +115,7 @@ class FragmentCommandService:
         db: Session,
         user_id: str,
         transcript: Optional[str],
-        body_markdown: str | None,
+        body_html: str | None,
         source: str,
         audio_source: Optional[str],
         audio_file: StoredFile | None,
@@ -127,7 +127,7 @@ class FragmentCommandService:
             db=db,
             user_id=user_id,
             transcript=transcript,
-            body_markdown=body_markdown,
+            body_html=body_html,
             source=source,
             audio_source=audio_source,
             audio_file=audio_file,
@@ -156,7 +156,7 @@ class FragmentCommandService:
         fragment_id: str,
         folder_id: Optional[str] = None,
         folder_id_provided: bool = False,
-        body_markdown: str | None = None,
+        body_html: str | None = None,
         media_asset_ids: list[str] | None = None,
     ) -> Fragment:
         """更新碎片正文、文件夹和素材绑定。"""
@@ -166,11 +166,11 @@ class FragmentCommandService:
             self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
             fragment = fragment_repository.update_folder(db=db, fragment=fragment, folder_id=folder_id)
         merged_asset_ids = media_asset_ids
-        if body_markdown is not None:
-            self.content_service.replace_content(db=db, fragment=fragment, body_markdown=body_markdown)
+        if body_html is not None:
+            self.content_service.replace_content(db=db, fragment=fragment, body_html=body_html)
             merged_asset_ids = self._merge_media_asset_ids(
                 media_asset_ids=media_asset_ids,
-                document_asset_ids=self.content_service.collect_body_asset_ids(body_markdown=body_markdown),
+                document_asset_ids=self.content_service.collect_body_asset_ids(body_html=body_html),
             )
         if media_asset_ids is not None:
             self.asset_binding_service.replace_media_assets(
@@ -181,7 +181,7 @@ class FragmentCommandService:
                 media_asset_ids=merged_asset_ids or [],
             )
         updated_fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
-        if body_markdown is not None:
+        if body_html is not None:
             await self.derivative_service.refresh_fragment_derivatives(
                 db=db,
                 user_id=user_id,

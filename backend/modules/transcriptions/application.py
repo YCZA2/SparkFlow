@@ -51,7 +51,7 @@ class TranscriptionUseCase:
             audio_mime_type=None,
             audio_file_size=None,
             audio_checksum=None,
-            body_markdown="",
+            body_html="",
             plain_text_snapshot="",
             folder_id=folder_id,
         )

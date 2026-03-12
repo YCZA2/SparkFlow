@@ -35,11 +35,11 @@ async function resolveVisibleFragment(fragmentId: string): Promise<Fragment | nu
     const remoteFragment = draft.remote_id ? peekFragmentCache(draft.remote_id)?.fragment ?? null : null;
     return buildFragmentFromLocalDraft(draft, remoteFragment);
   }
-  const [cachedEntry, draftMarkdown] = await Promise.all([
+  const [cachedEntry, draftHtml] = await Promise.all([
     readFragmentCache(fragmentId),
     loadFragmentBodyDraft(fragmentId),
   ]);
-  return applyDraftToFragment(cachedEntry?.fragment ?? null, draftMarkdown);
+  return applyDraftToFragment(cachedEntry?.fragment ?? null, draftHtml);
 }
 
 export function useFragmentDetailResource(fragmentId?: string | null): UseFragmentDetailResourceResult {
@@ -87,13 +87,13 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
           setFragment(nextFragment);
           return;
         }
-        const [remoteFragment, draftMarkdown] = await Promise.all([
+        const [remoteFragment, draftHtml] = await Promise.all([
           fetchFragmentDetail(fragmentId),
           loadFragmentBodyDraft(fragmentId),
         ]);
         hasVisibleFragmentRef.current = true;
         setError(null);
-        setFragment(applyDraftToFragment(remoteFragment, draftMarkdown));
+        setFragment(applyDraftToFragment(remoteFragment, draftHtml));
         await writeFragmentCache(remoteFragment);
       } catch (err) {
         const nextError = err instanceof Error ? err.message : '加载失败';
@@ -128,7 +128,6 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
         setFragment(cached);
         setError(null);
         setIsLoading(false);
-        await loadRemote({ silent: true });
         return;
       }
       await loadRemote();

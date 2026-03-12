@@ -15,6 +15,7 @@ from domains.fragment_tags import repository as fragment_tag_repository
 from models import Fragment, FragmentFolder, FragmentTag, KnowledgeDoc, User
 from main import ensure_local_test_user
 from modules.auth.application import TEST_USER_ID
+from modules.shared.content_html import convert_markdown_to_basic_html
 from modules.shared.fragment_body_markdown import convert_editor_document_to_body_markdown
 from modules.shared.ports import ExternalMediaResolvedAudio
 
@@ -47,9 +48,11 @@ async def _create_fragment(async_client, auth_headers_factory, payload: dict) ->
     """通过 API 创建碎片并返回响应数据。"""
     request_payload = dict(payload)
     if "editor_document" in request_payload:
-        request_payload["body_markdown"] = convert_editor_document_to_body_markdown(request_payload.pop("editor_document"))
-    body_markdown = request_payload.get("body_markdown")
-    endpoint = "/api/fragments/content" if body_markdown is not None else "/api/fragments"
+        request_payload["body_html"] = convert_markdown_to_basic_html(
+            convert_editor_document_to_body_markdown(request_payload.pop("editor_document"))
+        )
+    body_html = request_payload.get("body_html")
+    endpoint = "/api/fragments/content" if body_html is not None else "/api/fragments"
     response = await async_client.post(endpoint, json=request_payload, headers=await _auth_headers(async_client, auth_headers_factory))
     assert response.status_code == 201
     return response.json()["data"]
@@ -530,7 +533,7 @@ async def test_fragment_folder_validation_and_conflicts(async_client, auth_heade
 
     invalid_folder_fragment_response = await async_client.post(
         "/api/fragments",
-        json={"body_markdown": "错误文件夹", "source": "manual", "folder_id": "missing-folder"},
+        json={"body_html": "<p>错误文件夹</p>", "source": "manual", "folder_id": "missing-folder"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert invalid_folder_fragment_response.status_code == 404
@@ -544,13 +547,13 @@ async def test_manual_fragment_can_start_with_empty_body(async_client, auth_head
     """手动碎片应允许空正文建单，供移动端直接进入正文编辑器。"""
     response = await async_client.post(
         "/api/fragments/content",
-        json={"body_markdown": "", "source": "manual"},
+        json={"body_html": "", "source": "manual"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 201
     payload = response.json()["data"]
     assert payload["source"] == "manual"
-    assert payload["body_markdown"] == ""
+    assert payload["body_html"] == ""
     assert payload["plain_text_snapshot"] is None
     assert payload["content_state"] == "empty"
 

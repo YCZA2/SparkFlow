@@ -87,21 +87,21 @@ def test_fragment_command_service_allows_empty_manual_body(monkeypatch) -> None:
     monkeypatch.setattr(
         service.content_service,
         "create_initial_content",
-        lambda *, db, fragment, body_markdown: create_initial_calls.append(body_markdown),
+        lambda *, db, fragment, body_html: create_initial_calls.append(body_html),
     )
 
     fragment = service.create_fragment(
         db=object(),
         user_id="test-user-001",
         transcript=None,
-        body_markdown="",
+        body_html="",
         source="manual",
         audio_source=None,
         audio_file=None,
     )
 
     assert fragment.id == "frag-empty"
-    assert captured_create_kwargs["body_markdown"] == ""
+    assert captured_create_kwargs["body_html"] == ""
     assert captured_create_kwargs["plain_text_snapshot"] == ""
     assert create_initial_calls == [""]
 

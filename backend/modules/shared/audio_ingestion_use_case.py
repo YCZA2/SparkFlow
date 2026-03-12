@@ -84,7 +84,7 @@ class AudioIngestionUseCase:
                 audio_mime_type=request.audio_file.mime_type if request.audio_file else None,
                 audio_file_size=request.audio_file.file_size if request.audio_file else None,
                 audio_checksum=request.audio_file.checksum if request.audio_file else None,
-                body_markdown="",
+                body_html="",
                 plain_text_snapshot="",
                 folder_id=request.folder_id,
             )
@@ -136,7 +136,7 @@ class AudioIngestionUseCase:
             audio_mime_type=None,
             audio_file_size=None,
             audio_checksum=None,
-            body_markdown="",
+            body_html="",
             plain_text_snapshot="",
             folder_id=folder_id,
         )

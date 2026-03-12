@@ -30,7 +30,6 @@ export function useFragmentDetailScreen(
   const editor = useFragmentBodySession({
     fragmentId,
     fragment,
-    commitRemoteFragment: resource.commitRemoteFragment,
     commitOptimisticFragment: resource.commitOptimisticFragment,
   });
   const player = useFragmentAudioPlayer(fragment?.audio_file_url, { enabled: isSheetOpen });

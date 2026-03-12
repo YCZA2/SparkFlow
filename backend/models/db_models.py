@@ -104,8 +104,8 @@ class Fragment(Base):
     audio_checksum = Column(String, nullable=True)
     transcript = Column(Text, nullable=True)  # 转写文本
     speaker_segments = Column(Text, nullable=True)  # JSON数组字符串，说话人分段
-    body_markdown = Column(Text, nullable=False, default="")  # Markdown 正文
-    plain_text_snapshot = Column(Text, nullable=False, default="")  # 由正文派生的纯文本快照
+    body_html = Column(Text, nullable=False, default="")  # HTML 正文
+    plain_text_snapshot = Column(Text, nullable=False, default="")  # 由正文 HTML 派生的纯文本快照
     summary = Column(Text, nullable=True)  # AI一句话摘要
     tags = Column(String, nullable=True)  # JSON数组字符串，AI自动标签
     source = Column(String, default="voice", nullable=False)  # 'voice'|'manual'|'video_parse'
@@ -178,7 +178,7 @@ class Script(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=True)
-    body_markdown = Column(Text, nullable=False)  # Markdown 正文
+    body_html = Column(Text, nullable=False)  # HTML 正文
     mode = Column(String, nullable=False)  # 'mode_a' | 'mode_b'
     source_fragment_ids = Column(String, nullable=True)  # JSON数组字符串，关联碎片ID
     status = Column(String, default="draft", nullable=False)  # 'draft'|'ready'|'filmed'

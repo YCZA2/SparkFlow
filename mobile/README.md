@@ -18,12 +18,12 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 本地草稿会聚合进首页/文件夹页列表顶部；若后续绑定了 `remote_id`，列表会自动对远端卡片去重。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
-- 碎片详情页默认进入轻量正文编辑视图，正文改动会自动保存；`transcript`、音频、摘要、标签和 AI 整理工具收口到右上角“更多”底部抽屉。
-- 碎片详情内部已拆成 `detail resource / editor session / sheet / screen actions` 四层：缓存和远端刷新、正文编辑会话、更多内容抽屉、页面动作分别维护；其中 editor session 已收敛为 reducer 驱动的单一会话内核，统一处理 hydrate、自动保存、AI patch、图片插入和 bridge 事件，页面层统一只消费 `resource / editor / sheet / actions` 四组 view-model。
+- 碎片详情页默认进入轻量正文编辑视图，正文改动会优先写本地 HTML 草稿；`transcript`、音频、摘要、标签收口到右上角“更多”底部抽屉，AI patch 本期已下线。
+- 碎片详情内部已拆成 `detail resource / editor session / sheet / screen actions` 四层：资源层只负责首次加载远端基线和缓存叠加，编辑会话层以 reducer 驱动的单一 session 内核统一编排 hydrate、本地保存、后台同步、图片插入和桥接状态，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
-- 碎片正文详情和列表已接入本地缓存与本地草稿聚合：详情会优先读本地 draft，再叠加远端缓存；未同步正文和待上传图片会在应用启动、输入停顿和页面聚焦时静默重试。
-- 脚本详情页只展示 `body_markdown`，后端负责迁移旧数据。
-- 移动端碎片正文已切到 `WebView + Tiptap` 编辑器，DOM 编辑器内部维持富文本状态，但持久化真值统一为 `body_markdown`，支持标题、列表、引用、粗体、斜体、图片和 AI patch。
+- 碎片正文详情和列表已接入本地缓存与本地草稿聚合：详情会优先读本地 HTML draft，再叠加远端缓存；未同步正文和待上传图片会在应用启动、输入停顿、离页和页面聚焦时静默重试。
+- 脚本详情页当前读取 `body_html`，展示层先提取纯文本，后端在导出链路里再负责转换 Markdown。
+- 移动端碎片正文已切到 `react-native-enriched` 原生富文本输入，运行时与本地草稿真值统一为 `body_html`，支持标题、列表、引用、粗体、斜体和图片；AI patch 与 WebView/Tiptap 旧桥接层本期已移除。
 - 碎片详情里的正文基线解析、自动保存队列、AI fallback patch、图片 fallback 插入和素材去重都已下沉为独立 session helper / reducer，纯状态回归统一由 `mobile/tests/*.test.ts` 覆盖。
 - 碎片列表缓存已按首页 `all` 和文件夹 `folder:<id>` 分桶，首页/文件夹页都采用一致的“缓存秒开 + 后台刷新 + 缓存订阅回显”策略。
 - 知识库移动端仍是占位入口，还没有完整的 Markdown 编辑和素材管理 UI。
@@ -256,13 +256,12 @@ http://192.168.31.157:8000
 
 当前返回和展示约定：
 
-- 碎片详情正文读取 `body_markdown`，列表摘要和生成页预览读取 `plain_text_snapshot`
+- 碎片详情正文读取 `body_html`，列表摘要和生成页预览读取 `plain_text_snapshot`
 - `transcript` 表示机器转写原文，不参与正文编辑
 - 碎片详情默认只把正文编辑器作为主界面；原文时间线、音频播放、摘要、标签、来源和删除操作都从右上角“更多”抽屉进入
-- 碎片正文详情采用 local-first + stale-while-revalidate：优先读取本地 draft / 缓存秒开，再后台刷新远端详情；自动保存和图片上传失败时会保留本地草稿与待上传状态，重新进入详情仍可继续编辑
-- AI 编辑接口为 `POST /api/fragments/{id}/ai-edit`
-- AI 编辑 patch 现在返回 `replace_selection` / `insert_after_selection` / `prepend_document`，正文片段字段为 `markdown_snippet`
-- 脚本详情只读取 `body_markdown`
+- 碎片正文详情采用 local-first：优先读取本地 draft / 缓存秒开，编辑中不再自动远端刷新当前会话；本地保存和图片上传失败时会保留草稿与待上传状态，重新进入详情仍可继续编辑
+- AI 编辑接口本期停用，不再参与正文链路
+- 脚本详情只读取 `body_html`
 - 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
 - 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`
 

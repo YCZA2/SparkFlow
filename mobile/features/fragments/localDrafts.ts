@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { extractPlainTextFromMarkdown, normalizeBodyMarkdown } from '@/features/fragments/bodyMarkdown';
+import { extractPlainTextFromHtml, normalizeBodyHtml } from '@/features/fragments/bodyMarkdown';
 import {
   buildFragmentFromLocalDraft,
   mergeLocalDraftsIntoFragments,
@@ -44,14 +44,15 @@ function normalizePendingImageAsset(asset: LocalPendingImageAsset): LocalPending
 
 function normalizeDraft(draft: LocalFragmentDraft): LocalFragmentDraft {
   /*读取持久化草稿时补齐默认字段，并重新生成纯文本快照。 */
-  const bodyMarkdown = normalizeBodyMarkdown(draft.body_markdown);
+  const legacyBodyHtml = (draft as LocalFragmentDraft & { body_markdown?: string }).body_markdown;
+  const bodyHtml = normalizeBodyHtml(draft.body_html ?? legacyBodyHtml ?? '');
   return {
     local_id: draft.local_id,
     remote_id: draft.remote_id ?? null,
     folder_id: draft.folder_id ?? null,
-    body_markdown: bodyMarkdown,
+    body_html: bodyHtml,
     plain_text_snapshot:
-      String(draft.plain_text_snapshot ?? '').trim() || extractPlainTextFromMarkdown(bodyMarkdown),
+      String(draft.plain_text_snapshot ?? '').trim() || extractPlainTextFromHtml(bodyHtml),
     created_at: draft.created_at,
     sync_status: draft.sync_status,
     last_sync_attempt_at: draft.last_sync_attempt_at ?? null,
@@ -107,7 +108,7 @@ export async function createLocalFragmentDraft(folderId?: string | null): Promis
     local_id: generateLocalId(LOCAL_FRAGMENT_ID_PREFIX),
     remote_id: null,
     folder_id: folderId ?? null,
-    body_markdown: '',
+    body_html: '',
     plain_text_snapshot: '',
     created_at: new Date().toISOString(),
     sync_status: 'creating',
@@ -146,17 +147,17 @@ export async function saveLocalFragmentDraft(
   const drafts = await loadAllDrafts();
   const nextDrafts = drafts.map((item) => {
     if (item.local_id !== localId) return item;
-    const bodyMarkdown = normalizeBodyMarkdown(
-      typeof patch.body_markdown === 'string' ? patch.body_markdown : item.body_markdown
+    const bodyHtml = normalizeBodyHtml(
+      typeof patch.body_html === 'string' ? patch.body_html : item.body_html
     );
     return normalizeDraft({
       ...item,
       ...patch,
-      body_markdown: bodyMarkdown,
+      body_html: bodyHtml,
       plain_text_snapshot:
         typeof patch.plain_text_snapshot === 'string'
           ? patch.plain_text_snapshot
-          : extractPlainTextFromMarkdown(bodyMarkdown),
+          : extractPlainTextFromHtml(bodyHtml),
     });
   });
   const updated = nextDrafts.find((item) => item.local_id === localId) ?? null;

@@ -1,5 +1,14 @@
-import { extractAssetIdsFromMarkdown, extractPlainTextFromMarkdown, normalizeBodyMarkdown } from '@/features/fragments/bodyMarkdown';
+import {
+  extractAssetIdsFromHtml,
+  extractPlainTextFromHtml,
+  normalizeBodyHtml,
+} from '@/features/fragments/bodyMarkdown';
 import { createFragment, fetchFragmentDetail, updateFragment, uploadImageAsset } from '@/features/fragments/api';
+import {
+  clearFragmentBodyDraft,
+  listFragmentBodyDraftIds,
+  loadFragmentBodyDraft,
+} from '@/features/fragments/bodyDrafts';
 import { resolveRetryDelayMs } from '@/features/fragments/localDraftState';
 import { peekFragmentCache, writeFragmentCache } from '@/features/fragments/fragmentRepository';
 import {
@@ -13,10 +22,12 @@ import {
 
 const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const runningDraftIds = new Set<string>();
+const remoteDraftRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const runningRemoteFragmentIds = new Set<string>();
 
-function replaceLocalAssetReference(markdown: string, localAssetId: string, remoteAssetId: string): string {
+function replaceLocalAssetReference(html: string, localAssetId: string, remoteAssetId: string): string {
   /*本地图片上传成功后把正文里的临时 asset 引用替换成远端 asset id。 */
-  return normalizeBodyMarkdown(markdown.replaceAll(`asset://${localAssetId}`, `asset://${remoteAssetId}`));
+  return normalizeBodyHtml(html.replaceAll(`asset://${localAssetId}`, `asset://${remoteAssetId}`));
 }
 
 function scheduleRetry(localId: string, delayMs: number): void {
@@ -41,7 +52,7 @@ async function ensureRemoteFragment(localId: string): Promise<string> {
   if (draft.remote_id) return draft.remote_id;
   const fragment = await createFragment(
     {
-      body_markdown: '',
+      body_html: '',
       source: 'manual',
     },
     draft.folder_id ?? undefined
@@ -51,14 +62,14 @@ async function ensureRemoteFragment(localId: string): Promise<string> {
   return fragment.id;
 }
 
-async function uploadPendingImages(localId: string, bodyMarkdown: string): Promise<string> {
+async function uploadPendingImages(localId: string, bodyHtml: string): Promise<string> {
   /*远端 id 就绪后按顺序上传本地图片，并回写 asset:// 引用。 */
-  let nextMarkdown = normalizeBodyMarkdown(bodyMarkdown);
+  let nextHtml = normalizeBodyHtml(bodyHtml);
   const draft = await loadLocalFragmentDraft(localId);
-  if (!draft) return nextMarkdown;
+  if (!draft) return nextHtml;
   for (const image of draft.pending_image_assets ?? []) {
     if (image.upload_status === 'uploaded' && image.remote_asset_id) {
-      nextMarkdown = replaceLocalAssetReference(nextMarkdown, image.local_asset_id, image.remote_asset_id);
+      nextHtml = replaceLocalAssetReference(nextHtml, image.local_asset_id, image.remote_asset_id);
       continue;
     }
     await markPendingImageUploaded(localId, image.local_asset_id, {
@@ -67,7 +78,7 @@ async function uploadPendingImages(localId: string, bodyMarkdown: string): Promi
     });
     try {
       const uploaded = await uploadImageAsset(image.local_uri, image.file_name, image.mime_type);
-      nextMarkdown = replaceLocalAssetReference(nextMarkdown, image.local_asset_id, uploaded.id);
+      nextHtml = replaceLocalAssetReference(nextHtml, image.local_asset_id, uploaded.id);
       await markPendingImageUploaded(localId, image.local_asset_id, {
         remote_asset_id: uploaded.id,
         upload_status: 'uploaded',
@@ -80,7 +91,7 @@ async function uploadPendingImages(localId: string, bodyMarkdown: string): Promi
       throw error;
     }
   }
-  return nextMarkdown;
+  return nextHtml;
 }
 
 async function syncLocalFragmentDraft(localId: string): Promise<void> {
@@ -97,19 +108,19 @@ async function syncLocalFragmentDraft(localId: string): Promise<void> {
     const remoteId = await ensureRemoteFragment(localId);
     const latestDraft = await loadLocalFragmentDraft(localId);
     if (!latestDraft) return;
-    const nextMarkdown = await uploadPendingImages(localId, latestDraft.body_markdown);
+    const nextHtml = await uploadPendingImages(localId, latestDraft.body_html);
     await saveLocalFragmentDraft(localId, {
-      body_markdown: nextMarkdown,
-      plain_text_snapshot: extractPlainTextFromMarkdown(nextMarkdown),
+      body_html: nextHtml,
+      plain_text_snapshot: extractPlainTextFromHtml(nextHtml),
     });
     const updatedFragment = await updateFragment(remoteId, {
-      body_markdown: nextMarkdown,
-      media_asset_ids: extractAssetIdsFromMarkdown(nextMarkdown),
+      body_html: nextHtml,
+      media_asset_ids: extractAssetIdsFromHtml(nextHtml),
     });
     await writeFragmentCache(updatedFragment);
     await updateLocalFragmentSyncState(localId, 'synced', {
-      body_markdown: nextMarkdown,
-      plain_text_snapshot: extractPlainTextFromMarkdown(nextMarkdown),
+      body_html: nextHtml,
+      plain_text_snapshot: extractPlainTextFromHtml(nextHtml),
       retry_count: 0,
       next_retry_at: null,
     });
@@ -125,6 +136,31 @@ async function syncLocalFragmentDraft(localId: string): Promise<void> {
     scheduleRetry(localId, delayMs);
     throw error;
   }
+}
+
+function scheduleRemoteDraftRetry(fragmentId: string, delayMs: number): void {
+  /*远端碎片正文草稿也维持单独 timer，避免后台重复提交。 */
+  const currentTimer = remoteDraftRetryTimers.get(fragmentId);
+  if (currentTimer) clearTimeout(currentTimer);
+  remoteDraftRetryTimers.set(
+    fragmentId,
+    setTimeout(() => {
+      remoteDraftRetryTimers.delete(fragmentId);
+      void enqueueRemoteFragmentBodySync(fragmentId, { force: true });
+    }, delayMs)
+  );
+}
+
+async function syncRemoteFragmentBodyDraft(fragmentId: string): Promise<void> {
+  /*把远端碎片的本地 HTML 草稿静默推到服务端，并在成功后清理草稿。 */
+  const html = await loadFragmentBodyDraft(fragmentId);
+  if (!html) return;
+  const updatedFragment = await updateFragment(fragmentId, {
+    body_html: html,
+    media_asset_ids: extractAssetIdsFromHtml(html),
+  });
+  await writeFragmentCache(updatedFragment);
+  await clearFragmentBodyDraft(fragmentId);
 }
 
 export async function enqueueLocalFragmentSync(
@@ -155,6 +191,30 @@ export async function enqueueLocalFragmentSync(
   }
 }
 
+export async function enqueueRemoteFragmentBodySync(
+  fragmentId: string,
+  options?: { delayMs?: number; force?: boolean }
+): Promise<void> {
+  /*把远端碎片正文草稿加入后台同步队列，不阻塞当前编辑会话。 */
+  const html = await loadFragmentBodyDraft(fragmentId);
+  if (!html) return;
+  const delayMs = options?.force ? 0 : options?.delayMs ?? 0;
+  if (delayMs > 0) {
+    scheduleRemoteDraftRetry(fragmentId, delayMs);
+    return;
+  }
+  if (runningRemoteFragmentIds.has(fragmentId)) return;
+  runningRemoteFragmentIds.add(fragmentId);
+  try {
+    await syncRemoteFragmentBodyDraft(fragmentId);
+  } catch (error) {
+    scheduleRemoteDraftRetry(fragmentId, resolveRetryDelayMs(0));
+    throw error;
+  } finally {
+    runningRemoteFragmentIds.delete(fragmentId);
+  }
+}
+
 export async function restoreLocalFragmentSyncQueue(): Promise<void> {
   /*应用启动时恢复未收敛草稿和待上传图片的后台同步。 */
   const drafts = await listLocalFragmentDrafts();
@@ -171,6 +231,16 @@ export async function restoreLocalFragmentSyncQueue(): Promise<void> {
   );
 }
 
+export async function restoreRemoteFragmentBodySyncQueue(): Promise<void> {
+  /*应用启动时恢复远端碎片的本地正文草稿同步。 */
+  const fragmentIds = await listFragmentBodyDraftIds();
+  await Promise.all(
+    fragmentIds.map(async (fragmentId) => {
+      await enqueueRemoteFragmentBodySync(fragmentId, { delayMs: 1200 });
+    })
+  );
+}
+
 export async function wakeLocalFragmentSyncQueue(): Promise<void> {
   /*列表和详情聚焦时只唤醒到期草稿，避免每次进入页面都全量重试。 */
   const drafts = await listLocalFragmentDrafts();
@@ -180,6 +250,16 @@ export async function wakeLocalFragmentSyncQueue(): Promise<void> {
       const retryAt = Date.parse(draft.next_retry_at);
       if (!Number.isNaN(retryAt) && retryAt > Date.now()) return;
       await enqueueLocalFragmentSync(draft.local_id, { force: true });
+    })
+  );
+}
+
+export async function wakeRemoteFragmentBodySyncQueue(): Promise<void> {
+  /*页面回前台或离页时尝试收敛远端正文草稿，不覆盖当前编辑输入。 */
+  const fragmentIds = await listFragmentBodyDraftIds();
+  await Promise.all(
+    fragmentIds.map(async (fragmentId) => {
+      await enqueueRemoteFragmentBodySync(fragmentId, { force: true });
     })
   );
 }

@@ -12,6 +12,7 @@ from modules.fragments.application import FragmentCommandService
 from modules.fragments.content import render_fragment_markdown
 from modules.fragments.mapper import build_media_asset_file, map_media_asset
 from modules.scripts.application import ScriptQueryService, map_script
+from modules.shared.content_html import convert_html_to_markdown
 from modules.shared.content_markdown import (
     MarkdownExportFile,
     render_markdown_document,
@@ -63,7 +64,7 @@ class MarkdownExportUseCase:
             "created_at": payload.created_at,
             "source_fragment_ids": payload.source_fragment_ids,
         }
-        body = self._append_media_section(payload.body_markdown or "", media_assets)
+        body = self._append_media_section(convert_html_to_markdown(payload.body_html or ""), media_assets)
         filename = f"script-{sanitize_export_stem(payload.title or payload.id, fallback=payload.id)}.md"
         return MarkdownExportFile(filename=filename, content=render_markdown_document(metadata=metadata, body_markdown=body)), self._asset_files(media_assets, db=db, user_id=user_id, content_type="script", content_id=script_id)
 

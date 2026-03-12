@@ -100,7 +100,7 @@ flowchart TD
 - `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
-- `features/fragments/detail/*` 把碎片详情拆成 `resource / editor session / sheet / screen actions` 四层：资源层负责缓存和远端刷新，编辑会话层以 reducer 驱动的单一 session 内核统一编排 hydrate、自动保存、AI patch、图片插入和桥接状态，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
+- `features/fragments/detail/*` 把碎片详情拆成 `resource / editor session / sheet / screen actions` 四层：资源层负责首次远端基线加载与缓存叠加，编辑会话层以 reducer 驱动的单一 session 内核统一编排 hydrate、本地实时保存、后台同步、图片插入和桥接状态，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
 - `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用。
 
@@ -212,11 +212,11 @@ flowchart TD
 - `auth`: 测试 token 签发、当前用户信息、refresh。
 - 本地联调会确保默认测试用户 `test-user-001` 在数据库中存在，避免恢复旧 token 时触发用户外键错误。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
-- `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_markdown`，`plain_text_snapshot` 负责检索、摘要和生成输入。
+- `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_html`，`plain_text_snapshot` 负责检索、摘要和生成输入。
 - `transcriptions`: 音频上传、后台转写、状态查询，上传入口会创建 `source=voice`、`audio_source=upload` 的碎片。
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接；请求只创建 `source=voice`、`audio_source=external_link` 的碎片和 `media_ingestion` 任务，解析链接、下载转 m4a、转写与增强都在同一条后台管线里执行。
-- `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_markdown`。
-- `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段只保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷。
+- `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。
+- `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷。
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
 - `exports`: 单条 Markdown 导出与批量 zip 导出。
 - `pipelines`: 后台流水线详情、步骤查询与手动重跑入口。
@@ -254,12 +254,12 @@ flowchart TD
 - 碎片归一化标签表：`fragment_tags`
 - `fragments.folder_id` 指向真实文件夹；“全部”只是前端系统视图，不落库。
 - `fragments.audio_source` 用于区分音频来源；当前取值为 `upload` / `external_link` / `null`
-- `fragments.transcript` 保存机器转写原文，`fragments.body_markdown` 保存唯一正式正文的 Markdown，`fragments.plain_text_snapshot` 保存派生纯文本快照
-- 非语音碎片必须直接写入 `body_markdown`，不再把 `transcript` 当作正式正文来源
-- 移动端碎片详情正文继续采用 `WebView + Tiptap` 编辑内核，但 DOM 编辑器是唯一 live state；原生层只消费节流后的 Markdown 快照、AI 操作和图片插入命令
+- `fragments.transcript` 保存机器转写原文，`fragments.body_html` 保存唯一正式正文的 HTML，`fragments.plain_text_snapshot` 保存派生纯文本快照
+- 非语音碎片必须直接写入 `body_html`，不再把 `transcript` 当作正式正文来源
+- 移动端碎片详情正文改为 `react-native-enriched` 原生富文本输入；前端运行时、本地草稿和同步队列统一消费 HTML 快照，AI patch 本期停用
 - 移动端碎片详情的本地缓存和展示态真值允许分离：`fragmentRepository` 只持久化 fragment/list 快照与订阅广播，本地草稿覆盖逻辑只存在于 detail resource 层，不直接回写服务端真值
 - 详情编辑会话的纯逻辑已下沉到 `editorSessionState.ts`、`bodySessionState.ts` 和 `fragmentSaveController.ts`：`editorSessionState.ts` 负责 session reducer、基线解析、自动保存触发条件与图片 fallback 规则，`bodySessionState.ts` 继续承载 Markdown 快照构建、远端刷新判定、AI fallback patch 和乐观展示态合成，`fragmentSaveController.ts` 保证自动保存只串行提交最后一版快照
-- `scripts.body_markdown` / `knowledge_docs.body_markdown` 保存统一 Markdown 正文
+- `scripts.body_html` / `knowledge_docs.body_markdown` 分别保存脚本 HTML 正文与知识库 Markdown 正文
 - 媒体资源表：`media_assets` / `content_media_links`，对象元数据保存 `storage_provider` / `bucket` / `object_key`
 - 碎片向量 namespace: `fragments_{user_id}`
 - 知识库向量 namespace: `knowledge_{user_id}`
@@ -366,7 +366,7 @@ sequenceDiagram
     PIPE->>WFP: submit workflow run
     PIPE->>WFP: poll workflow run
     WFP-->>PIPE: outputs(title/outline/draft/...)
-    PIPE->>SCRIPT: create script(body_markdown=draft)
+    PIPE->>SCRIPT: create script(body_html=normalized_html)
     PIPE->>DB: mark pipeline succeeded + resource(script_id)
     App->>API: GET /api/pipelines/{run_id}
     API-->>App: script_id + latest status

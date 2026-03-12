@@ -285,9 +285,9 @@ Current business modules include `auth`, `fragment_folders`, `fragments`, `trans
 
 内容字段约定：
 
-- `scripts` 对外接口只暴露 `body_markdown` 作为正文。
-- `scripts` 数据库层也只保留 `body_markdown`，不再保留历史 `content` 镜像列。
-- `knowledge` 对外接口只接收和返回 `body_markdown`；数据库中的 `content` 仅保留为 Markdown 派生的纯文本索引载荷。
+- `fragments` 与 `scripts` 对外接口统一暴露 `body_html` 作为正文真值；导出链路再统一转换 Markdown。
+- `fragments` 与 `scripts` 数据库层只保留 `body_html`，不再保留正文 Markdown 真值列。
+- `knowledge` 对外接口仍接收和返回 `body_markdown`；数据库中的 `content` 仅保留为 Markdown 派生的纯文本索引载荷。
 
 文件存储相关配置：
 
@@ -343,8 +343,8 @@ bash scripts/postgres-local.sh stop
 - `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 返回 `pipeline_run_id`、`pipeline_type`、`status`
 - 文件类响应不再暴露 `audio_path` / `storage_path`，统一返回签名 `*_file_url` 与过期时间
 - `fragments` 列表 / 详情与 `GET /api/transcriptions/{fragment_id}` 不再返回 `sync_status`
-- `fragments.transcript` 表示机器转写原文，`body_markdown` 表示用户整理后的正式正文；正文消费统一按 `body_markdown -> transcript` 回退
-- 非语音碎片创建走 `POST /api/fragments/content`；当前允许先创建空 `body_markdown`，再由客户端后续 patch 正文，`transcript` 仅保留给语音转写链路
+- `fragments.transcript` 表示机器转写原文，`body_html` 表示用户整理后的正式正文；正文消费统一按 `body_html -> transcript` 回退
+- 非语音碎片创建走 `POST /api/fragments/content`；当前允许先创建空 `body_html`，再由客户端后续补正文，`transcript` 仅保留给语音转写链路
 - 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`
 - 如需排查 Dify 侧问题，优先查看 `GET /api/pipelines/{run_id}/steps` 中 `submit_workflow_run` / `poll_workflow_run` 的 `external_ref`，其中会暴露 `provider_run_id` / `provider_task_id`
 - 外链导入成功后的 `platform`、`share_url`、`media_id`、`title`、`author`、`cover_url`、`content_type`、`audio_file_url` 统一从 `GET /api/pipelines/{run_id}` 的 `output` 读取

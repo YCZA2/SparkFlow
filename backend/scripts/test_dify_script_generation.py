@@ -90,7 +90,7 @@ def create_fragment(
     *,
     backend_base_url: str,
     headers: dict[str, str],
-    body_markdown: str,
+    body_html: str,
 ) -> str:
     """创建一条手动测试碎片，供真实脚本生成使用。"""
     payload = request_json(
@@ -98,7 +98,7 @@ def create_fragment(
         "POST",
         f"{backend_base_url}/api/fragments/content",
         headers=headers,
-        json_body={"body_markdown": body_markdown, "source": "manual"},
+        json_body={"body_html": body_html, "source": "manual"},
     )
     data = extract_response_data(payload)
     fragment_id = data.get("id") if isinstance(data, dict) else None
@@ -266,7 +266,7 @@ def main() -> int:
                         client,
                         backend_base_url=backend_base_url,
                         headers=headers,
-                        body_markdown=fragment_text,
+                        body_html=f"<p>{fragment_text}</p>",
                     )
                 )
             run_id = trigger_generation(
@@ -305,7 +305,7 @@ def main() -> int:
                     "script_id": script_id,
                     "title": script_detail.get("title"),
                     "mode": script_detail.get("mode"),
-                    "body_markdown_preview": (script_detail.get("body_markdown") or "")[:300],
+                    "body_html_preview": (script_detail.get("body_html") or "")[:300],
                 },
                 ensure_ascii=False,
                 indent=2,

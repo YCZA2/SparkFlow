@@ -52,7 +52,7 @@ function HeaderCircleButton({
 }
 
 function EditorSkeleton({ dark = false }: { dark?: boolean }) {
-  /*在详情资源或 DOM 编辑器未就绪时渲染纸张骨架，减少首屏空白感。 */
+  /*在详情资源或正文编辑器未就绪时渲染纸张骨架，减少首屏空白感。 */
   const lineColor = dark ? '#1E1C19' : '#DFDAD2';
 
   return (
@@ -230,7 +230,7 @@ export function FragmentDetailScreen({
               <FragmentRichEditor
                 editorKey={editor.editorKey}
                 editorRef={editor.editorRef}
-                initialBodyMarkdown={editor.initialBodyMarkdown}
+                initialBodyHtml={editor.initialBodyHtml}
                 autoFocus={editor.shouldAutoFocus}
                 mediaAssets={editor.mediaAssets}
                 statusLabel={editor.statusLabel}

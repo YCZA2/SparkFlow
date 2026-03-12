@@ -1,6 +1,6 @@
 import type { Fragment } from '@/types/fragment';
 
-import { extractPlainTextFromMarkdown, normalizeBodyMarkdown } from './bodyMarkdown';
+import { extractPlainTextFromHtml, normalizeBodyHtml } from './bodyMarkdown';
 
 export interface FragmentCacheEntry {
   fragment: Fragment;
@@ -66,7 +66,7 @@ export function mergeFragmentIntoListItems(items: Fragment[], fragment: Fragment
 function resolveFragmentBodyLength(fragment: Fragment | null | undefined): number {
   /*按正文纯文本长度比较详情快照完整度，避免空快照覆盖已有内容。 */
   if (!fragment) return 0;
-  const bodyText = extractPlainTextFromMarkdown(fragment.body_markdown);
+  const bodyText = extractPlainTextFromHtml(fragment.body_html);
   if (bodyText) return bodyText.length;
   return String(fragment.plain_text_snapshot ?? '').trim().length;
 }
@@ -85,9 +85,9 @@ export function mergeFragmentDetailForPrewarm(
 
   return {
     ...incoming,
-    body_markdown: keepExistingBody ? existing.body_markdown : incoming.body_markdown,
+    body_html: keepExistingBody ? existing.body_html : incoming.body_html,
     plain_text_snapshot: keepExistingBody
-      ? existing.plain_text_snapshot ?? extractPlainTextFromMarkdown(existing.body_markdown)
+      ? existing.plain_text_snapshot ?? extractPlainTextFromHtml(existing.body_html)
       : incoming.plain_text_snapshot,
     media_assets: keepExistingMediaAssets ? existingMediaAssets : incomingMediaAssets,
   };
@@ -99,14 +99,14 @@ export function removeFragmentFromListItems(items: Fragment[], fragmentId: strin
   return items.filter((item) => item && item.id !== fragmentId);
 }
 
-export function applyDraftToFragment(fragment: Fragment | null, draftMarkdown: string | null): Fragment | null {
+export function applyDraftToFragment(fragment: Fragment | null, draftHtml: string | null): Fragment | null {
   /*仅把本地草稿叠加到展示态 fragment，不覆盖服务端快照真值。 */
   if (!fragment || typeof fragment !== 'object') return null;
-  const normalizedDraft = normalizeBodyMarkdown(draftMarkdown);
+  const normalizedDraft = normalizeBodyHtml(draftHtml);
   if (!normalizedDraft) return fragment;
   return {
     ...fragment,
-    body_markdown: normalizedDraft,
-    plain_text_snapshot: extractPlainTextFromMarkdown(normalizedDraft),
+    body_html: normalizedDraft,
+    plain_text_snapshot: extractPlainTextFromHtml(normalizedDraft),
   };
 }

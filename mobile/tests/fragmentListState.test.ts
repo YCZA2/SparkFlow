@@ -14,7 +14,7 @@ function buildFragment(createdAt: string, id: string) {
     tags: null,
     source: 'manual',
     created_at: createdAt,
-    body_markdown: '',
+    body_html: '',
   } as const;
 }
 

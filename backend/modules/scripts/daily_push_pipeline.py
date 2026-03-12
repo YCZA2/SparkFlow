@@ -15,6 +15,7 @@ from domains.scripts import repository as script_repository
 from models import Fragment, PipelineRun, User
 from modules.shared.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
 from modules.shared.ports import VectorStore, WorkflowProvider
+from modules.shared.content_html import convert_markdown_to_basic_html
 from utils.serialization import format_iso_datetime, parse_json_list
 from utils.time import get_app_timezone, get_local_day_bounds
 
@@ -145,7 +146,7 @@ class DailyPushPersistenceService:
         script = script_repository.create(
             db=db,
             user_id=run.user_id,
-            body_markdown=draft,
+            body_html=convert_markdown_to_basic_html(draft),
             mode="mode_a",
             source_fragment_ids=json.dumps(input_payload["fragment_ids"], ensure_ascii=False),
             title=title,

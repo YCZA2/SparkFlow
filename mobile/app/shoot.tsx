@@ -12,6 +12,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Text } from '@/components/Themed';
 import { TeleprompterOverlay } from '@/components/TeleprompterOverlay';
 import { useVideoRecorder } from '@/features/recording/hooks';
+import { extractPlainTextFromHtml } from '@/features/fragments/bodyMarkdown';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 const FALLBACK_TEXT =
@@ -25,9 +26,9 @@ const FALLBACK_TEXT =
 export default function ShootScreen() {
   const router = useRouter();
   const theme = useAppTheme();
-  const { script_id, body_markdown } = useLocalSearchParams<{
+  const { script_id, body_html } = useLocalSearchParams<{
     script_id?: string;
-    body_markdown?: string;
+    body_html?: string;
   }>();
   const [permission, requestPermission] = useCameraPermissions();
   const recorder = useVideoRecorder(script_id);
@@ -88,6 +89,10 @@ export default function ShootScreen() {
     );
   }
 
+  const teleprompterText = body_html?.trim()
+    ? extractPlainTextFromHtml(body_html)
+    : FALLBACK_TEXT;
+
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -100,7 +105,7 @@ export default function ShootScreen() {
         mirror={recorder.facing === 'front'}
       >
         <View style={styles.teleprompterWrapper}>
-          <TeleprompterOverlay text={body_markdown?.trim() ? body_markdown : FALLBACK_TEXT} />
+          <TeleprompterOverlay text={teleprompterText} />
         </View>
 
         <View style={styles.topControls}>

@@ -6,6 +6,7 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import type { Script, ScriptMode, ScriptStatus } from '@/types/script';
+import { extractPlainTextFromHtml } from '@/features/fragments/bodyMarkdown';
 import { formatDate } from '@/utils/date';
 import { useAppTheme } from '@/theme/useAppTheme';
 
@@ -64,7 +65,10 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
   const theme = useAppTheme();
 
   // 显示标题或内容前50字
-  const displayTitle = script.title || script.body_markdown?.slice(0, 50) || '无标题口播稿';
+  const displayTitle =
+    script.title ||
+    extractPlainTextFromHtml(script.body_html ?? '').slice(0, 50) ||
+    '无标题口播稿';
   const modeLabel = getModeLabel(script.mode);
   const statusLabel = getStatusLabel(script.status);
   const statusColor =

@@ -19,7 +19,7 @@ class ScriptGenerationResponse(BaseModel):
 class ScriptUpdateRequest(BaseModel):
     status: str | None = Field(None, description="更新状态: draft, ready, filmed")
     title: str | None = Field(None, description="更新标题")
-    body_markdown: str | None = Field(None, description="更新 Markdown 正文")
+    body_html: str | None = Field(None, description="更新 HTML 正文")
 
 
 class ScriptItem(BaseModel):
@@ -33,7 +33,7 @@ class ScriptItem(BaseModel):
 
 
 class ScriptDetail(ScriptItem):
-    body_markdown: str | None = None
+    body_html: str | None = None
     source_fragment_ids: list[str] = Field(default_factory=list)
 
 

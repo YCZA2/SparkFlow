@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 import { initApiBaseUrl } from '@/constants/config';
 import {
   getToken,
@@ -9,7 +10,12 @@ import {
   saveUserInfo,
   type UserInfo,
 } from '@/features/auth/api';
-import { restoreLocalFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
+import {
+  restoreLocalFragmentSyncQueue,
+  restoreRemoteFragmentBodySyncQueue,
+  wakeLocalFragmentSyncQueue,
+  wakeRemoteFragmentBodySyncQueue,
+} from '@/features/fragments/localFragmentSyncQueue';
 
 interface AppSessionContextValue {
   isReady: boolean;
@@ -78,6 +84,25 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     /*应用启动后恢复本地草稿同步队列，保证离线编辑可在后续静默收敛。 */
     void restoreLocalFragmentSyncQueue().catch(() => undefined);
+    void restoreRemoteFragmentBodySyncQueue().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    /*前后台切换时主动唤醒同步队列，避免正文草稿长期停留本地。 */
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        void wakeLocalFragmentSyncQueue().catch(() => undefined);
+        void wakeRemoteFragmentBodySyncQueue().catch(() => undefined);
+        return;
+      }
+      if (nextState === 'active') {
+        void wakeLocalFragmentSyncQueue().catch(() => undefined);
+        void wakeRemoteFragmentBodySyncQueue().catch(() => undefined);
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   const login = async () => {

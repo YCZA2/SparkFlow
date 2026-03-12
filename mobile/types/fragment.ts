@@ -59,7 +59,7 @@ export interface LocalFragmentDraft {
   local_id: string;
   remote_id?: string | null;
   folder_id?: string | null;
-  body_markdown: string;
+  body_html: string;
   plain_text_snapshot: string;
   created_at: string;
   sync_status: LocalFragmentSyncStatus;
@@ -85,7 +85,7 @@ export interface Fragment {
   created_at: string;
   folder_id?: string | null;
   folder?: FragmentFolder | null;
-  body_markdown: string;
+  body_html: string;
   plain_text_snapshot?: string | null;
   content_state?: 'empty' | 'transcript_only' | 'body_present';
   media_assets?: MediaAsset[];
@@ -106,7 +106,7 @@ export interface FragmentListResponse {
 
 export interface CreateFragmentRequest {
   transcript?: string;
-  body_markdown?: string;
+  body_html?: string;
   summary?: string;
   tags?: string[];
   source?: FragmentSource;
@@ -163,11 +163,11 @@ export interface FragmentVisualizationResponse {
 
 export interface FragmentAiPatch {
   op: 'replace_selection' | 'insert_after_selection' | 'prepend_document';
-  markdown_snippet: string;
+  html_snippet: string;
 }
 
 export interface FragmentEditorSnapshot {
-  body_markdown: string;
+  body_html: string;
   plain_text: string;
   asset_ids: string[];
 }
@@ -185,8 +185,8 @@ export interface SessionBaseline {
   fragment_id: string;
   snapshot: EditorSessionSnapshot;
   remote_baseline: string;
-  cached_body_markdown: string | null;
-  draft_markdown: string | null;
+  cached_body_html: string | null;
+  draft_html: string | null;
   media_assets: MediaAsset[];
   is_local_first: boolean;
   sync_status: LocalFragmentSyncStatus | FragmentSyncStatus;
@@ -235,7 +235,7 @@ export interface FragmentSaveAdapter {
     snapshot: FragmentEditorSnapshot
   ) => Promise<{
     fragment?: Fragment;
-    saved_markdown: string;
+    saved_html: string;
   }>;
 }
 

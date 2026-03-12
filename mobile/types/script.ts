@@ -9,7 +9,7 @@ export type PipelineStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'ca
 export interface Script {
   id: string;
   title: string | null;
-  body_markdown?: string | null;
+  body_html?: string | null;
   mode: ScriptMode;
   source_fragment_ids: string[] | null;
   source_fragment_count: number;

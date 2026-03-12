@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import * as DocumentPicker from 'expo-document-picker';
 
-import { requestAiEdit, updateFragment, uploadImageAsset } from '@/features/fragments/api';
+import { uploadImageAsset } from '@/features/fragments/api';
 import {
-  clearFragmentBodyDraft,
   loadFragmentBodyDraft,
   saveFragmentBodyDraft,
 } from '@/features/fragments/bodyDrafts';
-import { normalizeBodyMarkdown } from '@/features/fragments/bodyMarkdown';
+import { normalizeBodyHtml } from '@/features/fragments/bodyMarkdown';
 import {
   appendImageToSnapshot,
   createInitialEditorSessionState,
@@ -18,6 +17,7 @@ import {
 import { createLatestOnlySaveController } from '@/features/fragments/detail/fragmentSaveController';
 import {
   enqueueLocalFragmentSync,
+  enqueueRemoteFragmentBodySync,
 } from '@/features/fragments/localFragmentSyncQueue';
 import {
   attachPendingLocalImage,
@@ -27,10 +27,6 @@ import { peekFragmentCache } from '@/features/fragments/fragmentRepository';
 import {
   buildOptimisticFragmentSnapshot,
 } from '@/features/fragments/detail/bodySessionState';
-import {
-  resolveDoneAction,
-  resolveSaveOutcome,
-} from '@/features/fragments/fragmentSaveState';
 import type {
   Fragment,
   FragmentEditorFormattingState,
@@ -44,20 +40,19 @@ const AUTOSAVE_DELAY_MS = 800;
 interface UseFragmentBodySessionOptions {
   fragmentId?: string | null;
   fragment: Fragment | null;
-  commitRemoteFragment: (fragment: Fragment) => Promise<void>;
   commitOptimisticFragment: (fragment: Fragment) => Promise<void>;
 }
 
-function resolveCachedBodyMarkdown(
+function resolveCachedBodyHtml(
   fragmentId: string | null,
   fragment: Fragment | null
 ): string | null {
   /*按当前会话和已绑定远端 id 读取最近一次可用的正文缓存。 */
   if (!fragmentId || !fragment) return null;
   if (fragment.remote_id) {
-    return peekFragmentCache(fragment.remote_id)?.fragment.body_markdown ?? null;
+    return peekFragmentCache(fragment.remote_id)?.fragment.body_html ?? null;
   }
-  return peekFragmentCache(fragmentId)?.fragment.body_markdown ?? null;
+  return peekFragmentCache(fragmentId)?.fragment.body_html ?? null;
 }
 
 function buildLocalMediaAssetFromPendingImage(input: {
@@ -86,7 +81,6 @@ function buildLocalMediaAssetFromPendingImage(input: {
 export function useFragmentBodySession({
   fragmentId,
   fragment,
-  commitRemoteFragment,
   commitOptimisticFragment,
 }: UseFragmentBodySessionOptions) {
   /*用单一 reducer 编排正文会话，让 hydrate、保存和工具动作共享同一真值。 */
@@ -102,7 +96,6 @@ export function useFragmentBodySession({
   const stateRef = useRef(state);
   const fragmentRef = useRef(fragment);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const commitRemoteFragmentRef = useRef(commitRemoteFragment);
   const commitOptimisticFragmentRef = useRef(commitOptimisticFragment);
   const resolvedFragmentIdRef = useRef(resolvedFragmentId);
 
@@ -110,10 +103,9 @@ export function useFragmentBodySession({
     /*同步 ref，保证保存和工具动作总是读取最新上下文。 */
     stateRef.current = state;
     fragmentRef.current = fragment;
-    commitRemoteFragmentRef.current = commitRemoteFragment;
     commitOptimisticFragmentRef.current = commitOptimisticFragment;
     resolvedFragmentIdRef.current = resolvedFragmentId;
-  }, [commitOptimisticFragment, commitRemoteFragment, fragment, resolvedFragmentId, state]);
+  }, [commitOptimisticFragment, fragment, resolvedFragmentId, state]);
 
   useEffect(() => {
     /*切换 fragment 时重置整段编辑会话，但保持同页 UI 壳层不变。 */
@@ -125,28 +117,28 @@ export function useFragmentBodySession({
     dispatch({ type: 'REMOTE_LOADED', fragment });
     dispatch({
       type: 'CACHE_LOADED',
-      markdown: resolveCachedBodyMarkdown(resolvedFragmentId, fragment),
+      html: resolveCachedBodyHtml(resolvedFragmentId, fragment),
     });
   }, [fragment, resolvedFragmentId]);
 
   useEffect(() => {
     /*按当前详情维度读取本地正文草稿，让首屏 hydrate 有稳定优先级。 */
     if (!resolvedFragmentId) {
-      dispatch({ type: 'LOCAL_DRAFT_LOADED', markdown: null });
+      dispatch({ type: 'LOCAL_DRAFT_LOADED', html: null });
       return;
     }
     let cancelled = false;
     void (async () => {
-      const nextDraftMarkdown = fragment?.is_local_draft
-        ? fragment.body_markdown
+      const nextDraftHtml = fragment?.is_local_draft
+        ? fragment.body_html
         : await loadFragmentBodyDraft(resolvedFragmentId);
       if (cancelled) return;
-      dispatch({ type: 'LOCAL_DRAFT_LOADED', markdown: nextDraftMarkdown });
+      dispatch({ type: 'LOCAL_DRAFT_LOADED', html: nextDraftHtml });
     })();
     return () => {
       cancelled = true;
     };
-  }, [fragment?.body_markdown, fragment?.is_local_draft, resolvedFragmentId]);
+  }, [fragment?.body_html, fragment?.is_local_draft, resolvedFragmentId]);
 
   useEffect(() => {
     /*本地输入应立即反映到详情资源与草稿存储，但不等待远端保存完成。 */
@@ -164,7 +156,7 @@ export function useFragmentBodySession({
     if (currentFragment.is_local_draft) {
       void Promise.all([
         saveLocalFragmentDraft(currentFragmentId, {
-          body_markdown: state.snapshot.body_markdown,
+          body_html: state.snapshot.body_html,
           plain_text_snapshot: state.snapshot.plain_text,
           sync_status: currentFragment.remote_id ? 'syncing' : 'creating',
           next_retry_at: null,
@@ -175,7 +167,7 @@ export function useFragmentBodySession({
     }
 
     void Promise.all([
-      saveFragmentBodyDraft(currentFragmentId, state.snapshot.body_markdown),
+      saveFragmentBodyDraft(currentFragmentId, state.snapshot.body_html),
       commitOptimisticFragmentRef.current(optimisticFragment),
     ]).catch(() => undefined);
   }, [state]);
@@ -191,7 +183,7 @@ export function useFragmentBodySession({
       shouldProcess: (snapshot) => {
         /*只有正文真正偏离当前基线时才落保存任务。 */
         const remoteBaseline = stateRef.current.baseline?.remote_baseline ?? '';
-        return normalizeBodyMarkdown(snapshot.body_markdown) !== normalizeBodyMarkdown(remoteBaseline);
+        return normalizeBodyHtml(snapshot.body_html) !== normalizeBodyHtml(remoteBaseline);
       },
       submit: async (snapshot) => {
         /*把保存流程串行化，并在成功后统一回流 session 与资源层。 */
@@ -204,7 +196,7 @@ export function useFragmentBodySession({
         try {
           if (currentFragment.is_local_draft) {
             await saveLocalFragmentDraft(currentFragmentId, {
-              body_markdown: snapshot.body_markdown,
+              body_html: snapshot.body_html,
               plain_text_snapshot: snapshot.plain_text,
               sync_status: currentFragment.remote_id ? 'syncing' : 'creating',
               next_retry_at: null,
@@ -216,44 +208,35 @@ export function useFragmentBodySession({
               type: 'SAVE_SUCCEEDED',
               fragment: {
                 ...currentFragment,
-                body_markdown: snapshot.body_markdown,
+                body_html: snapshot.body_html,
                 plain_text_snapshot: snapshot.plain_text,
                 media_assets: stateRef.current.mediaAssets,
               },
-              savedMarkdown: snapshot.body_markdown,
+              savedHtml: snapshot.body_html,
             });
             return;
           }
 
-          const updated = await updateFragment(currentFragmentId, {
-            body_markdown: snapshot.body_markdown,
-            media_asset_ids: snapshot.asset_ids,
-          });
-          const outcome = resolveSaveOutcome({
-            ok: true,
-            savedMarkdown: normalizeBodyMarkdown(updated.body_markdown),
-            attemptedMarkdown: snapshot.body_markdown,
-          });
-          if (outcome.shouldClearDraft) {
-            await clearFragmentBodyDraft(currentFragmentId);
-          } else {
-            await saveFragmentBodyDraft(currentFragmentId, snapshot.body_markdown);
-          }
-          await commitRemoteFragmentRef.current(updated);
+          await saveFragmentBodyDraft(currentFragmentId, snapshot.body_html);
+          void enqueueRemoteFragmentBodySync(currentFragmentId, {
+            delayMs: AUTOSAVE_DELAY_MS,
+          }).catch(() => undefined);
+          const optimisticFragment = {
+            ...currentFragment,
+            body_html: snapshot.body_html,
+            plain_text_snapshot: snapshot.plain_text,
+            media_assets: stateRef.current.mediaAssets,
+          };
+          await commitOptimisticFragmentRef.current(optimisticFragment);
           dispatch({
-            type: 'SAVE_SUCCEEDED',
-            fragment: updated,
-            savedMarkdown: outcome.lastSyncedMarkdown,
+            type: 'LOCAL_SAVE_SUCCEEDED',
+            fragment: optimisticFragment,
+            savedHtml: snapshot.body_html,
           });
         } catch (error) {
-          const outcome = resolveSaveOutcome({
-            ok: false,
-            savedMarkdown: stateRef.current.baseline?.remote_baseline ?? '',
-            attemptedMarkdown: snapshot.body_markdown,
-          });
           dispatch({
             type: 'SAVE_FAILED',
-            attemptedMarkdown: outcome.lastSyncedMarkdown,
+            attemptedHtml: snapshot.body_html,
             message: error instanceof Error ? error.message : '内容未同步',
           });
           throw error;
@@ -362,54 +345,47 @@ export function useFragmentBodySession({
     }
   }, [getLiveSnapshot]);
 
-  const onAiAction = useCallback(
-    async (instruction: 'polish' | 'shorten' | 'expand' | 'title' | 'script_seed') => {
-      /*AI patch 统一先命中 session，再让保存管线处理落盘。 */
-      const currentFragment = fragmentRef.current;
-      const remoteFragmentId =
-        currentFragment?.remote_id ??
-        (currentFragment?.is_local_draft ? null : currentFragment?.id ?? null);
-      if (!remoteFragmentId) return;
-      try {
-        setIsAiRunning(true);
-        const latestSnapshot = getLiveSnapshot();
-        const response = await requestAiEdit(remoteFragmentId, {
-          body_markdown: latestSnapshot.body_markdown,
-          instruction,
-          selection_text: stateRef.current.selectionText || undefined,
-        });
-        if (stateRef.current.isEditorReady) {
-          editorRef.current?.applyPatch(response.patch);
-          return;
-        }
-        dispatch({
-          type: 'AI_PATCH_APPLIED',
-          patch: response.patch,
-        });
-      } finally {
-        setIsAiRunning(false);
-      }
-    },
-    [getLiveSnapshot]
-  );
+  const onAiAction = useCallback(async (_instruction: 'polish' | 'shorten' | 'expand' | 'title' | 'script_seed') => {
+    /*AI patch 本期停用，保留异步签名避免页面层额外分支。 */
+    setIsAiRunning(false);
+  }, []);
 
   const saveNow = useCallback(async () => {
-    /*离页前主动 flush 当前正文，失败时保持原地并保留草稿。 */
+    /*离页前只保证本地草稿已落盘，远端同步继续后台收敛。 */
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
     const latestSnapshot = getLiveSnapshot();
-    try {
-      await saveControllerRef.current.submitLatest(latestSnapshot);
-      const doneAction = resolveDoneAction(null);
-      if (!doneAction.ok) {
-        throw new Error(doneAction.message ?? '内容未同步');
-      }
-    } catch (error) {
-      const doneAction = resolveDoneAction(error);
-      throw new Error(doneAction.message ?? '内容未同步');
+    const currentFragment = fragmentRef.current;
+    const currentFragmentId = resolvedFragmentIdRef.current;
+    if (!currentFragment || !currentFragmentId) return;
+
+    if (currentFragment.is_local_draft) {
+      await saveLocalFragmentDraft(currentFragmentId, {
+        body_html: latestSnapshot.body_html,
+        plain_text_snapshot: latestSnapshot.plain_text,
+        sync_status: currentFragment.remote_id ? 'syncing' : 'creating',
+        next_retry_at: null,
+      });
+      void enqueueLocalFragmentSync(currentFragmentId, { delayMs: AUTOSAVE_DELAY_MS }).catch(
+        () => undefined
+      );
+      return;
     }
+
+    await saveFragmentBodyDraft(currentFragmentId, latestSnapshot.body_html);
+    void enqueueRemoteFragmentBodySync(currentFragmentId, { force: true }).catch(() => undefined);
+    dispatch({
+      type: 'LOCAL_SAVE_SUCCEEDED',
+      fragment: {
+        ...currentFragment,
+        body_html: latestSnapshot.body_html,
+        plain_text_snapshot: latestSnapshot.plain_text,
+        media_assets: stateRef.current.mediaAssets,
+      },
+      savedHtml: latestSnapshot.body_html,
+    });
   }, [getLiveSnapshot]);
 
   const statusLabel = useMemo(() => {
@@ -424,8 +400,8 @@ export function useFragmentBodySession({
   return {
     editorRef,
     editorKey: state.editorKey,
-    initialBodyMarkdown: state.snapshot.body_markdown,
-    shouldAutoFocus: Boolean(fragment?.is_local_draft && !state.snapshot.body_markdown.trim()),
+    initialBodyHtml: state.snapshot.body_html,
+    shouldAutoFocus: Boolean(fragment?.is_local_draft && !state.snapshot.body_html.trim()),
     mediaAssets: state.mediaAssets,
     formattingState: state.formattingState,
     isDraftHydrated: state.isDraftHydrated,

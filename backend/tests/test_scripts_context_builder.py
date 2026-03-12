@@ -30,7 +30,7 @@ def _create_fragment(db, transcript: str):
         audio_mime_type=None,
         audio_file_size=None,
         audio_checksum=None,
-        body_markdown=transcript,
+        body_html=f"<p>{transcript}</p>",
         plain_text_snapshot=transcript,
     )
     return fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=fragment.id)

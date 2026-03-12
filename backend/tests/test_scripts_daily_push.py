@@ -28,7 +28,7 @@ def _create_fragment(db, transcript: str):
         audio_mime_type=None,
         audio_file_size=None,
         audio_checksum=None,
-        body_markdown=transcript,
+        body_html=f"<p>{transcript}</p>",
         plain_text_snapshot=transcript,
     )
     return fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=fragment.id)
@@ -97,4 +97,4 @@ async def test_daily_push_selector_returns_empty_when_candidates_below_minimum(d
 def test_build_fragments_text_requires_available_content() -> None:
     """文本拼接应拒绝没有可用正文快照的输入。"""
     with pytest.raises(ValidationError):
-        build_fragments_text([SimpleNamespace(transcript=None, plain_text_snapshot="", body_markdown="")])
+        build_fragments_text([SimpleNamespace(transcript=None, plain_text_snapshot="", body_html="")])

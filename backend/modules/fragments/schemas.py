@@ -21,7 +21,7 @@ class SpeakerSegmentItem(BaseModel):
 
 class FragmentCreateRequest(BaseModel):
     transcript: str | None = Field(None, description="转写文本")
-    body_markdown: str | None = Field(None, description="Markdown 正文")
+    body_html: str | None = Field(None, description="HTML 正文")
     source: str = Field("voice", description="来源：voice, manual, video_parse")
     audio_source: str | None = Field(None, description="音频来源：upload, external_link")
     folder_id: str | None = Field(None, description="文件夹 ID")
@@ -30,7 +30,7 @@ class FragmentCreateRequest(BaseModel):
 
 class FragmentUpdateRequest(BaseModel):
     folder_id: str | None = Field(None, description="文件夹 ID，传 null 表示移出文件夹")
-    body_markdown: str | None = Field(None, description="完整 Markdown 正文")
+    body_html: str | None = Field(None, description="完整 HTML 正文")
     media_asset_ids: list[str] | None = Field(None, description="要绑定到碎片的素材 ID 列表")
 
 
@@ -58,7 +58,7 @@ class FragmentItem(BaseModel):
     audio_file_expires_at: str | None = None
     folder_id: str | None = None
     folder: FragmentFolderInfo | None = None
-    body_markdown: str = ""
+    body_html: str = ""
     plain_text_snapshot: str | None = None
     content_state: str = "empty"
     media_assets: list[MediaAssetItem] = Field(default_factory=list)
@@ -146,14 +146,14 @@ class FragmentVisualizationResponse(BaseModel):
 
 
 class FragmentAiEditRequest(BaseModel):
-    body_markdown: str = Field(..., description="当前 Markdown 正文")
+    body_html: str = Field(..., description="当前 HTML 正文")
     selection_text: str | None = Field(None, description="当前选中文本")
     instruction: Literal["polish", "shorten", "expand", "title", "script_seed"]
 
 
 class FragmentAiPatch(BaseModel):
     op: Literal["replace_selection", "insert_after_selection", "prepend_document"]
-    markdown_snippet: str = Field(..., description="可直接插入到正文中的 Markdown 片段")
+    html_snippet: str = Field(..., description="可直接插入到正文中的 HTML 片段")
 
 
 class FragmentAiEditResponse(BaseModel):

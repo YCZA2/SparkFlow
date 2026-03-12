@@ -1,5 +1,6 @@
 import {
-  normalizeBodyMarkdown,
+  createImageHtml,
+  normalizeBodyHtml,
 } from '@/features/fragments/bodyMarkdown';
 import {
   appendRuntimeMediaAsset,
@@ -25,9 +26,9 @@ import type {
 
 interface SessionSourceState {
   fragment: Fragment | null;
-  draft_markdown: string | null;
+  draft_html: string | null;
   draft_loaded: boolean;
-  cached_body_markdown: string | null;
+  cached_body_html: string | null;
 }
 
 export interface EditorSessionState {
@@ -50,8 +51,8 @@ export interface EditorSessionState {
 
 export type EditorSessionEvent =
   | { type: 'RESET_SESSION'; fragmentId: string | null }
-  | { type: 'LOCAL_DRAFT_LOADED'; markdown: string | null }
-  | { type: 'CACHE_LOADED'; markdown: string | null }
+  | { type: 'LOCAL_DRAFT_LOADED'; html: string | null }
+  | { type: 'CACHE_LOADED'; html: string | null }
   | { type: 'REMOTE_LOADED'; fragment: Fragment | null }
   | { type: 'EDITOR_READY' }
   | { type: 'SNAPSHOT_CHANGED'; snapshot: FragmentEditorSnapshot }
@@ -61,8 +62,9 @@ export type EditorSessionEvent =
   | { type: 'AI_PATCH_APPLIED'; patch: FragmentAiPatch }
   | { type: 'SAVE_REQUESTED' }
   | { type: 'SAVE_STARTED' }
-  | { type: 'SAVE_SUCCEEDED'; fragment: Fragment | null; savedMarkdown: string }
-  | { type: 'SAVE_FAILED'; attemptedMarkdown: string; message: string | null };
+  | { type: 'LOCAL_SAVE_SUCCEEDED'; fragment: Fragment | null; savedHtml: string }
+  | { type: 'SAVE_SUCCEEDED'; fragment: Fragment | null; savedHtml: string }
+  | { type: 'SAVE_FAILED'; attemptedHtml: string; message: string | null };
 
 function resolveLocalDraftSyncStatus(fragment: Fragment | null): FragmentSyncStatus {
   /*把本地草稿同步态映射为统一的编辑器保存状态。 */
@@ -97,35 +99,35 @@ export function createInitialEditorSessionState(fragmentId: string | null): Edit
     isDraftHydrated: false,
     hasConfirmedLocalEdit: false,
     selectionText: '',
-    formattingState: null,
-    errorMessage: null,
-    saveRequestId: 0,
-    source: {
-      fragment: null,
-      draft_markdown: null,
-      draft_loaded: false,
-      cached_body_markdown: null,
-    },
+      formattingState: null,
+      errorMessage: null,
+      saveRequestId: 0,
+      source: {
+        fragment: null,
+        draft_html: null,
+        draft_loaded: false,
+        cached_body_html: null,
+      },
   };
 }
 
 export function resolveSessionBaseline(options: {
   fragment: Fragment;
-  draftMarkdown: string | null;
-  cachedBodyMarkdown: string | null;
+  draftHtml: string | null;
+  cachedBodyHtml: string | null;
 }): SessionBaseline {
   /*把草稿、缓存和远端详情解析为唯一初始化基线。 */
   const hydrated = resolveHydratedBodySession({
     fragment: options.fragment,
-    draftMarkdown: options.draftMarkdown,
-    cachedBodyMarkdown: options.cachedBodyMarkdown,
+    draftHtml: options.draftHtml,
+    cachedBodyHtml: options.cachedBodyHtml,
   });
   return {
     fragment_id: options.fragment.id,
     snapshot: hydrated.snapshot,
     remote_baseline: hydrated.remoteBaseline,
-    cached_body_markdown: options.cachedBodyMarkdown,
-    draft_markdown: options.draftMarkdown,
+    cached_body_html: options.cachedBodyHtml,
+    draft_html: options.draftHtml,
     media_assets: options.fragment.media_assets ?? [],
     is_local_first: Boolean(options.fragment.is_local_draft),
     sync_status: options.fragment.is_local_draft
@@ -152,15 +154,15 @@ function reconcileHydration(state: EditorSessionState): EditorSessionState {
 
   const baseline = resolveSessionBaseline({
     fragment,
-    draftMarkdown: state.source.draft_markdown,
-    cachedBodyMarkdown: state.source.cached_body_markdown,
+    draftHtml: state.source.draft_html,
+    cachedBodyHtml: state.source.cached_body_html,
   });
   const currentBaseline = state.baseline;
   const shouldInitialize = !currentBaseline || currentBaseline.fragment_id !== fragment.id;
   const shouldRefresh = !shouldInitialize && currentBaseline
-    ? shouldRehydrateBodySession({
+      ? shouldRehydrateBodySession({
         fragment,
-        draftMarkdown: state.source.draft_markdown,
+        draftHtml: state.source.draft_html,
         currentSnapshot: state.snapshot,
         remoteBaseline: currentBaseline.remote_baseline,
         visibleMediaAssets: state.mediaAssets,
@@ -177,24 +179,29 @@ function reconcileHydration(state: EditorSessionState): EditorSessionState {
       mediaAssets: mergeVisibleMediaAssets(fragment.media_assets, []),
       syncStatus: baseline.sync_status as FragmentSyncStatus,
       isDraftHydrated: true,
-      hasConfirmedLocalEdit: Boolean(baseline.draft_markdown),
+      hasConfirmedLocalEdit: Boolean(baseline.draft_html),
       errorMessage: null,
       phase: state.isEditorReady ? 'ready' : 'hydrating',
     };
   }
 
+  const nextSyncStatus = fragment.is_local_draft
+    ? resolveLocalDraftSyncStatus(fragment)
+    : state.source.draft_html === null &&
+        normalizeBodyHtml(fragment.body_html) === normalizeBodyHtml(state.snapshot.body_html)
+      ? 'synced'
+      : state.syncStatus;
+
   return {
     ...state,
     baseline: {
       ...currentBaseline,
-      cached_body_markdown: baseline.cached_body_markdown,
+      cached_body_html: baseline.cached_body_html,
       media_assets: fragment.media_assets ?? [],
-      sync_status: baseline.sync_status,
+      sync_status: nextSyncStatus,
     },
     mediaAssets: mergedMediaAssets,
-    syncStatus: fragment.is_local_draft
-      ? resolveLocalDraftSyncStatus(fragment)
-      : state.syncStatus,
+    syncStatus: nextSyncStatus,
     isDraftHydrated: true,
     phase: resolveSessionPhase({
       ...state,
@@ -208,11 +215,11 @@ export function shouldQueueAutosave(state: EditorSessionState): boolean {
   /*只有会话稳定且快照真正偏离远端基线时才进入自动保存队列。 */
   if (!state.fragmentId || !state.isDraftHydrated || !state.source.fragment) return false;
   const remoteBaseline = state.baseline?.remote_baseline ?? '';
-  if (state.snapshot.body_markdown === normalizeBodyMarkdown(remoteBaseline)) return false;
+  if (state.snapshot.body_html === normalizeBodyHtml(remoteBaseline)) return false;
   return !shouldProtectSuspiciousEmptySnapshot({
     snapshot: state.snapshot,
     remoteBaseline,
-    hasLocalDraft: state.source.draft_markdown !== null,
+    hasLocalDraft: state.source.draft_html !== null,
     hasConfirmedLocalEdit: state.hasConfirmedLocalEdit,
   });
 }
@@ -224,7 +231,7 @@ export function shouldPublishOptimisticFragment(state: EditorSessionState): bool
   if (shouldProtectSuspiciousEmptySnapshot({
     snapshot: state.snapshot,
     remoteBaseline,
-    hasLocalDraft: state.source.draft_markdown !== null,
+    hasLocalDraft: state.source.draft_html !== null,
     hasConfirmedLocalEdit: state.hasConfirmedLocalEdit,
   })) {
     return false;
@@ -236,13 +243,12 @@ export function appendImageToSnapshot(
   snapshot: FragmentEditorSnapshot,
   asset: MediaAsset
 ): FragmentEditorSnapshot {
-  /*bridge 不可用时回退为在 Markdown 尾部追加一条图片引用。 */
-  const alt = String(asset.original_filename ?? '').replace(/]/g, '\\]');
-  const imageMarkdown = `![${alt}](asset://${asset.id})`;
-  const nextMarkdown = snapshot.body_markdown
-    ? `${snapshot.body_markdown}\n\n${imageMarkdown}`
-    : imageMarkdown;
-  return buildFragmentEditorSnapshot(nextMarkdown);
+  /*bridge 不可用时回退为在 HTML 末尾追加一张图片。 */
+  const imageHtml = `<p>${createImageHtml(asset.id, String(asset.original_filename ?? ''))}</p>`;
+  const nextHtml = snapshot.body_html
+    ? `${snapshot.body_html}${imageHtml}`
+    : imageHtml;
+  return buildFragmentEditorSnapshot(nextHtml);
 }
 
 export function reduceEditorSession(
@@ -260,7 +266,7 @@ export function reduceEditorSession(
       source: {
         ...state.source,
         draft_loaded: true,
-        draft_markdown: event.markdown,
+        draft_html: event.html,
       },
     });
   }
@@ -270,7 +276,7 @@ export function reduceEditorSession(
       ...state,
       source: {
         ...state.source,
-        cached_body_markdown: event.markdown,
+        cached_body_html: event.html,
       },
     });
   }
@@ -298,7 +304,7 @@ export function reduceEditorSession(
 
   if (event.type === 'SNAPSHOT_CHANGED') {
     const hasMeaningfulChange =
-      event.snapshot.body_markdown !== state.snapshot.body_markdown ||
+      event.snapshot.body_html !== state.snapshot.body_html ||
       event.snapshot.asset_ids.join(',') !== state.snapshot.asset_ids.join(',');
     return {
       ...state,
@@ -368,15 +374,52 @@ export function reduceEditorSession(
     };
   }
 
-  if (event.type === 'SAVE_SUCCEEDED') {
-    const normalizedSavedMarkdown = normalizeBodyMarkdown(event.savedMarkdown);
-    const nextSnapshot = buildFragmentEditorSnapshot(normalizedSavedMarkdown);
+  if (event.type === 'LOCAL_SAVE_SUCCEEDED') {
+    const normalizedSavedHtml = normalizeBodyHtml(event.savedHtml);
+    const nextSnapshot = buildFragmentEditorSnapshot(normalizedSavedHtml);
     const nextFragment = event.fragment ?? state.source.fragment;
     const nextBaseline: SessionBaseline | null = state.baseline
       ? {
           ...state.baseline,
           snapshot: nextSnapshot,
-          remote_baseline: normalizedSavedMarkdown,
+          remote_baseline: normalizedSavedHtml,
+          media_assets: nextFragment?.media_assets ?? state.mediaAssets,
+          sync_status: 'unsynced',
+        }
+      : null;
+    return {
+      ...state,
+      baseline: nextBaseline,
+      snapshot: nextSnapshot,
+      mediaAssets: nextFragment
+        ? mergeVisibleMediaAssets(nextFragment.media_assets, state.mediaAssets)
+        : state.mediaAssets,
+      syncStatus: 'unsynced',
+      hasConfirmedLocalEdit: false,
+      errorMessage: null,
+      source: {
+        ...state.source,
+        draft_html: normalizedSavedHtml,
+        fragment: nextFragment,
+      },
+      phase: resolveSessionPhase({
+        ...state,
+        baseline: nextBaseline,
+        snapshot: nextSnapshot,
+        errorMessage: null,
+      }),
+    };
+  }
+
+  if (event.type === 'SAVE_SUCCEEDED') {
+    const normalizedSavedHtml = normalizeBodyHtml(event.savedHtml);
+    const nextSnapshot = buildFragmentEditorSnapshot(normalizedSavedHtml);
+    const nextFragment = event.fragment ?? state.source.fragment;
+    const nextBaseline: SessionBaseline | null = state.baseline
+      ? {
+          ...state.baseline,
+          snapshot: nextSnapshot,
+          remote_baseline: normalizedSavedHtml,
           media_assets: nextFragment?.media_assets ?? state.mediaAssets,
           sync_status: 'synced',
         }
@@ -393,7 +436,7 @@ export function reduceEditorSession(
       errorMessage: null,
       source: {
         ...state.source,
-        draft_markdown: null,
+        draft_html: null,
         fragment: nextFragment,
       },
       phase: resolveSessionPhase({
@@ -414,9 +457,9 @@ export function reduceEditorSession(
     baseline: state.baseline
       ? {
           ...state.baseline,
-          remote_baseline: normalizeBodyMarkdown(state.baseline.remote_baseline),
+          remote_baseline: normalizeBodyHtml(state.baseline.remote_baseline),
         }
       : null,
-    snapshot: buildFragmentEditorSnapshot(event.attemptedMarkdown),
+    snapshot: buildFragmentEditorSnapshot(event.attemptedHtml),
   };
 }

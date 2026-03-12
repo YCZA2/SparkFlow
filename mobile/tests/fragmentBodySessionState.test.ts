@@ -21,31 +21,31 @@ function buildFragment(overrides: Partial<Fragment> = {}): Fragment {
     tags: null,
     source: 'manual',
     created_at: '2026-03-11T10:00:00.000Z',
-    body_markdown: '服务端正文',
+    body_html: '服务端正文',
     ...overrides,
   };
 }
 
 test('resolveHydratedBodySession prefers local draft and keeps cached baseline', () => {
   const result = resolveHydratedBodySession({
-    fragment: buildFragment({ body_markdown: '服务端正文' }),
-    draftMarkdown: '本地草稿',
-    cachedBodyMarkdown: '缓存正文',
+    fragment: buildFragment({ body_html: '服务端正文' }),
+    draftHtml: '<p>本地草稿</p>',
+    cachedBodyHtml: '<p>缓存正文</p>',
   });
 
-  assert.equal(result.snapshot.body_markdown, '本地草稿');
-  assert.equal(result.remoteBaseline, '缓存正文');
+  assert.equal(result.snapshot.body_html, '<p>本地草稿</p>');
+  assert.equal(result.remoteBaseline, '<p>缓存正文</p>');
   assert.equal(result.syncStatus, 'idle');
 });
 
 test('resolveHydratedBodySession marks synced when no draft overrides remote body', () => {
   const result = resolveHydratedBodySession({
-    fragment: buildFragment({ body_markdown: '服务端正文' }),
-    draftMarkdown: null,
-    cachedBodyMarkdown: null,
+    fragment: buildFragment({ body_html: '服务端正文' }),
+    draftHtml: null,
+    cachedBodyHtml: null,
   });
 
-  assert.equal(result.snapshot.body_markdown, '服务端正文');
+  assert.equal(result.snapshot.body_html, '服务端正文');
   assert.equal(result.remoteBaseline, '服务端正文');
   assert.equal(result.syncStatus, 'synced');
 });
@@ -53,11 +53,11 @@ test('resolveHydratedBodySession marks synced when no draft overrides remote bod
 test('shouldRehydrateBodySession allows remote detail to replace stale empty snapshot', () => {
   const shouldRehydrate = shouldRehydrateBodySession({
     fragment: buildFragment({
-      body_markdown: '远端正文',
+      body_html: '远端正文',
       plain_text_snapshot: '远端正文',
       media_assets: [],
     }),
-    draftMarkdown: null,
+    draftHtml: null,
     currentSnapshot: buildFragmentEditorSnapshot(''),
     remoteBaseline: '',
     visibleMediaAssets: [],
@@ -70,12 +70,12 @@ test('shouldRehydrateBodySession allows remote detail to replace stale empty sna
 test('shouldRehydrateBodySession blocks remote reset when local draft exists', () => {
   const shouldRehydrate = shouldRehydrateBodySession({
     fragment: buildFragment({
-      body_markdown: '远端正文',
+      body_html: '远端正文',
       plain_text_snapshot: '远端正文',
       media_assets: [],
     }),
-    draftMarkdown: '本地草稿',
-    currentSnapshot: buildFragmentEditorSnapshot('本地草稿'),
+    draftHtml: '<p>本地草稿</p>',
+    currentSnapshot: buildFragmentEditorSnapshot('<p>本地草稿</p>'),
     remoteBaseline: '服务端正文',
     visibleMediaAssets: [],
     hasConfirmedLocalEdit: true,
@@ -106,18 +106,18 @@ test('shouldProtectSuspiciousEmptySnapshot allows intentional empty commit after
   assert.equal(shouldProtect, false);
 });
 
-test('applyAiPatchFallbackToSnapshot keeps markdown-derived snapshot fields aligned', () => {
-  const snapshot = buildFragmentEditorSnapshot('原始正文');
+test('applyAiPatchFallbackToSnapshot keeps html-derived snapshot fields aligned', () => {
+  const snapshot = buildFragmentEditorSnapshot('<p>原始正文</p>');
   const nextSnapshot = applyAiPatchFallbackToSnapshot(
     snapshot,
     {
       op: 'prepend_document',
-      markdown_snippet: '# 新标题',
+      html_snippet: '<h1>新标题</h1>',
     },
     ''
   );
 
-  assert.equal(nextSnapshot.body_markdown, '# 新标题\n\n原始正文');
+  assert.equal(nextSnapshot.body_html, '<h1>新标题</h1>\n<p>原始正文</p>');
   assert.equal(nextSnapshot.plain_text, '新标题 原始正文');
   assert.deepEqual(nextSnapshot.asset_ids, []);
 });

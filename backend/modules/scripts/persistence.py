@@ -9,6 +9,7 @@ from core.exceptions import ValidationError
 from domains.pipelines import repository as pipeline_repository
 from domains.scripts import repository as script_repository
 from models import PipelineRun
+from modules.shared.content_html import convert_markdown_to_basic_html
 
 
 class ScriptGenerationPersistenceService:
@@ -56,6 +57,7 @@ class ScriptGenerationPersistenceService:
         draft = (parsed_result.get("draft") or "").strip()
         if not draft:
             raise ValidationError(message="工作流输出缺少 draft，无法创建口播稿", field_errors={"generation": "工作流执行失败"})
+        draft_html = convert_markdown_to_basic_html(draft)
         existing = script_repository.get_by_id(db=db, user_id=run.user_id, script_id=run.resource_id or "")
         if existing:
             return self.build_run_output(
@@ -67,7 +69,7 @@ class ScriptGenerationPersistenceService:
         script = script_repository.create(
             db=db,
             user_id=run.user_id,
-            body_markdown=draft,
+            body_html=draft_html,
             mode=input_payload["mode"],
             source_fragment_ids=json.dumps(input_payload["fragment_ids"], ensure_ascii=False),
             title=parsed_result.get("title"),

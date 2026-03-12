@@ -19,7 +19,7 @@ async def _create_fragment(async_client, auth_headers_factory, transcript: str) 
     """创建手动碎片并返回其 ID。"""
     response = await async_client.post(
         "/api/fragments/content",
-        json={"body_markdown": transcript, "source": "manual"},
+        json={"body_html": f"<p>{transcript}</p>", "source": "manual"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 201
@@ -116,7 +116,7 @@ async def test_script_generation_pipeline_collects_context_and_persists_script(
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert detail_response.status_code == 200
-    assert detail_response.json()["data"]["body_markdown"] == "这是 pipeline 生成的口播稿"
+    assert detail_response.json()["data"]["body_html"] == "<p>这是 pipeline 生成的口播稿</p>"
 
     assert len(web_search_provider.calls) == 1
     inputs = script_mode_a_workflow_provider.last_submitted_inputs()

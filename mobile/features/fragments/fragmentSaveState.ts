@@ -2,14 +2,14 @@ export type FragmentSyncStatus = 'idle' | 'syncing' | 'synced' | 'unsynced';
 
 interface ResolveSaveOutcomeInput {
   ok: boolean;
-  savedMarkdown: string;
-  attemptedMarkdown: string;
+  savedHtml: string;
+  attemptedHtml: string;
 }
 
 interface ResolveSaveOutcomeResult {
   syncStatus: FragmentSyncStatus;
   shouldClearDraft: boolean;
-  lastSyncedMarkdown: string;
+  lastSyncedHtml: string;
 }
 
 interface ResolveDoneActionResult {
@@ -20,22 +20,22 @@ interface ResolveDoneActionResult {
 
 export function resolveSaveOutcome({
   ok,
-  savedMarkdown,
-  attemptedMarkdown,
+  savedHtml,
+  attemptedHtml,
 }: ResolveSaveOutcomeInput): ResolveSaveOutcomeResult {
   /*把保存结果统一映射成编辑器同步态，减少页面层条件分支。 */
   if (ok) {
     return {
       syncStatus: 'synced',
       shouldClearDraft: true,
-      lastSyncedMarkdown: savedMarkdown,
+      lastSyncedHtml: savedHtml,
     };
   }
 
   return {
     syncStatus: 'unsynced',
     shouldClearDraft: false,
-    lastSyncedMarkdown: attemptedMarkdown,
+    lastSyncedHtml: attemptedHtml,
   };
 }
 

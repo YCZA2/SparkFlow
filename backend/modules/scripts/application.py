@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ValidationError
 from models import Script
+from modules.shared.content_html import normalize_body_html
 from utils.serialization import format_iso_datetime, parse_json_list
 from utils.time import get_local_day_bounds
 
@@ -23,7 +24,7 @@ def map_script(script: Script) -> ScriptDetail:
     return ScriptDetail(
         id=script.id,
         title=script.title,
-        body_markdown=script.body_markdown,
+        body_html=script.body_html,
         mode=script.mode,
         source_fragment_ids=source_fragment_ids,
         source_fragment_count=len(source_fragment_ids),
@@ -111,14 +112,14 @@ class ScriptCommandService:
         script_id: str,
         status_value: Optional[str],
         title: Optional[str],
-        body_markdown: Optional[str],
+        body_html: Optional[str],
     ) -> Script:
         """更新稿件标题或状态。"""
         script = ScriptQueryService().get_script(db=db, user_id=user_id, script_id=script_id)
         if status_value is not None and status_value not in VALID_SCRIPT_STATUSES:
             raise ValidationError(message=f"无效的状态值: {status_value}", field_errors={"status": "必须是 draft、ready、filmed 之一"})
-        normalized_body = body_markdown.strip() if body_markdown is not None else None
-        return script_repository.update(db=db, script=script, status_value=status_value, title=title, body_markdown=normalized_body)
+        normalized_body = normalize_body_html(body_html) if body_html is not None else None
+        return script_repository.update(db=db, script=script, status_value=status_value, title=title, body_html=normalized_body)
 
     def delete_script(self, *, db: Session, user_id: str, script_id: str) -> None:
         """删除指定稿件。"""
