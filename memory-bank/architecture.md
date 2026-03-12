@@ -100,7 +100,7 @@ flowchart TD
 - `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
-- `features/fragments/detail/*` 把碎片详情拆成 `resource / editor session / sheet / screen actions` 四层：资源层负责缓存和远端刷新，编辑会话层继续拆成初始化/自动保存/AI 与插图动作/展示态合成，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
+- `features/fragments/detail/*` 把碎片详情拆成 `resource / editor session / sheet / screen actions` 四层：资源层负责缓存和远端刷新，编辑会话层以 reducer 驱动的单一 session 内核统一编排 hydrate、自动保存、AI patch、图片插入和桥接状态，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
 - `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用。
 
@@ -258,7 +258,7 @@ flowchart TD
 - 非语音碎片必须直接写入 `body_markdown`，不再把 `transcript` 当作正式正文来源
 - 移动端碎片详情正文继续采用 `WebView + Tiptap` 编辑内核，但 DOM 编辑器是唯一 live state；原生层只消费节流后的 Markdown 快照、AI 操作和图片插入命令
 - 移动端碎片详情的本地缓存和展示态真值允许分离：`fragmentRepository` 只持久化 fragment/list 快照与订阅广播，本地草稿覆盖逻辑只存在于 detail resource 层，不直接回写服务端真值
-- 详情编辑会话的纯逻辑已下沉到 `bodySessionState.ts` 和 `fragmentSaveController.ts`：前者统一正文初始化、AI fallback patch、素材去重与乐观展示态合成，后者保证自动保存只串行提交最后一版快照，降低 hook 回归风险
+- 详情编辑会话的纯逻辑已下沉到 `editorSessionState.ts`、`bodySessionState.ts` 和 `fragmentSaveController.ts`：`editorSessionState.ts` 负责 session reducer、基线解析、自动保存触发条件与图片 fallback 规则，`bodySessionState.ts` 继续承载 Markdown 快照构建、远端刷新判定、AI fallback patch 和乐观展示态合成，`fragmentSaveController.ts` 保证自动保存只串行提交最后一版快照
 - `scripts.body_markdown` / `knowledge_docs.body_markdown` 保存统一 Markdown 正文
 - 媒体资源表：`media_assets` / `content_media_links`，对象元数据保存 `storage_provider` / `bucket` / `object_key`
 - 碎片向量 namespace: `fragments_{user_id}`

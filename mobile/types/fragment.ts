@@ -172,6 +172,26 @@ export interface FragmentEditorSnapshot {
   asset_ids: string[];
 }
 
+export type EditorSessionPhase =
+  | 'booting'
+  | 'hydrating'
+  | 'ready'
+  | 'saving'
+  | 'error';
+
+export interface EditorSessionSnapshot extends FragmentEditorSnapshot {}
+
+export interface SessionBaseline {
+  fragment_id: string;
+  snapshot: EditorSessionSnapshot;
+  remote_baseline: string;
+  cached_body_markdown: string | null;
+  draft_markdown: string | null;
+  media_assets: MediaAsset[];
+  is_local_first: boolean;
+  sync_status: LocalFragmentSyncStatus | FragmentSyncStatus;
+}
+
 export type FragmentEditorCommand =
   | 'paragraph'
   | 'heading'
@@ -200,3 +220,23 @@ export interface FragmentEditorFormattingState {
   can_undo: boolean;
   can_redo: boolean;
 }
+
+export interface EditorBridgeAdapter {
+  getSnapshot: () => FragmentEditorSnapshot | null;
+  focus: () => void;
+  insertImage: (asset: MediaAsset) => void;
+  applyPatch: (patch: FragmentAiPatch) => void;
+  runCommand: (command: FragmentEditorCommand) => void;
+}
+
+export interface FragmentSaveAdapter {
+  saveSnapshot: (
+    fragment: Fragment,
+    snapshot: FragmentEditorSnapshot
+  ) => Promise<{
+    fragment?: Fragment;
+    saved_markdown: string;
+  }>;
+}
+
+type FragmentSyncStatus = 'idle' | 'syncing' | 'synced' | 'unsynced';

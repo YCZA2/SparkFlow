@@ -3,8 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { useAppTheme } from '@/theme/useAppTheme';
 import type {
-  FragmentAiPatch,
-  FragmentEditorCommand,
+  EditorBridgeAdapter,
   FragmentEditorFormattingState,
   FragmentEditorSnapshot,
   MediaAsset,
@@ -12,13 +11,8 @@ import type {
 
 import FragmentRichEditorDom from './FragmentRichEditorDom';
 
-export interface FragmentRichEditorHandle {
-  [key: string]: (...args: any[]) => void;
-  getSnapshot: () => FragmentEditorSnapshot | null;
-  focus: () => void;
-  insertImage: (asset: MediaAsset) => void;
-  applyPatch: (patch: FragmentAiPatch) => void;
-  runCommand: (command: FragmentEditorCommand) => void;
+export interface FragmentRichEditorHandle extends EditorBridgeAdapter {
+  [key: string]: (...args: any[]) => any;
 }
 
 interface FragmentRichEditorProps {

@@ -19,12 +19,12 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
 - 碎片详情页默认进入轻量正文编辑视图，正文改动会自动保存；`transcript`、音频、摘要、标签和 AI 整理工具收口到右上角“更多”底部抽屉。
-- 碎片详情内部已拆成 `detail resource / editor session / sheet / screen actions` 四层：缓存和远端刷新、正文编辑会话、更多内容抽屉、页面动作分别维护；页面层统一只消费 `resource / editor / sheet / actions` 四组 view-model。
+- 碎片详情内部已拆成 `detail resource / editor session / sheet / screen actions` 四层：缓存和远端刷新、正文编辑会话、更多内容抽屉、页面动作分别维护；其中 editor session 已收敛为 reducer 驱动的单一会话内核，统一处理 hydrate、自动保存、AI patch、图片插入和 bridge 事件，页面层统一只消费 `resource / editor / sheet / actions` 四组 view-model。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
 - 碎片正文详情和列表已接入本地缓存与本地草稿聚合：详情会优先读本地 draft，再叠加远端缓存；未同步正文和待上传图片会在应用启动、输入停顿和页面聚焦时静默重试。
 - 脚本详情页只展示 `body_markdown`，后端负责迁移旧数据。
 - 移动端碎片正文已切到 `WebView + Tiptap` 编辑器，DOM 编辑器内部维持富文本状态，但持久化真值统一为 `body_markdown`，支持标题、列表、引用、粗体、斜体、图片和 AI patch。
-- 碎片详情里的正文初始化、自动保存队列、AI fallback patch 和素材去重都已下沉为独立 helper / hook，纯状态回归统一由 `mobile/tests/*.test.ts` 覆盖。
+- 碎片详情里的正文基线解析、自动保存队列、AI fallback patch、图片 fallback 插入和素材去重都已下沉为独立 session helper / reducer，纯状态回归统一由 `mobile/tests/*.test.ts` 覆盖。
 - 碎片列表缓存已按首页 `all` 和文件夹 `folder:<id>` 分桶，首页/文件夹页都采用一致的“缓存秒开 + 后台刷新 + 缓存订阅回显”策略。
 - 知识库移动端仍是占位入口，还没有完整的 Markdown 编辑和素材管理 UI。
 
