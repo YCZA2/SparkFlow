@@ -213,7 +213,7 @@ export function ContentRichEditor({
           ref={nativeRef}
           autoFocus={autoFocus}
           defaultValue={seededEditorHtml}
-          placeholder="把灵感整理成可用正文..."
+          placeholder=""
           autoCapitalize="sentences"
           style={styles.input}
           contextMenuItems={contextMenuItems}
@@ -287,5 +287,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    fontSize: 18,
+    lineHeight: 28,
   },
 });

@@ -116,7 +116,6 @@ export function ContentRichEditor({
           styles.editorShell,
           {
             backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.border,
           },
         ]}
       >
@@ -125,7 +124,7 @@ export function ContentRichEditor({
           ref={inputRef}
           autoFocus={autoFocus}
           multiline={true}
-          placeholder="把灵感整理成可用正文..."
+          placeholder=""
           placeholderTextColor={theme.colors.textSubtle}
           selectionColor={`${theme.colors.primary}33`}
           style={[
@@ -152,7 +151,7 @@ const styles = StyleSheet.create({
   editorShell: {
     flex: 1,
     borderRadius: 24,
-    borderWidth: 1,
+    borderWidth: 0,  // 移除边框，避免白色横条闪现
     overflow: 'hidden',
   },
   input: {
