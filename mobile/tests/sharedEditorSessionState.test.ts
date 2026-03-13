@@ -3,11 +3,11 @@ import test from 'node:test';
 
 import {
   appendImageToSnapshot,
-  applyHtmlPatchFallbackToSnapshot,
   createInitialEditorSessionState,
   reduceEditorSession,
   resolveEditorSessionBaseline,
 } from '../features/editor/sessionState';
+import { applyHtmlPatchFallbackToSnapshot } from '../features/editor/sessionHydration';
 import type { EditorSourceDocument, EditorMediaAsset } from '../features/editor/types';
 
 function buildDocument(overrides: Partial<EditorSourceDocument> = {}): EditorSourceDocument {

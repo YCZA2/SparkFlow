@@ -146,11 +146,11 @@ test('appendRuntimeMediaAsset deduplicates uploaded assets and keeps insertion o
   const duplicated = appendRuntimeMediaAsset(once, secondAsset);
 
   assert.deepEqual(
-    once.map((item) => item.id),
+    once.map((item: MediaAsset) => item.id),
     ['asset-1', 'asset-2']
   );
   assert.deepEqual(
-    duplicated.map((item) => item.id),
+    duplicated.map((item: MediaAsset) => item.id),
     ['asset-1', 'asset-2']
   );
 });

@@ -175,7 +175,7 @@ export function useFragmentDetailScreen(
       tools: {
         supportsImages: true,
         isUploadingImage: editor.isUploadingImage,
-        onInsertImage: editor.onInsertImage,
+        onInsertImage: editor.onInsertImage ?? (async () => {}),
       },
       actions: {
         isDeleting,
