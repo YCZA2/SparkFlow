@@ -46,14 +46,16 @@ export function useFragmentDetailScreen(
   }, [fragment?.speaker_segments, isSheetOpen, player.positionMs]);
 
   const exitScreen = async () => {
-    /*离开详情前先保证最新输入已落本地，并把上云动作交给后台收敛。 */
+    /*离开详情前先保证最新输入已落本地，并把上云动作交给后台收敛，同时标记列表待刷新。 */
     try {
       await editor.saveNow();
+      // 标记碎片列表需要刷新
+      markFragmentsStale();
+      router.back();
     } catch {
       Alert.alert('本地保存失败', '请稍后重试，当前页会继续保留输入内容。');
       return;
     }
-    router.back();
   };
 
   const exitAfterDelete = () => {

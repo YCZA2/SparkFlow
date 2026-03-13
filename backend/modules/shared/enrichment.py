@@ -113,48 +113,72 @@ async def generate_summary_and_tags(
     *,
     llm_provider: TextGenerationProvider,
     timeout_seconds: float | None = None,
+    body_html: str | None = None,
 ) -> tuple[str, list[str]]:
     """生成摘要和标签，并支持超时控制。"""
     if timeout_seconds is not None:
         return await asyncio.wait_for(
-            _generate_summary_and_tags(transcript, llm_provider=llm_provider),
+            _generate_summary_and_tags(
+                transcript,
+                llm_provider=llm_provider,
+                body_html=body_html,
+            ),
             timeout=timeout_seconds,
         )
-    return await _generate_summary_and_tags(transcript, llm_provider=llm_provider)
+    return await _generate_summary_and_tags(
+        transcript,
+        llm_provider=llm_provider,
+        body_html=body_html,
+    )
 
 
 async def _generate_summary_and_tags(
     transcript: str,
     *,
     llm_provider: TextGenerationProvider,
+    body_html: str | None = None,
 ) -> tuple[str, list[str]]:
     """执行摘要和标签增强流程。"""
     if not transcript or not transcript.strip():
         logger.warning("enrichment_empty_transcript")
         return ("空内容", ["其他"])
 
-    summary = await _generate_summary(transcript, llm_provider=llm_provider)
+    summary = await _generate_summary(
+        transcript,
+        llm_provider=llm_provider,
+        body_html=body_html,
+    )
     tags = await _generate_tags(transcript, llm_provider=llm_provider)
     return (summary, tags)
 
 
-async def _generate_summary(transcript: str, *, llm_provider: TextGenerationProvider) -> str:
-    """调用 LLM 生成摘要，并在失败时回退。"""
-    user_message = SUMMARY_USER_PROMPT_TEMPLATE.format(transcript=transcript)
-    try:
-        summary = await llm_provider.generate(
-            system_prompt=SUMMARY_SYSTEM_PROMPT,
-            user_message=user_message,
-            temperature=0.3,
-            max_tokens=50,
-        )
-        summary = summary.strip().strip('"\'""\'')
-        if len(summary) > 20:
-            summary = summary[:20]
-        return summary or _generate_fallback_summary(transcript)
-    except Exception as exc:
-        _log_enrichment_failure(phase="summary", exc=exc)
-        return _generate_fallback_summary(transcript)
+async def _generate_summary(
+    transcript: str,
+    *,
+    llm_provider: TextGenerationProvider,
+    body_html: str | None = None,
+) -> str:
+    """从正文第一行提取摘要，不再使用 LLM。"""
+    from modules.shared.content_html import extract_plain_text_from_html
+
+    # 优先从正文提取纯文本
+    if body_html:
+        plain_text = extract_plain_text_from_html(body_html)
+    else:
+        # 降级：使用 transcript（转写文本）
+        plain_text = transcript.strip()
+
+    if not plain_text:
+        return "空内容"
+
+    # 提取第一行
+    first_line = plain_text.split('\n')[0].strip()
+
+    # 截取前 20 字
+    if len(first_line) <= 20:
+        return first_line
+
+    return first_line[:20] + "..."
 
 
 async def _generate_tags(transcript: str, *, llm_provider: TextGenerationProvider) -> list[str]:

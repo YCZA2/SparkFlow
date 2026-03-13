@@ -94,7 +94,15 @@ class FragmentDerivativeService:
                     tags=parse_json_list(fragment.tags, allow_csv_fallback=True),
                 )
             return
-        summary, tags = await self.generate_fragment_enrichment(current_effective_text)
+
+        # 读取碎片正文 HTML
+        from modules.fragments.content import read_fragment_body_html
+        body_html = read_fragment_body_html(fragment)
+
+        summary, tags = await self.generate_fragment_enrichment(
+            current_effective_text,
+            body_html=body_html,
+        )
         fragment.summary = summary
         fragment.tags = self.serialize_tags(tags)
         fragment_tag_repository.replace_for_fragment(
@@ -180,13 +188,22 @@ class FragmentDerivativeService:
         ratio_delta = absolute_delta / max(previous_length, 1)
         return absolute_delta >= SUMMARY_REFRESH_MIN_ABS_DELTA or ratio_delta >= SUMMARY_REFRESH_MIN_RATIO
 
-    async def generate_fragment_enrichment(self, effective_text: str) -> tuple[str | None, list[str]]:
+    async def generate_fragment_enrichment(
+        self,
+        effective_text: str,
+        body_html: str | None = None,
+    ) -> tuple[str | None, list[str]]:
         """基于正文生成或清空摘要与标签。"""
         normalized_text = effective_text.strip()
         if not normalized_text:
             return (None, [])
         try:
-            return await generate_summary_and_tags(normalized_text, llm_provider=self.llm_provider, timeout_seconds=45.0)
+            return await generate_summary_and_tags(
+                normalized_text,
+                llm_provider=self.llm_provider,
+                timeout_seconds=45.0,
+                body_html=body_html,
+            )
         except Exception:
             return build_fallback_summary_and_tags(normalized_text)
 
