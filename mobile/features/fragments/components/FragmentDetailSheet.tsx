@@ -159,11 +159,13 @@ function AudioTranscriptSection({
 }: Pick<
   FragmentDetailSheetProps,
   'content' | 'activeSegmentIndex' | 'player'
->) {
+> & { content: FragmentDetailSheetProps['content'] & { bodyHtml?: string | null } }) {
   /*单独渲染原文与音频区块，保持播放器和转写的展示边界。 */
   const theme = useAppTheme();
   const hasAudio = Boolean(content.audioFileUrl);
   const hasTranscript = Boolean(content.transcript?.trim() || content.speakerSegments?.length);
+  // 如果 bodyHtml 有内容，说明已在编辑区显示，不需要在抽屉中重复显示语音原文
+  const shouldShowTranscript = !content.bodyHtml?.trim() && hasTranscript;
 
   return (
     <Section title="原文与音频">
@@ -186,7 +188,7 @@ function AudioTranscriptSection({
         </View>
       ) : null}
 
-      {hasTranscript ? (
+      {shouldShowTranscript ? (
         <TranscriptSection
           transcript={content.transcript}
           speakerSegments={content.speakerSegments}
@@ -198,13 +200,14 @@ function AudioTranscriptSection({
             void player.playSegment(segment);
           }}
         />
-      ) : (
+      ) : null}
+      {!hasAudio && !shouldShowTranscript ? (
         <InfoCard>
           <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>
             这条碎片没有可查看的语音原文。
           </Text>
         </InfoCard>
-      )}
+      ) : null}
     </Section>
   );
 }

@@ -168,6 +168,7 @@ export function useFragmentDetailScreen(
             speakerSegments: fragment.speaker_segments,
             summary: fragment.summary,
             tags: fragment.tags,
+            bodyHtml: fragment.body_html,
           }
         : null,
       metadata: fragment

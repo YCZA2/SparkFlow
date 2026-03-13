@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from models import Fragment, FragmentTag
 from modules.shared.content_html import (
+    convert_markdown_to_basic_html,
     extract_plain_text_from_html,
     normalize_body_html,
 )
@@ -178,7 +179,7 @@ def save_transcription_result(
     tags_json: Optional[str],
     speaker_segments_json: Optional[str],
 ) -> bool:
-    """落库转写、摘要、标签和说话人分段结果。"""
+    """落库转写、摘要、标签和说话人分段结果，并同步到正文编辑区。"""
     fragment = get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
     if not fragment:
         return False
@@ -187,6 +188,10 @@ def save_transcription_result(
     fragment.speaker_segments = speaker_segments_json
     fragment.summary = summary
     fragment.tags = tags_json
+    # 如果 body_html 为空，将 transcript 同步到正文编辑区
+    if not fragment.body_html or not fragment.body_html.strip():
+        fragment.body_html = convert_markdown_to_basic_html(transcript)
+        fragment.plain_text_snapshot = transcript
     fragment_tag_repository.replace_for_fragment(
         db=db,
         user_id=user_id,
