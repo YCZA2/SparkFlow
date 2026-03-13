@@ -117,9 +117,11 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
     useCallback(() => {
       void wakeLocalFragmentSyncQueue().catch(() => undefined);
       if (consumeFragmentsStale()) {
+        /*同时刷新本地草稿和远端碎片，确保新建碎片立即显示。 */
+        void hydrateLocalDrafts();
         void loadFragments('load');
       }
-    }, [loadFragments])
+    }, [hydrateLocalDrafts, loadFragments])
   );
 
   return {

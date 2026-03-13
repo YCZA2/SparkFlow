@@ -16,7 +16,11 @@ export function buildFragmentSections(fragments: Fragment[]): FragmentSection[] 
     sectionMap.set(key, current);
   }
 
-  return Array.from(sectionMap.entries()).map(([title, data]) => ({ title, data }));
+  /*每个分组内按创建时间倒序排列，确保最新的碎片在最上面。 */
+  return Array.from(sectionMap.entries()).map(([title, data]) => ({
+    title,
+    data: data.sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)),
+  }));
 }
 
 function getSectionLabel(dateString: string): string {
