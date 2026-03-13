@@ -6,7 +6,6 @@
       ".ios",
       ".android",
       ".native",
-      ".web",
       ""
     ],
     "paths": {

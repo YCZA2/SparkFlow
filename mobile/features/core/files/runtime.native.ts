@@ -87,7 +87,7 @@ function getFragmentMetaDirectoryUri(fragmentId: string): string {
   return `${getFragmentDirectoryUri(fragmentId)}meta/`;
 }
 
-/*用 URI 构造受管文件句柄，统一原生与 Web 端接口形状。 */
+/*用 URI 构造受管文件句柄，统一文件接口形状。 */
 function createManagedNativeFile(parentDirectoryUri: string, fileName: string): ManagedNativeFile {
   const normalizedParentUri = ensureTrailingSlash(parentDirectoryUri);
   return {

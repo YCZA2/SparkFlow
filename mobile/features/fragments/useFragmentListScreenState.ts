@@ -70,8 +70,8 @@ export function useFragmentListScreenState({
       }
       // 跳转到详情页时，传递来源文件夹ID和名称（如果有）
       router.push({
-        pathname: `/fragment/${fragment.id}`,
-        params: folderId ? { folderId, folderName: folderName || '' } : {},
+        pathname: '/fragment/[id]' as const,
+        params: { id: fragment.id, ...(folderId ? { folderId, folderName: folderName || '' } : {}) },
       });
     },
     [router, selection, folderId, folderName]

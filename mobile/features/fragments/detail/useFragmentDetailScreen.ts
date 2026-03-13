@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, Platform, Share } from 'react-native';
+import { Alert, Share } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 
 import { deleteFragment } from '@/features/fragments/api';
@@ -108,14 +108,7 @@ export function useFragmentDetailScreen(
   };
 
   const requestDelete = () => {
-    /*统一处理跨平台删除确认逻辑，保持页面组件只关心点击事件。 */
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.confirm) {
-      if (window.confirm('删除后将无法恢复，是否继续？')) {
-        void confirmDelete();
-      }
-      return;
-    }
-
+    /*统一处理删除确认逻辑，保持页面组件只关心点击事件。 */
     Alert.alert('确认删除', '删除后将无法恢复，是否继续？', [
       { text: '取消', style: 'cancel' },
       {

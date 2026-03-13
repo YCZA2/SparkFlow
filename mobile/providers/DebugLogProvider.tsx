@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform } from 'react-native';
 
 import { STORAGE_KEYS, getBackendUrl } from '@/constants/config';
 import {
@@ -139,45 +138,11 @@ export function DebugLogProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    const webErrorListener = (event: ErrorEvent) => {
-      emitDebugLog(
-        createDebugLogEntry({
-          level: 'error',
-          source: 'window.error',
-          message: event.message || event.error || '未知页面错误',
-          context: {
-            filename: event.filename,
-            lineno: event.lineno,
-            colno: event.colno,
-          },
-        })
-      );
-    };
-
-    const rejectionListener = (event: PromiseRejectionEvent) => {
-      emitDebugLog(
-        createDebugLogEntry({
-          level: 'error',
-          source: 'unhandledrejection',
-          message: event.reason ?? '未处理 Promise 异常',
-        })
-      );
-    };
-
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.addEventListener('error', webErrorListener);
-      window.addEventListener('unhandledrejection', rejectionListener);
-    }
-
     return () => {
       unregisterSink();
       console.error = originalConsoleError;
       if (globalScope.ErrorUtils?.setGlobalHandler && previousGlobalHandler) {
         globalScope.ErrorUtils.setGlobalHandler(previousGlobalHandler);
-      }
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.removeEventListener('error', webErrorListener);
-        window.removeEventListener('unhandledrejection', rejectionListener);
       }
     };
   }, []);

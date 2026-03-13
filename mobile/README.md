@@ -92,30 +92,6 @@ npm run dev:mobile:simulator
 这个模式会先启动 Metro，再由脚本手动唤起已安装的 iOS dev client，
 比直接依赖 Expo CLI 自动 `openurl` 更稳定。
 
-如果你要启动浏览器 Web 端联调，请执行：
-
-```bash
-npm run dev:mobile:web
-```
-
-这个模式会同时启动：
-
-- Docker PostgreSQL（`5432`）
-- 后端 FastAPI（`8000`）
-- Expo Web（`8081`）
-
-浏览器访问：
-
-```text
-http://127.0.0.1:8081
-```
-
-Web 端请求业务 API 时，仍然应该指向：
-
-```text
-http://127.0.0.1:8000
-```
-
 如需单独管理本地数据库：
 
 ```bash
@@ -366,7 +342,7 @@ backend/runtime_logs/mobile-debug.log
 
 - `console.error`
 - 全局 JS 异常
-- 未处理 Promise 异常（Web）
+- 未处理 Promise 异常
 - API 请求失败 / 响应错误
 
 ## 五、测试
@@ -400,7 +376,6 @@ bash scripts/test-all.sh
 如果你以后不想记脚本，可以对照下面理解：
 
 - 模式1 ≈ 启动后端 + `npx expo start --lan`
-- 模式4 ≈ 启动后端 + `npx expo start --web`
 - 模式2 ≈ `npm install` + `expo prebuild` + `pod-install` + `expo run:ios --device`
 
 ## 六、后端数据库迁移（本项目联调时常用）
