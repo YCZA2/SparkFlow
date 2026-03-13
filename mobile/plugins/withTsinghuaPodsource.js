@@ -16,12 +16,15 @@ function withTsinghuaPodsource(config) {
 
         // 如果还没有添加清华源，则在文件开头添加
         if (!content.includes('mirrors.tuna.tsinghua.edu.cn')) {
-          content = `# 使用清华 CocoaPods 镜像源
+          content = `# 使用清华 CocoaPods 镜像源（CDN 加速）
+source 'https://cdn.cocoapods.org/'
+
+# 使用清华 CocoaPods 镜像源（Git 镜像）
 source 'https://mirrors.tuna.tsinghua.edu.cn/git/CocoaPods/Specs.git'
 
 ${content}`;
           fs.writeFileSync(podfilePath, content);
-          console.log('[Config Plugin] 已修改 Podfile 使用清华源');
+          console.log('[Config Plugin] 已修改 Podfile 使用清华源 + CDN');
         }
       }
 
