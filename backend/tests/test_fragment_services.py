@@ -149,7 +149,8 @@ async def test_derivative_service_refreshes_summary_and_tags_for_large_edits(mon
         current_effective_text="这是一次足够长的内容重写，用来触发摘要与标签刷新逻辑，并同步向量结果。",
     )
 
-    assert len(llm_provider.calls) == 2
+    # 现在摘要本地提取不调用 LLM，只有标签生成会调用 LLM provider
+    assert len(llm_provider.calls) == 1
     assert db.commit_calls == 1
     assert replaced_tags == ["产品", "增长"]
     assert json.loads(fragment.tags) == ["产品", "增长"]

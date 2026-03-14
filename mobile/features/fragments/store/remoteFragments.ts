@@ -31,7 +31,7 @@ export async function readRemoteFragmentSnapshot(fragmentId: string): Promise<Fr
   const rows = await database
     .select()
     .from(fragmentsTable)
-    .where(and(eq(fragmentsTable.id, fragmentId), eq(fragmentsTable.isLocalDraft, 0)))
+    .where(and(eq(fragmentsTable.id, fragmentId)))
     .limit(1);
   const row = rows[0];
   if (!row) {
@@ -45,7 +45,7 @@ export async function readRemoteFragmentSnapshot(fragmentId: string): Promise<Fr
 
 /*读取 SQLite 中的远端列表镜像，作为首页与文件夹页的唯一真值来源。 */
 export async function readRemoteFragmentList(folderId?: string | null): Promise<Fragment[]> {
-  const rows = await readFragmentRows(folderId, false);
+  const rows = await readFragmentRows(folderId);
   const mediaRowsByFragmentId = await loadMediaRowsByFragmentIds(rows.map((row) => row.id));
   const fragments = await Promise.all(
     rows.map(async (row) => {

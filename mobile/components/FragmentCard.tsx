@@ -126,7 +126,7 @@ export function FragmentCard({
 
         <View style={styles.footerRow}>
           <Text style={[styles.source, { color: theme.colors.textSubtle }]} numberOfLines={1}>
-            {fragment.display_source_label || getSourceLabel(fragment.source)}
+            {getSourceLabel(fragment.source)}
           </Text>
         </View>
       </View>

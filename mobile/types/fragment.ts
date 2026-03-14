@@ -30,11 +30,8 @@ export interface MediaAsset {
   expires_at?: string | null;
 }
 
-export type LocalFragmentSyncStatus =
-  | 'creating'
-  | 'syncing'
-  | 'synced'
-  | 'failed_pending_retry';
+/* 碎片同步状态 - 简化为两种状态 */
+export type FragmentSyncStatus = 'pending' | 'synced';
 
 export type LocalPendingImageUploadStatus =
   | 'pending'
@@ -52,14 +49,16 @@ export interface LocalPendingImageAsset {
   upload_status: LocalPendingImageUploadStatus;
 }
 
+/* 本地碎片草稿 - 使用统一 id */
 export interface LocalFragmentDraft {
-  local_id: string;
-  remote_id?: string | null;
+  id: string;
+  server_id?: string | null;
   folder_id?: string | null;
   body_html: string;
   plain_text_snapshot: string;
   created_at: string;
-  sync_status: LocalFragmentSyncStatus;
+  updated_at: string;
+  sync_status: FragmentSyncStatus;
   last_sync_attempt_at?: string | null;
   next_retry_at?: string | null;
   retry_count?: number;
@@ -80,6 +79,7 @@ export interface Fragment {
   source: FragmentSource;
   audio_source?: FragmentAudioSource | null;
   created_at: string;
+  updated_at: string;
   folder_id?: string | null;
   folder?: FragmentFolder | null;
   body_html: string;
@@ -87,11 +87,8 @@ export interface Fragment {
   content_state?: 'empty' | 'transcript_only' | 'body_present';
   media_assets?: MediaAsset[];
   /*前端本地优先视图字段，不属于后端 DTO。 */
-  local_id?: string | null;
-  remote_id?: string | null;
-  is_local_draft?: boolean;
-  local_sync_status?: LocalFragmentSyncStatus | null;
-  display_source_label?: string | null;
+  server_id?: string | null;
+  sync_status?: FragmentSyncStatus;
 }
 
 export interface FragmentListResponse {

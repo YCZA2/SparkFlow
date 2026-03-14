@@ -86,14 +86,17 @@ export async function migrateLegacyAsyncStorageIfNeeded(): Promise<void> {
       const parsed = JSON.parse(legacyDraftsRaw) as LocalFragmentDraft[];
       if (Array.isArray(parsed)) {
         for (const legacyDraft of parsed) {
+          // 兼容旧格式：local_id -> id, remote_id -> server_id
+          const draftId = (legacyDraft as unknown as { local_id?: string }).local_id ?? legacyDraft.id;
+          const serverId = (legacyDraft as unknown as { remote_id?: string | null }).remote_id ?? null;
           const normalizedHtml = resolveLegacyDraftHtml({ html: legacyDraft.body_html });
-          await writeFragmentBodyFile(legacyDraft.local_id, normalizedHtml);
+          await writeFragmentBodyFile(draftId, normalizedHtml);
           const database = await getLocalDatabase();
           await database
             .insert(fragmentsTable)
             .values({
-              id: legacyDraft.local_id,
-              remoteId: legacyDraft.remote_id ?? null,
+              id: draftId,
+              serverId: serverId,
               folderId: legacyDraft.folder_id ?? null,
               source: 'manual',
               audioSource: null,
@@ -103,23 +106,18 @@ export async function migrateLegacyAsyncStorageIfNeeded(): Promise<void> {
               tagsJson: '[]',
               plainTextSnapshot:
                 legacyDraft.plain_text_snapshot ?? extractPlainTextFromHtml(normalizedHtml),
-              bodyFileUri: getFragmentBodyFile(legacyDraft.local_id).uri,
+              bodyFileUri: getFragmentBodyFile(draftId).uri,
               transcript: null,
               speakerSegmentsJson: null,
               audioFileUri: null,
               audioFileUrl: null,
               audioFileExpiresAt: null,
-              syncStatus: 'local_only',
-              remoteSyncState: 'idle',
+              syncStatus: serverId ? 'synced' : 'pending',
               lastSyncedAt: null,
-              lastRemoteVersion: null,
               lastSyncAttemptAt: legacyDraft.last_sync_attempt_at ?? null,
               nextRetryAt: legacyDraft.next_retry_at ?? null,
               retryCount: legacyDraft.retry_count ?? 0,
               deletedAt: null,
-              isLocalDraft: 1,
-              localSyncStatus: legacyDraft.sync_status,
-              displaySourceLabel: '本地草稿',
               contentState: normalizedHtml ? 'body_present' : 'empty',
               cachedAt: legacyDraft.created_at,
             })
@@ -130,7 +128,7 @@ export async function migrateLegacyAsyncStorageIfNeeded(): Promise<void> {
               .insert(mediaAssetsTable)
               .values({
                 id: asset.local_asset_id,
-                fragmentId: legacyDraft.local_id,
+                fragmentId: draftId,
                 remoteAssetId: asset.remote_asset_id ?? null,
                 mediaKind: 'image',
                 mimeType: asset.mime_type,

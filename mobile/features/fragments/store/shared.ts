@@ -17,8 +17,8 @@ import {
 import { normalizeFragmentTags } from '@/features/fragments/utils';
 import type {
   Fragment,
+  FragmentSyncStatus,
   LocalFragmentDraft,
-  LocalFragmentSyncStatus,
   LocalPendingImageAsset,
   MediaAsset,
 } from '@/types/fragment';
@@ -28,20 +28,24 @@ export const LEGACY_FRAGMENT_LIST_PREFIX = '@fragment_cache:v1:list:';
 export const LEGACY_FRAGMENT_BODY_DRAFT_PREFIX = '@fragment_body_html_draft:';
 export const LEGACY_LOCAL_DRAFTS_STORAGE_KEY = '@local_fragment_drafts:v1';
 export const LEGACY_MIGRATION_FLAG = '@local_fragment_mirror_migrated:v1';
-export const LOCAL_FRAGMENT_ID_PREFIX = 'local:fragment:';
 export const LOCAL_IMAGE_ASSET_ID_PREFIX = 'local:image:';
 
 export type FragmentRow = typeof fragmentsTable.$inferSelect;
 export type MediaAssetRow = typeof mediaAssetsTable.$inferSelect;
 
-/*为本地草稿生成稳定的本地主键，避免真机多次重启后冲突。 */
-export function generateLocalId(prefix: string): string {
-  return `${prefix}${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+/*为本地草稿生成稳定的 UUID 主键。 */
+export function generateFragmentId(): string {
+  return `${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/*统一判断某个路由 id 是否属于本地草稿。 */
-export function isLocalFragmentId(fragmentId?: string | null): boolean {
-  return typeof fragmentId === 'string' && fragmentId.startsWith(LOCAL_FRAGMENT_ID_PREFIX);
+/*为本地图片生成临时 ID。 */
+export function generateLocalImageId(): string {
+  return `${LOCAL_IMAGE_ASSET_ID_PREFIX}${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/*判断是否为本地图片临时 ID。 */
+export function isLocalImageId(assetId: string): boolean {
+  return assetId.startsWith(LOCAL_IMAGE_ASSET_ID_PREFIX);
 }
 
 /*把标签统一序列化为 JSON 文本，便于 SQLite 持久化。 */
@@ -113,10 +117,8 @@ export async function mapRemoteRowToFragment(
   const bodyHtml = normalizeBodyHtml(await readFragmentBodyFile(row.id));
   return {
     id: row.id,
-    remote_id: row.remoteId ?? row.id,
-    is_local_draft: false,
-    local_sync_status: null,
-    display_source_label: row.displaySourceLabel ?? null,
+    server_id: row.serverId ?? null,
+    sync_status: 'synced',
     audio_file_url: row.audioFileUrl,
     audio_file_expires_at: row.audioFileExpiresAt ?? undefined,
     transcript: row.transcript,
@@ -126,6 +128,7 @@ export async function mapRemoteRowToFragment(
     source: row.source as Fragment['source'],
     audio_source: (row.audioSource as Fragment['audio_source']) ?? null,
     created_at: row.createdAt,
+    updated_at: row.updatedAt,
     folder_id: row.folderId ?? null,
     folder: null,
     body_html: bodyHtml,
@@ -142,14 +145,17 @@ export async function mapLocalDraftRow(
   mediaRows: MediaAssetRow[]
 ): Promise<LocalFragmentDraft> {
   const bodyHtml = normalizeBodyHtml(await readFragmentBodyFile(row.id));
+  const hasServerId = Boolean(row.serverId);
+  const isSynced = row.syncStatus === 'synced';
   return {
-    local_id: row.id,
-    remote_id: row.remoteId ?? null,
+    id: row.id,
+    server_id: row.serverId ?? null,
     folder_id: row.folderId ?? null,
     body_html: bodyHtml,
     plain_text_snapshot: row.plainTextSnapshot || extractPlainTextFromHtml(bodyHtml),
     created_at: row.createdAt,
-    sync_status: (row.localSyncStatus as LocalFragmentSyncStatus) ?? 'creating',
+    updated_at: row.updatedAt,
+    sync_status: isSynced ? 'synced' : 'pending',
     last_sync_attempt_at: row.lastSyncAttemptAt ?? null,
     next_retry_at: row.nextRetryAt ?? null,
     retry_count: row.retryCount ?? 0,
@@ -173,12 +179,12 @@ export function buildRemoteFragmentRow(
   const now = new Date().toISOString();
   return {
     id: fragment.id,
-    remoteId: fragment.id,
+    serverId: fragment.id, // 服务端返回的 ID 作为 serverId
     folderId: fragment.folder_id ?? null,
     source: fragment.source,
     audioSource: fragment.audio_source ?? null,
     createdAt: fragment.created_at,
-    updatedAt: fragment.created_at,
+    updatedAt: fragment.updated_at ?? fragment.created_at,
     summary: fragment.summary ?? null,
     tagsJson: serializeTags(fragment.tags),
     plainTextSnapshot: String(
@@ -191,16 +197,11 @@ export function buildRemoteFragmentRow(
     audioFileUrl: fragment.audio_file_url ?? null,
     audioFileExpiresAt: fragment.audio_file_expires_at ?? null,
     syncStatus: 'synced',
-    remoteSyncState: 'synced',
     lastSyncedAt: now,
-    lastRemoteVersion: null,
     lastSyncAttemptAt: null,
     nextRetryAt: null,
     retryCount: 0,
     deletedAt: null,
-    isLocalDraft: 0,
-    localSyncStatus: null,
-    displaySourceLabel: fragment.display_source_label ?? null,
     contentState: fragment.content_state ?? null,
     cachedAt: cachedAt ?? now,
   };
@@ -212,15 +213,15 @@ export function buildLocalDraftRowPatch(
   patch: Partial<LocalFragmentDraft>
 ): Partial<typeof fragmentsTable.$inferInsert> {
   return {
-    remoteId: patch.remote_id === undefined ? current.remoteId : patch.remote_id,
+    serverId: patch.server_id === undefined ? current.serverId : patch.server_id,
     folderId: patch.folder_id === undefined ? current.folderId : patch.folder_id,
     updatedAt: new Date().toISOString(),
     plainTextSnapshot:
       typeof patch.plain_text_snapshot === 'string'
         ? patch.plain_text_snapshot
         : current.plainTextSnapshot,
-    localSyncStatus:
-      patch.sync_status === undefined ? current.localSyncStatus : patch.sync_status,
+    syncStatus:
+      patch.sync_status === undefined ? current.syncStatus : patch.sync_status,
     lastSyncAttemptAt:
       patch.last_sync_attempt_at === undefined
         ? current.lastSyncAttemptAt
@@ -251,15 +252,15 @@ export async function loadMediaRowsByFragmentIds(
   return map;
 }
 
-/*按 id 或 remote_id 查询单条 fragments 行，供绑定远端 id 等场景复用。 */
-export async function loadFragmentRowByIdOrRemoteId(
+/*按 id 或 server_id 查询单条 fragments 行，供绑定服务端 id 等场景复用。 */
+export async function loadFragmentRowByIdOrServerId(
   identifier: string
 ): Promise<FragmentRow | null> {
   const database = await getLocalDatabase();
   const rows = await database
     .select()
     .from(fragmentsTable)
-    .where(or(eq(fragmentsTable.id, identifier), eq(fragmentsTable.remoteId, identifier)))
+    .where(or(eq(fragmentsTable.id, identifier), eq(fragmentsTable.serverId, identifier)))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -349,29 +350,27 @@ export async function stagePendingImage(
 }
 
 /*读取远端列表时统一构造文件夹筛选条件，避免多模块复制判断。 */
-export function buildFragmentListCondition(folderId?: string | null, isLocalDraft = false) {
+export function buildFragmentListCondition(folderId?: string | null) {
   const normalizedFolderId = String(folderId ?? '').trim();
   if (normalizedFolderId) {
     return and(
-      eq(fragmentsTable.isLocalDraft, isLocalDraft ? 1 : 0),
       isNull(fragmentsTable.deletedAt),
       eq(fragmentsTable.folderId, normalizedFolderId)
     );
   }
-  return and(eq(fragmentsTable.isLocalDraft, isLocalDraft ? 1 : 0), isNull(fragmentsTable.deletedAt));
+  return isNull(fragmentsTable.deletedAt);
 }
 
-/*统一按创建时间倒序读取 fragments 行，保持首页与文件夹页排序一致。 */
+/*统一按更新时间倒序读取 fragments 行，保持首页与文件夹页排序一致。 */
 export async function readFragmentRows(
-  folderId?: string | null,
-  isLocalDraft = false
+  folderId?: string | null
 ): Promise<FragmentRow[]> {
   const database = await getLocalDatabase();
   return await database
     .select()
     .from(fragmentsTable)
-    .where(buildFragmentListCondition(folderId, isLocalDraft))
-    .orderBy(desc(fragmentsTable.createdAt));
+    .where(buildFragmentListCondition(folderId))
+    .orderBy(desc(fragmentsTable.updatedAt));
 }
 
 /*直接写入某个 fragment 的正文文件，并同步补齐纯文本快照。 */

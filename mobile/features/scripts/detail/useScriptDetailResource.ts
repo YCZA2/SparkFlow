@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { fetchScriptDetail } from '@/features/scripts/api';
 import type { Script } from '@/types/script';
+import { getErrorMessage } from '@/utils/error';
 
 interface UseScriptDetailResourceResult {
   script: Script | null;
@@ -37,7 +38,7 @@ export function useScriptDetailResource(scriptId?: string | null): UseScriptDeta
       const detail = await fetchScriptDetail(scriptId);
       setScript(detail);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败');
+      setError(getErrorMessage(err, '加载失败'));
     } finally {
       setIsLoading(false);
     }

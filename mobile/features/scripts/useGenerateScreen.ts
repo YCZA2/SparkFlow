@@ -6,6 +6,7 @@ import { useSelectedFragments } from '@/features/fragments/hooks';
 import { useGenerateScript } from '@/features/scripts/hooks';
 import type { Fragment } from '@/types/fragment';
 import type { ScriptMode } from '@/types/script';
+import { getErrorMessage } from '@/utils/error';
 
 function displayFragmentText(fragment: Fragment): string {
   /*生成页摘要优先显示正文，其次回退到转写原文。 */
@@ -51,7 +52,7 @@ export function useGenerateScreen(): GenerateScreenState {
       const scriptId = await generator.run(ids, mode);
       router.replace(`/script/${scriptId}`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : '生成失败';
+      const message = getErrorMessage(err, '生成失败');
       Alert.alert('生成失败', message);
     }
   }, [generator, ids, mode, router]);

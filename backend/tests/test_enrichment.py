@@ -47,10 +47,10 @@ async def test_generate_summary_and_tags_falls_back_when_llm_fails(monkeypatch) 
 
     assert summary.startswith("这是一段关于产品增长")
     assert tags == ["产品", "设计"]
-    assert len(stub_logger.warning_calls) == 2
+    # 现在摘要本地提取不调用 LLM，只有标签生成会失败并产生 warning
+    assert len(stub_logger.warning_calls) == 1
     assert stub_logger.warning_calls[0][0] == "enrichment_generation_failed"
-    assert stub_logger.warning_calls[0][1]["phase"] == "summary"
-    assert stub_logger.warning_calls[1][1]["phase"] == "tags"
+    assert stub_logger.warning_calls[0][1]["phase"] == "tags"
 
 
 @pytest.mark.asyncio
@@ -69,8 +69,9 @@ async def test_generate_summary_and_tags_throttles_duplicate_failures(monkeypatc
     await generate_summary_and_tags(transcript, llm_provider=provider)
     await generate_summary_and_tags(transcript, llm_provider=provider)
 
-    assert len(stub_logger.warning_calls) == 2
-    assert {call[1]["phase"] for call in stub_logger.warning_calls} == {"summary", "tags"}
-    assert len(stub_logger.debug_calls) == 2
-    assert {call[0] for call in stub_logger.debug_calls} == {"enrichment_generation_failed_suppressed"}
-    assert {call[1]["phase"] for call in stub_logger.debug_calls} == {"summary", "tags"}
+    # 现在只有标签生成会调用 LLM，第一次失败产生 warning，第二次被限频产生 debug
+    assert len(stub_logger.warning_calls) == 1
+    assert stub_logger.warning_calls[0][1]["phase"] == "tags"
+    assert len(stub_logger.debug_calls) == 1
+    assert stub_logger.debug_calls[0][0] == "enrichment_generation_failed_suppressed"
+    assert stub_logger.debug_calls[0][1]["phase"] == "tags"

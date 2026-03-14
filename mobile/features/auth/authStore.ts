@@ -13,6 +13,7 @@ import {
   type UserInfo,
 } from '@/features/auth/api';
 import { getToken } from '@/features/core/api/client';
+import { getErrorMessage } from '@/utils/error';
 
 export interface AuthState {
   user: UserInfo | null;
@@ -59,7 +60,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       set({ user, isAuthenticated: true, error: null });
       return user;
     } catch (err) {
-      const error = err instanceof Error ? err.message : '登录失败';
+      const error = getErrorMessage(err, '登录失败');
       set({ error });
       throw err;
     }
@@ -101,7 +102,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         set({ user, isAuthenticated: true, isReady: true });
       }
     } catch (err) {
-      const error = err instanceof Error ? err.message : '初始化失败';
+      const error = getErrorMessage(err, '初始化失败');
       set({ user: null, isAuthenticated: false, error, isReady: true });
     }
   },

@@ -43,7 +43,7 @@ export interface EditorSourceDocument {
   body_html: string;
   media_assets?: EditorMediaAsset[];
   is_local_draft?: boolean;
-  local_sync_status?: 'creating' | 'syncing' | 'synced' | 'failed_pending_retry' | null;
+  sync_status?: 'pending' | 'synced' | null;
 }
 
 export interface EditorSessionBaseline {

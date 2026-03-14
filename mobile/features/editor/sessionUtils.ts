@@ -30,10 +30,7 @@ export function hasMeaningfulBody(html: string | null | undefined): boolean {
 /*把本地草稿同步态映射为统一的编辑器保存状态。 */
 export function resolveLocalDraftSyncStatus(document: EditorSourceDocument | null): EditorSaveState {
   if (!document?.is_local_draft) return 'idle';
-  if (document.local_sync_status === 'synced') return 'synced';
-  if (document.local_sync_status === 'syncing' || document.local_sync_status === 'creating') {
-    return 'syncing';
-  }
-  if (document.local_sync_status === 'failed_pending_retry') return 'unsynced';
+  if (document.sync_status === 'synced') return 'synced';
+  if (document.sync_status === 'pending') return 'syncing';
   return 'idle';
 }

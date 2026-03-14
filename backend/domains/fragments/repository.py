@@ -46,7 +46,7 @@ def list_by_user(
     query = _apply_fragment_filters(query, user_id=user_id, folder_id=folder_id, tag=tag)
     return (
         query
-        .order_by(Fragment.created_at.desc())
+        .order_by(Fragment.updated_at.desc())
         .offset(offset)
         .limit(limit)
         .all()

@@ -1,8 +1,7 @@
 export {
-  bindRemoteFragmentId,
+  bindServerId,
   createLocalFragmentDraft,
   deleteLocalFragmentDraft,
-  isLocalFragmentId,
   listLocalFragmentDrafts,
   loadLocalFragmentDraft,
   markPendingImageUploaded,

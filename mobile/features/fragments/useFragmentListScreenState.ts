@@ -6,6 +6,7 @@ import { buildFragmentSections, type FragmentSection } from '@/features/fragment
 import { useFragmentSelection } from '@/features/fragments/hooks';
 import { useFragments } from '@/features/fragments/hooks/useFragments';
 import { prewarmRemoteFragmentSnapshot } from '@/features/fragments/store';
+import { syncFragmentAndWait } from '@/features/fragments/localFragmentSyncQueue';
 import type { Fragment } from '@/types/fragment';
 
 interface UseFragmentListScreenStateOptions {
@@ -26,7 +27,7 @@ export interface FragmentListScreenState {
   refresh: () => Promise<void>;
   reload: () => Promise<void>;
   onFragmentPress: (fragment: Fragment) => void;
-  onGenerate: () => void;
+  onGenerate: () => Promise<void>;
 }
 
 export function useFragmentListScreenState({
@@ -54,10 +55,7 @@ export function useFragmentListScreenState({
   const onFragmentPress = useCallback(
     (fragment: Fragment) => {
       if (selection.isSelectionMode) {
-        if (fragment.is_local_draft && !fragment.remote_id) {
-          Alert.alert('暂不可选择', '本地草稿尚未同步完成，暂时不能用于 AI 编导。');
-          return;
-        }
+        // 所有碎片都可以被选择，无论同步状态
         const accepted = selection.toggleSelect(fragment.id);
         if (!accepted) {
           Alert.alert('已达上限', `最多选择 ${selection.maxSelection} 条碎片`);
@@ -65,7 +63,8 @@ export function useFragmentListScreenState({
         return;
       }
 
-      if (!fragment.is_local_draft) {
+      // 预加热远程碎片快照
+      if (fragment.server_id) {
         void prewarmRemoteFragmentSnapshot(fragment);
       }
       // 跳转到详情页时，传递来源文件夹ID和名称（如果有）
@@ -77,25 +76,48 @@ export function useFragmentListScreenState({
     [router, selection, folderId, folderName]
   );
 
-  const onGenerate = useCallback(() => {
+  const onGenerate = useCallback(async () => {
     if (selection.selectedCount === 0) {
       Alert.alert('请选择碎片', '请至少选择 1 条碎片');
       return;
     }
 
-    const selectedRemoteIds = selection.selectedIds
+    const selectedFragments = selection.selectedIds
       .map((selectedId) => fragments.find((item) => item.id === selectedId) ?? null)
-      .map((item) => item?.remote_id ?? item?.id ?? null)
-      .filter((item): item is string => Boolean(item));
+      .filter((item): item is Fragment => Boolean(item));
 
-    if (selectedRemoteIds.length !== selection.selectedCount) {
-      Alert.alert('请稍后重试', '仍有本地草稿未完成同步，暂时不能进入 AI 编导。');
+    // 检查是否有未同步的碎片
+    const unsyncedFragments = selectedFragments.filter(
+      (item) => item.sync_status !== 'synced'
+    );
+
+    // 强制同步未同步的碎片
+    if (unsyncedFragments.length > 0) {
+      Alert.alert('正在准备...', '正在同步选中的碎片，请稍候');
+      try {
+        await Promise.all(
+          unsyncedFragments.map((f) => syncFragmentAndWait(f.id))
+        );
+      } catch (error) {
+        Alert.alert('同步失败', '部分碎片同步失败，请检查网络后重试');
+        return;
+      }
+    }
+
+    // 使用 server_id（已同步）或 id（本地草稿已同步后会获得 server_id）
+    // 注意：同步完成后，本地草稿应该已经有 server_id 了
+    const serverIds = selectedFragments
+      .map((item) => item.server_id)
+      .filter((id): id is string => Boolean(id));
+
+    if (serverIds.length === 0) {
+      Alert.alert('同步失败', '无法获取碎片 ID，请重试');
       return;
     }
 
     router.push({
       pathname: '/generate',
-      params: { fragmentIds: selectedRemoteIds.join(',') },
+      params: { fragmentIds: serverIds.join(',') },
     });
   }, [fragments, router, selection.selectedCount, selection.selectedIds]);
 

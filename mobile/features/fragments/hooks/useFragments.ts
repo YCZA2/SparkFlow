@@ -10,7 +10,7 @@ import {
 import {
   mergeLocalDraftsIntoFragments,
 } from '@/features/fragments/localDraftState';
-import { wakeLocalFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
+import { wakeFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
 import {
   listLocalFragmentDrafts,
   readCachedRemoteFragmentList,
@@ -25,6 +25,7 @@ import type {
   FragmentVisualizationResponse,
   LocalFragmentDraft,
 } from '@/types/fragment';
+import { getErrorMessage } from '@/utils/error';
 
 interface UseFragmentsOptions {
   folderId?: string | null;
@@ -81,7 +82,7 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
         await writeCachedRemoteFragmentList(nextItems, resolvedFolderId);
         setError(null);
       } catch (err) {
-        const nextError = err instanceof Error ? err.message : '加载失败';
+        const nextError = getErrorMessage(err, '加载失败');
         setError(nextError);
       } finally {
         if (mode === 'refresh') {
@@ -115,7 +116,7 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
 
   useFocusEffect(
     useCallback(() => {
-      void wakeLocalFragmentSyncQueue().catch(() => undefined);
+      void wakeFragmentSyncQueue().catch(() => undefined);
       if (consumeFragmentsStale()) {
         /*同时刷新本地草稿和远端碎片，确保新建碎片立即显示。 */
         void hydrateLocalDrafts();
@@ -188,7 +189,7 @@ export function useSelectedFragments(fragmentIds?: string | string[]) {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : '读取碎片失败');
+          setError(getErrorMessage(err, '读取碎片失败'));
         }
       } finally {
         if (!cancelled) {
@@ -224,7 +225,7 @@ export function useFragmentVisualization() {
       const response = await fetchFragmentVisualization();
       setVisualization(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '读取灵感云图失败');
+      setError(getErrorMessage(err, '读取灵感云图失败'));
     } finally {
       setIsLoading(false);
     }

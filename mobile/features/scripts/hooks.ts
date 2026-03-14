@@ -10,6 +10,7 @@ import {
 } from '@/features/scripts/api';
 import { useAsyncList } from '@/hooks/useAsyncList';
 import type { Script, ScriptMode } from '@/types/script';
+import { getErrorMessage } from '@/utils/error';
 
 export function useGenerateScript() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -38,7 +39,7 @@ export function useGenerateScript() {
       return scriptId;
     } catch (err) {
       setStatus('error');
-      setError(err instanceof Error ? err.message : '生成失败');
+      setError(getErrorMessage(err, '生成失败'));
       throw err;
     }
   };
@@ -77,7 +78,7 @@ export function useTodayDailyPush() {
       const nextScript = await fetchDailyPush();
       setScript(nextScript);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载每日推盘失败');
+      setError(getErrorMessage(err, '加载每日推盘失败'));
     } finally {
       setIsLoading(false);
     }
@@ -107,7 +108,7 @@ export function useDailyPushTrigger() {
       return script;
     } catch (err) {
       setStatus('error');
-      setError(err instanceof Error ? err.message : '生成灵感卡片失败');
+      setError(getErrorMessage(err, '生成灵感卡片失败'));
       throw err;
     }
   }, []);
@@ -135,7 +136,7 @@ export function useForceDailyPushTrigger() {
       return script;
     } catch (err) {
       setStatus('error');
-      setError(err instanceof Error ? err.message : '强制生成灵感卡片失败');
+      setError(getErrorMessage(err, '强制生成灵感卡片失败'));
       throw err;
     }
   }, []);

@@ -113,6 +113,7 @@ def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = 
         source=fragment.source,
         audio_source=fragment.audio_source,
         created_at=format_iso_datetime(fragment.created_at),
+        updated_at=format_iso_datetime(fragment.updated_at),
         audio_file_url=audio_access.url if audio_access else None,
         audio_file_expires_at=audio_access.expires_at if audio_access else None,
         folder_id=fragment.folder_id,

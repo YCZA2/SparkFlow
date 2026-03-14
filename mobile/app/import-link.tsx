@@ -18,6 +18,7 @@ import { importExternalAudio } from '@/features/imports/api';
 import { isImportLinkReady, resolveImportedFragmentId } from '@/features/imports/importState';
 import { waitForPipelineTerminal } from '@/features/pipelines/api';
 import { useAppTheme } from '@/theme/useAppTheme';
+import { getErrorMessage } from '@/utils/error';
 
 /**
  承接抖音分享链接导入，并在后台任务完成后进入碎片详情。
@@ -54,7 +55,7 @@ export default function ImportLinkScreen() {
       router.replace(`/fragment/${fragmentId}`);
     } catch (err) {
       setIsSubmitting(false);
-      Alert.alert('导入失败', err instanceof Error ? err.message : '导入失败，请重试');
+      Alert.alert('导入失败', getErrorMessage(err, '导入失败，请重试'));
     }
   };
 

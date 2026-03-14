@@ -4,10 +4,8 @@ import { AppState } from 'react-native';
 import { initApiBaseUrl } from '@/constants/config';
 import { useAuthStore } from '@/features/auth/authStore';
 import {
-  restoreLocalFragmentSyncQueue,
-  restoreRemoteFragmentBodySyncQueue,
-  wakeLocalFragmentSyncQueue,
-  wakeRemoteFragmentBodySyncQueue,
+  restoreFragmentSyncQueue,
+  wakeFragmentSyncQueue,
 } from '@/features/fragments/localFragmentSyncQueue';
 import { ensureFragmentStoreReady } from '@/features/fragments/store';
 
@@ -32,9 +30,8 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
       await initApiBaseUrl();
       await bootstrap();
 
-      /*恢复本地草稿同步队列，保证离线编辑可在后续静默收敛。*/
-      await restoreLocalFragmentSyncQueue();
-      await restoreRemoteFragmentBodySyncQueue();
+      /*恢复碎片同步队列，保证离线编辑可在后续静默收敛。*/
+      await restoreFragmentSyncQueue();
     };
 
     void init();
@@ -45,8 +42,7 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
     const subscription = AppState.addEventListener('change', (nextState) => {
       /*仅在 background 和 active 状态时唤醒，减少冗余调用*/
       if (nextState === 'background' || nextState === 'active') {
-        void wakeLocalFragmentSyncQueue().catch(() => undefined);
-        void wakeRemoteFragmentBodySyncQueue().catch(() => undefined);
+        void wakeFragmentSyncQueue().catch(() => undefined);
       }
     });
     return () => {

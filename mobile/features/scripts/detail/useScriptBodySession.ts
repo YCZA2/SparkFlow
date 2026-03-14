@@ -33,7 +33,7 @@ function buildEditorDocumentFromScript(script: Script): EditorSourceDocument {
     body_html: script.body_html ?? '',
     media_assets: [],
     is_local_draft: false,
-    local_sync_status: null,
+    sync_status: 'synced',
   };
 }
 

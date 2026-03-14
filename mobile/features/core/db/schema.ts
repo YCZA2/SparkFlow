@@ -3,7 +3,7 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 /*定义本地镜像里的 fragments 主表，承接列表索引与同步状态。 */
 export const fragmentsTable = sqliteTable('fragments', {
   id: text('id').primaryKey(),
-  remoteId: text('remote_id'),
+  serverId: text('server_id'), // 服务端ID，null 表示未同步
   folderId: text('folder_id'),
   source: text('source').notNull(),
   audioSource: text('audio_source'),
@@ -18,17 +18,13 @@ export const fragmentsTable = sqliteTable('fragments', {
   audioFileUri: text('audio_file_uri'),
   audioFileUrl: text('audio_file_url'),
   audioFileExpiresAt: text('audio_file_expires_at'),
+  // 简化同步状态: 'pending' | 'synced'
   syncStatus: text('sync_status').notNull().default('synced'),
-  remoteSyncState: text('remote_sync_state').notNull().default('idle'),
   lastSyncedAt: text('last_synced_at'),
-  lastRemoteVersion: text('last_remote_version'),
   lastSyncAttemptAt: text('last_sync_attempt_at'),
   nextRetryAt: text('next_retry_at'),
   retryCount: integer('retry_count').notNull().default(0),
   deletedAt: text('deleted_at'),
-  isLocalDraft: integer('is_local_draft').notNull().default(0),
-  localSyncStatus: text('local_sync_status'),
-  displaySourceLabel: text('display_source_label'),
   contentState: text('content_state'),
   cachedAt: text('cached_at').notNull(),
 });

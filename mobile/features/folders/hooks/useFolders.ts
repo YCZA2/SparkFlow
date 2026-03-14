@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import * as folderApi from '@/features/folders/api';
 import { fetchFragments } from '@/features/fragments/api';
 import type { FragmentFolder } from '@/types/folder';
+import { getErrorMessage } from '@/utils/error';
 
 export interface UseFoldersReturn {
   /** 文件夹列表 */
@@ -53,7 +54,7 @@ export function useFolders(): UseFoldersReturn {
       setTotal(foldersResponse.total);
       setAllFragmentsCount(fragmentsResponse.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取文件夹列表失败');
+      setError(getErrorMessage(err, '获取文件夹列表失败'));
     } finally {
       setIsLoading(false);
     }
@@ -70,7 +71,7 @@ export function useFolders(): UseFoldersReturn {
       setTotal(foldersResponse.total);
       setAllFragmentsCount(fragmentsResponse.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '刷新文件夹列表失败');
+      setError(getErrorMessage(err, '刷新文件夹列表失败'));
     } finally {
       setIsRefreshing(false);
     }
@@ -88,7 +89,7 @@ export function useFolders(): UseFoldersReturn {
       setFolders((prev) => [newFolder, ...prev]);
       setTotal((prev) => prev + 1);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '创建文件夹失败';
+      const errorMessage = getErrorMessage(err, '创建文件夹失败');
       setError(errorMessage);
       throw err; // 向上抛出错误以便调用方处理
     } finally {

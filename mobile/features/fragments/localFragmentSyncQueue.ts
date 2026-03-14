@@ -5,39 +5,27 @@ import {
 } from '@/features/editor/html';
 import { createFragment, fetchFragmentDetail, updateFragment, uploadImageAsset } from '@/features/fragments/api';
 import {
-  clearRemoteBodyDraft,
   ensureFragmentStoreReady,
   listLocalFragmentDrafts,
-  listRemoteBodyDraftIds,
   loadLocalFragmentDraft,
-  loadRemoteBodyDraft,
-  peekRemoteFragmentSnapshot,
-  removeRemoteFragmentSnapshot,
   saveLocalFragmentDraft,
   updatePendingOperationStatus,
   upsertPendingOperation,
   upsertRemoteFragmentSnapshot,
-  bindRemoteFragmentId,
+  bindServerId,
   markPendingImageUploaded,
   updateLocalFragmentSyncState,
 } from '@/features/fragments/store';
+import { useFragmentStore } from '@/features/fragments/store/fragmentStore';
 import { resolveRetryDelayMs } from '@/features/fragments/localDraftState';
 import { shouldRestoreLocalDraftOnLaunch } from '@/features/fragments/bodySyncPolicy';
-import { shouldRecoverMissingRemoteBinding } from '@/features/fragments/localDraftSession';
 
 const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const runningDraftIds = new Set<string>();
-const remoteDraftRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const runningRemoteFragmentIds = new Set<string>();
+const runningFragmentIds = new Set<string>();
 
-/*为本地 manual fragment 同步生成稳定的 pending op 主键。 */
-function buildLocalDraftPendingOpId(localId: string): string {
-  return `local-fragment:${localId}`;
-}
-
-/*为远端正文草稿同步生成稳定的 pending op 主键。 */
-function buildRemoteBodyPendingOpId(fragmentId: string): string {
-  return `remote-body:${fragmentId}`;
+/*为 fragment 同步生成稳定的 pending op 主键。 */
+function buildFragmentPendingOpId(fragmentId: string): string {
+  return `fragment:${fragmentId}`;
 }
 
 function replaceLocalAssetReference(html: string, localAssetId: string, remoteAssetId: string): string {
@@ -45,26 +33,26 @@ function replaceLocalAssetReference(html: string, localAssetId: string, remoteAs
   return normalizeBodyHtml(html.replaceAll(`asset://${localAssetId}`, `asset://${remoteAssetId}`));
 }
 
-function scheduleRetry(localId: string, delayMs: number): void {
-  /*为单条草稿维持一个 retry timer，避免同一草稿并发重试。 */
-  const currentTimer = retryTimers.get(localId);
+function scheduleRetry(fragmentId: string, delayMs: number): void {
+  /*为单条 fragment 维持一个 retry timer，避免同一 fragment 并发重试。 */
+  const currentTimer = retryTimers.get(fragmentId);
   if (currentTimer) clearTimeout(currentTimer);
   retryTimers.set(
-    localId,
+    fragmentId,
     setTimeout(() => {
-      retryTimers.delete(localId);
-      void enqueueLocalFragmentSync(localId, { force: true });
+      retryTimers.delete(fragmentId);
+      void enqueueFragmentSync(fragmentId, { force: true });
     }, delayMs)
   );
 }
 
-async function ensureRemoteFragment(localId: string): Promise<string> {
-  /*本地草稿首次同步时先静默建空白手动碎片，再回填 remote_id。 */
-  const draft = await loadLocalFragmentDraft(localId);
+async function ensureServerFragment(fragmentId: string): Promise<string> {
+  /*本地草稿首次同步时先静默建空白手动碎片，再回填 server_id。 */
+  const draft = await loadLocalFragmentDraft(fragmentId);
   if (!draft) {
     throw new Error('本地草稿不存在');
   }
-  if (draft.remote_id) return draft.remote_id;
+  if (draft.server_id) return draft.server_id;
   const fragment = await createFragment(
     {
       body_html: '',
@@ -73,44 +61,43 @@ async function ensureRemoteFragment(localId: string): Promise<string> {
     draft.folder_id ?? undefined
   );
   await upsertRemoteFragmentSnapshot(fragment);
-  await bindRemoteFragmentId(localId, fragment.id);
+  await bindServerId(fragmentId, fragment.id);
   return fragment.id;
 }
 
-async function recoverMissingRemoteBinding(localId: string, staleRemoteId: string): Promise<string> {
-  /*已失效的 remote_id 先解绑并清理本地镜像，再重建远端碎片绑定。 */
-  await saveLocalFragmentDraft(localId, {
-    remote_id: null,
-    sync_status: 'creating',
+async function recoverMissingServerBinding(fragmentId: string, staleServerId: string): Promise<string> {
+  /*已失效的 server_id 先解绑并清理本地镜像，再重建服务端碎片绑定。 */
+  await saveLocalFragmentDraft(fragmentId, {
+    server_id: null,
+    sync_status: 'pending',
     next_retry_at: null,
   });
-  await removeRemoteFragmentSnapshot(staleRemoteId);
-  return await ensureRemoteFragment(localId);
+  return await ensureServerFragment(fragmentId);
 }
 
-async function uploadPendingImages(localId: string, bodyHtml: string): Promise<string> {
-  /*远端 id 就绪后按顺序上传本地图片，并回写 asset:// 引用。 */
+async function uploadPendingImages(fragmentId: string, bodyHtml: string): Promise<string> {
+  /*服务端 id 就绪后按顺序上传本地图片，并回写 asset:// 引用。 */
   let nextHtml = normalizeBodyHtml(bodyHtml);
-  const draft = await loadLocalFragmentDraft(localId);
+  const draft = await loadLocalFragmentDraft(fragmentId);
   if (!draft) return nextHtml;
   for (const image of draft.pending_image_assets ?? []) {
     if (image.upload_status === 'uploaded' && image.remote_asset_id) {
       nextHtml = replaceLocalAssetReference(nextHtml, image.local_asset_id, image.remote_asset_id);
       continue;
     }
-    await markPendingImageUploaded(localId, image.local_asset_id, {
+    await markPendingImageUploaded(fragmentId, image.local_asset_id, {
       remote_asset_id: image.remote_asset_id ?? null,
       upload_status: 'uploading',
     });
     try {
       const uploaded = await uploadImageAsset(image.local_uri, image.file_name, image.mime_type);
       nextHtml = replaceLocalAssetReference(nextHtml, image.local_asset_id, uploaded.id);
-      await markPendingImageUploaded(localId, image.local_asset_id, {
+      await markPendingImageUploaded(fragmentId, image.local_asset_id, {
         remote_asset_id: uploaded.id,
         upload_status: 'uploaded',
       });
     } catch (error) {
-      await markPendingImageUploaded(localId, image.local_asset_id, {
+      await markPendingImageUploaded(fragmentId, image.local_asset_id, {
         remote_asset_id: null,
         upload_status: 'failed_pending_retry',
       });
@@ -120,31 +107,31 @@ async function uploadPendingImages(localId: string, bodyHtml: string): Promise<s
   return nextHtml;
 }
 
-async function syncLocalFragmentDraft(localId: string): Promise<void> {
-  /*执行单条草稿收敛：建单、上传图片、patch 正文并回写缓存。 */
-  const draft = await loadLocalFragmentDraft(localId);
+async function syncFragment(fragmentId: string): Promise<void> {
+  /*执行单条 fragment 收敛：建单、上传图片、patch 正文并回写缓存。 */
+  const draft = await loadLocalFragmentDraft(fragmentId);
   if (!draft) return;
   const now = new Date().toISOString();
   const retryCount = draft.retry_count ?? 0;
   await upsertPendingOperation({
-    id: buildLocalDraftPendingOpId(localId),
+    id: buildFragmentPendingOpId(fragmentId),
     entityType: 'fragment',
-    entityId: localId,
-    opType: 'local_fragment_sync',
-    payload: { localId },
+    entityId: fragmentId,
+    opType: 'fragment_sync',
+    payload: { fragmentId },
     status: 'running',
     retryCount,
   });
-  await updateLocalFragmentSyncState(localId, draft.remote_id ? 'syncing' : 'creating', {
+  await updateLocalFragmentSyncState(fragmentId, 'pending', {
     last_sync_attempt_at: now,
     next_retry_at: null,
   });
   try {
-    let remoteId = await ensureRemoteFragment(localId);
-    const latestDraft = await loadLocalFragmentDraft(localId);
+    let serverId = await ensureServerFragment(fragmentId);
+    const latestDraft = await loadLocalFragmentDraft(fragmentId);
     if (!latestDraft) return;
-    const nextHtml = await uploadPendingImages(localId, latestDraft.body_html);
-    await saveLocalFragmentDraft(localId, {
+    const nextHtml = await uploadPendingImages(fragmentId, latestDraft.body_html);
+    await saveLocalFragmentDraft(fragmentId, {
       body_html: nextHtml,
       plain_text_snapshot: extractPlainTextFromHtml(nextHtml),
     });
@@ -152,172 +139,106 @@ async function syncLocalFragmentDraft(localId: string): Promise<void> {
     let updatedFragment: Awaited<ReturnType<typeof updateFragment>>;
     while (true) {
       try {
-        updatedFragment = await updateFragment(remoteId, {
+        updatedFragment = await updateFragment(serverId, {
           body_html: nextHtml,
           media_asset_ids: extractAssetIdsFromHtml(nextHtml),
         });
         break;
       } catch (error) {
-        if (!shouldRecoverMissingRemoteBinding({ error, remoteId, recoveryAttempted })) {
+        const isNotFoundError = error instanceof Error && error.message.includes('NOT_FOUND');
+        if (!isNotFoundError || recoveryAttempted || !serverId) {
           throw error;
         }
         recoveryAttempted = true;
-        remoteId = await recoverMissingRemoteBinding(localId, remoteId);
+        serverId = await recoverMissingServerBinding(fragmentId, serverId);
       }
     }
     await upsertRemoteFragmentSnapshot(updatedFragment);
-    await updateLocalFragmentSyncState(localId, 'synced', {
+    await updateLocalFragmentSyncState(fragmentId, 'synced', {
       body_html: nextHtml,
       plain_text_snapshot: extractPlainTextFromHtml(nextHtml),
       retry_count: 0,
       next_retry_at: null,
     });
-    await updatePendingOperationStatus(buildLocalDraftPendingOpId(localId), 'succeeded', {
+    await updatePendingOperationStatus(buildFragmentPendingOpId(fragmentId), 'succeeded', {
       retryCount: 0,
       nextRetryAt: null,
       lastError: null,
     });
+    // 同步成功后刷新 Zustand store
+    const latestDrafts = await listLocalFragmentDrafts();
+    useFragmentStore.getState().setLocalDrafts(null, latestDrafts);
   } catch (error) {
-    const latestDraft = await loadLocalFragmentDraft(localId);
+    const latestDraft = await loadLocalFragmentDraft(fragmentId);
     const nextRetryCount = (latestDraft?.retry_count ?? retryCount) + 1;
     const delayMs = resolveRetryDelayMs(nextRetryCount);
     const nextRetryAt = new Date(Date.now() + delayMs).toISOString();
-    await updateLocalFragmentSyncState(localId, 'failed_pending_retry', {
+    await updateLocalFragmentSyncState(fragmentId, 'pending', {
       retry_count: nextRetryCount,
       next_retry_at: nextRetryAt,
     });
-    await updatePendingOperationStatus(buildLocalDraftPendingOpId(localId), 'failed', {
+    await updatePendingOperationStatus(buildFragmentPendingOpId(fragmentId), 'failed', {
       retryCount: nextRetryCount,
       nextRetryAt,
-      lastError: error instanceof Error ? error.message : 'local fragment sync failed',
+      lastError: error instanceof Error ? error.message : 'fragment sync failed',
     });
-    scheduleRetry(localId, delayMs);
+    scheduleRetry(fragmentId, delayMs);
     throw error;
   }
 }
 
-function scheduleRemoteDraftRetry(fragmentId: string, delayMs: number): void {
-  /*远端碎片正文草稿也维持单独 timer，避免后台重复提交。 */
-  const currentTimer = remoteDraftRetryTimers.get(fragmentId);
-  if (currentTimer) clearTimeout(currentTimer);
-  remoteDraftRetryTimers.set(
-    fragmentId,
-    setTimeout(() => {
-      remoteDraftRetryTimers.delete(fragmentId);
-      void enqueueRemoteFragmentBodySync(fragmentId, { force: true });
-    }, delayMs)
-  );
-}
-
-async function syncRemoteFragmentBodyDraft(fragmentId: string): Promise<void> {
-  /*把远端碎片的本地 HTML 草稿静默推到服务端，并在成功后清理草稿。 */
-  const html = await loadRemoteBodyDraft(fragmentId);
-  if (!html) return;
-  await upsertPendingOperation({
-    id: buildRemoteBodyPendingOpId(fragmentId),
-    entityType: 'fragment',
-    entityId: fragmentId,
-    opType: 'remote_body_sync',
-    payload: { fragmentId },
-    status: 'running',
-  });
-  const updatedFragment = await updateFragment(fragmentId, {
-    body_html: html,
-    media_asset_ids: extractAssetIdsFromHtml(html),
-  });
-  await upsertRemoteFragmentSnapshot(updatedFragment);
-  await clearRemoteBodyDraft(fragmentId);
-  await updatePendingOperationStatus(buildRemoteBodyPendingOpId(fragmentId), 'succeeded', {
-    retryCount: 0,
-    nextRetryAt: null,
-    lastError: null,
-  });
-}
-
-export async function enqueueLocalFragmentSync(
-  localId: string,
+export async function enqueueFragmentSync(
+  fragmentId: string,
   options?: { delayMs?: number; force?: boolean }
 ): Promise<void> {
-  /*把草稿加入本地同步队列，按需立即执行或延后重试。 */
-  const draft = await loadLocalFragmentDraft(localId);
+  /*把 fragment 加入同步队列，按需立即执行或延后重试。 */
+  const draft = await loadLocalFragmentDraft(fragmentId);
   if (!draft) return;
+  // 已同步的不再重复同步
+  if (draft.sync_status === 'synced' && !options?.force) return;
+
   if (!options?.force && draft.next_retry_at) {
     const retryAt = Date.parse(draft.next_retry_at);
     if (!Number.isNaN(retryAt) && retryAt > Date.now()) {
-      scheduleRetry(localId, retryAt - Date.now());
+      scheduleRetry(fragmentId, retryAt - Date.now());
       return;
     }
   }
   const delayMs = options?.delayMs ?? 0;
   if (delayMs > 0) {
-    scheduleRetry(localId, delayMs);
+    scheduleRetry(fragmentId, delayMs);
     return;
   }
-  if (runningDraftIds.has(localId)) return;
-  runningDraftIds.add(localId);
+  if (runningFragmentIds.has(fragmentId)) return;
+  runningFragmentIds.add(fragmentId);
   try {
-    await syncLocalFragmentDraft(localId);
+    await syncFragment(fragmentId);
   } finally {
-    runningDraftIds.delete(localId);
+    runningFragmentIds.delete(fragmentId);
   }
 }
 
-export async function enqueueRemoteFragmentBodySync(
-  fragmentId: string,
-  options?: { delayMs?: number; force?: boolean }
-): Promise<void> {
-  /*把远端碎片正文草稿加入后台同步队列，不阻塞当前编辑会话。 */
-  const html = await loadRemoteBodyDraft(fragmentId);
-  if (!html) return;
-  const delayMs = options?.force ? 0 : options?.delayMs ?? 0;
-  if (delayMs > 0) {
-    scheduleRemoteDraftRetry(fragmentId, delayMs);
-    return;
-  }
-  if (runningRemoteFragmentIds.has(fragmentId)) return;
-  runningRemoteFragmentIds.add(fragmentId);
-  try {
-    await syncRemoteFragmentBodyDraft(fragmentId);
-  } catch (error) {
-    const delayMs = resolveRetryDelayMs(0);
-    const nextRetryAt = new Date(Date.now() + delayMs).toISOString();
-    await updatePendingOperationStatus(buildRemoteBodyPendingOpId(fragmentId), 'failed', {
-      retryCount: 1,
-      nextRetryAt,
-      lastError: error instanceof Error ? error.message : 'remote body sync failed',
-    });
-    scheduleRemoteDraftRetry(fragmentId, delayMs);
-    throw error;
-  } finally {
-    runningRemoteFragmentIds.delete(fragmentId);
-  }
+/*同步单个 fragment 并等待完成（供 AI 编导前强制同步使用）。 */
+export async function syncFragmentAndWait(fragmentId: string): Promise<void> {
+  const draft = await loadLocalFragmentDraft(fragmentId);
+  if (!draft || draft.sync_status === 'synced') return;
+  await enqueueFragmentSync(fragmentId, { force: true });
 }
 
-export async function restoreLocalFragmentSyncQueue(): Promise<void> {
-  /*应用启动时恢复未收敛草稿和待上传图片的后台同步。 */
+export async function restoreFragmentSyncQueue(): Promise<void> {
+  /*应用启动时恢复未收敛 fragment 的后台同步。 */
   await ensureFragmentStoreReady();
   const drafts = await listLocalFragmentDrafts();
   await Promise.all(
     drafts.map(async (draft) => {
       if (!shouldRestoreLocalDraftOnLaunch(draft)) return;
-      await enqueueLocalFragmentSync(draft.local_id, { force: true });
+      await enqueueFragmentSync(draft.id, { force: true });
     })
   );
 }
 
-export async function restoreRemoteFragmentBodySyncQueue(): Promise<void> {
-  /*应用启动时恢复远端碎片的本地正文草稿同步。 */
-  await ensureFragmentStoreReady();
-  const fragmentIds = await listRemoteBodyDraftIds();
-  await Promise.all(
-    fragmentIds.map(async (fragmentId) => {
-      await enqueueRemoteFragmentBodySync(fragmentId, { delayMs: 1200 });
-    })
-  );
-}
-
-export async function wakeLocalFragmentSyncQueue(): Promise<void> {
-  /*列表和详情聚焦时只唤醒到期草稿，避免每次进入页面都全量重试。 */
+export async function wakeFragmentSyncQueue(): Promise<void> {
+  /*列表和详情聚焦时只唤醒到期 fragment，避免每次进入页面都全量重试。 */
   await ensureFragmentStoreReady();
   const drafts = await listLocalFragmentDrafts();
   await Promise.all(
@@ -325,30 +246,15 @@ export async function wakeLocalFragmentSyncQueue(): Promise<void> {
       if (!draft.next_retry_at) return;
       const retryAt = Date.parse(draft.next_retry_at);
       if (!Number.isNaN(retryAt) && retryAt > Date.now()) return;
-      await enqueueLocalFragmentSync(draft.local_id, { force: true });
+      await enqueueFragmentSync(draft.id, { force: true });
     })
   );
 }
 
-export async function wakeRemoteFragmentBodySyncQueue(): Promise<void> {
-  /*页面回前台或离页时尝试收敛远端正文草稿，不覆盖当前编辑输入。 */
-  await ensureFragmentStoreReady();
-  const fragmentIds = await listRemoteBodyDraftIds();
-  await Promise.all(
-    fragmentIds.map(async (fragmentId) => {
-      await enqueueRemoteFragmentBodySync(fragmentId, { force: true });
-    })
-  );
-}
-
-export async function refreshLocalDraftRemoteSnapshot(localId: string): Promise<void> {
-  /*已绑定 remote_id 的本地草稿允许静默刷新远端详情，供详情页后台收敛。 */
-  const draft = await loadLocalFragmentDraft(localId);
-  if (!draft?.remote_id) return;
-  const cached = peekRemoteFragmentSnapshot(draft.remote_id);
-  if (cached) {
-    await upsertRemoteFragmentSnapshot(cached);
-  }
-  const remoteFragment = await fetchFragmentDetail(draft.remote_id);
+export async function refreshFragmentRemoteSnapshot(fragmentId: string): Promise<void> {
+  /*已绑定 server_id 的 fragment 允许静默刷新远端详情，供详情页后台收敛。 */
+  const draft = await loadLocalFragmentDraft(fragmentId);
+  if (!draft?.server_id) return;
+  const remoteFragment = await fetchFragmentDetail(draft.server_id);
   await upsertRemoteFragmentSnapshot(remoteFragment);
 }

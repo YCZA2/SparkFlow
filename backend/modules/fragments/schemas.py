@@ -54,6 +54,7 @@ class FragmentItem(BaseModel):
     source: str
     audio_source: str | None = None
     created_at: str | None = None
+    updated_at: str | None = None
     audio_file_url: str | None = None
     audio_file_expires_at: str | None = None
     folder_id: str | None = None

@@ -4,15 +4,14 @@ import { type Href, useRouter } from 'expo-router';
 
 import { deleteFragment } from '@/features/fragments/api';
 import { useFragmentAudioPlayer } from '@/features/fragments/hooks/useFragmentAudioPlayer';
-import { shouldIgnoreMissingRemoteDeleteError } from '@/features/fragments/localDraftSession';
+import { shouldIgnoreMissingServerDeleteError } from '@/features/fragments/localDraftSession';
 import { getActiveSegmentIndex } from '@/features/fragments/presenters/speakerSegments';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import {
-  clearRemoteBodyDraft,
   deleteLocalFragmentDraft,
-  isLocalFragmentId,
   removeRemoteFragmentSnapshot,
 } from '@/features/fragments/store';
+import { getErrorMessage } from '@/utils/error';
 
 import { useFragmentBodySession } from './useFragmentBodySession';
 import { useFragmentDetailResource } from './useFragmentDetailResource';
@@ -69,41 +68,40 @@ export function useFragmentDetailScreen(
 
     try {
       setIsDeleting(true);
-      if (isLocalFragmentId(fragmentId)) {
-        if (fragment?.remote_id) {
+      const isLocalDraft = !fragment?.server_id;
+
+      if (isLocalDraft) {
+        // 本地草稿：如果有 server_id，需要先删除服务端
+        if (fragment?.server_id) {
           try {
-            await deleteFragment(fragment.remote_id);
+            await deleteFragment(fragment.server_id);
           } catch (error) {
             if (
-              !shouldIgnoreMissingRemoteDeleteError({
+              !shouldIgnoreMissingServerDeleteError({
                 error,
                 isLocalDraftSession: true,
-                remoteId: fragment.remote_id,
+                serverId: fragment.server_id,
               })
             ) {
               throw error;
             }
           }
-          await Promise.all([
-            removeRemoteFragmentSnapshot(fragment.remote_id),
-            clearRemoteBodyDraft(fragment.remote_id),
-          ]);
+          await removeRemoteFragmentSnapshot(fragment.server_id);
         }
         await deleteLocalFragmentDraft(fragmentId);
       } else {
+        // 远程碎片直接删除
         await deleteFragment(fragmentId);
-        await Promise.all([
-          removeRemoteFragmentSnapshot(fragmentId),
-          clearRemoteBodyDraft(fragmentId),
-        ]);
+        await removeRemoteFragmentSnapshot(fragmentId);
       }
+
       // 标记碎片列表需要刷新
       markFragmentsStale();
       setIsSheetOpen(false);
       exitAfterDelete();
     } catch (err) {
       setIsDeleting(false);
-      Alert.alert('删除失败', err instanceof Error ? err.message : '删除失败');
+      Alert.alert('删除失败', getErrorMessage(err, '删除失败'));
     }
   };
 
@@ -136,7 +134,7 @@ export function useFragmentDetailScreen(
   };
 
   const done = async () => {
-    /*完成编辑与直接返回都复用同一套“先本地保存、再后台同步”的退出策略。 */
+    /*完成编辑与直接返回都复用同一套"先本地保存、再后台同步"的退出策略。 */
     await exitScreen();
   };
 

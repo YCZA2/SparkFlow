@@ -3,7 +3,7 @@ import type { EditorDocumentSnapshot } from '@/features/editor/types';
 import type {
   Fragment,
   LocalFragmentDraft,
-  LocalFragmentSyncStatus,
+  FragmentSyncStatus,
   MediaAsset,
 } from '@/types/fragment';
 
@@ -33,38 +33,26 @@ export function shouldTriggerRemoteSync(input: {
   );
   const mediaChanged = !areAssetIdsEqual(currentAssetIds, baselineAssetIds);
 
-  if (bodyChanged || mediaChanged) {
-    return true;
-  }
-
-  if (!input.fragment.is_local_draft || input.fragment.remote_id) {
-    return false;
-  }
-
-  return Boolean(input.snapshot.plain_text.trim()) || currentAssetIds.length > 0;
+  return bodyChanged || mediaChanged;
 }
 
-/*本地保存时只在真正发起远端收敛前切到 syncing，其余时候保留当前状态。 */
+/*本地保存时返回正确的同步状态。 */
 export function resolveLocalDraftPersistStatus(input: {
   fragment: Fragment;
   queueRemote: boolean;
-}): LocalFragmentSyncStatus {
+}): FragmentSyncStatus {
   if (input.queueRemote) {
-    return input.fragment.remote_id ? 'syncing' : 'creating';
+    return 'pending';
   }
 
-  return input.fragment.local_sync_status ?? (input.fragment.remote_id ? 'synced' : 'creating');
+  return input.fragment.sync_status ?? 'pending';
 }
 
-/*应用重启后只恢复已明确进入上云阶段或待重试的草稿，避免未离页编辑被偷跑同步。 */
+/*应用重启后只恢复已明确进入同步阶段或待重试的草稿，避免未离页编辑被偷跑同步。 */
 export function shouldRestoreLocalDraftOnLaunch(draft: LocalFragmentDraft): boolean {
-  if (draft.sync_status === 'failed_pending_retry') {
-    return true;
-  }
-
-  if (draft.next_retry_at || draft.last_sync_attempt_at) {
-    return true;
-  }
-
-  return (draft.pending_image_assets ?? []).some((asset) => asset.upload_status !== 'uploaded');
+  return Boolean(
+    draft.next_retry_at ||
+    (draft.pending_image_assets ?? []).some((asset) => asset.upload_status !== 'uploaded') ||
+    (draft.last_sync_attempt_at && draft.sync_status === 'pending')
+  );
 }

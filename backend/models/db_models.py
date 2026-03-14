@@ -111,6 +111,7 @@ class Fragment(Base):
     source = Column(String, default="voice", nullable=False)  # 'voice'|'manual'|'video_parse'
     audio_source = Column(String, nullable=True)  # 'upload'|'external_link'|None
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     # 关联关系
     user = relationship("User", back_populates="fragments")

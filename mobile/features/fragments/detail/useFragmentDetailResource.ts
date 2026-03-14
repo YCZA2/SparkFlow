@@ -4,11 +4,9 @@ import { fetchFragmentDetail } from '@/features/fragments/api';
 import {
   buildFragmentFromLocalDraft,
 } from '@/features/fragments/localDraftState';
-import { refreshLocalDraftRemoteSnapshot, wakeLocalFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
+import { refreshFragmentRemoteSnapshot, wakeFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
 import {
-  isLocalFragmentId,
   loadLocalFragmentDraft,
-  loadRemoteBodyDraft,
   peekRemoteFragmentSnapshot,
   readRemoteFragmentSnapshot,
   upsertRemoteFragmentSnapshot,
@@ -16,6 +14,7 @@ import {
 import { useFragmentStore } from '@/features/fragments/store/fragmentStore';
 import { applyDraftToFragment } from '@/features/fragments/fragmentCacheState';
 import type { Fragment } from '@/types/fragment';
+import { getErrorMessage } from '@/utils/error';
 
 interface UseFragmentDetailResourceResult {
   fragment: Fragment | null;
@@ -28,17 +27,14 @@ interface UseFragmentDetailResourceResult {
 
 async function resolveVisibleFragment(fragmentId: string): Promise<Fragment | null> {
   /*读取缓存并叠加本地草稿，让详情首屏优先展示用户最近编辑内容。 */
-  if (isLocalFragmentId(fragmentId)) {
-    const draft = await loadLocalFragmentDraft(fragmentId);
-    if (!draft) return null;
-    const remoteFragment = draft.remote_id ? peekRemoteFragmentSnapshot(draft.remote_id) ?? null : null;
+  const draft = await loadLocalFragmentDraft(fragmentId);
+  if (draft) {
+    const remoteFragment = draft.server_id ? peekRemoteFragmentSnapshot(draft.server_id) ?? null : null;
     return buildFragmentFromLocalDraft(draft, remoteFragment);
   }
-  const [cachedEntry, draftHtml] = await Promise.all([
-    readRemoteFragmentSnapshot(fragmentId),
-    loadRemoteBodyDraft(fragmentId),
-  ]);
-  return applyDraftToFragment(cachedEntry ?? null, draftHtml);
+
+  const cachedEntry = await readRemoteFragmentSnapshot(fragmentId);
+  return applyDraftToFragment(cachedEntry ?? null, null);
 }
 
 export function useFragmentDetailResource(fragmentId?: string | null): UseFragmentDetailResourceResult {
@@ -59,7 +55,7 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
     hasVisibleFragmentRef.current = true;
     setFragment(nextFragment);
     setError(null);
-    if (nextFragment.is_local_draft) return;
+    if (!nextFragment.server_id) return;
     await upsertRemoteFragmentSnapshot(nextFragment);
   }, []);
 
@@ -78,14 +74,12 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
       }
 
       try {
-        if (isLocalFragmentId(fragmentId)) {
-          await wakeLocalFragmentSyncQueue().catch(() => undefined);
-          const draft = await loadLocalFragmentDraft(fragmentId);
-          if (!draft) {
-            throw new Error('本地草稿不存在或已被删除');
-          }
-          if (draft.remote_id) {
-            await refreshLocalDraftRemoteSnapshot(fragmentId).catch(() => undefined);
+        // 先尝试加载本地草稿
+        const draft = await loadLocalFragmentDraft(fragmentId);
+        if (draft) {
+          await wakeFragmentSyncQueue().catch(() => undefined);
+          if (draft.server_id) {
+            await refreshFragmentRemoteSnapshot(fragmentId).catch(() => undefined);
           }
           const nextFragment = await resolveVisibleFragment(fragmentId);
           hasVisibleFragmentRef.current = true;
@@ -93,16 +87,15 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
           setFragment(nextFragment);
           return;
         }
-        const [remoteFragment, draftHtml] = await Promise.all([
-          fetchFragmentDetail(fragmentId),
-          loadRemoteBodyDraft(fragmentId),
-        ]);
+
+        // 否则从远程加载
+        const remoteFragment = await fetchFragmentDetail(fragmentId);
         await upsertRemoteFragmentSnapshot(remoteFragment);
         hasVisibleFragmentRef.current = true;
         setError(null);
-        setFragment(applyDraftToFragment(remoteFragment, draftHtml));
+        setFragment(applyDraftToFragment(remoteFragment, null));
       } catch (err) {
-        const nextError = err instanceof Error ? err.message : '加载失败';
+        const nextError = getErrorMessage(err, '加载失败');
         if (!hasVisibleFragmentRef.current) {
           setError(nextError);
         }

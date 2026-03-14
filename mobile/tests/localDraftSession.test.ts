@@ -2,90 +2,90 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  isMissingRemoteBindingError,
+  isMissingServerBindingError,
   resolveLocalDraftSession,
-  shouldIgnoreMissingRemoteDeleteError,
-  shouldRecoverMissingRemoteBinding,
+  shouldIgnoreMissingServerDeleteError,
+  shouldRecoverMissingServerBinding,
 } from '../features/fragments/localDraftSession';
 
-test('resolveLocalDraftSession keeps local-draft mode when route id is local even if fragment is remote-shaped', () => {
-  const result = resolveLocalDraftSession({
-    routeFragmentId: 'local:fragment:001',
-    fragment: {
-      id: 'fragment-001',
-      local_id: null,
-      is_local_draft: false,
-    },
-  });
-
-  assert.equal(result.isLocalDraftSession, true);
-  assert.equal(result.localDraftId, 'local:fragment:001');
-});
-
-test('resolveLocalDraftSession falls back to fragment local_id when route id is remote', () => {
+test('resolveLocalDraftSession keeps local-draft mode when fragment has no server_id', () => {
   const result = resolveLocalDraftSession({
     routeFragmentId: 'fragment-001',
     fragment: {
       id: 'fragment-001',
-      local_id: 'local:fragment:001',
-      is_local_draft: true,
+      server_id: null,
+      sync_status: 'pending',
     },
   });
 
   assert.equal(result.isLocalDraftSession, true);
-  assert.equal(result.localDraftId, 'local:fragment:001');
+  assert.equal(result.draftId, 'fragment-001');
 });
 
-test('isMissingRemoteBindingError only accepts NOT_FOUND shaped errors', () => {
-  assert.equal(isMissingRemoteBindingError({ code: 'NOT_FOUND' }), true);
-  assert.equal(isMissingRemoteBindingError({ code: 'NETWORK_ERROR' }), false);
-  assert.equal(isMissingRemoteBindingError(new Error('boom')), false);
+test('resolveLocalDraftSession uses fragment id when server_id exists', () => {
+  const result = resolveLocalDraftSession({
+    routeFragmentId: 'fragment-001',
+    fragment: {
+      id: 'fragment-001',
+      server_id: 'server-001',
+      sync_status: 'synced',
+    },
+  });
+
+  assert.equal(result.isLocalDraftSession, false);
+  assert.equal(result.draftId, 'fragment-001');
 });
 
-test('shouldRecoverMissingRemoteBinding allows one-time recovery for stale remote binding', () => {
+test('isMissingServerBindingError only accepts NOT_FOUND shaped errors', () => {
+  assert.equal(isMissingServerBindingError({ code: 'NOT_FOUND' }), true);
+  assert.equal(isMissingServerBindingError({ code: 'NETWORK_ERROR' }), false);
+  assert.equal(isMissingServerBindingError(new Error('boom')), false);
+});
+
+test('shouldRecoverMissingServerBinding allows one-time recovery for stale server binding', () => {
   assert.equal(
-    shouldRecoverMissingRemoteBinding({
+    shouldRecoverMissingServerBinding({
       error: { code: 'NOT_FOUND' },
-      remoteId: 'fragment-001',
+      serverId: 'server-001',
       recoveryAttempted: false,
     }),
     true
   );
 
   assert.equal(
-    shouldRecoverMissingRemoteBinding({
+    shouldRecoverMissingServerBinding({
       error: { code: 'NOT_FOUND' },
-      remoteId: 'fragment-001',
+      serverId: 'server-001',
       recoveryAttempted: true,
     }),
     false
   );
 });
 
-test('shouldIgnoreMissingRemoteDeleteError only suppresses local-draft bound remote 404', () => {
+test('shouldIgnoreMissingServerDeleteError only suppresses local-draft bound server 404', () => {
   assert.equal(
-    shouldIgnoreMissingRemoteDeleteError({
+    shouldIgnoreMissingServerDeleteError({
       error: { code: 'NOT_FOUND' },
       isLocalDraftSession: true,
-      remoteId: 'fragment-001',
+      serverId: 'server-001',
     }),
     true
   );
 
   assert.equal(
-    shouldIgnoreMissingRemoteDeleteError({
+    shouldIgnoreMissingServerDeleteError({
       error: { code: 'NOT_FOUND' },
       isLocalDraftSession: false,
-      remoteId: 'fragment-001',
+      serverId: 'server-001',
     }),
     false
   );
 
   assert.equal(
-    shouldIgnoreMissingRemoteDeleteError({
+    shouldIgnoreMissingServerDeleteError({
       error: { code: 'NETWORK_ERROR' },
       isLocalDraftSession: true,
-      remoteId: 'fragment-001',
+      serverId: 'server-001',
     }),
     false
   );

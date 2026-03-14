@@ -15,8 +15,6 @@ function buildDocument(overrides: Partial<EditorSourceDocument> = {}): EditorSou
     id: 'document-1',
     body_html: '服务端正文',
     media_assets: [],
-    is_local_draft: false,
-    local_sync_status: null,
     ...overrides,
   };
 }
@@ -65,8 +63,6 @@ test('local-first save success keeps session in unsynced state until remote reco
     type: 'REMOTE_LOADED',
     document: buildDocument({
       id: 'local-doc-1',
-      is_local_draft: true,
-      local_sync_status: 'synced',
       body_html: '<p>已同步正文</p>',
     }),
   });
@@ -90,8 +86,6 @@ test('local-first save success keeps session in unsynced state until remote reco
     type: 'LOCAL_SAVE_SUCCEEDED',
     document: buildDocument({
       id: 'local-doc-1',
-      is_local_draft: true,
-      local_sync_status: 'syncing',
       body_html: '<p>更新后的正文</p>',
     }),
     savedHtml: '<p>更新后的正文</p>',

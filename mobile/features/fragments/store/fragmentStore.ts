@@ -180,7 +180,7 @@ export const useFragmentStore = create<FragmentStore>()(
               key,
               drafts,
               /*草稿列表相等性检查*/
-              (a, b) => a.length === b.length && a.every((d, i) => d.local_id === b[i].local_id)
+              (a, b) => a.length === b.length && a.every((d, i) => d.id === b[i].id)
             );
             return next ? { localDraftsCache: next } : state;
           },

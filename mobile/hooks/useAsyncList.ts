@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
+import { getErrorMessage } from '@/utils/error';
+
 export interface AsyncListState<T> {
   items: T[];
   isLoading: boolean;
@@ -32,7 +34,7 @@ export function useAsyncList<T>(
         const nextItems = await loader();
         setItems(nextItems);
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败');
+        setError(getErrorMessage(err, '加载失败'));
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);

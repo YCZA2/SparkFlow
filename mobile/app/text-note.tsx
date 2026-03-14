@@ -6,6 +6,7 @@ import { ScreenState } from '@/components/ScreenState';
 import { FragmentDetailScreen } from '@/features/fragments/detail/FragmentDetailScreen';
 import { createLocalFragmentDraft } from '@/features/fragments/store';
 import { useAppTheme } from '@/theme/useAppTheme';
+import { getErrorMessage } from '@/utils/error';
 
 export default function TextNoteScreen() {
   const params = useLocalSearchParams<{ returnTo?: string; source?: string; folderId?: string }>();
@@ -23,10 +24,10 @@ export default function TextNoteScreen() {
         setError(null);
         const draft = await createLocalFragmentDraft(params.folderId);
         if (cancelled) return;
-        setFragmentId(draft.local_id);
+        setFragmentId(draft.id);
       } catch (err) {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : '创建失败，请重试';
+        const message = getErrorMessage(err, '创建失败，请重试');
         setError(message);
         Alert.alert('进入编辑器失败', message);
       }
