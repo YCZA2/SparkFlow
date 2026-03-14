@@ -9,8 +9,6 @@ import {
   listLocalFragmentDrafts,
   loadLocalFragmentDraft,
   saveLocalFragmentDraft,
-  updatePendingOperationStatus,
-  upsertPendingOperation,
   upsertRemoteFragmentSnapshot,
   bindServerId,
   markPendingImageUploaded,
@@ -23,11 +21,6 @@ import { scheduleRetryTimer } from '@/features/fragments/retryTimerManager';
 import type { LocalFragmentDraft } from '@/types/fragment';
 
 const runningFragmentIds = new Set<string>();
-
-/*为 fragment 同步生成稳定的 pending op 主键。 */
-function buildFragmentPendingOpId(fragmentId: string): string {
-  return `fragment:${fragmentId}`;
-}
 
 function replaceLocalAssetReference(html: string, localAssetId: string, remoteAssetId: string): string {
   /*本地图片上传成功后把正文里的临时 asset 引用替换成远端 asset id。 */
@@ -107,16 +100,6 @@ async function syncFragment(fragmentId: string): Promise<void> {
   const draft = await loadLocalFragmentDraft(fragmentId);
   if (!draft) return;
   const now = new Date().toISOString();
-  const retryCount = draft.retry_count ?? 0;
-  await upsertPendingOperation({
-    id: buildFragmentPendingOpId(fragmentId),
-    entityType: 'fragment',
-    entityId: fragmentId,
-    opType: 'fragment_sync',
-    payload: { fragmentId },
-    status: 'running',
-    retryCount,
-  });
   await updateLocalFragmentSyncState(fragmentId, 'pending', {
     last_sync_attempt_at: now,
     next_retry_at: null,
@@ -153,26 +136,16 @@ async function syncFragment(fragmentId: string): Promise<void> {
       retry_count: 0,
       next_retry_at: null,
     });
-    await updatePendingOperationStatus(buildFragmentPendingOpId(fragmentId), 'succeeded', {
-      retryCount: 0,
-      nextRetryAt: null,
-      lastError: null,
-    });
     // 同步成功后更新详情缓存，列表视图会在下次刷新时自动重新加载
     useFragmentStore.getState().setDetail(fragmentId, updatedFragment);
   } catch (error) {
     const latestDraft = await loadLocalFragmentDraft(fragmentId);
-    const nextRetryCount = (latestDraft?.retry_count ?? retryCount) + 1;
+    const nextRetryCount = (latestDraft?.retry_count ?? 0) + 1;
     const delayMs = resolveRetryDelayMs(nextRetryCount);
     const nextRetryAt = new Date(Date.now() + delayMs).toISOString();
     await updateLocalFragmentSyncState(fragmentId, 'pending', {
       retry_count: nextRetryCount,
       next_retry_at: nextRetryAt,
-    });
-    await updatePendingOperationStatus(buildFragmentPendingOpId(fragmentId), 'failed', {
-      retryCount: nextRetryCount,
-      nextRetryAt,
-      lastError: error instanceof Error ? error.message : 'fragment sync failed',
     });
     scheduleRetry(fragmentId, delayMs);
     throw error;

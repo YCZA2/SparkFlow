@@ -54,7 +54,9 @@
 - `expo-camera`: 拍摄页预览与视频录制。
 - `expo-media-library`: 视频写入系统相册。
 - `expo-document-picker`: 为后续知识库上传预留。
-- `AsyncStorage`: 当前真正参与主流程的本地持久化，承载 fragment cache、`LocalFragmentDraft` 与待上传图片队列。
+- **SQLite (expo-sqlite + drizzle-orm)**：fragments 本地镜像索引、媒体资源索引、同步状态和本地草稿，作为后端数据的镜像缓存
+- **expo-file-system**：fragment 正文文件（HTML）、待上传图片、音频文件
+- **AsyncStorage**：token、用户信息、后端地址等轻量配置，不再承载 fragment 主流程缓存
 
 ### 2.3 Current frontend architecture choice
 
@@ -235,7 +237,7 @@ http://<your-lan-ip>:8000
 
 ## 8. Practical Notes
 
-- 当前项目是“本地优先 + 单机联调”形态，文档和脚本都围绕这个前提设计。
-- Expo Dev Client 已接入，因此原生能力变更需要区分“只改 JS/TS”与“需要重建”两类流程。
+- 当前项目采用**缓存优先架构 + 本地优先用户体验**：后端 PostgreSQL 为数据真值来源，移动端 SQLite 作为镜像缓存实现快速响应，编辑采用乐观更新策略，后台异步同步到远端。
+- Expo Dev Client 已接入，因此原生能力变更需要区分”只改 JS/TS”与”需要重建”两类流程。
 - 移动端首页已偏向“碎片管理与创作入口”，不是最初的单一录音主页。
 - 知识库后端已可用，但移动端仍是占位入口；不要把它当成完整的已交付前端模块。

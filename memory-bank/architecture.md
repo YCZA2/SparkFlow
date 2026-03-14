@@ -109,8 +109,8 @@ flowchart TD
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
 - `features/editor/*` 提供共享正文编辑底座：HTML helper、session reducer、富文本桥接、toolbar 和页面 scaffold；fragment 与 script 详情统一复用这套协议。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
-- `features/fragments/store/*` 是 fragment 本地数据的唯一入口：`remoteFragments` 负责远端快照与订阅，`localDraftStore` 负责本地草稿，`remoteBodyDrafts` 负责远端正文草稿，`pendingOperations` 负责同步队列状态，`legacyMigration` / `runtime` 负责旧缓存迁移与启动准备。
-- `features/fragments/detail/*` 把碎片详情拆成 `resource / local-first editor session / sheet / screen actions` 四层：资源层负责首次远端基线加载与缓存叠加，编辑会话层只保留本地草稿、图片插入和后台同步策略，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
+- `features/fragments/store/*` 是 fragment 本地数据的唯一入口：`remoteFragments` 负责远端镜像缓存，`localDraftStore` 负责本地草稿 CRUD 和同步状态管理，`remoteBodyDrafts` 负责远端碎片的本地编辑草稿，`legacyMigration` / `runtime` 负责旧缓存迁移与启动准备。
+- `features/fragments/detail/*` 把碎片详情拆成 `resource / 缓存优先编辑会话 / sheet / screen actions` 四层：资源层负责首次远端基线加载与缓存叠加，编辑会话层只保留本地草稿、图片插入和后台同步策略，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
 - `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用；其中 `features/scripts/detail/*` 通过共享 editor 底座实现 `remote-only` 正文编辑与拍摄跳转。
 
@@ -122,7 +122,13 @@ flowchart TD
 - `expo-sqlite + drizzle-orm`: fragments 本地镜像索引、媒体资源索引、pending ops、同步状态
 - `expo-file-system`: fragment `body.html`、远端正文草稿、图片/音频 staging 文件
 
-当前移动端主流程已经切到 local-first 镜像：列表和详情的远端快照真值落在 SQLite，本地大文本和待上传文件落在 app sandbox 文件系统；页面优先读取本地镜像，后台同步层再把本地改动收敛到服务端，并把远端刷新结果回写到本地镜像。`AsyncStorage` 不再承载 fragments 主流程缓存与草稿真值。
+当前移动端主流程采用**缓存优先架构（Cache-First）**：
+- **后端 PostgreSQL 是数据真值来源（Source of Truth）**
+- SQLite 作为远端数据的**镜像缓存**，加速列表和详情读取，减少网络请求
+- 编辑时采用**乐观更新策略**：先写本地草稿和缓存，立即响应用户；后台异步上传到远端
+- 远端刷新结果回写到本地缓存，保证最终一致性
+- 网络失败时保留未同步状态，用户可继续编辑，体验接近离线可用
+- `AsyncStorage` 不再承载 fragments 主流程缓存与草稿真值
 
 ## 4. Backend Architecture
 
@@ -269,7 +275,7 @@ flowchart TD
 - `fragments.transcript` 保存机器转写原文，`fragments.body_html` 保存唯一正式正文的 HTML，`fragments.plain_text_snapshot` 保存派生纯文本快照
 - 非语音碎片必须直接写入 `body_html`，不再把 `transcript` 当作正式正文来源
 - 移动端碎片详情正文改为 `react-native-enriched` 原生富文本输入；前端运行时、本地草稿和同步队列统一消费 HTML 快照，AI patch 本期停用
-- 移动端碎片详情的本地缓存和展示态真值允许分离：`features/fragments/store/*` 统一持久化 fragment/list 快照、远端正文草稿、本地 draft 和 pending ops；detail resource 只负责把这些本地真值组合成当前可见态，不直接回写服务端真值
+- 移动端碎片详情采用**分层缓存策略**：`features/fragments/store/*` 统一管理远端镜像缓存、本地草稿和同步队列；detail resource 负责组合这些本地数据为当前展示态，后台异步收敛到后端真值
 - 详情编辑会话的纯逻辑已下沉到 `editorSessionState.ts`、`bodySessionState.ts` 和 `fragmentSaveController.ts`：`editorSessionState.ts` 负责 session reducer、基线解析、自动保存触发条件与图片 fallback 规则，`bodySessionState.ts` 继续承载 Markdown 快照构建、远端刷新判定、AI fallback patch 和乐观展示态合成，`fragmentSaveController.ts` 保证自动保存只串行提交最后一版快照
 - `scripts.body_html` / `knowledge_docs.body_markdown` 分别保存脚本 HTML 正文与知识库 Markdown 正文
 - 媒体资源表：`media_assets` / `content_media_links`，对象元数据保存 `storage_provider` / `bucket` / `object_key`

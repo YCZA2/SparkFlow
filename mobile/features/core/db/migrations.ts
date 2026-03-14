@@ -80,23 +80,6 @@ export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Prom
 
       CREATE INDEX IF NOT EXISTS media_assets_fragment_id_idx ON media_assets(fragment_id);
       CREATE INDEX IF NOT EXISTS media_assets_remote_asset_id_idx ON media_assets(remote_asset_id);
-
-      CREATE TABLE IF NOT EXISTS pending_ops (
-        id TEXT PRIMARY KEY NOT NULL,
-        entity_type TEXT NOT NULL,
-        entity_id TEXT NOT NULL,
-        op_type TEXT NOT NULL,
-        payload_json TEXT NOT NULL DEFAULT '{}',
-        status TEXT NOT NULL DEFAULT 'pending',
-        retry_count INTEGER NOT NULL DEFAULT 0,
-        next_retry_at TEXT,
-        last_error TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS pending_ops_entity_idx ON pending_ops(entity_type, entity_id);
-      CREATE INDEX IF NOT EXISTS pending_ops_status_idx ON pending_ops(status, next_retry_at);
     `);
   }
 

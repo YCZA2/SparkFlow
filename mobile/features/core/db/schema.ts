@@ -59,24 +59,8 @@ export const mediaAssetsTable = sqliteTable('media_assets', {
   createdAt: text('created_at').notNull(),
 });
 
-/*定义待同步操作表，为后台重试与恢复留出稳定索引。 */
-export const pendingOpsTable = sqliteTable('pending_ops', {
-  id: text('id').primaryKey(),
-  entityType: text('entity_type').notNull(),
-  entityId: text('entity_id').notNull(),
-  opType: text('op_type').notNull(),
-  payloadJson: text('payload_json').notNull().default('{}'),
-  status: text('status').notNull().default('pending'),
-  retryCount: integer('retry_count').notNull().default(0),
-  nextRetryAt: text('next_retry_at'),
-  lastError: text('last_error'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-});
-
 export const localSchema = {
   fragmentsTable,
   fragmentFoldersTable,
   mediaAssetsTable,
-  pendingOpsTable,
 };

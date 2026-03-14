@@ -14,15 +14,15 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 ## 当前移动端已接入的内容能力
 
-- fragments 主链路已切到 local-first 镜像：列表/详情索引使用 `expo-sqlite + drizzle-orm`，正文和 staging 文件使用 `expo-file-system`
-- 远端快照、本地草稿、待上传图片和 pending ops 不再混放在 `AsyncStorage`；`AsyncStorage` 仅保留 token、用户信息、后端地址和少量轻量配置
-- “写下灵感”文本链路已切到 local-first：进入 `/text-note` 时先创建本地 `LocalFragmentDraft`，立即进入编辑器，再后台静默建远端碎片。
+- fragments 主链路已采用**缓存优先架构**：列表/详情索引使用 `expo-sqlite + drizzle-orm` 作为后端镜像缓存，正文和 staging 文件使用 `expo-file-system`
+- 远端快照、本地草稿、待上传图片不再混放在 `AsyncStorage`；`AsyncStorage` 仅保留 token、用户信息、后端地址和少量轻量配置
+- “写下灵感”文本链路已采用**缓存优先 + 乐观更新**：进入 `/text-note` 时先创建本地 `LocalFragmentDraft`，立即进入编辑器，再后台静默建远端碎片。
 - 本地草稿会聚合进首页/文件夹页列表顶部；若后续绑定了 `remote_id`，列表会自动对远端卡片去重。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
 - 碎片详情页默认进入轻量正文编辑视图，正文改动会优先写本地 HTML 草稿；`transcript`、音频、摘要、标签收口到右上角“更多”底部抽屉，AI patch 本期已下线。
 - 移动端编辑器已抽出 `features/editor/*` 共享底座：统一承载 HTML helper、editor session reducer、`react-native-enriched` 富文本桥接、toolbar 和页面 scaffold，fragment 与 script 详情共用同一套正文编辑协议。
-- 碎片详情内部现在只保留 `detail resource / local-first editor session / sheet / screen actions` 四层：资源层只负责首次加载远端基线和缓存叠加，编辑会话层只处理本地保存、后台同步和图片插入，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
+- 碎片详情内部现在只保留 `detail resource / 缓存优先编辑会话 / sheet / screen actions` 四层：资源层只负责首次加载远端基线和缓存叠加，编辑会话层只处理本地保存、后台同步和图片插入，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
 - 碎片正文详情和列表已接入本地缓存与本地草稿聚合：详情会优先读本地 HTML draft，再叠加远端缓存；未同步正文和待上传图片会在应用启动、输入停顿、离页和页面聚焦时静默重试。
 - 脚本详情页已从只读改为 `remote-only` 正文编辑：页面内维持内存态，`blur`、显式完成和应用退后台时会尝试调用 `PATCH /api/scripts/{id}` 保存最新 `body_html`，失败时会停留当前页并提示重试。
@@ -35,7 +35,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 - `mobile/features/core/db/`：SQLite 连接、schema、迁移和 Drizzle 查询入口
 - `mobile/features/core/files/`：fragment 正文文件、远端正文草稿和图片/音频 staging 文件管理
-- `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `remoteFragments / localDrafts / remoteBodyDrafts / pendingOperations / legacyMigration / runtime` 拆分职责，并统一从 `store/index.ts` 对外导出
+- `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `remoteFragments / localDrafts / remoteBodyDrafts / legacyMigration / runtime` 拆分职责，并统一从 `store/index.ts` 对外导出
 - `mobile/features/editor/html.ts`：唯一 HTML / 纯文本快照 helper 真值源，fragment 与 script 共用
 
 当前 fragments 读写规则：
@@ -253,7 +253,7 @@ http://192.168.31.157:8000
 - 碎片详情正文读取 `body_html`，列表摘要和生成页预览读取 `plain_text_snapshot`
 - `transcript` 表示机器转写原文，不参与正文编辑
 - 碎片详情默认只把正文编辑器作为主界面；原文时间线、音频播放、摘要、标签、来源和删除操作都从右上角“更多”抽屉进入
-- 碎片正文详情采用 local-first：优先读取本地 draft / SQLite 镜像，编辑中不再自动远端刷新当前会话；本地保存和图片上传失败时会保留草稿与待上传状态，重新进入详情仍可继续编辑
+- 碎片正文详情采用**缓存优先 + 乐观更新**：优先读取本地 draft / SQLite 镜像缓存，编辑中不再自动远端刷新当前会话；本地保存和图片上传失败时会保留草稿与待上传状态，重新进入详情仍可继续编辑
 - AI 编辑接口本期停用，不再参与正文链路
 - 脚本详情直接编辑 `body_html`，并保留“一键去拍摄”入口消费当前最新正文
 - 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
