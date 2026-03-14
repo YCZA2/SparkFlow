@@ -19,8 +19,9 @@ import {
 import { useFragmentStore } from '@/features/fragments/store/fragmentStore';
 import { resolveRetryDelayMs } from '@/features/fragments/localDraftState';
 import { shouldRestoreLocalDraftOnLaunch } from '@/features/fragments/bodySyncPolicy';
+import { scheduleRetryTimer } from '@/features/fragments/retryTimerManager';
+import type { LocalFragmentDraft } from '@/types/fragment';
 
-const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const runningFragmentIds = new Set<string>();
 
 /*为 fragment 同步生成稳定的 pending op 主键。 */
@@ -35,15 +36,9 @@ function replaceLocalAssetReference(html: string, localAssetId: string, remoteAs
 
 function scheduleRetry(fragmentId: string, delayMs: number): void {
   /*为单条 fragment 维持一个 retry timer，避免同一 fragment 并发重试。 */
-  const currentTimer = retryTimers.get(fragmentId);
-  if (currentTimer) clearTimeout(currentTimer);
-  retryTimers.set(
-    fragmentId,
-    setTimeout(() => {
-      retryTimers.delete(fragmentId);
-      void enqueueFragmentSync(fragmentId, { force: true });
-    }, delayMs)
-  );
+  scheduleRetryTimer(fragmentId, delayMs, () => {
+    void enqueueFragmentSync(fragmentId, { force: true });
+  });
 }
 
 async function ensureServerFragment(fragmentId: string): Promise<string> {
@@ -65,7 +60,7 @@ async function ensureServerFragment(fragmentId: string): Promise<string> {
   return fragment.id;
 }
 
-async function recoverMissingServerBinding(fragmentId: string, staleServerId: string): Promise<string> {
+async function recoverMissingServerBinding(fragmentId: string): Promise<string> {
   /*已失效的 server_id 先解绑并清理本地镜像，再重建服务端碎片绑定。 */
   await saveLocalFragmentDraft(fragmentId, {
     server_id: null,
@@ -75,12 +70,12 @@ async function recoverMissingServerBinding(fragmentId: string, staleServerId: st
   return await ensureServerFragment(fragmentId);
 }
 
-async function uploadPendingImages(fragmentId: string, bodyHtml: string): Promise<string> {
+async function uploadPendingImages(fragmentId: string, bodyHtml: string, draft?: LocalFragmentDraft | null): Promise<string> {
   /*服务端 id 就绪后按顺序上传本地图片，并回写 asset:// 引用。 */
   let nextHtml = normalizeBodyHtml(bodyHtml);
-  const draft = await loadLocalFragmentDraft(fragmentId);
-  if (!draft) return nextHtml;
-  for (const image of draft.pending_image_assets ?? []) {
+  const currentDraft = draft ?? await loadLocalFragmentDraft(fragmentId);
+  if (!currentDraft) return nextHtml;
+  for (const image of currentDraft.pending_image_assets ?? []) {
     if (image.upload_status === 'uploaded' && image.remote_asset_id) {
       nextHtml = replaceLocalAssetReference(nextHtml, image.local_asset_id, image.remote_asset_id);
       continue;
@@ -128,9 +123,7 @@ async function syncFragment(fragmentId: string): Promise<void> {
   });
   try {
     let serverId = await ensureServerFragment(fragmentId);
-    const latestDraft = await loadLocalFragmentDraft(fragmentId);
-    if (!latestDraft) return;
-    const nextHtml = await uploadPendingImages(fragmentId, latestDraft.body_html);
+    const nextHtml = await uploadPendingImages(fragmentId, draft.body_html, draft);
     await saveLocalFragmentDraft(fragmentId, {
       body_html: nextHtml,
       plain_text_snapshot: extractPlainTextFromHtml(nextHtml),
@@ -150,7 +143,7 @@ async function syncFragment(fragmentId: string): Promise<void> {
           throw error;
         }
         recoveryAttempted = true;
-        serverId = await recoverMissingServerBinding(fragmentId, serverId);
+        serverId = await recoverMissingServerBinding(fragmentId);
       }
     }
     await upsertRemoteFragmentSnapshot(updatedFragment);
@@ -165,9 +158,8 @@ async function syncFragment(fragmentId: string): Promise<void> {
       nextRetryAt: null,
       lastError: null,
     });
-    // 同步成功后刷新 Zustand store
-    const latestDrafts = await listLocalFragmentDrafts();
-    useFragmentStore.getState().setLocalDrafts(null, latestDrafts);
+    // 同步成功后更新详情缓存，列表视图会在下次刷新时自动重新加载
+    useFragmentStore.getState().setDetail(fragmentId, updatedFragment);
   } catch (error) {
     const latestDraft = await loadLocalFragmentDraft(fragmentId);
     const nextRetryCount = (latestDraft?.retry_count ?? retryCount) + 1;

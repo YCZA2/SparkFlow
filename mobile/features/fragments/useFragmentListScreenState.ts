@@ -82,9 +82,9 @@ export function useFragmentListScreenState({
       return;
     }
 
-    const selectedFragments = selection.selectedIds
-      .map((selectedId) => fragments.find((item) => item.id === selectedId) ?? null)
-      .filter((item): item is Fragment => Boolean(item));
+    // 使用 Set 优化查找性能
+    const selectedIdSet = new Set(selection.selectedIds);
+    const selectedFragments = fragments.filter((item) => selectedIdSet.has(item.id));
 
     // 检查是否有未同步的碎片
     const unsyncedFragments = selectedFragments.filter(

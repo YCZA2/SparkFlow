@@ -9,6 +9,7 @@ import type {
   LocalFragmentDraft,
   LocalPendingImageAsset,
 } from '@/types/fragment';
+import { clearRetryTimer } from '@/features/fragments/retryTimerManager';
 
 import {
   buildLocalDraftRowPatch,
@@ -171,6 +172,9 @@ export async function saveLocalFragmentDraft(
 
 /*删除本地草稿镜像，并同步回收关联待上传素材。 */
 export async function deleteLocalFragmentDraft(id: string): Promise<void> {
+  // 清理重试定时器，防止已删除 fragment 继续触发同步
+  clearRetryTimer(id);
+
   const database = await getLocalDatabase();
   await database.delete(mediaAssetsTable).where(eq(mediaAssetsTable.fragmentId, id));
   await database.delete(fragmentsTable).where(eq(fragmentsTable.id, id));
