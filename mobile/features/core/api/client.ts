@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { STORAGE_KEYS, getBackendUrl, updateApiBaseUrl } from '@/constants/config';
+import { STORAGE_KEYS, getBackendUrl } from '@/constants/config';
 import { createDebugLogEntry, emitDebugLog, serializeForLog } from '@/features/debug-log/store';
 
 export interface ApiResponse<T = unknown> {
@@ -34,7 +34,6 @@ export class ApiError extends Error {
 
 async function getCurrentBaseUrl(): Promise<string> {
   const configuredUrl = await getBackendUrl();
-  updateApiBaseUrl(configuredUrl);
   return configuredUrl;
 }
 

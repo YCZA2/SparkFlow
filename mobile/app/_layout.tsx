@@ -152,7 +152,6 @@ function RootLayoutNav() {
               headerShown: true,
             }}
           />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
           <Stack.Screen
             name="network-settings"
             options={{

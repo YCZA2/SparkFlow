@@ -2,6 +2,8 @@
  * 碎片笔记类型定义
  */
 
+import type { FragmentFolder } from './folder';
+
 export type FragmentSource = 'voice' | 'manual' | 'video_parse';
 export type FragmentAudioSource = 'upload' | 'external_link';
 
@@ -26,11 +28,6 @@ export interface MediaAsset {
   created_at: string | null;
   file_url?: string | null;
   expires_at?: string | null;
-}
-
-export interface FragmentFolder {
-  id: string;
-  name: string;
 }
 
 export type LocalFragmentSyncStatus =

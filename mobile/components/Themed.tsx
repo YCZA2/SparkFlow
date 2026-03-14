@@ -14,9 +14,9 @@ type ThemeProps = {
 };
 
 export type TextProps = ThemeProps & DefaultText['props'];
-export type ViewProps = ThemeProps & DefaultView['props'];
+type ViewProps = ThemeProps & DefaultView['props'];
 
-export function useThemeColor(
+function useThemeColor(
   props: { light?: string; dark?: string },
   colorName: keyof typeof Colors.light & keyof typeof Colors.dark
 ) {

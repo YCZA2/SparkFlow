@@ -2,7 +2,7 @@ import type { SpeakerSegment } from '@/types/fragment';
 
 const SPEAKER_COLORS = ['#F26B3A', '#4FB4C8', '#7E57C2', '#1FA97A', '#C16A2D'];
 
-export interface PresentedSpeakerSegment {
+interface PresentedSpeakerSegment {
   key: string;
   originalIndex: number;
   originalSpeakerId: string;
@@ -20,14 +20,14 @@ function pad(value: number): string {
   return value.toString().padStart(2, '0');
 }
 
-export function formatSegmentTime(startMs: number): string {
+function formatSegmentTime(startMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(startMs / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${pad(minutes)}:${pad(seconds)}`;
 }
 
-export function createSegmentKey(segment: SpeakerSegment, index: number): string {
+function createSegmentKey(segment: SpeakerSegment, index: number): string {
   return `${segment.speaker_id}:${segment.start_ms}:${segment.end_ms}:${index}`;
 }
 

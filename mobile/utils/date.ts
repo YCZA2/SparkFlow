@@ -50,24 +50,3 @@ export function formatDate(dateString: string): string {
   // 不同年份，显示完整日期
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
-
-/**
- * 格式化日期时间为详细格式
- * @param dateString ISO 8601 格式的日期字符串
- * @returns 详细日期时间字符串
- */
-export function formatDateTime(dateString: string): string {
-  const date = new Date(dateString);
-
-  if (isNaN(date.getTime())) {
-    return '未知时间';
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-
-  return `${year}-${month}-${day} ${hours}:${minutes}`;
-}

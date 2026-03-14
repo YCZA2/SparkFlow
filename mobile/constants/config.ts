@@ -14,10 +14,6 @@ export const DEFAULT_API_BASE_URL = Platform.OS === 'ios'
   ? 'http://localhost:8000'  // iOS 模拟器
   : 'http://10.0.2.2:8000';  // Android 模拟器
 
-// 应用信息
-export const APP_NAME = '灵感编导';
-export const APP_VERSION = '1.0.0';
-
 // AsyncStorage 键名
 export const STORAGE_KEYS = {
   TOKEN: 'auth_token',
@@ -62,22 +58,11 @@ export const API_ENDPOINTS = {
   EXTERNAL_MEDIA: {
     AUDIO_IMPORTS: '/api/external-media/audio-imports',
   },
-  KNOWLEDGE: '/api/knowledge',
   FOLDERS: {
     LIST: '/api/fragment-folders',
     DETAIL: (id: string) => `/api/fragment-folders/${id}`,
   },
 } as const;
-
-// 分页配置
-export const PAGINATION = {
-  DEFAULT_LIMIT: 20,
-  MAX_LIMIT: 100,
-} as const;
-
-// 当前使用的 API_BASE_URL（会被动态更新）
-// 注意：这是一个变量，实际使用时应该通过 getBackendUrl() 获取
-export let API_BASE_URL = DEFAULT_API_BASE_URL;
 
 /**
  * 初始化 API 基础地址
@@ -86,13 +71,5 @@ export let API_BASE_URL = DEFAULT_API_BASE_URL;
 export async function initApiBaseUrl(): Promise<string> {
   // 首先尝试获取已配置的地址
   const configuredUrl = await getBackendUrl();
-  API_BASE_URL = configuredUrl;
   return configuredUrl;
-}
-
-/**
- * 更新当前使用的 API_BASE_URL
- */
-export function updateApiBaseUrl(url: string): void {
-  API_BASE_URL = url;
 }

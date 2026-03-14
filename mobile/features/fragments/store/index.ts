@@ -35,4 +35,4 @@ export {
   upsertRemoteFragmentSnapshots,
   writeCachedRemoteFragmentList,
 } from './remoteFragments';
-export { ensureFragmentStoreReady, readFragmentMetaPath } from './runtime';
+export { ensureFragmentStoreReady } from './runtime';

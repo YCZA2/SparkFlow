@@ -15,6 +15,7 @@ export async function fetchPipelineRun(runId: string): Promise<PipelineRun> {
   return get<PipelineRun>(API_ENDPOINTS.PIPELINES.DETAIL(runId));
 }
 
+// TODO: 用于未来错误处理 UI
 /**
  读取 pipeline 的步骤详情，便于失败排障或重试前查看。
  */
@@ -22,6 +23,7 @@ export async function fetchPipelineSteps(runId: string): Promise<PipelineStepLis
   return get<PipelineStepListResponse>(API_ENDPOINTS.PIPELINES.STEPS(runId));
 }
 
+// TODO: 用于未来失败重试功能
 /**
  触发失败 pipeline 的重试入口。
  */

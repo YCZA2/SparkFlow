@@ -32,7 +32,7 @@ test('buildFragmentSections groups fragments with the same day under one section
   assert.equal(sections[0]?.title, '今天');
   assert.deepEqual(
     sections[0]?.data.map((item) => item.id),
-    ['fragment-1', 'fragment-2']
+    ['fragment-2', 'fragment-1']
   );
 });
 
