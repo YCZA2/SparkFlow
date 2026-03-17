@@ -148,3 +148,9 @@ Full schema in `memory-bank/tech-stack.md`.
 - **Comments**: add a brief Chinese comment to every new/modified function describing its responsibility; for non-obvious constraints, also explain the reason (not line-by-line restatement)
 - **Modularization**: split expanding logic into focused files before it becomes a monolith
 - **`+` button semantics**: opens the import drawer; extend the drawer for new import sources rather than changing the button to a direct navigation
+
+## Environment Constraints
+
+**Check environment**: \`bash scripts/check-env.sh\`
+
+- **vps**: 1GB RAM lightweight environment — no installs/servers
