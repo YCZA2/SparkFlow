@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 
 from domains.fragments import repository as fragment_repository
 from modules.fragments.mapper import map_fragment
-from modules.shared.audio_ingestion import AudioIngestionRequest
-from modules.shared.audio_ingestion_use_case import AudioIngestionUseCase
-from modules.shared.storage import build_audio_object_key, sanitize_filename, validate_audio_upload
+from modules.shared.media.audio_ingestion import AudioIngestionRequest
+from modules.shared.media.audio_ingestion_use_case import AudioIngestionUseCase
+from modules.shared.infrastructure.storage import build_audio_object_key, sanitize_filename, validate_audio_upload
 from modules.shared.ports import FileStorage
 from .schemas import AudioUploadResponse, TranscriptionStatusResponse
 

@@ -24,7 +24,7 @@ from .providers import (
 )
 from .storage import create_file_storage
 from .vector_store import create_vector_store
-from .ports import (
+from modules.shared.ports import (
     EmbeddingProvider,
     ExternalMediaProvider,
     FileStorage,

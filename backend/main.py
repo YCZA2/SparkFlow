@@ -34,9 +34,9 @@ from modules.scripts.daily_push_pipeline import (
 )
 from modules.scripts.pipeline import build_script_generation_pipeline_service, PIPELINE_TYPE_SCRIPT_GENERATION
 from modules.scripts.presentation import router as scripts_router
-from modules.shared.audio_ingestion import build_media_ingestion_pipeline_service, PIPELINE_TYPE_MEDIA_INGESTION
-from modules.shared.container import ServiceContainer, build_container
-from modules.shared.pipeline_runtime import (
+from modules.shared.media.audio_ingestion import build_media_ingestion_pipeline_service, PIPELINE_TYPE_MEDIA_INGESTION
+from modules.shared.infrastructure.container import ServiceContainer, build_container
+from modules.shared.pipeline.pipeline_runtime import (
     PipelineDefinitionRegistry,
     PipelineDispatcher,
     PipelineRecoveryService,

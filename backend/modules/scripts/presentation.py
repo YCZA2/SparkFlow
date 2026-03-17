@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from core import ResponseModel, success_response
 from core.auth import get_current_user
-from modules.shared.container import ServiceContainer, get_container, get_db_session
+from modules.shared.infrastructure.container import ServiceContainer, get_container, get_db_session
 
 from .application import DailyPushUseCase, ScriptCommandService, ScriptGenerationUseCase, ScriptQueryService, map_script
 from .daily_push_pipeline import build_daily_push_pipeline_service

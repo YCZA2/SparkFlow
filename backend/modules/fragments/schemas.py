@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from modules.shared.content_schemas import MediaAssetItem
+from modules.shared.content.content_schemas import MediaAssetItem
 
 
 class FragmentFolderInfo(BaseModel):

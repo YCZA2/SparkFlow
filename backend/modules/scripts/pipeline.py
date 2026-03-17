@@ -9,7 +9,7 @@ from core.exceptions import ValidationError
 from models import PipelineRun
 from .context_builder import ResearchContext, ScriptGenerationContextBuilder, build_workflow_inputs
 from .persistence import ScriptGenerationPersistenceService
-from modules.shared.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
+from modules.shared.pipeline.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
 from modules.shared.ports import WorkflowProvider
 
 SUCCESS_STATUSES = {"succeeded", "success", "completed"}

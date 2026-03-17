@@ -7,10 +7,11 @@ import time
 
 from core.logging_config import get_logger
 from modules.shared.ports import TextGenerationProvider
+from modules.shared.warning_throttle import WarningThrottle
 
 logger = get_logger(__name__)
 ENRICHMENT_WARNING_THROTTLE_SECONDS = 60.0
-_enrichment_warning_last_seen: dict[tuple[str, str, str], float] = {}
+_enrichment_throttle = WarningThrottle(ENRICHMENT_WARNING_THROTTLE_SECONDS)
 
 SUMMARY_SYSTEM_PROMPT = """你是一个专业的内容摘要助手。你的任务是根据用户提供的口述内容，生成一句简短的中文摘要，描述核心主题。
 
@@ -38,56 +39,13 @@ TAGS_USER_PROMPT_TEMPLATE = """请为以下内容生成标签关键词：
 {transcript}"""
 
 
-def _build_enrichment_warning_key(*, phase: str, error_type: str, error_message: str) -> tuple[str, str, str]:
-    """为增强流程失败生成稳定的日志限频键。"""
-    return (phase, error_type, error_message)
-
-
-def _should_emit_enrichment_warning(
-    *,
-    phase: str,
-    error_type: str,
-    error_message: str,
-    now: float | None = None,
-) -> bool:
-    """同一类增强失败在冷却窗口内只保留一次 warning。"""
-    current = now if now is not None else time.monotonic()
-    key = _build_enrichment_warning_key(
-        phase=phase,
-        error_type=error_type,
-        error_message=error_message,
-    )
-    last_seen = _enrichment_warning_last_seen.get(key)
-    _enrichment_warning_last_seen[key] = current
-    if last_seen is None:
-        return True
-    return current - last_seen >= ENRICHMENT_WARNING_THROTTLE_SECONDS
-
-
-def _prune_enrichment_warning_cache(now: float | None = None) -> None:
-    """定期清理过期限频记录，避免长期运行后缓存膨胀。"""
-    current = now if now is not None else time.monotonic()
-    expired_keys = [
-        key
-        for key, last_seen in _enrichment_warning_last_seen.items()
-        if current - last_seen >= ENRICHMENT_WARNING_THROTTLE_SECONDS
-    ]
-    for key in expired_keys:
-        _enrichment_warning_last_seen.pop(key, None)
-
-
 def _log_enrichment_failure(*, phase: str, exc: Exception) -> None:
     """按阶段记录限频后的增强失败日志，避免重复刷完整堆栈。"""
     error_type = type(exc).__name__
     error_message = str(exc)
     current = time.monotonic()
-    _prune_enrichment_warning_cache(now=current)
-    if _should_emit_enrichment_warning(
-        phase=phase,
-        error_type=error_type,
-        error_message=error_message,
-        now=current,
-    ):
+    key = (phase, error_type, error_message)
+    if _enrichment_throttle.should_emit(key, now=current):
         logger.warning(
             "enrichment_generation_failed",
             phase=phase,
@@ -159,7 +117,7 @@ async def _generate_summary(
     body_html: str | None = None,
 ) -> str:
     """从正文第一行提取摘要，不再使用 LLM。"""
-    from modules.shared.content_html import extract_plain_text_from_html
+    from modules.shared.content.content_html import extract_plain_text_from_html
 
     # 优先从正文提取纯文本
     if body_html:

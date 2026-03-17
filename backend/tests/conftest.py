@@ -32,7 +32,7 @@ os.environ.setdefault("DATABASE_URL", os.environ.get("TEST_DATABASE_URL", DEFAUL
 from main import create_app
 from models import Base, User
 from modules.auth.application import TEST_USER_ID
-from modules.shared.infrastructure import LocalFileStorage
+from modules.shared.infrastructure.infrastructure import LocalFileStorage
 from tests.support import (
     FakeExternalMediaProvider,
     FakeLLMProvider,

@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 
 from core import ResponseModel, success_response
 from core.auth import get_current_user
-from modules.shared.audio_ingestion import build_media_ingestion_pipeline_service
-from modules.shared.container import ServiceContainer, get_container, get_db_session
+from modules.shared.media.audio_ingestion import build_media_ingestion_pipeline_service
+from modules.shared.infrastructure.container import ServiceContainer, get_container, get_db_session
 
 from .application import TranscriptionUseCase
 from .schemas import AudioUploadResponse, TranscriptionStatusResponse

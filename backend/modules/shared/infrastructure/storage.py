@@ -12,7 +12,7 @@ from fastapi import UploadFile
 from core.config import Settings
 from core.exceptions import ServiceUnavailableError, ValidationError
 
-from .ports import FileAccess, FileStorage, MaterializedFile, StoredFile
+from modules.shared.ports import FileAccess, FileStorage, MaterializedFile, StoredFile
 
 ALLOWED_AUDIO_TYPES = {
     "audio/m4a",

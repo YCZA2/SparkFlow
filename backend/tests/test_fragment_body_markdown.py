@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modules.shared.fragment_body_markdown import (
+from modules.shared.content.fragment_body_markdown import (
     collect_asset_ids_from_body_markdown,
     convert_editor_document_to_body_markdown,
     extract_plain_text_from_body_markdown,

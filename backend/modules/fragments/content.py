@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from models import Fragment
-from modules.shared.content_html import (
+from modules.shared.content.content_html import (
     convert_html_to_markdown,
     extract_plain_text_from_html,
     normalize_body_html,

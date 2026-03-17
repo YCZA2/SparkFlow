@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from core.auth import get_current_user
-from modules.shared.container import ServiceContainer, get_container, get_db_session
+from modules.shared.infrastructure.container import ServiceContainer, get_container, get_db_session
 
 from .application import MarkdownExportUseCase
 from .schemas import MarkdownBatchExportRequest

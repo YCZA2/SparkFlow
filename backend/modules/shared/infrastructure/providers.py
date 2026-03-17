@@ -4,7 +4,7 @@ from core.config import Settings
 from services.dify_workflow_provider import DifyWorkflowProvider
 from services.external_media import ExternalMediaService
 
-from .ports import ExternalMediaProvider, WebSearchProvider, WebSearchResult, WorkflowProvider
+from modules.shared.ports import ExternalMediaProvider, WebSearchProvider, WebSearchResult, WorkflowProvider
 
 
 class NoopWebSearchProvider(WebSearchProvider):
@@ -27,23 +27,17 @@ def create_web_search_provider() -> WebSearchProvider:
 
 def create_script_mode_a_workflow_provider(*, settings: Settings) -> WorkflowProvider:
     """构造 mode_a 脚本工作流 provider。"""
-    return DifyWorkflowProvider(
-        base_url=settings.DIFY_MODE_A_BASE_URL,
-        api_key=settings.DIFY_MODE_A_API_KEY,
-    )
+    cfg = settings.dify_mode_a
+    return DifyWorkflowProvider(base_url=cfg.base_url, api_key=cfg.api_key)
 
 
 def create_script_mode_b_workflow_provider(*, settings: Settings) -> WorkflowProvider:
     """构造 mode_b 脚本工作流 provider。"""
-    return DifyWorkflowProvider(
-        base_url=settings.DIFY_MODE_B_BASE_URL,
-        api_key=settings.DIFY_MODE_B_API_KEY,
-    )
+    cfg = settings.dify_mode_b
+    return DifyWorkflowProvider(base_url=cfg.base_url, api_key=cfg.api_key)
 
 
 def create_daily_push_workflow_provider(*, settings: Settings) -> WorkflowProvider:
     """构造每日推盘专用的外挂工作流 provider。"""
-    return DifyWorkflowProvider(
-        base_url=settings.DIFY_BASE_URL,
-        api_key=settings.DIFY_DAILY_PUSH_API_KEY or settings.DIFY_API_KEY,
-    )
+    cfg = settings.dify_daily_push
+    return DifyWorkflowProvider(base_url=cfg.base_url, api_key=cfg.api_key)

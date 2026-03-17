@@ -15,8 +15,8 @@ from domains.fragment_tags import repository as fragment_tag_repository
 from models import Fragment, FragmentFolder, FragmentTag, KnowledgeDoc, User
 from main import ensure_local_test_user
 from modules.auth.application import TEST_USER_ID
-from modules.shared.content_html import convert_markdown_to_basic_html
-from modules.shared.fragment_body_markdown import convert_editor_document_to_body_markdown
+from modules.shared.content.content_html import convert_markdown_to_basic_html
+from modules.shared.content.fragment_body_markdown import convert_editor_document_to_body_markdown
 from modules.shared.ports import ExternalMediaResolvedAudio
 
 pytestmark = pytest.mark.integration

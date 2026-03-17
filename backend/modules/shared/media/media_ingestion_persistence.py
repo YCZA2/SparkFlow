@@ -4,8 +4,8 @@ import json
 
 from domains.fragments import repository as fragment_repository
 
-from .ports import FileStorage
-from .stored_file_payloads import stored_file_from_payload
+from modules.shared.ports import FileStorage
+from modules.shared.media.stored_file_payloads import stored_file_from_payload
 
 
 class MediaIngestionPersistenceService:

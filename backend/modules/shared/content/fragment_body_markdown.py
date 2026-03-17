@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import re
 
-from .content_markdown import extract_plain_text
-from .editor_document import render_document_as_markdown
+from modules.shared.content.content_markdown import extract_plain_text
+from modules.shared.content.editor_document import render_document_as_markdown
 
 ASSET_REF_PATTERN = re.compile(r"!\[[^\]]*\]\(asset://([^)]+)\)")
 

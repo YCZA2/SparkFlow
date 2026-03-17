@@ -9,7 +9,7 @@ import pytest
 
 from domains.pipelines import repository as pipeline_repository
 from models import Fragment, PipelineRun, PipelineStepRun
-from modules.shared.pipeline_runtime import (
+from modules.shared.pipeline.pipeline_runtime import (
     PipelineDefinitionRegistry,
     PipelineDispatcher,
     PipelineExecutionError,

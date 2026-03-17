@@ -12,8 +12,8 @@ from modules.fragments.application import FragmentCommandService
 from modules.fragments.content import render_fragment_markdown
 from modules.fragments.mapper import build_media_asset_file, map_media_asset
 from modules.scripts.application import ScriptQueryService, map_script
-from modules.shared.content_html import convert_html_to_markdown
-from modules.shared.content_markdown import (
+from modules.shared.content.content_html import convert_html_to_markdown
+from modules.shared.content.content_markdown import (
     MarkdownExportFile,
     render_markdown_document,
     sanitize_export_stem,

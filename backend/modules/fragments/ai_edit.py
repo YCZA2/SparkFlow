@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from modules.shared.fragment_body_markdown import (
+from modules.shared.content.fragment_body_markdown import (
     extract_plain_text_from_body_markdown,
     normalize_fragment_body_markdown,
 )

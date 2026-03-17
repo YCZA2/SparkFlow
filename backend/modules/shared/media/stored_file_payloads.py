@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .ports import StoredFile
+from modules.shared.ports import StoredFile
 
 
 def stored_file_to_payload(stored_file: StoredFile | None) -> dict[str, Any] | None:

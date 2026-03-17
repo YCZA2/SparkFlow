@@ -5,11 +5,21 @@
 """
 
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+@dataclass
+class DifyWorkflowConfig:
+    """单个 Dify 工作流的连接参数。"""
+    base_url: Optional[str]
+    app_id: Optional[str]
+    api_key: Optional[str]
+    workflow_id: Optional[str]
 
 FALSEY_DEBUG_VALUES = {"0", "false", "off", "no", "release", "prod", "production"}
 TRUTHY_DEBUG_VALUES = {"1", "true", "on", "yes", "debug", "dev", "development"}
@@ -343,6 +353,36 @@ class Settings(BaseSettings):
                 return normalized
             return os.path.abspath(os.path.join(BACKEND_DIR, normalized))
         return value
+
+    @property
+    def dify_mode_a(self) -> DifyWorkflowConfig:
+        """返回 mode_a 工作流的连接配置。"""
+        return DifyWorkflowConfig(
+            base_url=self.DIFY_MODE_A_BASE_URL,
+            app_id=self.DIFY_MODE_A_APP_ID,
+            api_key=self.DIFY_MODE_A_API_KEY,
+            workflow_id=self.DIFY_MODE_A_WORKFLOW_ID,
+        )
+
+    @property
+    def dify_mode_b(self) -> DifyWorkflowConfig:
+        """返回 mode_b 工作流的连接配置。"""
+        return DifyWorkflowConfig(
+            base_url=self.DIFY_MODE_B_BASE_URL,
+            app_id=self.DIFY_MODE_B_APP_ID,
+            api_key=self.DIFY_MODE_B_API_KEY,
+            workflow_id=self.DIFY_MODE_B_WORKFLOW_ID,
+        )
+
+    @property
+    def dify_daily_push(self) -> DifyWorkflowConfig:
+        """返回每日推盘工作流的连接配置；api_key 优先取专属 key，否则复用默认 key。"""
+        return DifyWorkflowConfig(
+            base_url=self.DIFY_BASE_URL,
+            app_id=None,
+            api_key=self.DIFY_DAILY_PUSH_API_KEY or self.DIFY_API_KEY,
+            workflow_id=self.DIFY_DAILY_PUSH_WORKFLOW_ID,
+        )
 
     def ensure_directories(self):
         """确保所需目录存在"""

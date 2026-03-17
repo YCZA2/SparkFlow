@@ -12,7 +12,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-from modules.shared.content_html import convert_html_to_markdown, convert_markdown_to_basic_html
+from modules.shared.content.content_html import convert_html_to_markdown, convert_markdown_to_basic_html
 
 
 # revision identifiers, used by Alembic.

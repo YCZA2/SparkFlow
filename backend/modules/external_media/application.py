@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from modules.shared.audio_ingestion_use_case import AudioIngestionUseCase
+from modules.shared.media.audio_ingestion_use_case import AudioIngestionUseCase
 
 from .schemas import ExternalAudioImportResponse
 

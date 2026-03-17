@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from models import Fragment, MediaAsset
-from modules.shared.content_schemas import MediaAssetItem
+from modules.shared.content.content_schemas import MediaAssetItem
 from modules.shared.ports import FileStorage, StoredFile
 from utils.serialization import format_iso_datetime, parse_json_list, parse_json_object_list
 

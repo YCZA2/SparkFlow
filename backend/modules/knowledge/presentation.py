@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from core import ResponseModel, success_response
 from core.auth import get_current_user
-from modules.shared.container import ServiceContainer, get_container, get_db_session
+from modules.shared.infrastructure.container import ServiceContainer, get_container, get_db_session
 
 from .application import KnowledgeUseCase, map_knowledge_doc, parse_uploaded_file
 from .schemas import (

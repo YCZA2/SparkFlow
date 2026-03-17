@@ -9,7 +9,7 @@ from core.exceptions import ValidationError
 from domains.pipelines import repository as pipeline_repository
 from domains.scripts import repository as script_repository
 from models import PipelineRun
-from modules.shared.content_html import convert_markdown_to_basic_html
+from modules.shared.content.content_html import convert_markdown_to_basic_html
 
 
 class ScriptGenerationPersistenceService:

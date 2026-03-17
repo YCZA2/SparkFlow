@@ -11,7 +11,7 @@ from domains.fragment_folders import repository as fragment_folder_repository
 from domains.fragment_tags import repository as fragment_tag_repository
 from domains.fragments import repository as fragment_repository
 from domains.media_assets import repository as media_asset_repository
-from modules.shared.content_html import (
+from modules.shared.content.content_html import (
     extract_plain_text_from_html,
     normalize_body_html,
 )

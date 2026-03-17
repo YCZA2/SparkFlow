@@ -9,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from models import Fragment, FragmentTag
-from modules.shared.content_html import (
+from modules.shared.content.content_html import (
     convert_markdown_to_basic_html,
     extract_plain_text_from_html,
     normalize_body_html,

@@ -6,7 +6,7 @@ from typing import Any
 from core.exceptions import ValidationError
 from services.base import VectorDocument
 
-from .ports import EmbeddingProvider, VectorStore
+from modules.shared.ports import EmbeddingProvider, VectorStore
 
 FRAGMENT_NAMESPACE_PREFIX = "fragments"
 KNOWLEDGE_NAMESPACE_PREFIX = "knowledge"

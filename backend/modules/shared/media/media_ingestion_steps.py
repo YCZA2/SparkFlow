@@ -11,12 +11,12 @@ from modules.shared.enrichment import build_fallback_summary_and_tags, generate_
 from sqlalchemy.orm import Session
 
 from domains.fragment_folders import repository as fragment_folder_repository
-from modules.shared.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
+from modules.shared.pipeline.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
 
-from .media_ingestion_persistence import MediaIngestionPersistenceService
-from .ports import ExternalMediaProvider
-from .storage import build_imported_audio_object_key, sanitize_filename
-from .stored_file_payloads import stored_file_from_payload, stored_file_to_payload
+from modules.shared.media.media_ingestion_persistence import MediaIngestionPersistenceService
+from modules.shared.ports import ExternalMediaProvider
+from modules.shared.infrastructure.storage import build_imported_audio_object_key, sanitize_filename
+from modules.shared.media.stored_file_payloads import stored_file_from_payload, stored_file_to_payload
 
 logger = get_logger(__name__)
 DEFAULT_ENRICHMENT_TIMEOUT_SECONDS = 45.0
@@ -239,7 +239,7 @@ class MediaIngestionStepExecutor:
 
     async def generate_enrichment(self, transcript: str, *, llm_provider) -> tuple[str, list[str]]:
         """生成摘要与标签，并在超时时落回本地策略。"""
-        from . import audio_ingestion as audio_ingestion_module
+        import modules.shared.media.audio_ingestion as audio_ingestion_module
 
         try:
             return await generate_summary_and_tags(

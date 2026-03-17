@@ -13,8 +13,8 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-from modules.shared.editor_document import build_document_from_text
-from modules.shared.fragment_body_markdown import (
+from modules.shared.content.editor_document import build_document_from_text
+from modules.shared.content.fragment_body_markdown import (
     convert_editor_document_to_body_markdown,
     extract_plain_text_from_body_markdown,
 )

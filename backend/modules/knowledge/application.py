@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ValidationError
 from models import KnowledgeDoc
-from modules.shared.content_markdown import extract_plain_text
+from modules.shared.content.content_markdown import extract_plain_text
 from utils.serialization import format_iso_datetime
 
 from domains.knowledge import repository as knowledge_repository

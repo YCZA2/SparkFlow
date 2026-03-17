@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from core.logging_config import get_logger
 from domains.pipelines import repository as pipeline_repository
 from models import PipelineRun, PipelineStepRun
-from modules.shared.pipeline_types import (
+from modules.shared.pipeline.pipeline_types import (
     PipelineExecutionContext,
     PipelineExecutionError,
     PipelineStepDefinition,

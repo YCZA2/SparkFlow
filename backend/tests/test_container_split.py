@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 
 from main import create_app
-from modules.shared.storage import LocalFileStorage
-from modules.shared.vector_store import AppVectorStore
+from modules.shared.infrastructure.storage import LocalFileStorage
+from modules.shared.infrastructure.vector_store import AppVectorStore
 
 
 def test_app_container_uses_split_shared_modules() -> None:

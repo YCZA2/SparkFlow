@@ -6,9 +6,9 @@ from typing import Any
 from core.exceptions import ServiceUnavailableError
 from domains.fragments import repository as fragment_repository
 
-from .media_ingestion_persistence import MediaIngestionPersistenceService
-from .media_ingestion_steps import MediaIngestionStepExecutor
-from .stored_file_payloads import stored_file_to_payload
+from modules.shared.media.media_ingestion_persistence import MediaIngestionPersistenceService
+from modules.shared.media.media_ingestion_steps import MediaIngestionStepExecutor
+from modules.shared.media.stored_file_payloads import stored_file_to_payload
 
 PIPELINE_TYPE_MEDIA_INGESTION = "media_ingestion"
 

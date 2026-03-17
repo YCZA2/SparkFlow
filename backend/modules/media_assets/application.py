@@ -9,7 +9,7 @@ from core.exceptions import NotFoundError, ValidationError
 from domains.media_assets import repository as media_asset_repository
 from models import generate_uuid
 from modules.fragments.mapper import build_media_asset_file, map_media_asset
-from modules.shared.storage import build_media_asset_object_key, sanitize_filename, validate_media_upload
+from modules.shared.infrastructure.storage import build_media_asset_object_key, sanitize_filename, validate_media_upload
 from modules.shared.ports import FileStorage
 from .schemas import MediaAssetListResponse, MediaAssetUploadResponse
 

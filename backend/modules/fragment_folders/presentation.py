@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from core import ResponseModel, success_response
 from core.auth import get_current_user
-from modules.shared.container import get_db_session
+from modules.shared.infrastructure.container import get_db_session
 
 from .application import (
     FragmentFolderCommandService,

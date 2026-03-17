@@ -13,9 +13,9 @@ from domains.fragments import repository as fragment_repository
 from domains.pipelines import repository as pipeline_repository
 from domains.scripts import repository as script_repository
 from models import Fragment, PipelineRun, User
-from modules.shared.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
+from modules.shared.pipeline.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
 from modules.shared.ports import VectorStore, WorkflowProvider
-from modules.shared.content_html import convert_markdown_to_basic_html
+from modules.shared.content.content_html import convert_markdown_to_basic_html
 from utils.serialization import format_iso_datetime, parse_json_list
 from utils.time import get_app_timezone, get_local_day_bounds
 

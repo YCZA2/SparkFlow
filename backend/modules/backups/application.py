@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from core.exceptions import ValidationError
 from domains.backups import repository as backup_repository
 from modules.shared.ports import FileStorage, StoredFile
-from modules.shared.storage import LocalFileStorage, OssFileStorage, normalize_object_key, sanitize_filename
+from modules.shared.infrastructure.storage import LocalFileStorage, OssFileStorage, normalize_object_key, sanitize_filename
 from utils.time import ensure_aware_utc
 
 from .schemas import (

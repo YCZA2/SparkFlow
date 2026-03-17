@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import BackgroundTasks
 
-from .ports import JobRunner
+from modules.shared.ports import JobRunner
 from .providers import (
     NoopWebSearchProvider,
     create_daily_push_workflow_provider,

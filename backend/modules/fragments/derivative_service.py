@@ -6,6 +6,7 @@ import time
 from core.logging_config import get_logger
 from domains.fragment_tags import repository as fragment_tag_repository
 from modules.shared.enrichment import build_fallback_summary_and_tags, generate_summary_and_tags
+from modules.shared.warning_throttle import WarningThrottle
 from utils.serialization import parse_json_list
 
 SUMMARY_REFRESH_MIN_ABS_DELTA = 50
@@ -13,47 +14,7 @@ SUMMARY_REFRESH_MIN_RATIO = 0.2
 VECTOR_SYNC_WARNING_THROTTLE_SECONDS = 60.0
 
 logger = get_logger(__name__)
-_vector_sync_warning_last_seen: dict[tuple[str, str, str, str], float] = {}
-
-
-def _build_vector_sync_warning_key(*, fragment_id: str, action: str, error_type: str, error_message: str) -> tuple[str, str, str, str]:
-    """为向量同步失败生成稳定的日志限频键。"""
-    return (fragment_id, action, error_type, error_message)
-
-
-def _should_emit_vector_sync_warning(
-    *,
-    fragment_id: str,
-    action: str,
-    error_type: str,
-    error_message: str,
-    now: float | None = None,
-) -> bool:
-    """同一条向量同步失败在冷却窗口内只保留一次 warning。"""
-    current = now if now is not None else time.monotonic()
-    key = _build_vector_sync_warning_key(
-        fragment_id=fragment_id,
-        action=action,
-        error_type=error_type,
-        error_message=error_message,
-    )
-    last_seen = _vector_sync_warning_last_seen.get(key)
-    _vector_sync_warning_last_seen[key] = current
-    if last_seen is None:
-        return True
-    return current - last_seen >= VECTOR_SYNC_WARNING_THROTTLE_SECONDS
-
-
-def _prune_vector_sync_warning_cache(now: float | None = None) -> None:
-    """定期清理过期的限频记录，避免进程长期运行后缓存膨胀。"""
-    current = now if now is not None else time.monotonic()
-    expired_keys = [
-        key
-        for key, last_seen in _vector_sync_warning_last_seen.items()
-        if current - last_seen >= VECTOR_SYNC_WARNING_THROTTLE_SECONDS
-    ]
-    for key in expired_keys:
-        _vector_sync_warning_last_seen.pop(key, None)
+_vector_sync_throttle = WarningThrottle(VECTOR_SYNC_WARNING_THROTTLE_SECONDS)
 
 
 class FragmentDerivativeService:
@@ -149,14 +110,8 @@ class FragmentDerivativeService:
             error_type = type(exc).__name__
             error_message = str(exc)
             current = time.monotonic()
-            _prune_vector_sync_warning_cache(now=current)
-            if _should_emit_vector_sync_warning(
-                fragment_id=fragment.id,
-                action=action,
-                error_type=error_type,
-                error_message=error_message,
-                now=current,
-            ):
+            key = (fragment.id, action, error_type, error_message)
+            if _vector_sync_throttle.should_emit(key, now=current):
                 logger.warning(
                     "fragment_vector_sync_failed",
                     fragment_id=fragment.id,

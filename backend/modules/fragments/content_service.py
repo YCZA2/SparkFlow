@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from domains.fragments import repository as fragment_repository
-from modules.shared.content_html import (
+from modules.shared.content.content_html import (
     collect_asset_ids_from_html,
     extract_plain_text_from_html,
     normalize_body_html,

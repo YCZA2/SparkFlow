@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ValidationError
 from models import Script
-from modules.shared.content_html import normalize_body_html
+from modules.shared.content.content_html import normalize_body_html
 from utils.serialization import format_iso_datetime, parse_json_list
 from utils.time import get_local_day_bounds
 

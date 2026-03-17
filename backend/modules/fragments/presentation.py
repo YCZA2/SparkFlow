@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from core import ResponseModel, success_response
 from core.auth import get_current_user
-from modules.shared.container import get_container, get_db_session, ServiceContainer
+from modules.shared.infrastructure.container import get_container, get_db_session, ServiceContainer
 
 from .application import FragmentCommandService, FragmentQueryService
 from .schemas import (

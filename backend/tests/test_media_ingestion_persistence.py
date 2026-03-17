@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from modules.shared.media_ingestion_persistence import MediaIngestionPersistenceService
+from modules.shared.media.media_ingestion_persistence import MediaIngestionPersistenceService
 from modules.shared.ports import FileAccess, StoredFile
 
 

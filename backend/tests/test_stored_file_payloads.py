@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from modules.shared.ports import StoredFile
-from modules.shared.stored_file_payloads import stored_file_from_payload, stored_file_to_payload
+from modules.shared.media.stored_file_payloads import stored_file_from_payload, stored_file_to_payload
 
 
 def test_stored_file_payload_round_trip() -> None:
