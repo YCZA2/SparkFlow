@@ -211,63 +211,66 @@ export async function restoreFromBackup(reason?: string): Promise<BackupRestoreR
   await refreshFragmentAudioAccess(plan);
   await refreshBackupMediaAssetUrls(plan);
   await hydrateBackupFileCache(plan);
-  await database.$client.execAsync(`
-    DELETE FROM media_assets;
-    DELETE FROM fragments;
-    DELETE FROM fragment_folders;
-  `);
 
+  // 用事务原子替换本地数据：DELETE 和 INSERT 要么全成功，要么全回滚，避免崩溃后数据为空。
+  await database.transaction(async (tx) => {
+    await tx.delete(mediaAssetsTable);
+    await tx.delete(fragmentsTable);
+    await tx.delete(fragmentFoldersTable);
+
+    if (plan.folders.length > 0) {
+      await tx.insert(fragmentFoldersTable).values(plan.folders);
+    }
+
+    if (plan.fragments.length > 0) {
+      await tx.insert(fragmentsTable).values(
+        plan.fragments.map((fragment) => ({
+          id: fragment.id,
+          legacyServerBindingId: fragment.legacyServerBindingId,
+          folderId: fragment.folderId,
+          source: fragment.source,
+          audioSource: fragment.audioSource,
+          createdAt: fragment.createdAt,
+          updatedAt: fragment.updatedAt,
+          summary: fragment.summary,
+          tagsJson: fragment.tagsJson,
+          plainTextSnapshot: fragment.plainTextSnapshot,
+          bodyFileUri: fragment.deletedAt ? null : getFragmentBodyFile(fragment.id).uri,
+          transcript: fragment.transcript,
+          speakerSegmentsJson: fragment.speakerSegmentsJson,
+          audioObjectKey: fragment.audioObjectKey,
+          audioFileUri: fragment.audioFileUri,
+          audioFileUrl: fragment.audioFileUrl,
+          audioFileExpiresAt: fragment.audioFileExpiresAt,
+          legacyCloudBindingStatus: fragment.legacyCloudBindingStatus,
+          lastSyncedAt: fragment.lastSyncedAt,
+          lastSyncAttemptAt: fragment.lastSyncAttemptAt,
+          nextRetryAt: fragment.nextRetryAt,
+          retryCount: fragment.retryCount,
+          deletedAt: fragment.deletedAt,
+          isFilmed: fragment.isFilmed,
+          filmedAt: fragment.filmedAt,
+          backupStatus: fragment.backupStatus,
+          lastBackupAt: fragment.lastBackupAt,
+          entityVersion: fragment.entityVersion,
+          lastModifiedDeviceId: fragment.lastModifiedDeviceId,
+          contentState: fragment.contentState,
+          cachedAt: fragment.cachedAt,
+        }))
+      );
+    }
+
+    if (plan.mediaAssets.length > 0) {
+      await tx.insert(mediaAssetsTable).values(plan.mediaAssets);
+    }
+  });
+
+  // 事务提交后再写正文文件：SQLite 行已存在，文件写失败只影响正文展示，不会导致数据行丢失。
   for (const fragment of plan.fragments) {
     if (fragment.deletedAt || !fragment.bodyHtml.trim()) {
       continue;
     }
     await writeFragmentBodyFile(fragment.id, fragment.bodyHtml);
-  }
-
-  if (plan.folders.length > 0) {
-    await database.insert(fragmentFoldersTable).values(plan.folders);
-  }
-
-  if (plan.fragments.length > 0) {
-    await database.insert(fragmentsTable).values(
-      plan.fragments.map((fragment) => ({
-        id: fragment.id,
-        legacyServerBindingId: fragment.legacyServerBindingId,
-        folderId: fragment.folderId,
-        source: fragment.source,
-        audioSource: fragment.audioSource,
-        createdAt: fragment.createdAt,
-        updatedAt: fragment.updatedAt,
-        summary: fragment.summary,
-        tagsJson: fragment.tagsJson,
-        plainTextSnapshot: fragment.plainTextSnapshot,
-        bodyFileUri: fragment.deletedAt ? null : getFragmentBodyFile(fragment.id).uri,
-        transcript: fragment.transcript,
-        speakerSegmentsJson: fragment.speakerSegmentsJson,
-        audioObjectKey: fragment.audioObjectKey,
-        audioFileUri: fragment.audioFileUri,
-        audioFileUrl: fragment.audioFileUrl,
-        audioFileExpiresAt: fragment.audioFileExpiresAt,
-        legacyCloudBindingStatus: fragment.legacyCloudBindingStatus,
-        lastSyncedAt: fragment.lastSyncedAt,
-        lastSyncAttemptAt: fragment.lastSyncAttemptAt,
-        nextRetryAt: fragment.nextRetryAt,
-        retryCount: fragment.retryCount,
-        deletedAt: fragment.deletedAt,
-        isFilmed: fragment.isFilmed,
-        filmedAt: fragment.filmedAt,
-        backupStatus: fragment.backupStatus,
-        lastBackupAt: fragment.lastBackupAt,
-        entityVersion: fragment.entityVersion,
-        lastModifiedDeviceId: fragment.lastModifiedDeviceId,
-        contentState: fragment.contentState,
-        cachedAt: fragment.cachedAt,
-      }))
-    );
-  }
-
-  if (plan.mediaAssets.length > 0) {
-    await database.insert(mediaAssetsTable).values(plan.mediaAssets);
   }
 
   await mergeRestoredScripts(plan);

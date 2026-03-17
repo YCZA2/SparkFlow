@@ -196,24 +196,38 @@ async function buildScriptItems(deviceId: string): Promise<BackupMutationItem[]>
   );
 }
 
-async function markBackupsSynced(serverGeneratedAt: string): Promise<void> {
+async function markBackupsSynced(items: BackupMutationItem[], serverGeneratedAt: string): Promise<void> {
+  // 按 id + entityVersion 精确匹配，避免把扫描结束后新产生的 pending 修改误标为 synced。
+  // 若用户在备份飞行期间编辑了某实体，entityVersion 已递增，本次不会命中，下次 flush 再处理。
   const database = await getLocalDatabase();
-  await database
-    .update(fragmentsTable)
-    .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
-    .where(or(eq(fragmentsTable.backupStatus, 'pending'), eq(fragmentsTable.backupStatus, 'failed')));
-  await database
-    .update(fragmentFoldersTable)
-    .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
-    .where(or(eq(fragmentFoldersTable.backupStatus, 'pending'), eq(fragmentFoldersTable.backupStatus, 'failed')));
-  await database
-    .update(mediaAssetsTable)
-    .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
-    .where(or(eq(mediaAssetsTable.backupStatus, 'pending'), eq(mediaAssetsTable.backupStatus, 'failed')));
-  await database
-    .update(scriptsTable)
-    .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
-    .where(or(eq(scriptsTable.backupStatus, 'pending'), eq(scriptsTable.backupStatus, 'failed')));
+  for (const item of items) {
+    switch (item.entity_type) {
+      case 'fragment':
+        await database
+          .update(fragmentsTable)
+          .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
+          .where(and(eq(fragmentsTable.id, item.entity_id), eq(fragmentsTable.entityVersion, item.entity_version)));
+        break;
+      case 'folder':
+        await database
+          .update(fragmentFoldersTable)
+          .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
+          .where(and(eq(fragmentFoldersTable.id, item.entity_id), eq(fragmentFoldersTable.entityVersion, item.entity_version)));
+        break;
+      case 'media_asset':
+        await database
+          .update(mediaAssetsTable)
+          .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
+          .where(and(eq(mediaAssetsTable.id, item.entity_id), eq(mediaAssetsTable.entityVersion, item.entity_version)));
+        break;
+      case 'script':
+        await database
+          .update(scriptsTable)
+          .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
+          .where(and(eq(scriptsTable.id, item.entity_id), eq(scriptsTable.entityVersion, item.entity_version)));
+        break;
+    }
+  }
 }
 
 async function markBackupsFailed(): Promise<void> {
@@ -251,7 +265,7 @@ export async function flushBackupQueue(): Promise<void> {
       }
       try {
         const response = await pushBackupBatch(items);
-        await markBackupsSynced(response.server_generated_at);
+        await markBackupsSynced(items, response.server_generated_at);
       } catch (error) {
         await markBackupsFailed();
         throw error;
