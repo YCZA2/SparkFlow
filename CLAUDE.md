@@ -4,158 +4,147 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-灵感编导 AI (Inspiration Director) - A mobile app for knowledge content creators that captures voice fragments, generates scripts via backend-managed pipeline workflows, and provides a teleprompter for recording.
+SparkFlow（灵感编导 AI）- A mobile-first app for knowledge content creators. Core flow: capture voice fragments → AI transcription/summarization → AI script generation → teleprompter recording.
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| **Mobile** | Expo (React Native) + TypeScript + expo-router |
-| **Backend** | FastAPI (Python) + SQLAlchemy + Alembic + APScheduler + structlog + DB-backed pipeline worker |
-| **Database** | PostgreSQL (local default) + ChromaDB (vector DB for knowledge base) |
-| **External APIs** | DashScope/Qwen (LLM / STT / Embeddings), Workflow provider (current adapter: Dify) |
+| **Mobile** | Expo 54 + React Native 0.81 + TypeScript + expo-router 6 |
+| **Mobile State** | Zustand 5; local truth via expo-sqlite + drizzle-orm |
+| **Backend** | FastAPI + SQLAlchemy 2.0 + Alembic + APScheduler + structlog |
+| **Database** | PostgreSQL (default, Docker-provided) + ChromaDB (vector DB) |
+| **External APIs** | DashScope/Qwen (LLM / STT / Embeddings), Dify (current workflow provider) |
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│              Expo (React Native)                │
-│  ┌───────────┐ ┌──────────┐ ┌───────────────┐  │
-│  │ 录音/相机  │ │ 提词器 UI │ │ AsyncStorage  │  │
-│  │ expo-av   │ │ Animated │ │ (本地缓存)     │  │
-│  │expo-camera│ │          │ │               │  │
-│  └───────────┘ └──────────┘ └───────────────┘  │
-└─────────────────────┼───────────────────────────┘
-                      │ HTTP localhost:8000
-┌─────────────────────┼───────────────────────────┐
-│           FastAPI (Python)                      │
-│  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ 业务路由  │ │ APScheduler│ │ PostgreSQL    │  │
-│  │ Pipeline │ │ Worker     │ │ pipeline_*    │  │
-│  └────┬─────┘ └──────────┘ └────────────────┘  │
-└───────┼─────────────────────────────────────────┘
-        │
-┌───────┼─────────────────────────────────────────┐
-│    外部 API                                      │
-│  ┌──────────┐ ┌──────────────────┐ ┌──────────┐  │
-│  │ LLM      │ │ Workflow Provider│ │ Vector DB│  │
-│  │          │ │ (current: Dify)  │ │          │  │
-│  └──────────┘ └──────────────────┘ └──────────┘  │
-└─────────────────────────────────────────────────┘
+Expo Mobile App (React Native)
+  ├─ expo-sqlite + drizzle-orm  ← local-first truth for fragments/folders
+  ├─ expo-file-system           ← body.html, images, audio staging
+  └─ AsyncStorage               ← token, backend URL, device_id
+        │ HTTP :8000
+FastAPI Backend (Python)
+  ├─ modules/*/presentation.py  ← HTTP routers
+  ├─ modules/*/application.py   ← orchestration / use cases
+  ├─ domains/*/repository.py    ← data access
+  ├─ services/*                 ← provider adapters (Dify, DashScope, Qwen, ChromaDB)
+  └─ pipeline_runs tables       ← async task source of truth (not Celery/Redis)
 ```
+
+**Local-first principle**: mobile SQLite/file system is the truth for fragments. The backend is an automatic backup target and explicit recovery source — not the primary store.
 
 ## Development Commands
 
-### Backend Setup & Run
+### Full Stack (recommended)
+
+```bash
+bash scripts/dev-mobile.sh           # Start PostgreSQL + FastAPI + Expo (LAN mode)
+bash scripts/dev-mobile.sh simulator # Use iOS Simulator instead of device
+bash scripts/dev-mobile.sh build     # Rebuild iOS native (after native config changes)
+```
+
+Equivalent npm aliases: `npm run dev:mobile`, `npm run dev:mobile:simulator`.
+
+### Backend Only
+
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
-.venv/bin/pip install -r requirements.txt
+pip install -r requirements.txt
 .venv/bin/alembic upgrade heads
-.venv/bin/python -m uvicorn main:app --reload   # → http://localhost:8000
+.venv/bin/uvicorn main:app --reload   # http://localhost:8000
 ```
 
-### Mobile Setup & Run
+Start PostgreSQL separately if needed:
 ```bash
-cd mobile
-npm install
-npx expo start --ios        # → Launch iOS Simulator
+bash scripts/postgres-local.sh start dev
 ```
+
+### Tests
+
+```bash
+# Full suite (backend + mobile)
+bash scripts/test-all.sh       # auto-starts Docker test DB unless TEST_DATABASE_URL is set
+npm run test:all
+
+# Backend only
+cd backend
+.venv/bin/pytest                         # all tests
+.venv/bin/pytest -m "not integration"    # smoke/contract only (no PostgreSQL needed)
+
+# Mobile state tests only (Node/TypeScript, no Expo)
+node mobile/scripts/run-state-tests.mjs
+```
+
+### Networking
+
+- Backend API: `:8000`; Metro bundler: `:8081` — do not mix these up
+- Real-device debugging: point app API base URL to `http://<your-lan-ip>:8000`
 
 ## Project Structure
 
 ```
 backend/
-├── main.py                 # FastAPI entry point
-├── modules/                # Modular feature entrypoints
-│   ├── fragments/          # Fragment APIs and orchestration
-│   │   ├── application.py  # Fragment command/query orchestration
-│   │   ├── mapper.py       # Fragment / media response mapping
-│   │   └── *_service.py    # Content / derivatives / asset binding internals
-│   ├── scripts/            # Script generation and script pipeline definitions
-│   ├── pipelines/          # Persistent pipeline APIs
-│   ├── knowledge/          # Knowledge base APIs
-│   ├── media_assets/       # Unified media asset APIs
-│   ├── exports/            # Markdown export APIs
-│   ├── transcriptions/     # Voice upload and transcription
-│   └── shared/             # Shared ports, container, storage, vector store, providers, media ingestion runtime
-├── services/
-│   ├── factory.py          # Provider factory
-│   ├── dify_workflow_provider.py # Current workflow provider adapter
-│   ├── dashscope_stt.py    # Speech-to-text adapter
-│   ├── qwen_embedding.py   # Current embedding adapter
-│   └── external_media/     # External media providers
-├── models/
-│   └── database.py         # Engine / session setup
-├── prompts/
-│   ├── mode_a_boom.txt     # "导师爆款模式" prompt
-│   └── mode_b_brain.txt    # "专属二脑模式" prompt
-├── alembic/                # Database migrations
-├── runtime_logs/           # Runtime logs
-└── uploads/                # Local uploaded media
+├── main.py                  # FastAPI entry point
+├── modules/                 # Feature modules (presentation / application layers)
+│   ├── fragments/           # Fragment APIs, orchestration, mapper, services
+│   ├── scripts/             # Script generation + pipeline definitions
+│   ├── pipelines/           # Pipeline status & retry APIs
+│   ├── transcriptions/      # Voice upload and transcription
+│   ├── backups/             # Auto-backup + explicit restore
+│   ├── external_media/      # External link imports (TikTok adapter)
+│   ├── knowledge/           # Knowledge base APIs
+│   └── shared/              # Pipeline runtime, provider factories, storage, vector store
+├── domains/                 # Domain repositories and persistence
+├── services/                # Provider adapters (Dify, DashScope, Qwen, ChromaDB, external_media)
+├── models/database.py       # Engine / session setup
+├── prompts/                 # LLM prompt templates (mode_a_boom.txt, mode_b_brain.txt)
+├── alembic/                 # Migrations
+└── dify_dsl/                # Dify workflow DSL templates
 
 mobile/
-├── app/                    # expo-router file-based routing
-├── components/             # Reusable UI components
-├── features/               # Feature APIs / state / hooks
-├── providers/              # App-level bootstrap
-└── utils/                  # Utilities
+├── app/                     # expo-router file-based pages
+├── features/                # Feature hooks, state, API logic (TypeScript source only — no compiled .js/.d.ts)
+├── components/              # Shared UI components
+├── providers/               # App-level bootstrap (AppSessionProvider, AudioCaptureProvider, etc.)
+├── tests/                   # State-only tests (*.test.ts)
+└── utils/ constants/ types/ theme/
 ```
 
-## Core Features (User Flow)
+## Core Features
 
-1. **Voice Capture** → Record voice → Receive `pipeline_run_id` → Poll task → Stored in fragment library
-   - Voice fragments keep machine transcription in `transcript`
-   - User-edited body content persists as `body_markdown`; detail view prefers local cache/draft, then silently refreshes remote data
-2. **Manual Fragment Capture** → Enter `/text-note` → Create local draft immediately → Edit locally first → Background sync creates/patches remote fragment
-   - Manual fragments no longer write `transcript`; AI actions stay disabled until the draft has a real `remote_id`
-2. **AI Script Generation** → Select multiple fragments → Receive `pipeline_run_id` → Poll task → Generate script
-   - Backend assembles structured context, then calls the workflow provider through a shared port
-   - Current provider adapter is Dify; script generation is publicly exposed through `/api/scripts/generation` + `/api/pipelines/{run_id}`
-   - Script domain no longer depends on any Dify-specific client code directly
-   - Mode A: "导师爆款模式" - Forces golden structure (hook + pain point + value + CTA)
-   - Mode B: "专属二脑模式" - Mimics user's writing style from knowledge base
-3. **Markdown Content Export** → Export fragment / script / knowledge doc as `.md` or batch zip
-4. **Daily Auto-Aggregation** → If ≥3 related fragments recorded yesterday → Create `daily_push_generation` pipeline run → Dify workflow generates script
-   - Manual triggers use `/api/scripts/daily-push/trigger` and `/api/scripts/daily-push/force-trigger`
-   - The trigger endpoints now return `pipeline_run_id`, and the client should poll `/api/pipelines/{run_id}`
-   - Fragment summary/tag enrichment still uses direct `llm_provider`; daily-push正文生成已切到 Dify
-5. **Teleprompter Recording** → One-tap to camera → Overlay teleprompter → Save video to local photos
+1. **Voice Capture** → POST `/api/transcriptions` → poll `pipeline_run_id` → fragment stored locally + synced
+2. **Manual Fragment** → local draft created immediately → background sync via `/api/backups/batch`
+3. **AI Script Generation** → select fragments → POST `/api/scripts/generation` → poll `pipeline_run_id`
+   - Mode A "导师爆款": enforced structure (hook + pain point + value + CTA)
+   - Mode B "专属二脑": mimics user's writing style from knowledge base
+4. **Daily Auto-Aggregation** → ≥3 related fragments from yesterday → `daily_push_generation` pipeline run
+5. **Teleprompter Recording** → overlay teleprompter on camera → save video to local photos
 
 ## Database Schema (Key Tables)
 
-- `users` - User accounts (with RBAC: user/creator roles)
-- `fragments` - Fragment containers (source, summary, tags, `transcript`)
-- `scripts` - Generated scripts (mode, status, linked fragment IDs, `body_markdown`)
-- `pipeline_runs` - Persistent async pipeline run records
-- `pipeline_step_runs` - Step-level execution, retries, and external refs
-- `knowledge_docs` - Knowledge base docs (`body_markdown` + vector embeddings)
-- `media_assets` / `content_media_links` - Local media file metadata and content references
-- `agents` - Creator agents (for future marketplace feature)
+- `fragments` — containers with `transcript`, `summary`, `tags`, `body_markdown`
+- `scripts` — generated scripts (mode, status, linked fragment IDs, `body_markdown`)
+- `pipeline_runs` / `pipeline_step_runs` — async task source of truth (step retries, external refs)
+- `knowledge_docs` — knowledge base docs + vector embeddings
+- `media_assets` / `content_media_links` — media file metadata and content references
+- `users` — device session auth (RBAC: user/creator roles)
 
-See `memory-bank/tech-stack.md` for full SQL schema.
+Full schema in `memory-bank/tech-stack.md`.
 
-## Key Design Principles
+## Key Conventions
 
-- **Minimal MVP**: No cloud video storage (saves to local photos only), pure native camera without filters
-- **PostgreSQL-default**: 本地开发默认使用 PostgreSQL，迁移和测试都与应用配置保持一致
-- **Task-source-of-truth**: `pipeline_runs` / `pipeline_step_runs` are the async workflow source of truth
-- **Workflow boundary**: backend keeps permissions, retrieval, context assembly, and output validation; workflow provider only handles remote execution
-- **Scheduler over Celery**: APScheduler sufficient for daily tasks; no Redis needed
-- **Vector DB per user**: Namespace isolation by `user_id` for knowledge base embeddings
-
-## Future Architecture Previews (Pre-reserved)
-
-- Creator marketplace (publish/subscribe agents)
-- Floating teleprompter overlay for third-party apps
-- Video link analyzer (extract and analyze competitor scripts)
-
-See `memory-bank/PRD.md` section 5 for full预留 requirements.
-
-
-# IMPORTANT:
-# Modularization (multi-file structure), and avoid a single huge file.
-# Always read memory-bank/architecture.md before writing any code. Include entire database schema.
-# Always read memory-bank/PRD.md before writing any code.
-# After adding a major feature or completing a milestone, update memory-bank/architecture.md.
-# Always add Chinese comments for each function.
+- **Before structural/feature changes**: read `memory-bank/architecture.md` and `memory-bank/PRD.md`
+- **After major structural changes**: update `memory-bank/architecture.md`, relevant README, and `AGENTS.md`
+- **Layering**: keep presentation / application / domain / service responsibilities separated; no bypassing for convenience
+- **Local-first naming**: use `legacy*` / `compat*` for old cloud-binding fields; never introduce new `remote*` / `server*` / `localDraft*` business names
+- **Async tasks**: `pipeline_runs` / `pipeline_step_runs` are the only task state; do not reintroduce `agent_runs` or fragment-level task fields
+- **New mobile entities** needing remote persistence: hook into `/api/backups/*` + local `entity_version / backup_status` — do not default to "create remote record first"
+- **Backend tests**: smoke/contract tests must not connect to PostgreSQL; integration tests (requiring DB) must be marked `@pytest.mark.integration`
+- **Backend storage**: PostgreSQL only; no SQLite fallback branches
+- **File storage**: use unified object storage abstraction; do not expose disk paths or `storage_path` / `audio_path` as external contracts
+- **Mobile state code**: TypeScript source is the single source of truth in `mobile/features/`; do not commit compiled `.js` / `.d.ts` artifacts
+- **Comments**: add a brief Chinese comment to every new/modified function describing its responsibility; for non-obvious constraints, also explain the reason (not line-by-line restatement)
+- **Modularization**: split expanding logic into focused files before it becomes a monolith
+- **`+` button semantics**: opens the import drawer; extend the drawer for new import sources rather than changing the button to a direct navigation
