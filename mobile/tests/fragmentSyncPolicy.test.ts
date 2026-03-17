@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  resolveLocalDraftPersistStatus,
-  shouldRestoreLocalDraftOnLaunch,
-  shouldTriggerRemoteSync,
+  resolveLegacyCloudBindingPersistStatus,
+  shouldRestoreLegacyDraftOnLaunch,
+  shouldTriggerLegacyCloudSync,
 } from '../features/fragments/bodySyncPolicy';
 
 function buildFragment(overrides = {}) {
-  /*构造最小碎片载荷，聚焦远端同步触发策略。 */
+  /*构造最小碎片载荷，聚焦兼容云端补传触发策略。 */
   return {
     id: 'fragment-001',
     server_id: 'fragment-001',
@@ -51,22 +51,22 @@ function buildDraft(overrides = {}) {
   };
 }
 
-test('shouldTriggerRemoteSync stays quiet for unchanged bound remote fragment', () => {
+test('shouldTriggerLegacyCloudSync stays quiet for unchanged bound fragment', () => {
   assert.equal(
-    shouldTriggerRemoteSync({
+    shouldTriggerLegacyCloudSync({
       fragment: buildFragment() as any,
       snapshot: buildSnapshot() as any,
       mediaAssets: [],
-      baselineRemoteHtml: '<p>服务端正文</p>',
+      baselineBodyHtml: '<p>服务端正文</p>',
       baselineMediaAssets: [],
     }),
     false
   );
 });
 
-test('shouldTriggerRemoteSync waits for non-empty local draft before first cloud create', () => {
+test('shouldTriggerLegacyCloudSync waits for non-empty local draft before first cloud create', () => {
   assert.equal(
-    shouldTriggerRemoteSync({
+    shouldTriggerLegacyCloudSync({
       fragment: buildFragment({
         id: 'fragment-001',
         server_id: null,
@@ -78,14 +78,14 @@ test('shouldTriggerRemoteSync waits for non-empty local draft before first cloud
         plain_text: '',
       }) as any,
       mediaAssets: [],
-      baselineRemoteHtml: '',
+      baselineBodyHtml: '',
       baselineMediaAssets: [],
     }),
     false
   );
 
   assert.equal(
-    shouldTriggerRemoteSync({
+    shouldTriggerLegacyCloudSync({
       fragment: buildFragment({
         id: 'fragment-001',
         server_id: null,
@@ -97,16 +97,16 @@ test('shouldTriggerRemoteSync waits for non-empty local draft before first cloud
         plain_text: '本地正文',
       }) as any,
       mediaAssets: [],
-      baselineRemoteHtml: '',
+      baselineBodyHtml: '',
       baselineMediaAssets: [],
     }),
     true
   );
 });
 
-test('resolveLocalDraftPersistStatus keeps synced draft quiet until explicit cloud trigger', () => {
+test('resolveLegacyCloudBindingPersistStatus keeps synced draft quiet until explicit cloud trigger', () => {
   assert.equal(
-    resolveLocalDraftPersistStatus({
+    resolveLegacyCloudBindingPersistStatus({
       fragment: buildFragment({
         id: 'fragment-001',
         server_id: 'fragment-001',
@@ -118,7 +118,7 @@ test('resolveLocalDraftPersistStatus keeps synced draft quiet until explicit clo
   );
 
   assert.equal(
-    resolveLocalDraftPersistStatus({
+    resolveLegacyCloudBindingPersistStatus({
       fragment: buildFragment({
         id: 'fragment-001',
         server_id: 'fragment-001',
@@ -130,10 +130,10 @@ test('resolveLocalDraftPersistStatus keeps synced draft quiet until explicit clo
   );
 });
 
-test('shouldRestoreLocalDraftOnLaunch skips drafts that never entered cloud sync phase', () => {
+test('shouldRestoreLegacyDraftOnLaunch skips drafts that never entered cloud sync phase', () => {
   // 草稿有未上传图片，应该恢复
   assert.equal(
-    shouldRestoreLocalDraftOnLaunch(
+    shouldRestoreLegacyDraftOnLaunch(
       buildDraft({
         pending_image_assets: [
           { upload_status: 'pending' }
@@ -145,7 +145,7 @@ test('shouldRestoreLocalDraftOnLaunch skips drafts that never entered cloud sync
 
   // 草稿有重试计划，应该恢复
   assert.equal(
-    shouldRestoreLocalDraftOnLaunch(
+    shouldRestoreLegacyDraftOnLaunch(
       buildDraft({
         next_retry_at: '2026-03-12T10:10:00.000Z',
       }) as any
@@ -155,7 +155,7 @@ test('shouldRestoreLocalDraftOnLaunch skips drafts that never entered cloud sync
 
   // 尝试过同步但未完成的草稿应该恢复
   assert.equal(
-    shouldRestoreLocalDraftOnLaunch(
+    shouldRestoreLegacyDraftOnLaunch(
       buildDraft({
         sync_status: 'pending',
         last_sync_attempt_at: '2026-03-12T10:10:00.000Z',
@@ -166,7 +166,7 @@ test('shouldRestoreLocalDraftOnLaunch skips drafts that never entered cloud sync
 
   // 纯空草稿（无同步尝试、无重试、无待传图片），不恢复
   assert.equal(
-    shouldRestoreLocalDraftOnLaunch(
+    shouldRestoreLegacyDraftOnLaunch(
       buildDraft({
         sync_status: 'pending',
         last_sync_attempt_at: null,

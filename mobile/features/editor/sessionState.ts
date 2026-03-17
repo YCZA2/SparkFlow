@@ -45,9 +45,9 @@ export { shouldPublishOptimisticDocument } from './sessionPersistence';
 
 interface SessionSourceState {
   document: EditorSourceDocument | null;
-  draft_html: string | null;
-  draft_loaded: boolean;
-  cached_body_html: string | null;
+  local_draft_html: string | null;
+  local_draft_loaded: boolean;
+  cached_baseline_html: string | null;
 }
 
 export interface EditorSessionState {
@@ -71,9 +71,9 @@ export interface EditorSessionState {
 
 export type EditorSessionEvent =
   | { type: 'RESET_SESSION'; documentId: string | null; persistenceMode: EditorPersistenceMode }
-  | { type: 'LOCAL_DRAFT_LOADED'; html: string | null }
-  | { type: 'CACHE_LOADED'; html: string | null }
-  | { type: 'REMOTE_LOADED'; document: EditorSourceDocument | null }
+  | { type: 'LOCAL_DRAFT_HTML_LOADED'; html: string | null }
+  | { type: 'CACHED_BASELINE_LOADED'; html: string | null }
+  | { type: 'SOURCE_DOCUMENT_LOADED'; document: EditorSourceDocument | null }
   | { type: 'EDITOR_READY' }
   | { type: 'SNAPSHOT_CHANGED'; snapshot: EditorDocumentSnapshot }
   | { type: 'SELECTION_CHANGED'; text: string }
@@ -112,9 +112,9 @@ export function createInitialEditorSessionState(
     persistenceMode,
     source: {
       document: null,
-      draft_html: null,
-      draft_loaded: false,
-      cached_body_html: null,
+      local_draft_html: null,
+      local_draft_loaded: false,
+      cached_baseline_html: null,
     },
   };
 }
@@ -132,28 +132,28 @@ export function reduceEditorSession(
     return createInitialEditorSessionState(event.documentId, event.persistenceMode);
   }
 
-  if (event.type === 'LOCAL_DRAFT_LOADED') {
+  if (event.type === 'LOCAL_DRAFT_HTML_LOADED') {
     return reconcileHydration({
       ...state,
       source: {
         ...state.source,
-        draft_loaded: true,
-        draft_html: event.html,
+        local_draft_loaded: true,
+        local_draft_html: event.html,
       },
     });
   }
 
-  if (event.type === 'CACHE_LOADED') {
+  if (event.type === 'CACHED_BASELINE_LOADED') {
     return reconcileHydration({
       ...state,
       source: {
         ...state.source,
-        cached_body_html: event.html,
+        cached_baseline_html: event.html,
       },
     });
   }
 
-  if (event.type === 'REMOTE_LOADED') {
+  if (event.type === 'SOURCE_DOCUMENT_LOADED') {
     return reconcileHydration({
       ...state,
       source: {
@@ -183,7 +183,7 @@ export function reduceEditorSession(
       snapshot: event.snapshot,
       hasConfirmedLocalEdit: hasMeaningfulChange ? true : state.hasConfirmedLocalEdit,
       syncStatus: hasMeaningfulChange
-        ? state.source.document?.is_local_draft
+        ? state.source.document?.is_legacy_local_document
           ? 'syncing'
           : state.syncStatus === 'synced'
             ? 'idle'
@@ -240,9 +240,9 @@ export function reduceEditorSession(
       ? {
           ...state.baseline,
           snapshot: nextSnapshot,
-          remote_baseline: normalizedSavedHtml,
+          baseline_body_html: normalizedSavedHtml,
           media_assets: nextDocument?.media_assets ?? state.mediaAssets,
-          sync_status: 'unsynced',
+          save_state: 'unsynced',
         }
       : null;
     return {
@@ -257,7 +257,7 @@ export function reduceEditorSession(
       errorMessage: null,
       source: {
         ...state.source,
-        draft_html: normalizedSavedHtml,
+        local_draft_html: normalizedSavedHtml,
         document: nextDocument,
       },
       phase: resolveSessionPhase({
@@ -277,9 +277,9 @@ export function reduceEditorSession(
       ? {
           ...state.baseline,
           snapshot: nextSnapshot,
-          remote_baseline: normalizedSavedHtml,
+          baseline_body_html: normalizedSavedHtml,
           media_assets: nextDocument?.media_assets ?? state.mediaAssets,
-          sync_status: 'synced',
+          save_state: 'synced',
         }
       : null;
     return {
@@ -294,7 +294,7 @@ export function reduceEditorSession(
       errorMessage: null,
       source: {
         ...state.source,
-        draft_html: null,
+        local_draft_html: null,
         document: nextDocument,
       },
       phase: resolveSessionPhase({
@@ -316,7 +316,7 @@ export function reduceEditorSession(
     baseline: state.baseline
       ? {
           ...state.baseline,
-          remote_baseline: normalizeBodyHtml(state.baseline.remote_baseline),
+          baseline_body_html: normalizeBodyHtml(state.baseline.baseline_body_html),
         }
       : null,
     snapshot: buildEditorDocumentSnapshot(event.attemptedHtml),

@@ -1,3 +1,5 @@
+import type { LegacyCloudBindingStatus } from '@/types/fragment';
+
 export type EditorPersistenceMode = 'local-first' | 'remote-only';
 
 export type EditorSaveState = 'idle' | 'syncing' | 'synced' | 'unsynced';
@@ -42,19 +44,19 @@ export interface EditorSourceDocument {
   id: string;
   body_html: string;
   media_assets?: EditorMediaAsset[];
-  is_local_draft?: boolean;
-  sync_status?: 'pending' | 'synced' | null;
+  is_legacy_local_document?: boolean;
+  legacy_cloud_binding_status?: LegacyCloudBindingStatus | null;
 }
 
 export interface EditorSessionBaseline {
   document_id: string;
   snapshot: EditorDocumentSnapshot;
-  remote_baseline: string;
-  cached_body_html: string | null;
-  draft_html: string | null;
+  baseline_body_html: string;
+  cached_baseline_html: string | null;
+  local_draft_html: string | null;
   media_assets: EditorMediaAsset[];
   persistence_mode: EditorPersistenceMode;
-  sync_status: EditorSaveState;
+  save_state: EditorSaveState;
 }
 
 export type EditorCommand =

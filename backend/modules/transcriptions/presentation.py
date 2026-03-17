@@ -31,6 +31,7 @@ def get_transcription_use_case(container: ServiceContainer = Depends(get_contain
 async def upload_audio(
     audio: UploadFile = File(..., description="音频文件"),
     folder_id: str | None = Form(None),
+    local_fragment_id: str | None = Form(None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
     use_case: TranscriptionUseCase = Depends(get_transcription_use_case),
@@ -40,6 +41,7 @@ async def upload_audio(
         user_id=current_user["user_id"],
         audio=audio,
         folder_id=folder_id,
+        local_fragment_id=local_fragment_id,
     )
     return success_response(data=payload, message="音频上传成功，已创建后台流水线")
 

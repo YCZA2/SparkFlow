@@ -1,12 +1,14 @@
-import React from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { Text } from '@/components/Themed';
 import { useAuth } from '@/features/auth/hooks';
+import { restoreFromBackup } from '@/features/backups/restore';
 import { useAppTheme } from '@/theme/useAppTheme';
+import { getErrorMessage } from '@/utils/error';
 
 function MenuItem({
   icon,
@@ -14,6 +16,7 @@ function MenuItem({
   subtitle,
   onPress,
   hideBorder = false,
+  disabled = false,
   tone,
 }: {
   icon: string;
@@ -21,15 +24,21 @@ function MenuItem({
   subtitle?: string;
   onPress: () => void;
   hideBorder?: boolean;
+  disabled?: boolean;
   tone: ReturnType<typeof useAppTheme>;
 }) {
   return (
     <TouchableOpacity
       style={[
         styles.menuItem,
-        { borderBottomColor: tone.colors.border, borderBottomWidth: hideBorder ? 0 : 1 },
+        {
+          borderBottomColor: tone.colors.border,
+          borderBottomWidth: hideBorder ? 0 : 1,
+          opacity: disabled ? 0.55 : 1,
+        },
       ]}
       onPress={onPress}
+      disabled={disabled}
     >
       <Text style={styles.menuIcon}>{icon}</Text>
       <View style={styles.menuContent}>
@@ -47,8 +56,56 @@ function MenuItem({
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, error, loginWithTestUser } = useAuth();
   const theme = useAppTheme();
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [isRelogging, setIsRelogging] = useState(false);
+
+  const handleRestore = useCallback(() => {
+    /*通过显式确认触发恢复，避免静默覆盖本地 SQLite 真值。 */
+    Alert.alert(
+      '从备份恢复',
+      '这会用远端备份覆盖当前本地 fragments / folders，未备份的本地改动不会保留。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '开始恢复',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                setIsRestoring(true);
+                const result = await restoreFromBackup('manual_profile_restore');
+                Alert.alert(
+                  '恢复完成',
+                  `已恢复 ${result.fragmentCount} 条碎片、${result.folderCount} 个文件夹。`
+                );
+              } catch (error) {
+                Alert.alert('恢复失败', getErrorMessage(error, '恢复失败，请稍后重试'));
+              } finally {
+                setIsRestoring(false);
+              }
+            })();
+          },
+        },
+      ]
+    );
+  }, []);
+
+  const handleRelogin = useCallback(() => {
+    /*显式重新登录当前设备，恢复 backup 与 AI 的远端访问能力。 */
+    void (async () => {
+      try {
+        setIsRelogging(true);
+        await loginWithTestUser();
+        Alert.alert('已重新连接', '当前设备已经重新拿到在线会话，可以继续备份和调用 AI。');
+      } catch (loginError) {
+        Alert.alert('重新连接失败', getErrorMessage(loginError, '重新登录失败，请稍后重试'));
+      } finally {
+        setIsRelogging(false);
+      }
+    })();
+  }, [loginWithTestUser]);
 
   return (
     <ScreenContainer>
@@ -77,7 +134,7 @@ export default function ProfileScreen() {
                 {isAuthenticated ? user?.nickname || '测试博主' : '未登录'}
               </Text>
               <Text style={[styles.userId, { color: theme.colors.textSubtle }]}>
-                {isAuthenticated ? `ID: ${user?.user_id}` : '点击登录'}
+                {isAuthenticated ? `ID: ${user?.user_id}` : error || '当前处于本地只读模式'}
               </Text>
             </View>
           </View>
@@ -121,10 +178,35 @@ export default function ProfileScreen() {
               tone={theme}
             />
             <MenuItem
+              icon="🔐"
+              title="重新连接当前设备"
+              subtitle={
+                isRelogging
+                  ? '正在重新申请当前 device session'
+                  : '当设备会话失效时，用它恢复备份和 AI 能力'
+              }
+              onPress={handleRelogin}
+              disabled={isRelogging || isRestoring}
+              tone={theme}
+            />
+            <MenuItem
+              icon="🛟"
+              title="从备份恢复"
+              subtitle={
+                isRestoring
+                  ? '正在拉取远端 snapshot 并重建本地数据库'
+                  : '显式用远端备份覆盖当前本地 fragments / folders'
+              }
+              onPress={handleRestore}
+              disabled={isRestoring || isRelogging}
+              tone={theme}
+            />
+            <MenuItem
               icon="🔧"
               title="API 测试"
               subtitle="测试后端连接"
               onPress={() => router.push('/test-api')}
+              disabled={isRestoring || isRelogging}
               tone={theme}
             />
             <MenuItem
@@ -133,6 +215,7 @@ export default function ProfileScreen() {
               subtitle="查看前端运行时错误和接口异常"
               onPress={() => router.push('/debug-logs')}
               hideBorder
+              disabled={isRestoring || isRelogging}
               tone={theme}
             />
           </View>

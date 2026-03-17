@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react';
 
 import * as folderApi from '@/features/folders/api';
-import { fetchFragments } from '@/features/fragments/api';
+import { getOrCreateDeviceId } from '@/features/auth/device';
+import { createLocalFolder, listLocalFolders } from '@/features/folders/localStore';
+import { listLocalFragmentEntities } from '@/features/fragments/store/localEntityStore';
 import type { FragmentFolder } from '@/types/folder';
 import { getErrorMessage } from '@/utils/error';
 
@@ -45,14 +47,13 @@ export function useFolders(): UseFoldersReturn {
     setIsLoading(true);
     setError(null);
     try {
-      // 同时获取文件夹列表和全部碎片数量
-      const [foldersResponse, fragmentsResponse] = await Promise.all([
-        folderApi.fetchFolders(),
-        fetchFragments(), // 不传 folderId 获取全部碎片
+      const [localFolders, localFragments] = await Promise.all([
+        listLocalFolders(),
+        listLocalFragmentEntities(),
       ]);
-      setFolders(foldersResponse.items);
-      setTotal(foldersResponse.total);
-      setAllFragmentsCount(fragmentsResponse.total);
+      setFolders(localFolders);
+      setTotal(localFolders.length);
+      setAllFragmentsCount(localFragments.length);
     } catch (err) {
       setError(getErrorMessage(err, '获取文件夹列表失败'));
     } finally {
@@ -63,13 +64,13 @@ export function useFolders(): UseFoldersReturn {
   const refreshFolders = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [foldersResponse, fragmentsResponse] = await Promise.all([
-        folderApi.fetchFolders(),
-        fetchFragments(),
+      const [localFolders, localFragments] = await Promise.all([
+        listLocalFolders(),
+        listLocalFragmentEntities(),
       ]);
-      setFolders(foldersResponse.items);
-      setTotal(foldersResponse.total);
-      setAllFragmentsCount(fragmentsResponse.total);
+      setFolders(localFolders);
+      setTotal(localFolders.length);
+      setAllFragmentsCount(localFragments.length);
     } catch (err) {
       setError(getErrorMessage(err, '刷新文件夹列表失败'));
     } finally {
@@ -85,7 +86,8 @@ export function useFolders(): UseFoldersReturn {
     setIsCreating(true);
     setError(null);
     try {
-      const newFolder = await folderApi.createFolder({ name });
+      const deviceId = await getOrCreateDeviceId();
+      const newFolder = await createLocalFolder(name, deviceId);
       setFolders((prev) => [newFolder, ...prev]);
       setTotal((prev) => prev + 1);
     } catch (err) {

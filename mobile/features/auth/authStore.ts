@@ -12,6 +12,7 @@ import {
   parseUserFromToken,
   type UserInfo,
 } from '@/features/auth/api';
+import { getDeviceSessionInvalidReason } from '@/features/auth/deviceSession';
 import { getToken } from '@/features/core/api/client';
 import { getErrorMessage } from '@/utils/error';
 
@@ -97,6 +98,12 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
           set({ user, isAuthenticated: true, isReady: true });
         }
       } else {
+        const invalidReason = await getDeviceSessionInvalidReason();
+        if (invalidReason) {
+          /*设备会话失效后保持本地只读，不自动抢回远端在线资格。 */
+          set({ user: null, isAuthenticated: false, error: invalidReason, isReady: true });
+          return;
+        }
         /*无 token，自动使用测试用户登录*/
         const user = await get().loginWithTestUser();
         set({ user, isAuthenticated: true, isReady: true });

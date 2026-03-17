@@ -108,7 +108,7 @@ class MediaIngestionStepExecutor:
         mime_type = mimetypes.guess_type(filename)[0] or "audio/m4a"
         object_key = build_imported_audio_object_key(
             user_id=context.run.user_id,
-            fragment_id=payload["fragment_id"],
+            fragment_id=payload.get("fragment_id") or payload.get("local_fragment_id") or "local-fragment",
             platform=resolved["platform"],
             filename=filename,
         )
@@ -193,10 +193,16 @@ class MediaIngestionStepExecutor:
         """将碎片文本写入向量库。"""
         transcript_payload = context.get_step_output("transcribe_audio")
         enrichment_payload = context.get_step_output("enrich_fragment")
+        target_fragment_id = (
+            context.input_payload.get("fragment_id")
+            or context.input_payload.get("local_fragment_id")
+        )
+        if not target_fragment_id:
+            raise PipelineExecutionError("缺少可向量化的 fragment 标识", retryable=False)
         try:
             await self._runtime_vector_store(context).upsert_fragment(
                 user_id=context.run.user_id,
-                fragment_id=context.input_payload["fragment_id"],
+                fragment_id=target_fragment_id,
                 text=transcript_payload.get("transcript") or "",
                 source="voice",
                 summary=enrichment_payload.get("summary"),

@@ -180,7 +180,7 @@ export function useEditorSession<TDocument>(
   // 加载本地草稿
   useEffect(() => {
     if (!documentId || !loadLocalDraft) {
-      dispatch({ type: 'LOCAL_DRAFT_LOADED', html: null });
+      dispatch({ type: 'LOCAL_DRAFT_HTML_LOADED', html: null });
       return;
     }
 
@@ -188,7 +188,7 @@ export function useEditorSession<TDocument>(
     void (async () => {
       const draftHtml = await loadLocalDraft(documentId);
       if (cancelled) return;
-      dispatch({ type: 'LOCAL_DRAFT_LOADED', html: draftHtml });
+      dispatch({ type: 'LOCAL_DRAFT_HTML_LOADED', html: draftHtml });
     })();
 
     return () => {
@@ -199,7 +199,7 @@ export function useEditorSession<TDocument>(
   // 加载缓存
   useEffect(() => {
     if (!documentId || !loadCache) {
-      dispatch({ type: 'CACHE_LOADED', html: null });
+      dispatch({ type: 'CACHED_BASELINE_LOADED', html: null });
       return;
     }
 
@@ -207,7 +207,7 @@ export function useEditorSession<TDocument>(
     void (async () => {
       const cachedHtml = await loadCache(documentId);
       if (cancelled) return;
-      dispatch({ type: 'CACHE_LOADED', html: cachedHtml });
+      dispatch({ type: 'CACHED_BASELINE_LOADED', html: cachedHtml });
     })();
 
     return () => {
@@ -215,10 +215,10 @@ export function useEditorSession<TDocument>(
     };
   }, [documentId, loadCache]);
 
-  // 加载远端文档
+  // 加载来源文档
   useEffect(() => {
     dispatch({
-      type: 'REMOTE_LOADED',
+      type: 'SOURCE_DOCUMENT_LOADED',
       document: document ? buildSourceDocument(document) : null,
     });
   }, [buildSourceDocument, document]);
@@ -247,11 +247,11 @@ export function useEditorSession<TDocument>(
       if (!currentDocument || !currentDocumentId) return;
 
       const latestSnapshot = getLiveSnapshot();
-      const remoteBaseline = normalizeBodyHtml(
-        stateRef.current.baseline?.remote_baseline ?? buildSourceDocument(currentDocument).body_html
+      const baselineBodyHtml = normalizeBodyHtml(
+        stateRef.current.baseline?.baseline_body_html ?? buildSourceDocument(currentDocument).body_html
       );
 
-      if (!options?.force && normalizeBodyHtml(latestSnapshot.body_html) === remoteBaseline) {
+      if (!options?.force && normalizeBodyHtml(latestSnapshot.body_html) === baselineBodyHtml) {
         return;
       }
 
@@ -321,7 +321,7 @@ export function useEditorSession<TDocument>(
           uploadStatus: pendingAsset.upload_status,
         });
       }
-      // 远端路径
+      // 在线上传路径
       else if (uploadImageAsset) {
         mediaAsset = await uploadImageAsset(
           asset.uri,

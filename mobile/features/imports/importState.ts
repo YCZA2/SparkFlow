@@ -12,11 +12,13 @@ interface ExternalAudioImportPayload {
   share_url: string;
   platform: 'auto';
   folder_id?: string;
+  local_fragment_id?: string;
 }
 
 export function buildExternalAudioImportPayload(
   shareUrl: string,
-  folderId?: string
+  folderId?: string,
+  localFragmentId?: string
 ): ExternalAudioImportPayload {
   /*统一整理外链导入载荷，避免页面层重复处理空白链接和 folderId。 */
   const trimmedShareUrl = typeof shareUrl === 'string' ? shareUrl.trim() : '';
@@ -27,6 +29,9 @@ export function buildExternalAudioImportPayload(
 
   if (folderId) {
     payload.folder_id = folderId;
+  }
+  if (localFragmentId) {
+    payload.local_fragment_id = localFragmentId;
   }
 
   return payload;
@@ -43,7 +48,8 @@ export function resolveImportedFragmentId(taskFragmentId: string | null, pipelin
     pipeline &&
     pipeline.status === 'succeeded' &&
     pipeline.resource &&
-    pipeline.resource.resource_type === 'fragment' &&
+    (pipeline.resource.resource_type === 'fragment' ||
+      pipeline.resource.resource_type === 'local_fragment') &&
     pipeline.resource.resource_id
   ) {
     return pipeline.resource.resource_id;

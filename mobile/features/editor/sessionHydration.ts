@@ -16,7 +16,7 @@ import {
   areAssetIdsEqual,
   collectMediaAssetIds,
   hasMeaningfulBody,
-  resolveLocalDraftSyncStatus,
+  resolveLegacyCloudBindingSaveState,
 } from './sessionUtils';
 import type {
   EditorDocumentSnapshot,
@@ -39,7 +39,7 @@ export function buildEditorDocumentSnapshot(html: string): EditorDocumentSnapsho
   };
 }
 
-/*统一计算编辑器的初始正文、远端基线和同步态。 */
+/*统一计算编辑器的初始正文、基线正文和保存态。 */
 export function resolveHydratedEditorDocument({
   document,
   draftHtml,
@@ -50,40 +50,40 @@ export function resolveHydratedEditorDocument({
   cachedBodyHtml: string | null;
 }): {
   snapshot: EditorDocumentSnapshot;
-  remoteBaseline: string;
+  baselineBodyHtml: string;
   syncStatus: EditorSaveState;
 } {
   const nextHtml = normalizeBodyHtml(draftHtml ?? document.body_html);
   const snapshot = buildEditorDocumentSnapshot(nextHtml);
-  const remoteBaseline =
+  const baselineBodyHtml =
     normalizeBodyHtml(cachedBodyHtml) ||
     (draftHtml == null ? normalizeBodyHtml(document.body_html) : '');
   return {
     snapshot,
-    remoteBaseline,
-    syncStatus: snapshot.body_html === remoteBaseline ? 'synced' : 'idle',
+    baselineBodyHtml,
+    syncStatus: snapshot.body_html === baselineBodyHtml ? 'synced' : 'idle',
   };
 }
 
-/*仅在没有本地编辑负担时，才允许远端详情重建当前编辑会话。 */
+/*仅在没有本地编辑负担时，才允许来源文档重建当前编辑会话。 */
 export function shouldRehydrateEditorSession({
   document,
   draftHtml,
   currentSnapshot,
-  remoteBaseline,
+  baselineBodyHtml,
   visibleMediaAssets,
   hasConfirmedLocalEdit,
 }: {
   document: EditorSourceDocument;
   draftHtml: string | null;
   currentSnapshot: EditorDocumentSnapshot;
-  remoteBaseline: string;
+  baselineBodyHtml: string;
   visibleMediaAssets: EditorMediaAsset[];
   hasConfirmedLocalEdit: boolean;
 }): boolean {
   if (draftHtml !== null) return false;
   if (hasConfirmedLocalEdit) return false;
-  if (normalizeBodyHtml(currentSnapshot.body_html) !== normalizeBodyHtml(remoteBaseline)) {
+  if (normalizeBodyHtml(currentSnapshot.body_html) !== normalizeBodyHtml(baselineBodyHtml)) {
     return false;
   }
 
@@ -123,21 +123,21 @@ export function shouldCommitOptimisticDocument(
   return currentHtml !== snapshot.body_html || !areAssetIdsEqual(currentAssetIds, nextAssetIds);
 }
 
-/*若空正文仅像初始化异常而非用户操作，则阻止其污染本地和远端状态。 */
+/*若空正文仅像初始化异常而非用户操作，则阻止其污染本地与来源文档状态。 */
 export function shouldProtectSuspiciousEmptySnapshot({
   snapshot,
-  remoteBaseline,
+  baselineBodyHtml,
   hasLocalDraft,
   hasConfirmedLocalEdit,
 }: {
   snapshot: EditorDocumentSnapshot;
-  remoteBaseline: string;
+  baselineBodyHtml: string;
   hasLocalDraft: boolean;
   hasConfirmedLocalEdit: boolean;
 }): boolean {
   if (hasLocalDraft) return false;
   if (hasConfirmedLocalEdit) return false;
-  return !hasMeaningfulBody(snapshot.body_html) && hasMeaningfulBody(remoteBaseline);
+  return !hasMeaningfulBody(snapshot.body_html) && hasMeaningfulBody(baselineBodyHtml);
 }
 
 /*新增素材只保留一份，并维持用户插图顺序。 */
@@ -170,7 +170,7 @@ export function appendImageToSnapshot(
   return buildEditorDocumentSnapshot(nextHtml);
 }
 
-/*把草稿、缓存和远端详情解析为唯一初始化基线。 */
+/*把草稿、缓存和来源文档解析为唯一初始化基线。 */
 export function resolveEditorSessionBaseline(options: {
   document: EditorSourceDocument;
   draftHtml: string | null;
@@ -185,13 +185,13 @@ export function resolveEditorSessionBaseline(options: {
   return {
     document_id: options.document.id,
     snapshot: hydrated.snapshot,
-    remote_baseline: hydrated.remoteBaseline,
-    cached_body_html: options.cachedBodyHtml,
-    draft_html: options.draftHtml,
+    baseline_body_html: hydrated.baselineBodyHtml,
+    cached_baseline_html: options.cachedBodyHtml,
+    local_draft_html: options.draftHtml,
     media_assets: options.document.media_assets ?? [],
     persistence_mode: options.persistenceMode,
-    sync_status: options.document.is_local_draft
-      ? resolveLocalDraftSyncStatus(options.document)
+    save_state: options.document.is_legacy_local_document
+      ? resolveLegacyCloudBindingSaveState(options.document)
       : hydrated.syncStatus,
   };
 }
@@ -213,7 +213,7 @@ export function reconcileHydration(state: EditorSessionState): EditorSessionStat
       phase: resolveSessionPhase(state),
     };
   }
-  if (!document || !state.source.draft_loaded) {
+  if (!document || !state.source.local_draft_loaded) {
     return {
       ...state,
       phase: state.isEditorReady ? 'hydrating' : 'booting',
@@ -222,8 +222,8 @@ export function reconcileHydration(state: EditorSessionState): EditorSessionStat
 
   const baseline = resolveEditorSessionBaseline({
     document,
-    draftHtml: state.source.draft_html,
-    cachedBodyHtml: state.source.cached_body_html,
+    draftHtml: state.source.local_draft_html,
+    cachedBodyHtml: state.source.cached_baseline_html,
     persistenceMode: state.persistenceMode,
   });
   const currentBaseline = state.baseline;
@@ -231,9 +231,9 @@ export function reconcileHydration(state: EditorSessionState): EditorSessionStat
   const shouldRefresh = !shouldInitialize && currentBaseline
     ? shouldRehydrateEditorSession({
         document,
-        draftHtml: state.source.draft_html,
+        draftHtml: state.source.local_draft_html,
         currentSnapshot: state.snapshot,
-        remoteBaseline: currentBaseline.remote_baseline,
+        baselineBodyHtml: currentBaseline.baseline_body_html,
         visibleMediaAssets: state.mediaAssets,
         hasConfirmedLocalEdit: state.hasConfirmedLocalEdit,
       })
@@ -246,17 +246,17 @@ export function reconcileHydration(state: EditorSessionState): EditorSessionStat
       baseline,
       snapshot: baseline.snapshot,
       mediaAssets: mergeVisibleMediaAssets(document.media_assets, []),
-      syncStatus: baseline.sync_status,
+      syncStatus: baseline.save_state,
       isDraftHydrated: true,
-      hasConfirmedLocalEdit: Boolean(baseline.draft_html),
+      hasConfirmedLocalEdit: Boolean(baseline.local_draft_html),
       errorMessage: null,
       phase: state.isEditorReady ? 'ready' : 'hydrating',
     };
   }
 
-  const nextSyncStatus = document.is_local_draft
-    ? resolveLocalDraftSyncStatus(document)
-    : state.source.draft_html === null &&
+  const nextSyncStatus = document.is_legacy_local_document
+    ? resolveLegacyCloudBindingSaveState(document)
+    : state.source.local_draft_html === null &&
         normalizeBodyHtml(document.body_html) === normalizeBodyHtml(state.snapshot.body_html)
       ? 'synced'
       : state.syncStatus;
@@ -265,9 +265,9 @@ export function reconcileHydration(state: EditorSessionState): EditorSessionStat
     ...state,
     baseline: {
       ...currentBaseline!,
-      cached_body_html: baseline.cached_body_html,
+      cached_baseline_html: baseline.cached_baseline_html,
       media_assets: document.media_assets ?? [],
-      sync_status: nextSyncStatus,
+      save_state: nextSyncStatus,
     },
     mediaAssets: mergedMediaAssets,
     syncStatus: nextSyncStatus,

@@ -3,8 +3,9 @@ import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 import { type Href, Stack, useLocalSearchParams } from 'expo-router';
 
 import { ScreenState } from '@/components/ScreenState';
+import { getOrCreateDeviceId } from '@/features/auth/device';
 import { FragmentDetailScreen } from '@/features/fragments/detail/FragmentDetailScreen';
-import { createLocalFragmentDraft } from '@/features/fragments/store';
+import { createLocalFragmentEntity } from '@/features/fragments/store';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { getErrorMessage } from '@/utils/error';
 
@@ -16,15 +17,21 @@ export default function TextNoteScreen() {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    /*进入写下灵感时只创建本地草稿，远端建单延后到离页或后台同步。 */
+    /*进入写下灵感时直接创建本地真值 fragment，不再先走远端建单。 */
     let cancelled = false;
 
     const bootstrap = async () => {
       try {
         setError(null);
-        const draft = await createLocalFragmentDraft(params.folderId);
+        const deviceId = await getOrCreateDeviceId();
+        const fragment = await createLocalFragmentEntity({
+          folderId: params.folderId,
+          source: 'manual',
+          contentState: 'empty',
+          deviceId,
+        });
         if (cancelled) return;
-        setFragmentId(draft.id);
+        setFragmentId(fragment.id);
       } catch (err) {
         if (cancelled) return;
         const message = getErrorMessage(err, '创建失败，请重试');

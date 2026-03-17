@@ -49,7 +49,7 @@ export function useGenerateScreen(): GenerateScreenState {
     }
 
     try {
-      const scriptId = await generator.run(ids, mode);
+      const scriptId = await generator.run(ids, mode, fragments);
       router.replace(`/script/${scriptId}`);
     } catch (err) {
       const message = getErrorMessage(err, '生成失败');

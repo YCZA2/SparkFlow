@@ -4,13 +4,13 @@ import { getLocalDatabase } from '@/features/core/db/database';
 import { fragmentsTable, mediaAssetsTable } from '@/features/core/db/schema';
 import { getFragmentBodyFile, writeFragmentBodyFile } from '@/features/core/files/runtime';
 import { extractPlainTextFromHtml } from '@/features/editor/html';
-import type { Fragment, LocalFragmentDraft } from '@/types/fragment';
+import type { Fragment, LegacyLocalFragmentDraft } from '@/types/fragment';
 
-import { saveRemoteBodyDraft } from './remoteBodyDrafts';
+import { saveLegacyRemoteBodyDraft } from './legacyRemoteBodyDraftStore';
 import {
-  upsertRemoteFragmentSnapshot,
-  upsertRemoteFragmentSnapshots,
-} from './remoteFragments';
+  upsertLegacyRemoteFragmentSnapshot,
+  upsertLegacyRemoteFragmentSnapshots,
+} from './legacyRemoteSnapshotStore';
 import {
   LEGACY_FRAGMENT_BODY_DRAFT_PREFIX,
   LEGACY_FRAGMENT_DETAIL_PREFIX,
@@ -38,7 +38,7 @@ export async function migrateLegacyAsyncStorageIfNeeded(): Promise<void> {
     try {
       const parsed = JSON.parse(raw) as { fragment?: Fragment; cachedAt?: string };
       if (parsed.fragment) {
-        await upsertRemoteFragmentSnapshot(parsed.fragment, parsed.cachedAt);
+        await upsertLegacyRemoteFragmentSnapshot(parsed.fragment, parsed.cachedAt);
         removableKeys.push(key);
       }
     } catch {
@@ -54,7 +54,7 @@ export async function migrateLegacyAsyncStorageIfNeeded(): Promise<void> {
     try {
       const parsed = JSON.parse(raw) as { items?: Fragment[] };
       if (Array.isArray(parsed.items)) {
-        await upsertRemoteFragmentSnapshots(parsed.items);
+        await upsertLegacyRemoteFragmentSnapshots(parsed.items);
         removableKeys.push(key);
       }
     } catch {
@@ -72,7 +72,7 @@ export async function migrateLegacyAsyncStorageIfNeeded(): Promise<void> {
       const parsed = JSON.parse(raw) as { html?: string; markdown?: string };
       const html = resolveLegacyDraftHtml(parsed);
       if (fragmentId && html) {
-        await saveRemoteBodyDraft(fragmentId, html);
+        await saveLegacyRemoteBodyDraft(fragmentId, html);
         removableKeys.push(key);
       }
     } catch {
@@ -83,12 +83,13 @@ export async function migrateLegacyAsyncStorageIfNeeded(): Promise<void> {
   const legacyDraftsRaw = await AsyncStorage.getItem(LEGACY_LOCAL_DRAFTS_STORAGE_KEY);
   if (legacyDraftsRaw) {
     try {
-      const parsed = JSON.parse(legacyDraftsRaw) as LocalFragmentDraft[];
+      const parsed = JSON.parse(legacyDraftsRaw) as LegacyLocalFragmentDraft[];
       if (Array.isArray(parsed)) {
         for (const legacyDraft of parsed) {
           // 兼容旧格式：local_id -> id, remote_id -> server_id
           const draftId = (legacyDraft as unknown as { local_id?: string }).local_id ?? legacyDraft.id;
-          const serverId = (legacyDraft as unknown as { remote_id?: string | null }).remote_id ?? null;
+          const legacyServerBindingId =
+            (legacyDraft as unknown as { remote_id?: string | null }).remote_id ?? null;
           const normalizedHtml = resolveLegacyDraftHtml({ html: legacyDraft.body_html });
           await writeFragmentBodyFile(draftId, normalizedHtml);
           const database = await getLocalDatabase();
@@ -96,7 +97,7 @@ export async function migrateLegacyAsyncStorageIfNeeded(): Promise<void> {
             .insert(fragmentsTable)
             .values({
               id: draftId,
-              serverId: serverId,
+              legacyServerBindingId,
               folderId: legacyDraft.folder_id ?? null,
               source: 'manual',
               audioSource: null,
@@ -112,7 +113,7 @@ export async function migrateLegacyAsyncStorageIfNeeded(): Promise<void> {
               audioFileUri: null,
               audioFileUrl: null,
               audioFileExpiresAt: null,
-              syncStatus: serverId ? 'synced' : 'pending',
+              legacyCloudBindingStatus: legacyServerBindingId ? 'synced' : 'pending',
               lastSyncedAt: null,
               lastSyncAttemptAt: legacyDraft.last_sync_attempt_at ?? null,
               nextRetryAt: legacyDraft.next_retry_at ?? null,

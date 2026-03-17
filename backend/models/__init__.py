@@ -6,7 +6,10 @@
 
 from models.database import Base, engine, SessionLocal, get_db, init_db
 from models.db_models import (
+    BackupRecord,
+    BackupRestoreSession,
     ContentMediaLink,
+    DeviceSession,
     PipelineRun,
     PipelineStepRun,
     Fragment,
@@ -29,6 +32,9 @@ __all__ = [
     "init_db",
     # 数据模型
     "User",
+    "DeviceSession",
+    "BackupRecord",
+    "BackupRestoreSession",
     "Fragment",
     "FragmentBlock",
     "FragmentFolder",

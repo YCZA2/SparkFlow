@@ -1,8 +1,16 @@
 # SparkFlow Architecture
 
-> 最后更新：2026-03-11
+> 最后更新：2026-03-17
 
 本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为 Docker 管理的 PostgreSQL。
+
+## 0. 今日进展（2026-03-17）
+
+- `fragments / folders` 的 phase 1 local-first 主链路已经落地：移动端本地 SQLite + `body.html` 为真值，远端只承担自动备份与显式恢复。
+- 后端已经补齐 `backups` 模块、`device session` 单设备在线约束，以及面向本地快照的转写 / 外链导入 / 脚本生成请求入口。
+- 移动端已经补齐 backup queue、显式恢复、本地媒体缓存重建、音频 `object_key` 持久化与恢复链路。
+- 仓库本轮也完成了一次大规模命名清理：旧的 remote-first / local-draft 兼容层统一下沉为 `legacy*` 语义；凡仍映射旧库或旧协议的字段，都明确标记为 legacy cloud-binding / legacy snapshot，而不再伪装成当前领域真值。
+- 这意味着后续新增实现默认应直接接入 local-first 实体、`backup_status / entity_version` 与 `/api/backups/*`；只有升级迁移或历史兼容路径，才允许继续使用 `legacy*` 模块和字段。
 
 ## 1. Overall
 
@@ -59,7 +67,7 @@ flowchart LR
 
 - `index.tsx`: 当前实际首页，展示文件夹列表与“全部”系统视图入口；碎片列表主视图下沉到 `folder/[id].tsx`。
 - `record-audio.tsx`: 录音与上传页。
-- `text-note.tsx`: 手动文本碎片创建入口页；进入后会先创建本地 draft 并立即挂载碎片详情编辑器，再后台静默建单与收敛远端。
+- `text-note.tsx`: 手动文本碎片创建入口页；进入后会直接创建本地 fragment 实体并立即挂载碎片详情编辑器，不再先走远端建单。
 - `fragment/[id].tsx`: 单条碎片详情。
 - `fragment-cloud.tsx`: 灵感云图。
 - `generate.tsx`: AI 编导生成确认页。
@@ -109,8 +117,9 @@ flowchart TD
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
 - `features/editor/*` 提供共享正文编辑底座：HTML helper、session reducer、富文本桥接、toolbar 和页面 scaffold；fragment 与 script 详情统一复用这套协议。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
-- `features/fragments/store/*` 是 fragment 本地数据的唯一入口：`remoteFragments` 负责远端镜像缓存，`localDraftStore` 负责本地草稿 CRUD 和同步状态管理，`remoteBodyDrafts` 负责远端碎片的本地编辑草稿，`legacyMigration` / `runtime` 负责旧缓存迁移与启动准备。
-- `features/fragments/detail/*` 把碎片详情拆成 `resource / 缓存优先编辑会话 / sheet / screen actions` 四层：资源层负责首次远端基线加载与缓存叠加，编辑会话层只保留本地草稿、图片插入和后台同步策略，抽屉层只消费 `content + tools + actions` 展示更多内容，screen 层统一向页面暴露 `resource / editor / sheet / actions` 四组 view-model。
+- `features/fragments/store/*` 现在承接 fragment 的 **local-first 真值**：列表、详情、编辑和删除统一读写本地 SQLite / 文件系统；主链路集中在 `localEntityStore` 与 `runtime`，`legacyMigration*` 相关文件只在升级时负责接住旧缓存与旧正文草稿。
+- `features/core/db/schema.ts` 仍映射旧 SQLite 物理列名，但 Drizzle 属性名已经显式标成 `legacy*` 语义，避免在实现层误把云端绑定字段当成本地真值。
+- `features/fragments/detail/*` 保留 `resource / 编辑会话 / sheet / screen actions` 四层，但资源层已经改成优先读取本地实体，不再把远端详情当作首屏真值。
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
 - `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用；其中 `features/scripts/detail/*` 通过共享 editor 底座实现 `remote-only` 正文编辑与拍摄跳转。
 
@@ -118,17 +127,20 @@ flowchart TD
 
 当前移动端真正参与主流程的数据持久化是：
 
-- `AsyncStorage`: token、用户信息、后端 base URL、少量调试/配置键值
-- `expo-sqlite + drizzle-orm`: fragments 本地镜像索引、媒体资源索引、pending ops、同步状态
-- `expo-file-system`: fragment `body.html`、远端正文草稿、图片/音频 staging 文件
+- `AsyncStorage`: token、用户信息、后端 base URL、`device_id` 与少量调试配置
+- `expo-sqlite + drizzle-orm`: fragments / folders / media_assets 的本地真值、备份状态和实体版本
+- `expo-file-system`: fragment `body.html`、图片/音频 staging 文件
 
-当前移动端主流程采用**缓存优先架构（Cache-First）**：
-- **后端 PostgreSQL 是数据真值来源（Source of Truth）**
-- SQLite 作为远端数据的**镜像缓存**，加速列表和详情读取，减少网络请求
-- 编辑时采用**乐观更新策略**：先写本地草稿和缓存，立即响应用户；后台异步上传到远端
-- 远端刷新结果回写到本地缓存，保证最终一致性
-- 网络失败时保留未同步状态，用户可继续编辑，体验接近离线可用
-- `AsyncStorage` 不再承载 fragments 主流程缓存与草稿真值
+当前移动端 fragments / folders 主流程采用**local-first 架构**：
+- **设备本地 SQLite + 文件系统是当前阶段的真值来源**
+- 远端只负责自动备份与显式恢复，不再承担 fragments / folders 的主读取路径
+- 编辑与删除先更新本地实体，再由 backup queue 批量推送快照和 tombstone
+- AI 生成、转写、外链导入继续走后端，但输入来自客户端上传的本地快照或媒体文件
+- 单设备在线由 `device session` 约束；旧设备失效后仍可离线读写本地，但不能继续备份或调用远端 AI
+- 显式恢复入口当前挂在 `profile.tsx`，执行时会拉取 `/api/backups/snapshot` 并重建本地 SQLite 与 fragment `body.html`，同时最佳努力回填音频/图片本地缓存
+- 对于带 `backup_object_key` 的媒体资源，恢复前会额外调用 `/api/backups/assets/access` 刷新最新访问地址，再尝试下载到本地缓存
+- fragment 自身音频也会把 `audio_object_key` 存进本地 SQLite 与备份快照，恢复时走同一条地址刷新与本地缓存重建链路
+- 移动端在收到“设备会话已失效”后会停止自动补 token，转入本地只读态，并要求用户在 `profile.tsx` 显式重新连接当前设备
 
 ## 4. Backend Architecture
 
@@ -229,10 +241,11 @@ flowchart TD
 
 - `auth`: 测试 token 签发、当前用户信息、refresh。
 - 本地联调会确保默认测试用户 `test-user-001` 在数据库中存在，避免恢复旧 token 时触发用户外键错误。
+- `backups`: 远端备份批量写入、快照拉取、restore session 审计与备份素材上传；不承担 fragments / folders 的主读取职责。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
-- `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_html`，`plain_text_snapshot` 负责检索、摘要和生成输入。
-- `transcriptions`: 音频上传、后台转写、状态查询，上传入口会创建 `source=voice`、`audio_source=upload` 的碎片。
-- `external_media`: 外部媒体音频导入，当前支持抖音分享链接；请求只创建 `source=voice`、`audio_source=external_link` 的碎片和 `media_ingestion` 任务，解析链接、下载转 m4a、转写与增强都在同一条后台管线里执行。
+- `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；移动端 phase 1 已不再依赖其作为 fragments / folders 首屏真值读取来源，`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_html`，`plain_text_snapshot` 负责检索、摘要和生成输入。
+- `transcriptions`: 音频上传、后台转写、状态查询；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录。
+- `external_media`: 外部媒体音频导入，当前支持抖音分享链接；local-first 请求会直接绑定客户端 placeholder fragment，解析链接、下载转 m4a、转写与增强都在同一条后台管线里执行。
 - `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷。
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
@@ -274,8 +287,8 @@ flowchart TD
 - `fragments.audio_source` 用于区分音频来源；当前取值为 `upload` / `external_link` / `null`
 - `fragments.transcript` 保存机器转写原文，`fragments.body_html` 保存唯一正式正文的 HTML，`fragments.plain_text_snapshot` 保存派生纯文本快照
 - 非语音碎片必须直接写入 `body_html`，不再把 `transcript` 当作正式正文来源
-- 移动端碎片详情正文改为 `react-native-enriched` 原生富文本输入；前端运行时、本地草稿和同步队列统一消费 HTML 快照，AI patch 本期停用
-- 移动端碎片详情采用**分层缓存策略**：`features/fragments/store/*` 统一管理远端镜像缓存、本地草稿和同步队列；detail resource 负责组合这些本地数据为当前展示态，后台异步收敛到后端真值
+- 移动端碎片详情正文改为 `react-native-enriched` 原生富文本输入；前端运行时与本地草稿统一消费 HTML 快照，AI patch 本期停用
+- 移动端碎片详情采用**local-first 分层缓存策略**：`features/fragments/store/*` 统一管理本地实体与少量 legacy 兼容缓存；detail resource 负责组合这些本地数据为当前展示态，远端仅承担备份与恢复
 - 详情编辑会话的纯逻辑已下沉到 `editorSessionState.ts`、`bodySessionState.ts` 和 `fragmentSaveController.ts`：`editorSessionState.ts` 负责 session reducer、基线解析、自动保存触发条件与图片 fallback 规则，`bodySessionState.ts` 继续承载 Markdown 快照构建、远端刷新判定、AI fallback patch 和乐观展示态合成，`fragmentSaveController.ts` 保证自动保存只串行提交最后一版快照
 - `scripts.body_html` / `knowledge_docs.body_markdown` 分别保存脚本 HTML 正文与知识库 Markdown 正文
 - 媒体资源表：`media_assets` / `content_media_links`，对象元数据保存 `storage_provider` / `bucket` / `object_key`

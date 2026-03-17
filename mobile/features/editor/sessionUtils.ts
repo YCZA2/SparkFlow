@@ -27,10 +27,12 @@ export function hasMeaningfulBody(html: string | null | undefined): boolean {
   return resolveMeaningfulTextLength(html) > 0;
 }
 
-/*把本地草稿同步态映射为统一的编辑器保存状态。 */
-export function resolveLocalDraftSyncStatus(document: EditorSourceDocument | null): EditorSaveState {
-  if (!document?.is_local_draft) return 'idle';
-  if (document.sync_status === 'synced') return 'synced';
-  if (document.sync_status === 'pending') return 'syncing';
+/*把兼容云端绑定状态映射为统一的编辑器保存状态。 */
+export function resolveLegacyCloudBindingSaveState(
+  document: EditorSourceDocument | null
+): EditorSaveState {
+  if (!document?.is_legacy_local_document) return 'idle';
+  if (document.legacy_cloud_binding_status === 'synced') return 'synced';
+  if (document.legacy_cloud_binding_status === 'pending') return 'syncing';
   return 'idle';
 }

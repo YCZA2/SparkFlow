@@ -11,7 +11,12 @@ import {
 import { CameraType, CameraView } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 
+import { getOrCreateDeviceId } from '@/features/auth/device';
 import { ApiError } from '@/features/core/api/client';
+import { createLocalFragmentEntity, updateLocalFragmentEntity } from '@/features/fragments/store';
+import { markFragmentsStale } from '@/features/fragments/refreshSignal';
+import { waitForPipelineTerminal } from '@/features/pipelines/api';
+import { applyMediaIngestionPipelineResult } from '@/features/pipelines/mediaIngestion';
 import { uploadAudio } from '@/features/recording/api';
 import { updateScriptStatus } from '@/features/scripts/api';
 
@@ -200,6 +205,14 @@ export function useAudioUpload() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    /*避免异步转写回调在组件卸载后继续写入本地状态。 */
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const upload = async (uri: string, folderId?: string) => {
     if (!uri) return null;
@@ -208,18 +221,48 @@ export function useAudioUpload() {
       setStatus('loading');
       setError(null);
       setResult(null);
-      const response = await uploadAudio(uri, folderId);
-      if (!response.fragment_id) {
-        throw new Error('上传成功，但未返回 fragment_id');
-      }
+      const deviceId = await getOrCreateDeviceId();
+      const localFragment = await createLocalFragmentEntity({
+        folderId,
+        source: 'voice',
+        audioSource: 'upload',
+        contentState: 'empty',
+        deviceId,
+      });
+      const response = await uploadAudio(uri, folderId, localFragment.id);
+      await updateLocalFragmentEntity(localFragment.id, {
+        audio_object_key: response.audio_object_key ?? undefined,
+        audio_file_url: response.audio_file_url,
+        audio_file_expires_at: response.audio_file_expires_at,
+      });
       const nextResult = {
         pipeline_run_id: response.pipeline_run_id,
-        fragment_id: response.fragment_id,
+        fragment_id: response.local_fragment_id ?? localFragment.id,
         audio_file_url: response.audio_file_url,
         message: '已创建后台转写任务，可在任务状态中继续观察进度。',
       };
+      markFragmentsStale();
       setResult(nextResult);
       setStatus('success');
+      void waitForPipelineTerminal(response.pipeline_run_id, { timeoutMs: 180_000 })
+        .then(async (pipeline) => {
+          const restoredFragment = await applyMediaIngestionPipelineResult(localFragment.id, pipeline);
+          if (!restoredFragment || !isMountedRef.current) {
+            return;
+          }
+          setResult((current) =>
+            current
+              ? {
+                  ...current,
+                  fragment_id: restoredFragment.id,
+                  message: '转写和摘要已回写到本地碎片，可以继续编辑。',
+                }
+              : current
+          );
+        })
+        .catch((pipelineError) => {
+          console.warn('录音转写后台回写失败:', pipelineError);
+        });
       return nextResult;
     } catch (err) {
       const message =

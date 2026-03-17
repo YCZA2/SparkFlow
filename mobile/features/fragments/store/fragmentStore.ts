@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import type { Fragment, LocalFragmentDraft } from '@/types/fragment';
+import type { Fragment } from '@/types/fragment';
 
 /*列表缓存键，支持按文件夹分组*/
 const ALL_FOLDERS_KEY = '__all__' as const;
@@ -21,9 +21,6 @@ export interface FragmentState {
 
   /*列表缓存：按文件夹 ID 缓存列表*/
   listCache: Map<ListCacheKey, Fragment[]>;
-
-  /*本地草稿列表：按文件夹分组*/
-  localDraftsCache: Map<ListCacheKey, LocalFragmentDraft[]>;
 }
 
 export interface FragmentActions {
@@ -36,10 +33,6 @@ export interface FragmentActions {
   setList: (folderId: string | null, fragments: Fragment[]) => void;
   getList: (folderId: string | null) => Fragment[] | undefined;
   deleteList: (folderId: string | null) => void;
-
-  /*本地草稿操作*/
-  setLocalDrafts: (folderId: string | null, drafts: LocalFragmentDraft[]) => void;
-  getLocalDrafts: (folderId: string | null) => LocalFragmentDraft[] | undefined;
 
   /*批量更新（从 SQLite 同步后调用）*/
   batchUpdateDetails: (fragments: Fragment[]) => void;
@@ -104,7 +97,6 @@ export const useFragmentStore = create<FragmentStore>()(
       /*初始状态*/
       detailCache: new Map(),
       listCache: new Map(),
-      localDraftsCache: new Map(),
 
       /*详情操作*/
       setDetail: (id, fragment) => {
@@ -170,30 +162,6 @@ export const useFragmentStore = create<FragmentStore>()(
         );
       },
 
-      /*本地草稿操作*/
-      setLocalDrafts: (folderId, drafts) => {
-        const key = getListCacheKey(folderId);
-        set(
-          (state) => {
-            const next = updateMapState(
-              state.localDraftsCache,
-              key,
-              drafts,
-              /*草稿列表相等性检查*/
-              (a, b) => a.length === b.length && a.every((d, i) => d.id === b[i].id)
-            );
-            return next ? { localDraftsCache: next } : state;
-          },
-          false,
-          'setLocalDrafts'
-        );
-      },
-
-      getLocalDrafts: (folderId) => {
-        const key = getListCacheKey(folderId);
-        return get().localDraftsCache.get(key);
-      },
-
       /*批量更新*/
       batchUpdateDetails: (fragments) => {
         set(
@@ -224,7 +192,6 @@ export const useFragmentStore = create<FragmentStore>()(
           {
             detailCache: new Map(),
             listCache: new Map(),
-            localDraftsCache: new Map(),
           },
           false,
           'clearCache'
@@ -242,6 +209,3 @@ export const useFragmentDetail = (id: string) =>
 
 export const useFragmentList = (folderId: string | null) =>
   useFragmentStore((state) => state.listCache.get(folderId ?? '__all__'));
-
-export const useLocalDrafts = (folderId: string | null) =>
-  useFragmentStore((state) => state.localDraftsCache.get(folderId ?? '__all__'));

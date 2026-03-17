@@ -1,9 +1,9 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
-/*定义本地镜像里的 fragments 主表，承接列表索引与同步状态。 */
+/*定义本地镜像里的 fragments 主表，承接列表索引与 legacy 云端绑定元数据。 */
 export const fragmentsTable = sqliteTable('fragments', {
   id: text('id').primaryKey(),
-  serverId: text('server_id'), // 服务端ID，null 表示未同步
+  legacyServerBindingId: text('server_id'),
   folderId: text('folder_id'),
   source: text('source').notNull(),
   audioSource: text('audio_source'),
@@ -15,16 +15,20 @@ export const fragmentsTable = sqliteTable('fragments', {
   bodyFileUri: text('body_file_uri'),
   transcript: text('transcript'),
   speakerSegmentsJson: text('speaker_segments_json'),
+  audioObjectKey: text('audio_object_key'),
   audioFileUri: text('audio_file_uri'),
   audioFileUrl: text('audio_file_url'),
   audioFileExpiresAt: text('audio_file_expires_at'),
-  // 简化同步状态: 'pending' | 'synced'
-  syncStatus: text('sync_status').notNull().default('synced'),
+  legacyCloudBindingStatus: text('sync_status').notNull().default('synced'),
   lastSyncedAt: text('last_synced_at'),
   lastSyncAttemptAt: text('last_sync_attempt_at'),
   nextRetryAt: text('next_retry_at'),
   retryCount: integer('retry_count').notNull().default(0),
   deletedAt: text('deleted_at'),
+  backupStatus: text('backup_status').notNull().default('pending'),
+  lastBackupAt: text('last_backup_at'),
+  entityVersion: integer('entity_version').notNull().default(1),
+  lastModifiedDeviceId: text('last_modified_device_id'),
   contentState: text('content_state'),
   cachedAt: text('cached_at').notNull(),
 });
@@ -32,10 +36,16 @@ export const fragmentsTable = sqliteTable('fragments', {
 /*定义文件夹索引表，为后续本地镜像筛选与目录展示预留结构。 */
 export const fragmentFoldersTable = sqliteTable('fragment_folders', {
   id: text('id').primaryKey(),
-  remoteId: text('remote_id'),
+  legacyRemoteId: text('remote_id'),
   name: text('name').notNull(),
+  createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
-  syncStatus: text('sync_status').notNull().default('synced'),
+  legacyCloudBindingStatus: text('sync_status').notNull().default('synced'),
+  deletedAt: text('deleted_at'),
+  backupStatus: text('backup_status').notNull().default('pending'),
+  lastBackupAt: text('last_backup_at'),
+  entityVersion: integer('entity_version').notNull().default(1),
+  lastModifiedDeviceId: text('last_modified_device_id'),
 });
 
 /*定义媒体资源表，统一承接远端素材与本地待上传文件。 */
@@ -57,6 +67,11 @@ export const mediaAssetsTable = sqliteTable('media_assets', {
   durationMs: integer('duration_ms'),
   status: text('status').notNull().default('uploaded'),
   createdAt: text('created_at').notNull(),
+  deletedAt: text('deleted_at'),
+  backupStatus: text('backup_status').notNull().default('pending'),
+  lastBackupAt: text('last_backup_at'),
+  entityVersion: integer('entity_version').notNull().default(1),
+  lastModifiedDeviceId: text('last_modified_device_id'),
 });
 
 export const localSchema = {

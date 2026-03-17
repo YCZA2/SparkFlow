@@ -1,0 +1,209 @@
+import { and, eq, isNull, or } from 'drizzle-orm';
+
+import { getOrCreateDeviceId } from '@/features/auth/device';
+import { getLocalDatabase } from '@/features/core/db/database';
+import { fragmentFoldersTable, fragmentsTable, mediaAssetsTable } from '@/features/core/db/schema';
+import { readFragmentBodyFile } from '@/features/core/files/runtime';
+import { deserializeSpeakerSegments, deserializeTags } from '@/features/fragments/store/shared';
+
+import {
+  pushBackupBatch,
+  uploadBackupAsset,
+  type BackupFragmentContractPayload,
+  type BackupFolderContractPayload,
+  type BackupMediaAssetContractPayload,
+  type BackupMutationItem,
+} from './api';
+
+let flushPromise: Promise<void> | null = null;
+
+async function buildFragmentItems(deviceId: string): Promise<BackupMutationItem[]> {
+  const database = await getLocalDatabase();
+  const rows = await database
+    .select()
+    .from(fragmentsTable)
+    .where(or(eq(fragmentsTable.backupStatus, 'pending'), eq(fragmentsTable.backupStatus, 'failed')));
+  return await Promise.all(
+    rows.map(async (row) => {
+      const payload: BackupFragmentContractPayload | null = row.deletedAt
+        ? null
+        : {
+            id: row.id,
+            server_id: row.legacyServerBindingId,
+            folder_id: row.folderId,
+            source: row.source,
+            audio_source: row.audioSource,
+            created_at: row.createdAt,
+            updated_at: row.updatedAt,
+            summary: row.summary,
+            tags: deserializeTags(row.tagsJson),
+            transcript: row.transcript,
+            speaker_segments: deserializeSpeakerSegments(row.speakerSegmentsJson),
+            audio_object_key: row.audioObjectKey,
+            audio_file_url: row.audioFileUrl,
+            audio_file_expires_at: row.audioFileExpiresAt,
+            body_html: (await readFragmentBodyFile(row.id)) ?? '',
+            plain_text_snapshot: row.plainTextSnapshot,
+            content_state: row.contentState,
+            deleted_at: row.deletedAt,
+          };
+      return {
+      entity_type: 'fragment' as const,
+      entity_id: row.id,
+      entity_version: row.entityVersion,
+      operation: row.deletedAt ? 'delete' : 'upsert',
+      payload,
+      modified_at: row.updatedAt,
+      last_modified_device_id: row.lastModifiedDeviceId ?? deviceId,
+    };
+    })
+  );
+}
+
+async function buildFolderItems(deviceId: string): Promise<BackupMutationItem[]> {
+  const database = await getLocalDatabase();
+  const rows = await database
+    .select()
+    .from(fragmentFoldersTable)
+    .where(or(eq(fragmentFoldersTable.backupStatus, 'pending'), eq(fragmentFoldersTable.backupStatus, 'failed')));
+  return rows.map((row) => {
+    const payload: BackupFolderContractPayload | null = row.deletedAt
+      ? null
+      : {
+          id: row.id,
+          remote_id: row.legacyRemoteId,
+          name: row.name,
+          created_at: row.createdAt,
+          updated_at: row.updatedAt,
+          deleted_at: row.deletedAt,
+        };
+    return {
+    entity_type: 'folder' as const,
+    entity_id: row.id,
+    entity_version: row.entityVersion,
+    operation: row.deletedAt ? 'delete' : 'upsert',
+    payload,
+    modified_at: row.updatedAt,
+    last_modified_device_id: row.lastModifiedDeviceId ?? deviceId,
+  };
+  });
+}
+
+async function buildMediaAssetItems(deviceId: string): Promise<BackupMutationItem[]> {
+  const database = await getLocalDatabase();
+  const rows = await database
+    .select()
+    .from(mediaAssetsTable)
+    .where(or(eq(mediaAssetsTable.backupStatus, 'pending'), eq(mediaAssetsTable.backupStatus, 'failed')));
+  const nextItems: BackupMutationItem[] = [];
+  for (const row of rows) {
+    let backupFileUrl = row.remoteFileUrl;
+    let backupObjectKey = row.remoteAssetId;
+    if (!row.deletedAt && row.localFileUri) {
+      const uploaded = await uploadBackupAsset({
+        uri: row.localFileUri,
+        fileName: row.fileName,
+        mimeType: row.mimeType,
+        entityType: 'media_asset',
+        entityId: row.id,
+      });
+      backupFileUrl = uploaded.file_url;
+      backupObjectKey = uploaded.object_key;
+      await database
+        .update(mediaAssetsTable)
+        .set({
+          remoteFileUrl: uploaded.file_url,
+          remoteAssetId: uploaded.object_key,
+        })
+        .where(eq(mediaAssetsTable.id, row.id));
+    }
+    const payload: BackupMediaAssetContractPayload | null = row.deletedAt
+      ? null
+      : {
+          id: row.id,
+          fragment_id: row.fragmentId,
+          media_kind: row.mediaKind as BackupMediaAssetContractPayload['media_kind'],
+          mime_type: row.mimeType,
+          file_name: row.fileName,
+          backup_object_key: backupObjectKey,
+          backup_file_url: backupFileUrl,
+          remote_expires_at: row.remoteExpiresAt,
+          upload_status: row.uploadStatus,
+          file_size: row.fileSize,
+          checksum: row.checksum,
+          width: row.width,
+          height: row.height,
+          duration_ms: row.durationMs,
+          created_at: row.createdAt,
+          deleted_at: row.deletedAt,
+        };
+    nextItems.push({
+      entity_type: 'media_asset',
+      entity_id: row.id,
+      entity_version: row.entityVersion,
+      operation: row.deletedAt ? 'delete' : 'upsert',
+      payload,
+      modified_at: row.createdAt,
+      last_modified_device_id: row.lastModifiedDeviceId ?? deviceId,
+    });
+  }
+  return nextItems;
+}
+
+async function markBackupsSynced(serverGeneratedAt: string): Promise<void> {
+  const database = await getLocalDatabase();
+  await database
+    .update(fragmentsTable)
+    .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
+    .where(or(eq(fragmentsTable.backupStatus, 'pending'), eq(fragmentsTable.backupStatus, 'failed')));
+  await database
+    .update(fragmentFoldersTable)
+    .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
+    .where(or(eq(fragmentFoldersTable.backupStatus, 'pending'), eq(fragmentFoldersTable.backupStatus, 'failed')));
+  await database
+    .update(mediaAssetsTable)
+    .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
+    .where(or(eq(mediaAssetsTable.backupStatus, 'pending'), eq(mediaAssetsTable.backupStatus, 'failed')));
+}
+
+async function markBackupsFailed(): Promise<void> {
+  const database = await getLocalDatabase();
+  await database
+    .update(fragmentsTable)
+    .set({ backupStatus: 'failed' })
+    .where(eq(fragmentsTable.backupStatus, 'pending'));
+  await database
+    .update(fragmentFoldersTable)
+    .set({ backupStatus: 'failed' })
+    .where(eq(fragmentFoldersTable.backupStatus, 'pending'));
+  await database
+    .update(mediaAssetsTable)
+    .set({ backupStatus: 'failed' })
+    .where(eq(mediaAssetsTable.backupStatus, 'pending'));
+}
+
+export async function flushBackupQueue(): Promise<void> {
+  if (!flushPromise) {
+    flushPromise = (async () => {
+      const deviceId = await getOrCreateDeviceId();
+      const items = [
+        ...(await buildFolderItems(deviceId)),
+        ...(await buildMediaAssetItems(deviceId)),
+        ...(await buildFragmentItems(deviceId)),
+      ];
+      if (items.length === 0) {
+        return;
+      }
+      try {
+        const response = await pushBackupBatch(items);
+        await markBackupsSynced(response.server_generated_at);
+      } catch (error) {
+        await markBackupsFailed();
+        throw error;
+      }
+    })().finally(() => {
+      flushPromise = null;
+    });
+  }
+  await flushPromise;
+}

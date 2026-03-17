@@ -46,6 +46,7 @@ async def generate_script(
         db=db,
         user_id=current_user["user_id"],
         fragment_ids=data.fragment_ids,
+        fragment_snapshots=[item.model_dump() for item in data.fragment_snapshots],
         mode=data.mode,
         query_hint=data.query_hint,
         include_web_search=data.include_web_search,

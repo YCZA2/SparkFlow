@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const LATEST_SCHEMA_VERSION = 2;
+const LATEST_SCHEMA_VERSION = 4;
 
 /*创建本地镜像所需的 SQLite 表与索引。 */
 export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Promise<void> {
@@ -83,10 +83,10 @@ export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Prom
     `);
   }
 
-  // Version 2: 简化同步状态，统一 ID 模型
+  // Version 2: 保留物理列兼容的同时，收敛为统一的 legacy 云端绑定字段
   if (currentVersion < 2) {
     await database.execAsync(`
-      -- 重命名 remote_id 为 server_id
+      -- 物理列沿用 server_id，作为 legacy 云端绑定字段继续保留
       ALTER TABLE fragments RENAME COLUMN remote_id TO server_id;
 
       -- 移除废弃的列（SQLite 不支持 DROP COLUMN，我们创建新表）
@@ -135,6 +135,36 @@ export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Prom
       CREATE INDEX IF NOT EXISTS fragments_server_id_idx ON fragments(server_id);
       CREATE INDEX IF NOT EXISTS fragments_folder_id_idx ON fragments(folder_id);
       CREATE INDEX IF NOT EXISTS fragments_updated_at_idx ON fragments(updated_at DESC);
+    `);
+  }
+
+  // Version 3: 为 local-first 真值补充备份元数据
+  if (currentVersion < 3) {
+    await database.execAsync(`
+      ALTER TABLE fragments ADD COLUMN backup_status TEXT NOT NULL DEFAULT 'pending';
+      ALTER TABLE fragments ADD COLUMN last_backup_at TEXT;
+      ALTER TABLE fragments ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE fragments ADD COLUMN last_modified_device_id TEXT;
+
+      ALTER TABLE fragment_folders ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE fragment_folders ADD COLUMN deleted_at TEXT;
+      ALTER TABLE fragment_folders ADD COLUMN backup_status TEXT NOT NULL DEFAULT 'pending';
+      ALTER TABLE fragment_folders ADD COLUMN last_backup_at TEXT;
+      ALTER TABLE fragment_folders ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE fragment_folders ADD COLUMN last_modified_device_id TEXT;
+
+      ALTER TABLE media_assets ADD COLUMN deleted_at TEXT;
+      ALTER TABLE media_assets ADD COLUMN backup_status TEXT NOT NULL DEFAULT 'pending';
+      ALTER TABLE media_assets ADD COLUMN last_backup_at TEXT;
+      ALTER TABLE media_assets ADD COLUMN entity_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE media_assets ADD COLUMN last_modified_device_id TEXT;
+    `);
+  }
+
+  // Version 4: 为 fragment 音频补充稳定对象键，供恢复时刷新访问地址
+  if (currentVersion < 4) {
+    await database.execAsync(`
+      ALTER TABLE fragments ADD COLUMN audio_object_key TEXT;
     `);
   }
 

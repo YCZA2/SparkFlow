@@ -71,7 +71,11 @@ class ScriptGenerationPersistenceService:
             user_id=run.user_id,
             body_html=draft_html,
             mode=input_payload["mode"],
-            source_fragment_ids=json.dumps(input_payload["fragment_ids"], ensure_ascii=False),
+            source_fragment_ids=json.dumps(
+                input_payload.get("fragment_ids")
+                or [item.get("id") for item in input_payload.get("fragment_snapshots") or []],
+                ensure_ascii=False,
+            ),
             title=parsed_result.get("title"),
         )
         run_output = self.build_run_output(

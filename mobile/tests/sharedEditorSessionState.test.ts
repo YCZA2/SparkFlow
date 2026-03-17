@@ -28,28 +28,28 @@ test('resolveEditorSessionBaseline prefers local draft over cache and remote', (
   });
 
   assert.equal(baseline.snapshot.body_html, '<p>本地草稿</p>');
-  assert.equal(baseline.remote_baseline, '<p>缓存正文</p>');
-  assert.equal(baseline.sync_status, 'idle');
+  assert.equal(baseline.baseline_body_html, '<p>缓存正文</p>');
+  assert.equal(baseline.save_state, 'idle');
 });
 
 test('shared session keeps local draft snapshot stable across remote refresh', () => {
   let state = createInitialEditorSessionState('document-1', 'local-first');
   state = reduceEditorSession(state, {
-    type: 'REMOTE_LOADED',
+    type: 'SOURCE_DOCUMENT_LOADED',
     document: buildDocument({ body_html: '远端正文' }),
   });
   state = reduceEditorSession(state, {
-    type: 'CACHE_LOADED',
+    type: 'CACHED_BASELINE_LOADED',
     html: '<p>缓存正文</p>',
   });
   state = reduceEditorSession(state, {
-    type: 'LOCAL_DRAFT_LOADED',
+    type: 'LOCAL_DRAFT_HTML_LOADED',
     html: '<p>本地草稿</p>',
   });
 
   const initialEditorKey = state.editorKey;
   state = reduceEditorSession(state, {
-    type: 'REMOTE_LOADED',
+    type: 'SOURCE_DOCUMENT_LOADED',
     document: buildDocument({ body_html: '新的远端正文' }),
   });
 
@@ -60,18 +60,18 @@ test('shared session keeps local draft snapshot stable across remote refresh', (
 test('local-first save success keeps session in unsynced state until remote reconciliation', () => {
   let state = createInitialEditorSessionState('local-doc-1', 'local-first');
   state = reduceEditorSession(state, {
-    type: 'REMOTE_LOADED',
+    type: 'SOURCE_DOCUMENT_LOADED',
     document: buildDocument({
       id: 'local-doc-1',
       body_html: '<p>已同步正文</p>',
     }),
   });
   state = reduceEditorSession(state, {
-    type: 'CACHE_LOADED',
+    type: 'CACHED_BASELINE_LOADED',
     html: '<p>已同步正文</p>',
   });
   state = reduceEditorSession(state, {
-    type: 'LOCAL_DRAFT_LOADED',
+    type: 'LOCAL_DRAFT_HTML_LOADED',
     html: '<p>已同步正文</p>',
   });
   state = reduceEditorSession(state, {
@@ -92,21 +92,21 @@ test('local-first save success keeps session in unsynced state until remote reco
   });
 
   assert.equal(state.syncStatus, 'unsynced');
-  assert.equal(state.baseline?.remote_baseline, '<p>更新后的正文</p>');
+  assert.equal(state.baseline?.baseline_body_html, '<p>更新后的正文</p>');
 });
 
 test('remote-only save success clears local error and marks session synced', () => {
   let state = createInitialEditorSessionState('script-1', 'remote-only');
   state = reduceEditorSession(state, {
-    type: 'REMOTE_LOADED',
+    type: 'SOURCE_DOCUMENT_LOADED',
     document: buildDocument({ id: 'script-1', body_html: '<p>远端正文</p>' }),
   });
   state = reduceEditorSession(state, {
-    type: 'LOCAL_DRAFT_LOADED',
+    type: 'LOCAL_DRAFT_HTML_LOADED',
     html: null,
   });
   state = reduceEditorSession(state, {
-    type: 'CACHE_LOADED',
+    type: 'CACHED_BASELINE_LOADED',
     html: null,
   });
   state = reduceEditorSession(state, {
@@ -125,7 +125,7 @@ test('remote-only save success clears local error and marks session synced', () 
 
   assert.equal(state.syncStatus, 'synced');
   assert.equal(state.errorMessage, null);
-  assert.equal(state.source.draft_html, null);
+  assert.equal(state.source.local_draft_html, null);
 });
 
 test('save failure keeps attempted snapshot and exposes unsynced state', () => {

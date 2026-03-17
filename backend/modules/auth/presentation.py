@@ -20,10 +20,14 @@ use_case = AuthUseCase()
     description="为本地开发和联调场景签发测试用户令牌。",
 )
 async def create_token(
-    _: TokenRequest | None = None,
+    payload: TokenRequest | None = None,
     db: Session = Depends(get_db_session),
 ):
-    return success_response(data=use_case.issue_test_token(db=db), message="测试用户令牌创建成功")
+    request_payload = payload or TokenRequest()
+    return success_response(
+        data=use_case.issue_test_token(db=db, device_id=request_payload.device_id),
+        message="测试用户令牌创建成功",
+    )
 
 
 @router.get(
@@ -34,7 +38,12 @@ async def create_token(
 )
 async def get_me(current_user: dict = Depends(get_current_user)):
     return success_response(
-        data=CurrentUserResponse(user_id=current_user["user_id"], role=current_user["role"]),
+        data=CurrentUserResponse(
+            user_id=current_user["user_id"],
+            role=current_user["role"],
+            device_id=current_user.get("device_id"),
+            session_version=current_user.get("session_version"),
+        ),
         message="用户信息获取成功",
     )
 
@@ -47,6 +56,11 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 )
 async def refresh_token(current_user: dict = Depends(get_current_user)):
     return success_response(
-        data=use_case.refresh_token(user_id=current_user["user_id"], role=current_user["role"]),
+        data=use_case.refresh_token(
+            user_id=current_user["user_id"],
+            role=current_user["role"],
+            device_id=current_user.get("device_id"),
+            session_version=current_user.get("session_version"),
+        ),
         message="令牌刷新成功",
     )

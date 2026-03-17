@@ -5,8 +5,6 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { buildFragmentSections, type FragmentSection } from '@/features/fragments/fragmentListState';
 import { useFragmentSelection } from '@/features/fragments/hooks';
 import { useFragments } from '@/features/fragments/hooks/useFragments';
-import { prewarmRemoteFragmentSnapshot } from '@/features/fragments/store';
-import { syncFragmentAndWait } from '@/features/fragments/localFragmentSyncQueue';
 import type { Fragment } from '@/types/fragment';
 
 interface UseFragmentListScreenStateOptions {
@@ -63,11 +61,7 @@ export function useFragmentListScreenState({
         return;
       }
 
-      // 预加热远程碎片快照
-      if (fragment.server_id) {
-        void prewarmRemoteFragmentSnapshot(fragment);
-      }
-      // 跳转到详情页时，传递来源文件夹ID和名称（如果有）
+      // 跳转到详情页时，传递来源文件夹 ID 和名称（如果有）。
       router.push({
         pathname: '/fragment/[id]' as const,
         params: { id: fragment.id, ...(folderId ? { folderId, folderName: folderName || '' } : {}) },
@@ -86,38 +80,16 @@ export function useFragmentListScreenState({
     const selectedIdSet = new Set(selection.selectedIds);
     const selectedFragments = fragments.filter((item) => selectedIdSet.has(item.id));
 
-    // 检查是否有未同步的碎片
-    const unsyncedFragments = selectedFragments.filter(
-      (item) => item.sync_status !== 'synced'
-    );
+    const fragmentIds = selectedFragments.map((item) => item.id).filter(Boolean);
 
-    // 强制同步未同步的碎片
-    if (unsyncedFragments.length > 0) {
-      Alert.alert('正在准备...', '正在同步选中的碎片，请稍候');
-      try {
-        await Promise.all(
-          unsyncedFragments.map((f) => syncFragmentAndWait(f.id))
-        );
-      } catch (error) {
-        Alert.alert('同步失败', '部分碎片同步失败，请检查网络后重试');
-        return;
-      }
-    }
-
-    // 使用 server_id（已同步）或 id（本地草稿已同步后会获得 server_id）
-    // 注意：同步完成后，本地草稿应该已经有 server_id 了
-    const serverIds = selectedFragments
-      .map((item) => item.server_id)
-      .filter((id): id is string => Boolean(id));
-
-    if (serverIds.length === 0) {
-      Alert.alert('同步失败', '无法获取碎片 ID，请重试');
+    if (fragmentIds.length === 0) {
+      Alert.alert('准备失败', '无法获取碎片 ID，请重试');
       return;
     }
 
     router.push({
       pathname: '/generate',
-      params: { fragmentIds: serverIds.join(',') },
+      params: { fragmentIds: fragmentIds.join(',') },
     });
   }, [fragments, router, selection.selectedCount, selection.selectedIds]);
 

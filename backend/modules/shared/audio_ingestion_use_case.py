@@ -19,6 +19,7 @@ class AudioIngestionRequest:
     audio_file: Any
     audio_source: str
     fragment_id: str | None = None
+    local_fragment_id: str | None = None
     folder_id: str | None = None
     source_context: dict[str, Any] = field(default_factory=dict)
 
@@ -69,7 +70,7 @@ class AudioIngestionUseCase:
         self.step_executor.validate_audio_source(request.audio_source)
         self.step_executor.validate_folder_exists(db=db, user_id=request.user_id, folder_id=request.folder_id)
         fragment_id = request.fragment_id
-        if fragment_id is None:
+        if fragment_id is None and request.local_fragment_id is None:
             fragment = fragment_repository.create(
                 db=db,
                 user_id=request.user_id,
@@ -89,6 +90,8 @@ class AudioIngestionUseCase:
                 folder_id=request.folder_id,
             )
             fragment_id = fragment.id
+        resource_id = request.local_fragment_id or fragment_id
+        resource_type = "local_fragment" if request.local_fragment_id else "fragment"
         run = await self.pipeline_runner.create_run(
             run_id=None,
             user_id=request.user_id,
@@ -98,10 +101,11 @@ class AudioIngestionUseCase:
                 "audio_file": stored_file_to_payload(request.audio_file),
                 "folder_id": request.folder_id,
                 "fragment_id": fragment_id,
+                "local_fragment_id": request.local_fragment_id,
                 "source_context": request.source_context,
             },
-            resource_type="fragment",
-            resource_id=fragment_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
         )
         return AudioIngestionResult(
             pipeline_run_id=run.id,
@@ -119,44 +123,49 @@ class AudioIngestionUseCase:
         share_url: str,
         platform: str,
         folder_id: str | None = None,
+        local_fragment_id: str | None = None,
     ) -> AudioIngestionResult:
         """创建外链导入流水线并返回异步任务句柄。"""
         self.step_executor.validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
-        fragment = fragment_repository.create(
-            db=db,
-            user_id=user_id,
-            transcript=None,
-            source="voice",
-            audio_source="external_link",
-            audio_storage_provider=None,
-            audio_bucket=None,
-            audio_object_key=None,
-            audio_access_level=None,
-            audio_original_filename=None,
-            audio_mime_type=None,
-            audio_file_size=None,
-            audio_checksum=None,
-            body_html="",
-            plain_text_snapshot="",
-            folder_id=folder_id,
-        )
+        fragment = None
+        if local_fragment_id is None:
+            fragment = fragment_repository.create(
+                db=db,
+                user_id=user_id,
+                transcript=None,
+                source="voice",
+                audio_source="external_link",
+                audio_storage_provider=None,
+                audio_bucket=None,
+                audio_object_key=None,
+                audio_access_level=None,
+                audio_original_filename=None,
+                audio_mime_type=None,
+                audio_file_size=None,
+                audio_checksum=None,
+                body_html="",
+                plain_text_snapshot="",
+                folder_id=folder_id,
+            )
+        fragment_id = fragment.id if fragment else None
         run = await self.pipeline_runner.create_run(
             run_id=None,
             user_id=user_id,
             pipeline_type=PIPELINE_TYPE_MEDIA_INGESTION,
             input_payload={
                 "source_kind": "external_link",
-                "fragment_id": fragment.id,
+                "fragment_id": fragment_id,
+                "local_fragment_id": local_fragment_id,
                 "folder_id": folder_id,
                 "share_url": share_url,
                 "platform": platform,
             },
-            resource_type="fragment",
-            resource_id=fragment.id,
+            resource_type="local_fragment" if local_fragment_id else "fragment",
+            resource_id=local_fragment_id or fragment_id,
         )
         return AudioIngestionResult(
             pipeline_run_id=run.id,
-            fragment_id=fragment.id,
+            fragment_id=fragment_id,
             audio_file=None,
             source="voice",
             audio_source="external_link",

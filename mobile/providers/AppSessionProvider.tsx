@@ -2,11 +2,9 @@ import React, { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import { initApiBaseUrl } from '@/constants/config';
+import { getOrCreateDeviceId } from '@/features/auth/device';
 import { useAuthStore } from '@/features/auth/authStore';
-import {
-  restoreFragmentSyncQueue,
-  wakeFragmentSyncQueue,
-} from '@/features/fragments/localFragmentSyncQueue';
+import { flushBackupQueue } from '@/features/backups/queue';
 import { ensureFragmentStoreReady } from '@/features/fragments/store';
 
 /**
@@ -27,11 +25,10 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
     /*启动时初始化本地镜像、API URL、认证态，并恢复同步队列。*/
     const init = async () => {
       await ensureFragmentStoreReady();
+      await getOrCreateDeviceId();
       await initApiBaseUrl();
       await bootstrap();
-
-      /*恢复碎片同步队列，保证离线编辑可在后续静默收敛。*/
-      await restoreFragmentSyncQueue();
+      await flushBackupQueue().catch(() => undefined);
     };
 
     void init();
@@ -42,7 +39,7 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
     const subscription = AppState.addEventListener('change', (nextState) => {
       /*仅在 background 和 active 状态时唤醒，减少冗余调用*/
       if (nextState === 'background' || nextState === 'active') {
-        void wakeFragmentSyncQueue().catch(() => undefined);
+        void flushBackupQueue().catch(() => undefined);
       }
     });
     return () => {

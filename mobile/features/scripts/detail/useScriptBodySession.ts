@@ -32,8 +32,8 @@ function buildEditorDocumentFromScript(script: Script): EditorSourceDocument {
     id: script.id,
     body_html: script.body_html ?? '',
     media_assets: [],
-    is_local_draft: false,
-    sync_status: 'synced',
+    is_legacy_local_document: false,
+    legacy_cloud_binding_status: 'synced',
   };
 }
 

@@ -19,6 +19,9 @@ class SchedulerService:
 
     def start(self) -> None:
         """启动调度器并注册每日推盘任务。"""
+        if not settings.ENABLE_DAILY_PUSH_SCHEDULER:
+            logger.info("scheduler_skipped", reason="daily_push_disabled_for_local_first")
+            return
         if self.scheduler.get_job("daily-fragment-aggregate") is None:
             self.scheduler.add_job(
                 self.run_job,

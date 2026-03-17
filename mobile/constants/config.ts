@@ -21,6 +21,8 @@ export const STORAGE_KEYS = {
   REFRESH_TOKEN: 'refresh_token',
   BACKEND_URL: '@backend_url',
   DEBUG_LOGS: '@debug_logs',
+  DEVICE_ID: '@device_id',
+  DEVICE_SESSION_INVALID: '@device_session_invalid',
 } as const;
 
 // API 端点
@@ -31,6 +33,13 @@ export const API_ENDPOINTS = {
     TOKEN: '/api/auth/token',
     ME: '/api/auth/me',
     REFRESH: '/api/auth/refresh',
+  },
+  BACKUPS: {
+    BATCH: '/api/backups/batch',
+    SNAPSHOT: '/api/backups/snapshot',
+    RESTORE: '/api/backups/restore',
+    ASSETS: '/api/backups/assets',
+    ASSET_ACCESS: '/api/backups/assets/access',
   },
   FRAGMENTS: {
     LIST: '/api/fragments',

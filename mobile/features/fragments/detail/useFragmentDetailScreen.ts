@@ -2,14 +2,12 @@ import { useMemo, useState } from 'react';
 import { Alert, Share } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 
-import { deleteFragment } from '@/features/fragments/api';
+import { getOrCreateDeviceId } from '@/features/auth/device';
 import { useFragmentAudioPlayer } from '@/features/fragments/hooks/useFragmentAudioPlayer';
-import { shouldIgnoreMissingServerDeleteError } from '@/features/fragments/localDraftSession';
 import { getActiveSegmentIndex } from '@/features/fragments/presenters/speakerSegments';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import {
-  deleteLocalFragmentDraft,
-  removeRemoteFragmentSnapshot,
+  deleteLocalFragmentEntity,
 } from '@/features/fragments/store';
 import { getErrorMessage } from '@/utils/error';
 
@@ -68,32 +66,8 @@ export function useFragmentDetailScreen(
 
     try {
       setIsDeleting(true);
-      const isLocalDraft = !fragment?.server_id;
-
-      if (isLocalDraft) {
-        // 本地草稿：如果有 server_id，需要先删除服务端
-        if (fragment?.server_id) {
-          try {
-            await deleteFragment(fragment.server_id);
-          } catch (error) {
-            if (
-              !shouldIgnoreMissingServerDeleteError({
-                error,
-                isLocalDraftSession: true,
-                serverId: fragment.server_id,
-              })
-            ) {
-              throw error;
-            }
-          }
-          await removeRemoteFragmentSnapshot(fragment.server_id);
-        }
-        await deleteLocalFragmentDraft(fragmentId);
-      } else {
-        // 远程碎片直接删除
-        await deleteFragment(fragmentId);
-        await removeRemoteFragmentSnapshot(fragmentId);
-      }
+      const deviceId = await getOrCreateDeviceId();
+      await deleteLocalFragmentEntity(fragmentId, { deviceId });
 
       // 标记碎片列表需要刷新
       markFragmentsStale();

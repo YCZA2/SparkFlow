@@ -17,8 +17,8 @@ import {
 import { normalizeFragmentTags } from '@/features/fragments/utils';
 import type {
   Fragment,
-  FragmentSyncStatus,
-  LocalFragmentDraft,
+  LegacyCloudBindingStatus,
+  LegacyLocalFragmentDraft,
   LocalPendingImageAsset,
   MediaAsset,
 } from '@/types/fragment';
@@ -109,17 +109,18 @@ export function mapMediaAssetRow(row: MediaAssetRow): MediaAsset {
   };
 }
 
-/*按本地镜像行与正文文件组装远端碎片展示模型。 */
-export async function mapRemoteRowToFragment(
+/*按兼容快照行与正文文件组装遗留碎片展示模型。 */
+export async function mapLegacySnapshotRowToFragment(
   row: FragmentRow,
   mediaRows: MediaAssetRow[]
 ): Promise<Fragment> {
   const bodyHtml = normalizeBodyHtml(await readFragmentBodyFile(row.id));
   return {
     id: row.id,
-    server_id: row.serverId ?? null,
+    server_id: row.legacyServerBindingId ?? null,
     sync_status: 'synced',
-    audio_file_url: row.audioFileUrl,
+    audio_object_key: row.audioObjectKey ?? null,
+    audio_file_url: row.audioFileUri ?? row.audioFileUrl,
     audio_file_expires_at: row.audioFileExpiresAt ?? undefined,
     transcript: row.transcript,
     speaker_segments: deserializeSpeakerSegments(row.speakerSegmentsJson),
@@ -139,23 +140,61 @@ export async function mapRemoteRowToFragment(
   };
 }
 
+/*按本地实体行统一组装 local-first 碎片展示模型。 */
+export async function mapLocalEntityRowToFragment(
+  row: FragmentRow,
+  mediaRows: MediaAssetRow[]
+): Promise<Fragment> {
+  const bodyHtml = normalizeBodyHtml(await readFragmentBodyFile(row.id));
+  return {
+    id: row.id,
+    server_id: row.legacyServerBindingId ?? null,
+    sync_status: row.legacyCloudBindingStatus === 'synced' ? 'synced' : 'pending',
+    audio_object_key: row.audioObjectKey ?? null,
+    backup_status:
+      row.backupStatus === 'synced'
+        ? 'synced'
+        : row.backupStatus === 'failed'
+          ? 'failed'
+          : 'pending',
+    entity_version: row.entityVersion,
+    last_backup_at: row.lastBackupAt ?? null,
+    deleted_at: row.deletedAt ?? null,
+    audio_file_url: row.audioFileUri ?? row.audioFileUrl,
+    audio_file_expires_at: row.audioFileExpiresAt ?? undefined,
+    transcript: row.transcript,
+    speaker_segments: deserializeSpeakerSegments(row.speakerSegmentsJson),
+    summary: row.summary,
+    tags: deserializeTags(row.tagsJson),
+    source: row.source as Fragment['source'],
+    audio_source: (row.audioSource as Fragment['audio_source']) ?? null,
+    created_at: row.createdAt,
+    updated_at: row.updatedAt,
+    folder_id: row.folderId ?? null,
+    folder: null,
+    body_html: bodyHtml,
+    plain_text_snapshot: row.plainTextSnapshot || extractPlainTextFromHtml(bodyHtml),
+    content_state:
+      (row.contentState as Fragment['content_state']) ?? (bodyHtml ? 'body_present' : 'empty'),
+    media_assets: mediaRows.map(mapMediaAssetRow),
+  };
+}
+
 /*按本地镜像行与待上传素材组装 local draft 记录。 */
 export async function mapLocalDraftRow(
   row: FragmentRow,
   mediaRows: MediaAssetRow[]
-): Promise<LocalFragmentDraft> {
+): Promise<LegacyLocalFragmentDraft> {
   const bodyHtml = normalizeBodyHtml(await readFragmentBodyFile(row.id));
-  const hasServerId = Boolean(row.serverId);
-  const isSynced = row.syncStatus === 'synced';
   return {
     id: row.id,
-    server_id: row.serverId ?? null,
+    server_id: row.legacyServerBindingId ?? null,
     folder_id: row.folderId ?? null,
     body_html: bodyHtml,
     plain_text_snapshot: row.plainTextSnapshot || extractPlainTextFromHtml(bodyHtml),
     created_at: row.createdAt,
     updated_at: row.updatedAt,
-    sync_status: isSynced ? 'synced' : 'pending',
+    sync_status: row.legacyCloudBindingStatus === 'synced' ? 'synced' : 'pending',
     last_sync_attempt_at: row.lastSyncAttemptAt ?? null,
     next_retry_at: row.nextRetryAt ?? null,
     retry_count: row.retryCount ?? 0,
@@ -171,15 +210,15 @@ export async function mapLocalDraftRow(
   };
 }
 
-/*把远端 DTO 映射为 fragments 行，供本地镜像统一 upsert。 */
-export function buildRemoteFragmentRow(
+/*把兼容快照 DTO 映射为 fragments 行，供迁移镜像统一 upsert。 */
+export function buildLegacySnapshotRow(
   fragment: Fragment,
   cachedAt?: string
 ): typeof fragmentsTable.$inferInsert {
   const now = new Date().toISOString();
   return {
     id: fragment.id,
-    serverId: fragment.id, // 服务端返回的 ID 作为 serverId
+    legacyServerBindingId: fragment.id,
     folderId: fragment.folder_id ?? null,
     source: fragment.source,
     audioSource: fragment.audio_source ?? null,
@@ -193,10 +232,11 @@ export function buildRemoteFragmentRow(
     bodyFileUri: getFragmentBodyFile(fragment.id).uri,
     transcript: fragment.transcript ?? null,
     speakerSegmentsJson: serializeSpeakerSegments(fragment.speaker_segments),
+    audioObjectKey: fragment.audio_object_key ?? null,
     audioFileUri: fragment.audio_file_url ?? null,
     audioFileUrl: fragment.audio_file_url ?? null,
     audioFileExpiresAt: fragment.audio_file_expires_at ?? null,
-    syncStatus: 'synced',
+    legacyCloudBindingStatus: 'synced',
     lastSyncedAt: now,
     lastSyncAttemptAt: null,
     nextRetryAt: null,
@@ -207,27 +247,32 @@ export function buildRemoteFragmentRow(
   };
 }
 
-/*把 LocalFragmentDraft patch 映射为 fragments 表更新字段。 */
+/*把旧草稿 patch 映射为 fragments 表更新字段。 */
 export function buildLocalDraftRowPatch(
   current: FragmentRow,
-  patch: Partial<LocalFragmentDraft>
+  patch: Partial<LegacyLocalFragmentDraft>
 ): Partial<typeof fragmentsTable.$inferInsert> {
   return {
-    serverId: patch.server_id === undefined ? current.serverId : patch.server_id,
+    legacyServerBindingId:
+      patch.server_id === undefined ? current.legacyServerBindingId : patch.server_id,
     folderId: patch.folder_id === undefined ? current.folderId : patch.folder_id,
     updatedAt: new Date().toISOString(),
     plainTextSnapshot:
       typeof patch.plain_text_snapshot === 'string'
         ? patch.plain_text_snapshot
         : current.plainTextSnapshot,
-    syncStatus:
-      patch.sync_status === undefined ? current.syncStatus : patch.sync_status,
+    legacyCloudBindingStatus:
+      patch.sync_status === undefined
+        ? current.legacyCloudBindingStatus
+        : (patch.sync_status as LegacyCloudBindingStatus),
     lastSyncAttemptAt:
       patch.last_sync_attempt_at === undefined
         ? current.lastSyncAttemptAt
         : patch.last_sync_attempt_at,
     nextRetryAt: patch.next_retry_at === undefined ? current.nextRetryAt : patch.next_retry_at,
     retryCount: patch.retry_count === undefined ? current.retryCount : patch.retry_count,
+    backupStatus: 'pending',
+    entityVersion: (current.entityVersion ?? 0) + 1,
   };
 }
 
@@ -252,7 +297,7 @@ export async function loadMediaRowsByFragmentIds(
   return map;
 }
 
-/*按 id 或 server_id 查询单条 fragments 行，供绑定服务端 id 等场景复用。 */
+/*按 id 或 legacy server_id 查询单条 fragments 行，供兼容绑定场景复用。 */
 export async function loadFragmentRowByIdOrServerId(
   identifier: string
 ): Promise<FragmentRow | null> {
@@ -260,13 +305,15 @@ export async function loadFragmentRowByIdOrServerId(
   const rows = await database
     .select()
     .from(fragmentsTable)
-    .where(or(eq(fragmentsTable.id, identifier), eq(fragmentsTable.serverId, identifier)))
+    .where(
+      or(eq(fragmentsTable.id, identifier), eq(fragmentsTable.legacyServerBindingId, identifier))
+    )
     .limit(1);
   return rows[0] ?? null;
 }
 
-/*用远端素材列表替换远端镜像下的媒体资源，同时保留独立本地草稿的待上传项。 */
-export async function replaceRemoteMediaAssets(
+/*用兼容快照素材替换迁移镜像下的媒体资源，同时保留独立本地草稿的待上传项。 */
+export async function replaceLegacySnapshotMediaAssets(
   fragmentId: string,
   mediaAssets: MediaAsset[] | undefined
 ): Promise<void> {
@@ -349,7 +396,7 @@ export async function stagePendingImage(
   return await prepareManagedImageFile(localUri, fileName, mimeType);
 }
 
-/*读取远端列表时统一构造文件夹筛选条件，避免多模块复制判断。 */
+/*读取兼容快照列表时统一构造文件夹筛选条件，避免多模块复制判断。 */
 export function buildFragmentListCondition(folderId?: string | null) {
   const normalizedFolderId = String(folderId ?? '').trim();
   if (normalizedFolderId) {
@@ -379,4 +426,3 @@ export async function persistBodyHtml(fragmentId: string, html: string): Promise
   await writeFragmentBodyFile(fragmentId, normalizedHtml);
   return normalizedHtml;
 }
-

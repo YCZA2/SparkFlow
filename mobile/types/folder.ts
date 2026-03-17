@@ -16,6 +16,14 @@ export interface FragmentFolder {
   created_at: string | null;
   /** 更新时间 */
   updated_at: string | null;
+  /** 本地备份状态 */
+  backup_status?: 'pending' | 'synced' | 'failed';
+  /** 本地实体版本 */
+  entity_version?: number;
+  /** 上次备份时间 */
+  last_backup_at?: string | null;
+  /** tombstone 时间 */
+  deleted_at?: string | null;
 }
 
 /**

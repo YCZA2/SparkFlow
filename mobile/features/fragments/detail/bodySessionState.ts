@@ -35,7 +35,7 @@ export function shouldRehydrateBodySession(input: {
   fragment: Fragment;
   draftHtml: string | null;
   currentSnapshot: EditorDocumentSnapshot;
-  remoteBaseline: string;
+  baselineBodyHtml: string;
   visibleMediaAssets: MediaAsset[];
   hasConfirmedLocalEdit: boolean;
 }): boolean {
@@ -44,7 +44,7 @@ export function shouldRehydrateBodySession(input: {
     document: input.fragment,
     draftHtml: input.draftHtml,
     currentSnapshot: input.currentSnapshot,
-    remoteBaseline: input.remoteBaseline,
+    baselineBodyHtml: input.baselineBodyHtml,
     visibleMediaAssets: input.visibleMediaAssets,
     hasConfirmedLocalEdit: input.hasConfirmedLocalEdit,
   });

@@ -13,6 +13,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from .config import settings
 from .exceptions import AuthenticationError
+from models import SessionLocal
+from domains.device_sessions import repository as device_session_repository
 
 # JWT 配置
 ALGORITHM = "HS256"
@@ -24,6 +26,8 @@ security = HTTPBearer(auto_error=False)
 def create_access_token(
     user_id: str,
     role: str = "user",
+    device_id: str | None = None,
+    session_version: int | None = None,
     expires_delta: Optional[timedelta] = None
 ) -> str:
     """
@@ -47,8 +51,12 @@ def create_access_token(
         "role": role,
         "exp": expire,
         "iat": datetime.now(timezone.utc),  # 签发时间
-        "type": "access"
+        "type": "access",
     }
+    if device_id:
+        payload["device_id"] = device_id
+    if session_version is not None:
+        payload["session_version"] = session_version
 
     encoded_jwt = jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -105,16 +113,40 @@ async def get_current_user(
 
     user_id = payload.get("sub")
     role = payload.get("role", "user")
+    device_id = payload.get("device_id")
+    session_version = payload.get("session_version")
 
     if user_id is None:
         raise AuthenticationError(
             message="无效的令牌：缺少用户标识符",
         )
 
+    if device_id and session_version is not None:
+        with SessionLocal() as db:
+            session = device_session_repository.get_by_user_and_device(
+                db=db,
+                user_id=user_id,
+                device_id=str(device_id),
+            )
+            if (
+                session is None
+                or session.status != "active"
+                or int(session.session_version) != int(session_version)
+            ):
+                raise AuthenticationError(message="当前设备会话已失效，请重新登录")
+            device_session_repository.touch_session(
+                db=db,
+                session=session,
+                seen_at=datetime.now(timezone.utc),
+            )
+            db.commit()
+
     return {
         "user_id": user_id,
         "role": role,
-        "exp": payload.get("exp")
+        "exp": payload.get("exp"),
+        "device_id": device_id,
+        "session_version": session_version,
     }
 
 

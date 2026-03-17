@@ -1,6 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { STORAGE_KEYS, getBackendUrl } from '@/constants/config';
+import { getOrCreateDeviceId } from '@/features/auth/device';
+import {
+  clearDeviceSessionInvalid,
+  getDeviceSessionInvalidReason,
+  markDeviceSessionInvalid,
+} from '@/features/auth/deviceSession';
 import { createDebugLogEntry, emitDebugLog, serializeForLog } from '@/features/debug-log/store';
 
 export interface ApiResponse<T = unknown> {
@@ -52,12 +58,13 @@ export async function clearToken(): Promise<void> {
 export async function fetchTestToken(): Promise<string> {
   try {
     const baseUrl = await getCurrentBaseUrl();
+    const deviceId = await getOrCreateDeviceId();
     const response = await fetch(`${baseUrl}/api/auth/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ device_id: deviceId }),
     });
 
     const data: ApiResponse<{ access_token: string; token_type: string }> = await response.json();
@@ -66,6 +73,7 @@ export async function fetchTestToken(): Promise<string> {
     }
 
     const token = data.data.access_token;
+    await clearDeviceSessionInvalid();
     await setToken(token);
     return token;
   } catch (error) {
@@ -85,9 +93,32 @@ export async function fetchTestToken(): Promise<string> {
 async function ensureToken(): Promise<string> {
   let token = await getToken();
   if (!token) {
+    const invalidReason = await getDeviceSessionInvalidReason();
+    if (invalidReason) {
+      throw new ApiError('DEVICE_SESSION_INVALID', invalidReason);
+    }
     token = await fetchTestToken();
   }
   return token;
+}
+
+async function readApiErrorPayload(response: Response): Promise<ApiResponse<unknown>['error'] | null> {
+  /*在 401 重试前先探测错误体，避免把设备会话失效误判成 token 过期。 */
+  try {
+    const data: ApiResponse<unknown> = await response.clone().json();
+    return data.error ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function isDeviceSessionInvalidError(error: ApiResponse<unknown>['error'] | null): boolean {
+  /*单设备模式下，一旦会话被其它设备顶掉，前端必须停留只读本地态。 */
+  return (
+    error?.code === 'AUTHENTICATION' &&
+    typeof error.message === 'string' &&
+    error.message.includes('设备会话已失效')
+  );
 }
 
 function buildHeaders(
@@ -167,6 +198,12 @@ async function executeRequest<T>(
     console.log(`[API] 响应状态: ${response.status}`);
 
     if (response.status === 401) {
+      const apiError = await readApiErrorPayload(response);
+      if (isDeviceSessionInvalidError(apiError)) {
+        await clearToken();
+        await markDeviceSessionInvalid(apiError?.message);
+        throw new ApiError('DEVICE_SESSION_INVALID', apiError?.message || '当前设备会话已失效，请重新登录');
+      }
       console.log('[API] 收到 401，尝试重新获取 Token');
       await clearToken();
       const newToken = await fetchTestToken();

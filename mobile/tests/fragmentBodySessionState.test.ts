@@ -37,7 +37,7 @@ test('resolveHydratedBodySession prefers local draft and keeps cached baseline',
   });
 
   assert.equal(result.snapshot.body_html, '<p>本地草稿</p>');
-  assert.equal(result.remoteBaseline, '<p>缓存正文</p>');
+  assert.equal(result.baselineBodyHtml, '<p>缓存正文</p>');
   assert.equal(result.syncStatus, 'idle');
 });
 
@@ -49,7 +49,7 @@ test('resolveHydratedBodySession marks synced when no draft overrides remote bod
   });
 
   assert.equal(result.snapshot.body_html, '服务端正文');
-  assert.equal(result.remoteBaseline, '服务端正文');
+  assert.equal(result.baselineBodyHtml, '服务端正文');
   assert.equal(result.syncStatus, 'synced');
 });
 
@@ -62,7 +62,7 @@ test('shouldRehydrateBodySession allows remote detail to replace stale empty sna
     }),
     draftHtml: null,
     currentSnapshot: buildEditorDocumentSnapshot(''),
-    remoteBaseline: '',
+    baselineBodyHtml: '',
     visibleMediaAssets: [],
     hasConfirmedLocalEdit: false,
   });
@@ -79,7 +79,7 @@ test('shouldRehydrateBodySession blocks remote reset when local draft exists', (
     }),
     draftHtml: '<p>本地草稿</p>',
     currentSnapshot: buildEditorDocumentSnapshot('<p>本地草稿</p>'),
-    remoteBaseline: '服务端正文',
+    baselineBodyHtml: '服务端正文',
     visibleMediaAssets: [],
     hasConfirmedLocalEdit: true,
   });
@@ -90,7 +90,7 @@ test('shouldRehydrateBodySession blocks remote reset when local draft exists', (
 test('shouldProtectSuspiciousEmptySnapshot blocks accidental empty commit without local edits', () => {
   const shouldProtect = shouldProtectSuspiciousEmptySnapshot({
     snapshot: buildEditorDocumentSnapshot(''),
-    remoteBaseline: '可信远端正文',
+    baselineBodyHtml: '可信远端正文',
     hasLocalDraft: false,
     hasConfirmedLocalEdit: false,
   });
@@ -101,7 +101,7 @@ test('shouldProtectSuspiciousEmptySnapshot blocks accidental empty commit withou
 test('shouldProtectSuspiciousEmptySnapshot allows intentional empty commit after local edits', () => {
   const shouldProtect = shouldProtectSuspiciousEmptySnapshot({
     snapshot: buildEditorDocumentSnapshot(''),
-    remoteBaseline: '可信远端正文',
+    baselineBodyHtml: '可信远端正文',
     hasLocalDraft: false,
     hasConfirmedLocalEdit: true,
   });

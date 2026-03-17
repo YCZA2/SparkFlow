@@ -1,7 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
 export type ManagedAppFileKind = 'audio' | 'image' | 'text';
-export type ManagedAppFileSource = 'remote-mirror' | 'draft' | 'staging' | 'picker' | 'recording';
+export type ManagedAppFileSource = 'backup-cache' | 'draft' | 'staging' | 'picker' | 'recording';
 
 export interface ManagedAppFile {
   uri: string;
@@ -22,6 +22,7 @@ interface NativeDirectoryHandle {
   uri: string;
   exists: boolean;
   create: (options?: { idempotent?: boolean; intermediates?: boolean; overwrite?: boolean }) => void;
+  delete: () => void;
   list: () => (Directory | File)[];
 }
 
@@ -87,6 +88,11 @@ function getFragmentMetaDirectoryUri(fragmentId: string): string {
   return `${getFragmentDirectoryUri(fragmentId)}meta/`;
 }
 
+/*为单条片段创建 assets 子目录，统一承接恢复后的媒体本地缓存。 */
+function getFragmentAssetsDirectoryUri(fragmentId: string): string {
+  return `${getFragmentDirectoryUri(fragmentId)}assets/`;
+}
+
 /*用 URI 构造受管文件句柄，统一文件接口形状。 */
 function createManagedNativeFile(parentDirectoryUri: string, fileName: string): ManagedNativeFile {
   const normalizedParentUri = ensureTrailingSlash(parentDirectoryUri);
@@ -102,7 +108,7 @@ export function getFragmentBodyFile(fragmentId: string): ManagedNativeFile {
   return createManagedNativeFile(getFragmentDirectoryUri(fragmentId), 'body.html');
 }
 
-/*返回远端正文草稿文件句柄，供未同步编辑内容临时落盘。 */
+/*返回兼容草稿正文文件句柄，供未持久化输入临时落盘。 */
 export function getFragmentDraftBodyFile(fragmentId: string): ManagedNativeFile {
   return createManagedNativeFile(getFragmentMetaDirectoryUri(fragmentId), 'draft.html');
 }
@@ -151,17 +157,17 @@ export async function readFragmentBodyFile(fragmentId: string): Promise<string |
   return await readTextFile(getFragmentBodyFile(fragmentId));
 }
 
-/*把远端正文草稿写到 meta 目录，避免污染正式基线文件。 */
+/*把兼容草稿正文写到 meta 目录，避免污染正式基线文件。 */
 export async function writeFragmentDraftBodyFile(fragmentId: string, html: string): Promise<string> {
   return await writeTextFile(getFragmentDraftBodyFile(fragmentId), html);
 }
 
-/*读取远端正文草稿，供编辑器 hydrate 优先恢复最近输入。 */
+/*读取兼容草稿正文，供编辑器 hydrate 优先恢复最近输入。 */
 export async function readFragmentDraftBodyFile(fragmentId: string): Promise<string | null> {
   return await readTextFile(getFragmentDraftBodyFile(fragmentId));
 }
 
-/*清理远端正文草稿文件，让同步成功后的状态回到干净基线。 */
+/*清理兼容草稿正文文件，让持久化成功后的状态回到干净基线。 */
 export async function clearFragmentDraftBodyFile(fragmentId: string): Promise<void> {
   await deleteFileIfExists(getFragmentDraftBodyFile(fragmentId));
 }
@@ -174,6 +180,63 @@ export async function listFragmentDraftBodyIds(): Promise<string[]> {
     .filter((entry): entry is Directory => entry instanceof Directory)
     .map((directory) => directory.name)
     .filter((fragmentId) => toFileHandle(new File(getFragmentDraftBodyFile(fragmentId).uri)).exists);
+}
+
+/*递归清空 fragments 目录，供显式恢复时重建本地正文文件使用。 */
+export async function resetFragmentFiles(): Promise<void> {
+  await ensureDirectoryAsync(FRAGMENTS_DIRECTORY_URI);
+
+  const deleteDirectoryRecursively = (directory: Directory): void => {
+    const handle = toDirectoryHandle(directory);
+    if (!handle.exists) {
+      return;
+    }
+
+    for (const entry of handle.list()) {
+      if (entry instanceof Directory) {
+        deleteDirectoryRecursively(entry);
+      } else {
+        toFileHandle(entry).delete();
+      }
+    }
+
+    handle.delete();
+  };
+
+  for (const entry of toDirectoryHandle(FRAGMENTS_DIRECTORY).list()) {
+    if (entry instanceof Directory) {
+      deleteDirectoryRecursively(entry);
+    } else {
+      toFileHandle(entry).delete();
+    }
+  }
+}
+
+/*把备份文件下载到片段私有目录，恢复后优先走本地缓存访问。 */
+export async function downloadRemoteFileToFragment(input: {
+  fragmentId: string;
+  url: string;
+  fileName: string;
+  kind: ManagedAppFileKind;
+  mimeType: string;
+}): Promise<ManagedAppFile> {
+  const targetDirectoryUri = await ensureDirectoryAsync(getFragmentAssetsDirectoryUri(input.fragmentId));
+  const uniqueName = `${Date.now()}-${sanitizeFileName(
+    input.fileName,
+    input.kind === 'audio' ? 'audio.bin' : input.kind === 'image' ? 'image.bin' : 'file.bin'
+  )}`;
+  const targetFile = createManagedNativeFile(targetDirectoryUri, uniqueName);
+  const downloaded = await File.downloadFileAsync(input.url, new File(targetFile.uri));
+  const handle = toFileHandle(downloaded as unknown as File);
+
+  return {
+    uri: downloaded.uri,
+    name: targetFile.name,
+    mimeType: input.mimeType,
+    size: handle.size ?? 0,
+    kind: input.kind,
+    source: 'backup-cache',
+  };
 }
 
 /*把外部 URI 复制到 staging 目录，统一转换成可控的 app sandbox 文件。 */

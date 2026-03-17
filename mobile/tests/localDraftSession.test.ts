@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  isMissingServerBindingError,
-  resolveLocalDraftSession,
-  shouldIgnoreMissingServerDeleteError,
-  shouldRecoverMissingServerBinding,
-} from '../features/fragments/localDraftSession';
+  isLegacyCloudBindingMissingError,
+  resolveLegacyCloudBindingSession,
+  shouldIgnoreLegacyCloudDeleteError,
+  shouldRecoverLegacyCloudBinding,
+} from '../features/fragments/legacyCloudBindingSession';
 
-test('resolveLocalDraftSession keeps local-draft mode when fragment has no server_id', () => {
-  const result = resolveLocalDraftSession({
+test('resolveLegacyCloudBindingSession keeps legacy-local mode when fragment has no server_id', () => {
+  const result = resolveLegacyCloudBindingSession({
     routeFragmentId: 'fragment-001',
     fragment: {
       id: 'fragment-001',
@@ -18,12 +18,12 @@ test('resolveLocalDraftSession keeps local-draft mode when fragment has no serve
     },
   });
 
-  assert.equal(result.isLocalDraftSession, true);
+  assert.equal(result.isLegacyLocalFragment, true);
   assert.equal(result.draftId, 'fragment-001');
 });
 
-test('resolveLocalDraftSession uses fragment id when server_id exists', () => {
-  const result = resolveLocalDraftSession({
+test('resolveLegacyCloudBindingSession uses fragment id when server_id exists', () => {
+  const result = resolveLegacyCloudBindingSession({
     routeFragmentId: 'fragment-001',
     fragment: {
       id: 'fragment-001',
@@ -32,60 +32,60 @@ test('resolveLocalDraftSession uses fragment id when server_id exists', () => {
     },
   });
 
-  assert.equal(result.isLocalDraftSession, false);
+  assert.equal(result.isLegacyLocalFragment, false);
   assert.equal(result.draftId, 'fragment-001');
 });
 
-test('isMissingServerBindingError only accepts NOT_FOUND shaped errors', () => {
-  assert.equal(isMissingServerBindingError({ code: 'NOT_FOUND' }), true);
-  assert.equal(isMissingServerBindingError({ code: 'NETWORK_ERROR' }), false);
-  assert.equal(isMissingServerBindingError(new Error('boom')), false);
+test('isLegacyCloudBindingMissingError only accepts NOT_FOUND shaped errors', () => {
+  assert.equal(isLegacyCloudBindingMissingError({ code: 'NOT_FOUND' }), true);
+  assert.equal(isLegacyCloudBindingMissingError({ code: 'NETWORK_ERROR' }), false);
+  assert.equal(isLegacyCloudBindingMissingError(new Error('boom')), false);
 });
 
-test('shouldRecoverMissingServerBinding allows one-time recovery for stale server binding', () => {
+test('shouldRecoverLegacyCloudBinding allows one-time recovery for stale server binding', () => {
   assert.equal(
-    shouldRecoverMissingServerBinding({
+    shouldRecoverLegacyCloudBinding({
       error: { code: 'NOT_FOUND' },
-      serverId: 'server-001',
+      legacyServerBindingId: 'server-001',
       recoveryAttempted: false,
     }),
     true
   );
 
   assert.equal(
-    shouldRecoverMissingServerBinding({
+    shouldRecoverLegacyCloudBinding({
       error: { code: 'NOT_FOUND' },
-      serverId: 'server-001',
+      legacyServerBindingId: 'server-001',
       recoveryAttempted: true,
     }),
     false
   );
 });
 
-test('shouldIgnoreMissingServerDeleteError only suppresses local-draft bound server 404', () => {
+test('shouldIgnoreLegacyCloudDeleteError only suppresses legacy-local bound server 404', () => {
   assert.equal(
-    shouldIgnoreMissingServerDeleteError({
+    shouldIgnoreLegacyCloudDeleteError({
       error: { code: 'NOT_FOUND' },
-      isLocalDraftSession: true,
-      serverId: 'server-001',
+      isLegacyLocalFragment: true,
+      legacyServerBindingId: 'server-001',
     }),
     true
   );
 
   assert.equal(
-    shouldIgnoreMissingServerDeleteError({
+    shouldIgnoreLegacyCloudDeleteError({
       error: { code: 'NOT_FOUND' },
-      isLocalDraftSession: false,
-      serverId: 'server-001',
+      isLegacyLocalFragment: false,
+      legacyServerBindingId: 'server-001',
     }),
     false
   );
 
   assert.equal(
-    shouldIgnoreMissingServerDeleteError({
+    shouldIgnoreLegacyCloudDeleteError({
       error: { code: 'NETWORK_ERROR' },
-      isLocalDraftSession: true,
-      serverId: 'server-001',
+      isLegacyLocalFragment: true,
+      legacyServerBindingId: 'server-001',
     }),
     false
   );

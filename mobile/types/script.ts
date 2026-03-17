@@ -27,6 +27,15 @@ export interface ScriptListResponse {
 
 export interface GenerateScriptRequest {
   fragment_ids: string[];
+  fragment_snapshots?: Array<{
+    id: string;
+    body_html?: string | null;
+    plain_text_snapshot?: string | null;
+    summary?: string | null;
+    tags?: string[] | null;
+    source?: string;
+    created_at?: string | null;
+  }>;
   mode: ScriptMode;
   query_hint?: string;
   include_web_search?: boolean;

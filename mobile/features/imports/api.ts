@@ -6,6 +6,7 @@ export interface ExternalAudioImportTask {
   pipeline_run_id: string;
   pipeline_type: 'media_ingestion';
   fragment_id: string | null;
+  local_fragment_id?: string | null;
   source: string;
   audio_source: 'external_link';
 }
@@ -13,9 +14,13 @@ export interface ExternalAudioImportTask {
 /**
  提交抖音外链导入任务，返回异步 pipeline 句柄。
  */
-export async function importExternalAudio(shareUrl: string, folderId?: string): Promise<ExternalAudioImportTask> {
+export async function importExternalAudio(
+  shareUrl: string,
+  folderId?: string,
+  localFragmentId?: string
+): Promise<ExternalAudioImportTask> {
   return post<ExternalAudioImportTask>(
     API_ENDPOINTS.EXTERNAL_MEDIA.AUDIO_IMPORTS,
-    buildExternalAudioImportPayload(shareUrl, folderId)
+    buildExternalAudioImportPayload(shareUrl, folderId, localFragmentId)
   );
 }

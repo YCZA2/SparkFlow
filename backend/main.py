@@ -18,6 +18,7 @@ from core.logging_config import configure_logging, get_logger
 from models import SessionLocal
 from modules.auth.application import AuthUseCase
 from modules.auth.presentation import router as auth_router
+from modules.backups.presentation import router as backups_router
 from modules.debug_logs.presentation import router as debug_logs_router
 from modules.external_media.presentation import router as external_media_router
 from modules.exports.presentation import router as exports_router
@@ -208,6 +209,7 @@ def register_routes(app: FastAPI) -> None:
         return Response(status_code=200)
 
     app.include_router(auth_router)
+    app.include_router(backups_router)
     app.include_router(debug_logs_router)
     app.include_router(external_media_router)
     app.include_router(exports_router)

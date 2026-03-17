@@ -1,18 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { fetchFragmentDetail } from '@/features/fragments/api';
 import {
-  buildFragmentFromLocalDraft,
-} from '@/features/fragments/localDraftState';
-import { refreshFragmentRemoteSnapshot, wakeFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
-import {
-  loadLocalFragmentDraft,
-  peekRemoteFragmentSnapshot,
-  readRemoteFragmentSnapshot,
-  upsertRemoteFragmentSnapshot,
+  readLocalFragmentEntity,
+  updateLocalFragmentEntity,
 } from '@/features/fragments/store';
 import { useFragmentStore } from '@/features/fragments/store/fragmentStore';
-import { applyDraftToFragment } from '@/features/fragments/fragmentCacheState';
 import type { Fragment } from '@/types/fragment';
 import { getErrorMessage } from '@/utils/error';
 
@@ -21,24 +13,17 @@ interface UseFragmentDetailResourceResult {
   isLoading: boolean;
   error: string | null;
   reload: () => Promise<void>;
-  commitRemoteFragment: (fragment: Fragment) => Promise<void>;
+  commitPersistedFragment: (fragment: Fragment) => Promise<void>;
   commitOptimisticFragment: (fragment: Fragment) => Promise<void>;
 }
 
 async function resolveVisibleFragment(fragmentId: string): Promise<Fragment | null> {
-  /*读取缓存并叠加本地草稿，让详情首屏优先展示用户最近编辑内容。 */
-  const draft = await loadLocalFragmentDraft(fragmentId);
-  if (draft) {
-    const remoteFragment = draft.server_id ? peekRemoteFragmentSnapshot(draft.server_id) ?? null : null;
-    return buildFragmentFromLocalDraft(draft, remoteFragment);
-  }
-
-  const cachedEntry = await readRemoteFragmentSnapshot(fragmentId);
-  return applyDraftToFragment(cachedEntry ?? null, null);
+  /*详情只读取本地真值，不再依赖远端详情回填。 */
+  return await readLocalFragmentEntity(fragmentId);
 }
 
 export function useFragmentDetailResource(fragmentId?: string | null): UseFragmentDetailResourceResult {
-  /*封装碎片详情的缓存秒开、草稿可见态和远端刷新，供页面层纯消费。 */
+  /*封装碎片详情的本地读取、可见态提交与重载能力，供页面层纯消费。 */
   const [fragment, setFragment] = useState<Fragment | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(fragmentId));
   const [error, setError] = useState<string | null>(null);
@@ -50,16 +35,15 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
     setError(null);
   }, []);
 
-  const commitRemoteFragment = useCallback(async (nextFragment: Fragment) => {
-    /*只有服务端确认后的碎片才回写远端镜像，避免 optimistic 本地输入污染基线。 */
+  const commitPersistedFragment = useCallback(async (nextFragment: Fragment) => {
+    /*确认态统一回写本地实体，保证详情与持久层始终同源。 */
     hasVisibleFragmentRef.current = true;
     setFragment(nextFragment);
     setError(null);
-    if (!nextFragment.server_id) return;
-    await upsertRemoteFragmentSnapshot(nextFragment);
+    await updateLocalFragmentEntity(nextFragment.id, nextFragment);
   }, []);
 
-  const loadRemote = useCallback(
+  const loadFragment = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {
       if (!fragmentId) {
         hasVisibleFragmentRef.current = false;
@@ -74,26 +58,13 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
       }
 
       try {
-        // 先尝试加载本地草稿
-        const draft = await loadLocalFragmentDraft(fragmentId);
-        if (draft) {
-          await wakeFragmentSyncQueue().catch(() => undefined);
-          if (draft.server_id) {
-            await refreshFragmentRemoteSnapshot(fragmentId).catch(() => undefined);
-          }
-          const nextFragment = await resolveVisibleFragment(fragmentId);
-          hasVisibleFragmentRef.current = true;
-          setError(null);
-          setFragment(nextFragment);
-          return;
+        const visibleFragment = await resolveVisibleFragment(fragmentId);
+        if (!visibleFragment) {
+          throw new Error('碎片不存在');
         }
-
-        // 否则从远程加载
-        const remoteFragment = await fetchFragmentDetail(fragmentId);
-        await upsertRemoteFragmentSnapshot(remoteFragment);
         hasVisibleFragmentRef.current = true;
         setError(null);
-        setFragment(applyDraftToFragment(remoteFragment, null));
+        setFragment(visibleFragment);
       } catch (err) {
         const nextError = getErrorMessage(err, '加载失败');
         if (!hasVisibleFragmentRef.current) {
@@ -129,7 +100,7 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
         setIsLoading(false);
         return;
       }
-      await loadRemote();
+      await loadFragment();
     };
 
     void hydrate();
@@ -150,16 +121,16 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
       cancelled = true;
       unsubscribe();
     };
-  }, [fragmentId, loadRemote]);
+  }, [fragmentId, loadFragment]);
 
   return {
     fragment,
     isLoading,
     error,
     reload: useCallback(async () => {
-      await loadRemote();
-    }, [loadRemote]),
-    commitRemoteFragment,
+      await loadFragment();
+    }, [loadFragment]),
+    commitPersistedFragment,
     commitOptimisticFragment: commitVisibleFragment,
   };
 }

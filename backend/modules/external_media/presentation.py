@@ -38,5 +38,6 @@ async def import_external_audio(
         share_url=data.share_url,
         platform=data.platform,
         folder_id=data.folder_id,
+        local_fragment_id=data.local_fragment_id,
     )
     return success_response(data=payload, message="外部媒体音频导入任务已创建")

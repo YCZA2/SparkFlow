@@ -2,28 +2,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
 import {
-  deleteFragment,
-  fetchFragmentDetail,
   fetchFragmentVisualization,
-  fetchFragments as fetchFragmentsRemote,
 } from '@/features/fragments/api';
 import {
-  mergeLocalDraftsIntoFragments,
-} from '@/features/fragments/localDraftState';
-import { wakeFragmentSyncQueue } from '@/features/fragments/localFragmentSyncQueue';
-import {
-  listLocalFragmentDrafts,
-  readCachedRemoteFragmentList,
-  readRemoteFragmentSnapshot,
-  upsertRemoteFragmentSnapshot,
-  writeCachedRemoteFragmentList,
+  deleteLocalFragmentEntity,
+  listLocalFragmentEntities,
+  readLocalFragmentEntity,
 } from '@/features/fragments/store';
-import { useFragmentStore, useFragmentList, useLocalDrafts } from '@/features/fragments/store/fragmentStore';
+import { useFragmentStore, useFragmentList } from '@/features/fragments/store/fragmentStore';
 import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
 import type {
   Fragment,
   FragmentVisualizationResponse,
-  LocalFragmentDraft,
 } from '@/types/fragment';
 import { getErrorMessage } from '@/utils/error';
 
@@ -32,7 +22,7 @@ interface UseFragmentsOptions {
 }
 
 export function useFragments({ folderId }: UseFragmentsOptions = {}) {
-  /*列表页优先消费本地缓存，再静默刷新远端结果。 */
+  /*列表页只消费本地真值，并在失效标记后重新读取本地列表。 */
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,30 +31,8 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
       ? folderId
       : undefined;
 
-  /*从 Zustand Store 读取缓存，自动响应式*/
-  const remoteFragments = useFragmentList(resolvedFolderId ?? null) ?? [];
-  const localDrafts = useLocalDrafts(resolvedFolderId ?? null) ?? [];
-
-  const fragments = useMemo(() => {
-    const remoteById = new Map(remoteFragments.map((item) => [item.id, item]));
-    return mergeLocalDraftsIntoFragments(remoteFragments, localDrafts, remoteById);
-  }, [localDrafts, remoteFragments]);
-
-  const applyCachedList = useCallback(async (): Promise<boolean> => {
-    const cached = await readCachedRemoteFragmentList(resolvedFolderId);
-    if (!cached) return false;
-    /*Zustand Store 自动更新，无需手动 setState*/
-    setError(null);
-    setIsLoading(false);
-    return true;
-  }, [resolvedFolderId]);
-
-  const hydrateLocalDrafts = useCallback(async () => {
-    const drafts = await listLocalFragmentDrafts(resolvedFolderId);
-    /*更新 Zustand Store*/
-    useFragmentStore.getState().setLocalDrafts(resolvedFolderId ?? null, drafts);
-    return drafts;
-  }, [resolvedFolderId]);
+  const cachedFragments = useFragmentList(resolvedFolderId ?? null) ?? [];
+  const fragments = useMemo(() => cachedFragments, [cachedFragments]);
 
   const loadFragments = useCallback(
     async (mode: 'load' | 'refresh' | 'silent' = 'load'): Promise<void> => {
@@ -76,10 +44,8 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
       }
 
       try {
-        const response = await fetchFragmentsRemote(resolvedFolderId);
-        const nextItems = response.items || [];
-        /*Zustand Store 自动更新列表缓存*/
-        await writeCachedRemoteFragmentList(nextItems, resolvedFolderId);
+        const nextItems = await listLocalFragmentEntities(resolvedFolderId);
+        useFragmentStore.getState().setList(resolvedFolderId ?? null, nextItems);
         setError(null);
       } catch (err) {
         const nextError = getErrorMessage(err, '加载失败');
@@ -100,9 +66,11 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
     let cancelled = false;
 
     const hydrate = async () => {
-      const [hasCache] = await Promise.all([applyCachedList(), hydrateLocalDrafts()]);
+      const nextItems = await listLocalFragmentEntities(resolvedFolderId);
       if (cancelled) return;
-      await loadFragments(hasCache ? 'silent' : 'load');
+      useFragmentStore.getState().setList(resolvedFolderId ?? null, nextItems);
+      setError(null);
+      setIsLoading(false);
     };
 
     void hydrate();
@@ -112,17 +80,14 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
     return () => {
       cancelled = true;
     };
-  }, [applyCachedList, hydrateLocalDrafts, loadFragments, resolvedFolderId]);
+  }, [loadFragments, resolvedFolderId]);
 
   useFocusEffect(
     useCallback(() => {
-      void wakeFragmentSyncQueue().catch(() => undefined);
       if (consumeFragmentsStale()) {
-        /*同时刷新本地草稿和远端碎片，确保新建碎片立即显示。 */
-        void hydrateLocalDrafts();
         void loadFragments('load');
       }
-    }, [hydrateLocalDrafts, loadFragments])
+    }, [loadFragments])
   );
 
   return {
@@ -175,12 +140,10 @@ export function useSelectedFragments(fragmentIds?: string | string[]) {
         setError(null);
         const detailList = await Promise.all(
           ids.map(async (id) => {
-            const cached = await readRemoteFragmentSnapshot(id);
-            if (cached) {
-              return cached;
+            const fragment = await readLocalFragmentEntity(id);
+            if (!fragment) {
+              throw new Error(`碎片不存在: ${id}`);
             }
-            const fragment = await fetchFragmentDetail(id);
-            await upsertRemoteFragmentSnapshot(fragment);
             return fragment;
           })
         );
@@ -243,4 +206,5 @@ export function useFragmentVisualization() {
   };
 }
 
-export { deleteFragment, fetchFragmentDetail };
+export const deleteFragment = deleteLocalFragmentEntity;
+export const fetchFragmentDetail = readLocalFragmentEntity;

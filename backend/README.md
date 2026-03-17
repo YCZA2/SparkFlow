@@ -2,6 +2,21 @@
 
 SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Docker PostgreSQL + ChromaDB 联调；文件存储已统一走对象存储抽象，本地开发默认使用 `local` provider，线上可切阿里云 OSS。
 
+## 今日进展（2026-03-17）
+
+- 后端已经补齐 phase 1 local-first 所需的备份恢复能力：`/api/backups/batch`、`/api/backups/snapshot`、`/api/backups/restore`、`/api/backups/assets` 与 `/api/backups/assets/access`。
+- 认证链路已经加入 `device_id + session_version` 语义；登录、刷新 token、备份、恢复和 AI / 转写相关请求都受单设备在线约束。
+- `transcriptions`、`external_media`、`scripts/generation` 现已支持客户端本地快照 / 本地 placeholder 驱动，不再把“先创建远端 fragment 业务记录”作为默认入口。
+- scheduler 侧的 `daily push` 已降级为兼容壳；因为 fragments 真值已经回到客户端，后续若继续演进应优先走客户端触发而不是恢复服务器真值模式。
+- 仓库当前仍保留 `fragments / fragment_folders` 的历史业务表与少量兼容读取能力，但它们已不是移动端 fragments / folders 的主读取来源。
+
+当前第一阶段 local-first 改造已经落地两条基础约束：
+
+- `fragments / folders` 在移动端以本地 SQLite + 文件系统为真值
+- 后端新增 `/api/backups/*` 作为自动备份与显式恢复入口，不再要求移动端先把 fragment 存进后端业务表才能继续主流程
+- `/api/backups/assets/access` 可按 `object_key` 批量换取最新访问地址，供恢复时重新下载媒体缓存，避免依赖旧 snapshot 里的过期签名 URL
+- 该地址刷新接口同时支持备份素材对象键与 fragment 音频对象键，便于移动端恢复时统一重建本地缓存
+
 ## Quick Start
 
 1. Create venv and install dependencies.
@@ -31,6 +46,7 @@ bash scripts/test-all.sh
 ```
 
 本地联调默认测试账号 `test-user-001` 会在应用启动和 `POST /api/auth/token` 时自动补齐到数据库，避免切库后出现外键错误。
+`POST /api/auth/token` 现在会接收 `device_id` 并创建 `device session`，用于单设备在线校验。
 
 如果启用当前默认的 Dify workflow provider adapter，还需要配置：
 

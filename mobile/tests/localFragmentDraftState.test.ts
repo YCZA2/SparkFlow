@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  buildFragmentFromLocalDraft,
-  mergeLocalDraftsIntoFragments,
+  buildFragmentFromLegacyDraft,
+  mergeLegacyDraftsIntoFragments,
   resolveRetryDelayMs,
-} from '../features/fragments/localDraftState';
+} from '../features/fragments/legacyDraftState';
 
-function buildRemoteFragment(overrides = {}) {
-  /*构造最小远端碎片载荷，聚焦本地聚合和去重规则。 */
+function buildBaselineFragment(overrides = {}) {
+  /*构造最小基线碎片载荷，聚焦本地聚合和去重规则。 */
   return {
     id: 'fragment-001',
     server_id: 'fragment-001',
@@ -47,22 +47,22 @@ function buildLocalDraft(overrides = {}) {
   };
 }
 
-test('buildFragmentFromLocalDraft marks local-first fragment metadata', () => {
-  const fragment = buildFragmentFromLocalDraft(buildLocalDraft() as any);
+test('buildFragmentFromLegacyDraft marks local-first fragment metadata', () => {
+  const fragment = buildFragmentFromLegacyDraft(buildLocalDraft() as any);
 
   assert.equal(fragment.id, 'fragment-001');
   assert.equal(fragment.server_id, null);
   assert.equal(fragment.sync_status, 'pending');
 });
 
-test('buildFragmentFromLocalDraft keeps local body over empty bound remote snapshot', () => {
-  const fragment = buildFragmentFromLocalDraft(
+test('buildFragmentFromLegacyDraft keeps local body over empty bound baseline snapshot', () => {
+  const fragment = buildFragmentFromLegacyDraft(
     buildLocalDraft({
       server_id: 'server-001',
       body_html: '<p>本地正文</p>',
       plain_text_snapshot: '本地正文',
     }) as any,
-    buildRemoteFragment({
+    buildBaselineFragment({
       id: 'server-001',
       body_html: '',
       plain_text_snapshot: '',
@@ -75,11 +75,11 @@ test('buildFragmentFromLocalDraft keeps local body over empty bound remote snaps
   assert.equal(fragment.plain_text_snapshot, '本地正文');
 });
 
-test('mergeLocalDraftsIntoFragments hides remote duplicate after local draft binds server_id', () => {
-  const merged = mergeLocalDraftsIntoFragments(
+test('mergeLegacyDraftsIntoFragments hides baseline duplicate after legacy draft binds server_id', () => {
+  const merged = mergeLegacyDraftsIntoFragments(
     [
-      buildRemoteFragment({ id: 'fragment-001', server_id: 'fragment-001', created_at: '2026-03-11T10:00:00Z' }) as any,
-      buildRemoteFragment({ id: 'fragment-002', server_id: 'fragment-002', created_at: '2026-03-11T09:00:00Z' }) as any,
+      buildBaselineFragment({ id: 'fragment-001', server_id: 'fragment-001', created_at: '2026-03-11T10:00:00Z' }) as any,
+      buildBaselineFragment({ id: 'fragment-002', server_id: 'fragment-002', created_at: '2026-03-11T09:00:00Z' }) as any,
     ],
     [buildLocalDraft({ server_id: 'fragment-001' }) as any]
   );

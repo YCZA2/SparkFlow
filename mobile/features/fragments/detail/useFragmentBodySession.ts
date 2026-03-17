@@ -12,20 +12,18 @@ import type {
   EditorMediaAsset,
   EditorSourceDocument,
 } from '@/features/editor/types';
-import {
-  attachPendingLocalImage,
-  loadLocalFragmentDraft,
-  peekRemoteFragmentSnapshot,
-  saveLocalFragmentDraft,
-} from '@/features/fragments/store';
 import { uploadImageAsset } from '@/features/fragments/api';
-import { enqueueFragmentSync } from '@/features/fragments/localFragmentSyncQueue';
-import { resolveLocalDraftSession } from '@/features/fragments/localDraftSession';
+import { resolveLegacyCloudBindingSession } from '@/features/fragments/legacyCloudBindingSession';
 import {
-  resolveLocalDraftPersistStatus,
-  shouldTriggerRemoteSync,
+  resolveLegacyCloudBindingPersistStatus,
 } from '@/features/fragments/bodySyncPolicy';
 import { buildOptimisticFragmentSnapshot } from '@/features/fragments/detail/bodySessionState';
+import {
+  readLocalFragmentEntity,
+  stageLocalFragmentPendingImage,
+  updateLocalFragmentEntity,
+} from '@/features/fragments/store';
+import { useFragmentStore } from '@/features/fragments/store/fragmentStore';
 import type { Fragment } from '@/types/fragment';
 
 // ============================================================================
@@ -47,17 +45,14 @@ function buildEditorDocumentFromFragment(fragment: Fragment): EditorSourceDocume
     id: fragment.id,
     body_html: fragment.body_html ?? '',
     media_assets: fragment.media_assets ?? [],
-    is_local_draft: !fragment.server_id,
-    sync_status: fragment.sync_status ?? 'pending',
+    is_legacy_local_document: !fragment.server_id,
+    legacy_cloud_binding_status: fragment.sync_status ?? 'pending',
   };
 }
 
 function resolveCachedBodyHtml(fragmentId: string | null, fragment: Fragment | null): string | null {
   if (!fragmentId || !fragment) return null;
-  if (fragment.server_id) {
-    return peekRemoteFragmentSnapshot(fragment.server_id)?.body_html ?? null;
-  }
-  return peekRemoteFragmentSnapshot(fragmentId)?.body_html ?? null;
+  return useFragmentStore.getState().getDetail(fragmentId)?.body_html ?? null;
 }
 
 // ============================================================================
@@ -70,20 +65,20 @@ export function useFragmentBodySession({
   commitOptimisticFragment,
 }: UseFragmentBodySessionOptions) {
   const resolvedFragmentId = fragmentId ?? fragment?.id ?? null;
-  const localDraftSession = useMemo(
-    () => resolveLocalDraftSession({ routeFragmentId: fragmentId, fragment }),
+  const legacyBindingSession = useMemo(
+    () => resolveLegacyCloudBindingSession({ routeFragmentId: fragmentId, fragment }),
     [fragment, fragmentId]
   );
 
   const loadLocalDraft = useCallback(
     async (id: string): Promise<string | null> => {
-      if (localDraftSession.draftId) {
-        const draft = await loadLocalFragmentDraft(localDraftSession.draftId);
-        return draft?.body_html ?? null;
+      if (legacyBindingSession.draftId) {
+        const fragmentEntity = await readLocalFragmentEntity(legacyBindingSession.draftId);
+        return fragmentEntity?.body_html ?? null;
       }
       return null;
     },
-    [localDraftSession.draftId]
+    [legacyBindingSession.draftId]
   );
 
   const loadCache = useCallback(
@@ -96,11 +91,11 @@ export function useFragmentBodySession({
 
   const saveLocally = useCallback(
     async (id: string, snapshot: EditorDocumentSnapshot): Promise<void> => {
-      if (localDraftSession.draftId) {
-        await saveLocalFragmentDraft(localDraftSession.draftId, {
+      if (legacyBindingSession.draftId) {
+        await updateLocalFragmentEntity(legacyBindingSession.draftId, {
           body_html: snapshot.body_html,
           plain_text_snapshot: snapshot.plain_text,
-          sync_status: resolveLocalDraftPersistStatus({
+          sync_status: resolveLegacyCloudBindingPersistStatus({
             fragment: fragment!,
             queueRemote: false,
           }),
@@ -118,27 +113,15 @@ export function useFragmentBodySession({
         mediaAssets
       );
       await commitOptimisticFragment(optimisticFragment);
-
-      const shouldSync = shouldTriggerRemoteSync({
-        fragment: fragment!,
-        snapshot,
-        mediaAssets,
-        baselineRemoteHtml: null,
-        baselineMediaAssets: [],
-      });
-
-      if (shouldSync && localDraftSession.draftId) {
-        void enqueueFragmentSync(localDraftSession.draftId, { force: true }).catch(() => undefined);
-      }
     },
-    [commitOptimisticFragment, fragment, localDraftSession.draftId]
+    [commitOptimisticFragment, fragment, legacyBindingSession.draftId]
   );
 
   const determineAutoFocus = useCallback(
     (snapshot: EditorDocumentSnapshot, doc: Fragment | null): boolean => {
-      return Boolean(localDraftSession.isLocalDraftSession && !snapshot.body_html.trim());
+      return Boolean(legacyBindingSession.isLegacyLocalFragment && !snapshot.body_html.trim());
     },
-    [localDraftSession.isLocalDraftSession]
+    [legacyBindingSession.isLegacyLocalFragment]
   );
 
   const session = useEditorSession<Fragment>({
@@ -153,9 +136,9 @@ export function useFragmentBodySession({
     supportsImages: true,
     determineAutoFocus,
     uploadImageAsset,
-    attachPendingLocalImage: localDraftSession.draftId
+    attachPendingLocalImage: legacyBindingSession.draftId
       ? async (localId, payload) => {
-          const result = await attachPendingLocalImage(localId, {
+          const result = await stageLocalFragmentPendingImage(localId, {
             local_uri: payload.local_uri,
             file_name: payload.file_name,
             mime_type: payload.mime_type,

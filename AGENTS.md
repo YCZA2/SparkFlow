@@ -167,8 +167,11 @@ http://<your-lan-ip>:8000
 
 - Prefer modular changes; do not collapse new logic into one large file
 - Respect current backend layering: presentation/application/domain/service responsibilities should stay separated
+- 当前 fragments / folders 正在向 **local-first + backup/recovery** 演进；默认假设移动端本地 SQLite / 文件系统是真值，远端只负责自动备份与显式恢复
+- 处理旧缓存、旧云端绑定或旧正文草稿兼容层时，命名统一使用 `legacy*` / `compat*`；不要再新增会让人误以为远端仍是主真值的 `remote*` / `server*` / `localDraft*` 业务命名
 - Treat `pipeline_runs` / `pipeline_step_runs` as the backend task source of truth for async media ingestion and script generation
 - Do not reintroduce fragment-level task state compatibility fields or `agent_runs`; task progress must stay on `pipeline_runs` / `pipeline_step_runs`
+- 新增需要远端持久化的移动端实体时，优先接入 `/api/backups/*` 和本地 `entity_version / backup_status`，不要再把“先建远端业务记录”当默认路径
 - Reuse existing scripts and utilities before adding new entrypoints
 - 后端测试需要分层：不依赖数据库或启动副作用的 smoke / contract 测试默认不要连接 PostgreSQL，依赖 `db_session_factory`、`app`、`async_client` 或真实 lifespan 的测试统一标记为 `integration`
 - Keep comments concise. For every new or modified function, add a brief Chinese comment describing its responsibility or intent; for non-obvious or project-specific logic, also explain the key constraint or reason, but avoid line-by-line restatement of the code

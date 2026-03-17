@@ -48,18 +48,26 @@ class ScriptGenerationPipelineService:
         db: Session,
         user_id: str,
         fragment_ids: list[str],
+        fragment_snapshots: list[dict[str, Any]],
         mode: str,
         query_hint: str | None,
         include_web_search: bool,
     ) -> PipelineRun:
         """创建脚本生成任务态流水线。"""
-        self.context_builder.validate_fragments(db=db, user_id=user_id, fragment_ids=fragment_ids, mode=mode)
+        normalized_snapshots = self.context_builder.validate_inputs(
+            db=db,
+            user_id=user_id,
+            fragment_ids=fragment_ids,
+            fragment_snapshots=fragment_snapshots,
+            mode=mode,
+        )
         return await self.pipeline_runner.create_run(
             run_id=None,
             user_id=user_id,
             pipeline_type=PIPELINE_TYPE_SCRIPT_GENERATION,
             input_payload={
                 "fragment_ids": fragment_ids,
+                "fragment_snapshots": normalized_snapshots,
                 "mode": mode,
                 "query_hint": query_hint,
                 "include_web_search": include_web_search,
@@ -97,16 +105,17 @@ class ScriptGenerationPipelineService:
     async def collect_fragments_context(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """组装碎片、知识库和搜索所需的基础上下文。"""
         payload = context.input_payload
-        fragments = self.context_builder.validate_fragments(
+        fragment_snapshots = self.context_builder.validate_inputs(
             db=context.db,
             user_id=context.run.user_id,
             fragment_ids=payload["fragment_ids"],
+            fragment_snapshots=payload.get("fragment_snapshots") or [],
             mode=payload["mode"],
         )
         research_context = await self.context_builder.build_context(
             db=context.db,
             user_id=context.run.user_id,
-            fragments=fragments,
+            fragment_snapshots=fragment_snapshots,
             mode=payload["mode"],
             query_hint=payload.get("query_hint"),
             include_web_search=payload.get("include_web_search", False),

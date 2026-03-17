@@ -2,13 +2,13 @@ import { normalizeBodyHtml } from '@/features/editor/html';
 import type { EditorDocumentSnapshot } from '@/features/editor/types';
 import type {
   Fragment,
-  LocalFragmentDraft,
-  FragmentSyncStatus,
+  LegacyLocalFragmentDraft,
+  LegacyCloudBindingStatus,
   MediaAsset,
 } from '@/types/fragment';
 
 function collectMediaAssetIds(mediaAssets: MediaAsset[] | null | undefined): string[] {
-  /*统一按可见素材 id 比较远端与本地差异，避免图片顺序变化被吞掉。 */
+  /*统一按可见素材 id 比较基线与本地差异，避免图片顺序变化被吞掉。 */
   return (mediaAssets ?? []).map((asset) => asset.id);
 }
 
@@ -17,16 +17,16 @@ function areAssetIdsEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-/*只在正文或素材真正偏离远端基线时，才允许触发远端同步。 */
-export function shouldTriggerRemoteSync(input: {
+/*只在正文或素材真正偏离兼容云端基线时，才允许触发补传。 */
+export function shouldTriggerLegacyCloudSync(input: {
   fragment: Fragment;
   snapshot: EditorDocumentSnapshot;
   mediaAssets: MediaAsset[];
-  baselineRemoteHtml?: string | null;
+  baselineBodyHtml?: string | null;
   baselineMediaAssets?: MediaAsset[] | null;
 }): boolean {
-  const baselineRemoteHtml = normalizeBodyHtml(input.baselineRemoteHtml ?? input.fragment.body_html);
-  const bodyChanged = normalizeBodyHtml(input.snapshot.body_html) !== baselineRemoteHtml;
+  const baselineBodyHtml = normalizeBodyHtml(input.baselineBodyHtml ?? input.fragment.body_html);
+  const bodyChanged = normalizeBodyHtml(input.snapshot.body_html) !== baselineBodyHtml;
   const currentAssetIds = collectMediaAssetIds(input.mediaAssets);
   const baselineAssetIds = collectMediaAssetIds(
     input.baselineMediaAssets ?? input.fragment.media_assets ?? []
@@ -36,11 +36,11 @@ export function shouldTriggerRemoteSync(input: {
   return bodyChanged || mediaChanged;
 }
 
-/*本地保存时返回正确的同步状态。 */
-export function resolveLocalDraftPersistStatus(input: {
+/*本地保存时返回兼容云端绑定字段需要的状态。 */
+export function resolveLegacyCloudBindingPersistStatus(input: {
   fragment: Fragment;
   queueRemote: boolean;
-}): FragmentSyncStatus {
+}): LegacyCloudBindingStatus {
   if (input.queueRemote) {
     return 'pending';
   }
@@ -48,8 +48,8 @@ export function resolveLocalDraftPersistStatus(input: {
   return input.fragment.sync_status ?? 'pending';
 }
 
-/*应用重启后只恢复已明确进入同步阶段或待重试的草稿，避免未离页编辑被偷跑同步。 */
-export function shouldRestoreLocalDraftOnLaunch(draft: LocalFragmentDraft): boolean {
+/*应用重启后只恢复已进入兼容同步阶段的 legacy 草稿。 */
+export function shouldRestoreLegacyDraftOnLaunch(draft: LegacyLocalFragmentDraft): boolean {
   return Boolean(
     draft.next_retry_at ||
     (draft.pending_image_assets ?? []).some((asset) => asset.upload_status !== 'uploaded') ||

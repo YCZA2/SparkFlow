@@ -30,8 +30,8 @@ export interface MediaAsset {
   expires_at?: string | null;
 }
 
-/* 碎片同步状态 - 简化为两种状态 */
-export type FragmentSyncStatus = 'pending' | 'synced';
+/* 旧云端绑定状态，仅保留给兼容字段 sync_status 使用。 */
+export type LegacyCloudBindingStatus = 'pending' | 'synced';
 
 export type LocalPendingImageUploadStatus =
   | 'pending'
@@ -49,8 +49,8 @@ export interface LocalPendingImageAsset {
   upload_status: LocalPendingImageUploadStatus;
 }
 
-/* 本地碎片草稿 - 使用统一 id */
-export interface LocalFragmentDraft {
+/* 旧版本地草稿结构，仅用于升级迁移与兼容态判断。 */
+export interface LegacyLocalFragmentDraft {
   id: string;
   server_id?: string | null;
   folder_id?: string | null;
@@ -58,7 +58,7 @@ export interface LocalFragmentDraft {
   plain_text_snapshot: string;
   created_at: string;
   updated_at: string;
-  sync_status: FragmentSyncStatus;
+  sync_status: LegacyCloudBindingStatus;
   last_sync_attempt_at?: string | null;
   next_retry_at?: string | null;
   retry_count?: number;
@@ -86,9 +86,15 @@ export interface Fragment {
   plain_text_snapshot?: string | null;
   content_state?: 'empty' | 'transcript_only' | 'body_present';
   media_assets?: MediaAsset[];
-  /*前端本地优先视图字段，不属于后端 DTO。 */
+  /* 兼容字段：旧云端业务记录 ID，local-first 主链路不再把它当主键。 */
   server_id?: string | null;
-  sync_status?: FragmentSyncStatus;
+  /* 兼容字段：旧云端绑定状态，仅供迁移期逻辑判断。 */
+  sync_status?: LegacyCloudBindingStatus;
+  audio_object_key?: string | null;
+  backup_status?: 'pending' | 'synced' | 'failed';
+  entity_version?: number;
+  last_backup_at?: string | null;
+  deleted_at?: string | null;
 }
 
 export interface FragmentListResponse {

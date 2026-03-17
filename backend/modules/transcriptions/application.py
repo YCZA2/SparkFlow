@@ -32,56 +32,66 @@ class TranscriptionUseCase:
         user_id: str,
         audio: UploadFile,
         folder_id: str | None = None,
+        local_fragment_id: str | None = None,
     ) -> AudioUploadResponse:
         """上传录音文件、落库对象元数据并启动转写流水线。"""
         await self.ingestion_service.ensure_transcription_available()
         content = await audio.read()
         ext, mime_type = validate_audio_upload(audio, content)
-        fragment = fragment_repository.create(
-            db=db,
-            user_id=user_id,
-            transcript=None,
-            source="voice",
-            audio_source="upload",
-            audio_storage_provider=None,
-            audio_bucket=None,
-            audio_object_key=None,
-            audio_access_level=None,
-            audio_original_filename=None,
-            audio_mime_type=None,
-            audio_file_size=None,
-            audio_checksum=None,
-            body_html="",
-            plain_text_snapshot="",
-            folder_id=folder_id,
-        )
+        fragment = None
+        if local_fragment_id is None:
+            fragment = fragment_repository.create(
+                db=db,
+                user_id=user_id,
+                transcript=None,
+                source="voice",
+                audio_source="upload",
+                audio_storage_provider=None,
+                audio_bucket=None,
+                audio_object_key=None,
+                audio_access_level=None,
+                audio_original_filename=None,
+                audio_mime_type=None,
+                audio_file_size=None,
+                audio_checksum=None,
+                body_html="",
+                plain_text_snapshot="",
+                folder_id=folder_id,
+            )
+        target_fragment_id = fragment.id if fragment else local_fragment_id
         if hasattr(audio.file, "seek"):
             audio.file.seek(0)
         stem = sanitize_filename(Path(audio.filename or "recording").stem, "recording")
         saved = await self.file_storage.save_upload(
             file=audio,
-            object_key=build_audio_object_key(user_id=user_id, fragment_id=fragment.id, filename=f"{stem}{ext}"),
+            object_key=build_audio_object_key(
+                user_id=user_id,
+                fragment_id=target_fragment_id or "local-fragment",
+                filename=f"{stem}{ext}",
+            ),
             original_filename=f"{stem}{ext}",
             mime_type=mime_type,
         )
-        fragment_repository.update_audio_file(
-            db=db,
-            fragment_id=fragment.id,
-            user_id=user_id,
-            audio_storage_provider=saved.storage_provider,
-            audio_bucket=saved.bucket,
-            audio_object_key=saved.object_key,
-            audio_access_level=saved.access_level,
-            audio_original_filename=saved.original_filename,
-            audio_mime_type=saved.mime_type,
-            audio_file_size=saved.file_size,
-            audio_checksum=saved.checksum,
-        )
+        if fragment is not None:
+            fragment_repository.update_audio_file(
+                db=db,
+                fragment_id=fragment.id,
+                user_id=user_id,
+                audio_storage_provider=saved.storage_provider,
+                audio_bucket=saved.bucket,
+                audio_object_key=saved.object_key,
+                audio_access_level=saved.access_level,
+                audio_original_filename=saved.original_filename,
+                audio_mime_type=saved.mime_type,
+                audio_file_size=saved.file_size,
+                audio_checksum=saved.checksum,
+            )
         result = await self.ingestion_service.ingest_audio(
             db=db,
             request=AudioIngestionRequest(
                 user_id=user_id,
-                fragment_id=fragment.id,
+                fragment_id=fragment.id if fragment else None,
+                local_fragment_id=local_fragment_id,
                 audio_file=saved,
                 folder_id=folder_id,
                 audio_source="upload",
@@ -92,6 +102,8 @@ class TranscriptionUseCase:
             pipeline_run_id=result.pipeline_run_id,
             pipeline_type="media_ingestion",
             fragment_id=result.fragment_id,
+            local_fragment_id=local_fragment_id,
+            audio_object_key=saved.object_key,
             audio_file_url=access.url,
             audio_file_expires_at=access.expires_at,
             file_size=saved.file_size,

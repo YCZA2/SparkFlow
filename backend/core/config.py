@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     APP_TIMEZONE: str = Field(default="Asia/Shanghai", description="应用业务时区")
     LOG_LEVEL: str = Field(default="INFO", description="日志级别")
     LOG_JSON: bool = Field(default=False, description="是否输出 JSON 结构化日志")
+    ENABLE_DAILY_PUSH_SCHEDULER: bool = Field(
+        default=False,
+        description="是否启用服务端 daily push 定时任务；local-first 第一阶段默认关闭",
+    )
 
     # 服务器配置
     HOST: str = Field(default="0.0.0.0", description="服务器主机")

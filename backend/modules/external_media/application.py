@@ -24,6 +24,7 @@ class ExternalMediaUseCase:
         share_url: str,
         platform: str,
         folder_id: str | None = None,
+        local_fragment_id: str | None = None,
     ) -> ExternalAudioImportResponse:
         """创建全异步外链导入流水线，并返回任务句柄。"""
         ingestion_result = await self.ingestion_service.ingest_external_media(
@@ -32,11 +33,13 @@ class ExternalMediaUseCase:
             share_url=share_url,
             platform=platform,
             folder_id=folder_id,
+            local_fragment_id=local_fragment_id,
         )
         return ExternalAudioImportResponse(
             pipeline_run_id=ingestion_result.pipeline_run_id,
             pipeline_type="media_ingestion",
             fragment_id=ingestion_result.fragment_id,
+            local_fragment_id=local_fragment_id,
             source=ingestion_result.source,
             audio_source=ingestion_result.audio_source,
         )
