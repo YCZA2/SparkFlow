@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const LATEST_SCHEMA_VERSION = 4;
+const LATEST_SCHEMA_VERSION = 6;
 
 /*创建本地镜像所需的 SQLite 表与索引。 */
 export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Promise<void> {
@@ -165,6 +165,49 @@ export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Prom
   if (currentVersion < 4) {
     await database.execAsync(`
       ALTER TABLE fragments ADD COLUMN audio_object_key TEXT;
+    `);
+  }
+
+  // Version 5: 为 script local-first 补齐本地真值表
+  if (currentVersion < 5) {
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS scripts (
+        id TEXT PRIMARY KEY NOT NULL,
+        title TEXT,
+        mode TEXT NOT NULL,
+        generation_kind TEXT NOT NULL DEFAULT 'manual',
+        source_fragment_ids_json TEXT NOT NULL DEFAULT '[]',
+        is_daily_push INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        generated_at TEXT NOT NULL,
+        plain_text_snapshot TEXT NOT NULL DEFAULT '',
+        body_file_uri TEXT,
+        is_filmed INTEGER NOT NULL DEFAULT 0,
+        filmed_at TEXT,
+        copy_of_script_id TEXT,
+        copy_reason TEXT,
+        trashed_at TEXT,
+        deleted_at TEXT,
+        backup_status TEXT NOT NULL DEFAULT 'pending',
+        last_backup_at TEXT,
+        entity_version INTEGER NOT NULL DEFAULT 1,
+        last_modified_device_id TEXT,
+        cached_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS scripts_generated_at_idx ON scripts(generated_at DESC);
+      CREATE INDEX IF NOT EXISTS scripts_trashed_at_idx ON scripts(trashed_at);
+      CREATE INDEX IF NOT EXISTS scripts_deleted_at_idx ON scripts(deleted_at);
+      CREATE INDEX IF NOT EXISTS scripts_copy_of_script_id_idx ON scripts(copy_of_script_id);
+    `);
+  }
+
+  // Version 6: 为 fragment 补充拍摄标记，和成稿保持统一消费语义
+  if (currentVersion < 6) {
+    await database.execAsync(`
+      ALTER TABLE fragments ADD COLUMN is_filmed INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE fragments ADD COLUMN filmed_at TEXT;
     `);
   }
 

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class BackupMutationItem(BaseModel):
-    entity_type: Literal["fragment", "folder", "media_asset"] = Field(..., description="备份实体类型")
+    entity_type: Literal["fragment", "folder", "media_asset", "script"] = Field(..., description="备份实体类型")
     entity_id: str = Field(..., description="本地实体 ID")
     entity_version: int = Field(..., ge=1, description="客户端实体版本号")
     operation: Literal["upsert", "delete"] = Field(..., description="写入或 tombstone 操作")

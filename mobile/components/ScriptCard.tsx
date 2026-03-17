@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View, Text } from 'react-native';
-import type { Script, ScriptMode, ScriptStatus } from '@/types/script';
+import type { Script, ScriptMode } from '@/types/script';
 import { extractPlainTextFromHtml } from '@/features/editor/html';
 import { formatDate } from '@/utils/date';
 import { useAppTheme } from '@/theme/useAppTheme';
@@ -15,38 +15,6 @@ import { useAppTheme } from '@/theme/useAppTheme';
  */
 function getModeLabel(mode: ScriptMode): string {
   return mode === 'mode_a' ? '导师爆款' : '专属二脑';
-}
-
-/**
- * 获取状态标签
- */
-function getStatusLabel(status: ScriptStatus): string {
-  switch (status) {
-    case 'draft':
-      return '草稿';
-    case 'ready':
-      return '待拍摄';
-    case 'filmed':
-      return '已拍摄';
-    default:
-      return '草稿';
-  }
-}
-
-/**
- * 获取状态颜色
- */
-function getStatusColor(status: ScriptStatus): string {
-  switch (status) {
-    case 'draft':
-      return 'subtle';
-    case 'ready':
-      return 'warning';
-    case 'filmed':
-      return 'success';
-    default:
-      return 'subtle';
-  }
 }
 
 /**
@@ -69,14 +37,8 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
     script.title ||
     extractPlainTextFromHtml(script.body_html ?? '').slice(0, 50) ||
     '无标题口播稿';
+  const previewText = extractPlainTextFromHtml(script.body_html ?? '').trim();
   const modeLabel = getModeLabel(script.mode);
-  const statusLabel = getStatusLabel(script.status);
-  const statusColor =
-    getStatusColor(script.status) === 'warning'
-      ? theme.colors.warning
-      : getStatusColor(script.status) === 'success'
-      ? theme.colors.success
-      : theme.colors.textSubtle;
   const modeColor = getModeColor(script.mode) === 'danger' ? theme.colors.danger : theme.colors.primary;
 
   return (
@@ -97,16 +59,20 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
         {displayTitle}
       </Text>
 
+      {previewText ? (
+        <Text
+          style={[styles.preview, { color: theme.colors.textSubtle }]}
+          numberOfLines={3}
+        >
+          {previewText}
+        </Text>
+      ) : null}
+
       {/* 标签行 */}
       <View style={styles.tagsRow}>
         {/* 模式标签 */}
         <View style={[styles.tag, { backgroundColor: modeColor + '20' }]}>
           <Text style={[styles.tagText, { color: modeColor }]}>{modeLabel}</Text>
-        </View>
-
-        {/* 状态标签 */}
-        <View style={[styles.tag, { backgroundColor: statusColor + '20' }]}>
-          <Text style={[styles.tagText, { color: statusColor }]}>{statusLabel}</Text>
         </View>
 
         {/* 每日推盘标记 */}
@@ -138,6 +104,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     lineHeight: 22,
+    marginBottom: 8,
+  },
+  preview: {
+    fontSize: 13,
+    lineHeight: 20,
     marginBottom: 10,
   },
   tagsRow: {

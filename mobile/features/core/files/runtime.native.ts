@@ -38,12 +38,14 @@ interface NativeFileHandle extends ManagedNativeFile {
 
 const ROOT_DIRECTORY = new Directory(Paths.document, 'sparkflow');
 const FRAGMENTS_DIRECTORY = new Directory(ROOT_DIRECTORY, 'fragments');
+const SCRIPTS_DIRECTORY = new Directory(ROOT_DIRECTORY, 'scripts');
 const STAGING_DIRECTORY = new Directory(Paths.cache, 'sparkflow', 'staging');
 const STAGING_IMAGE_DIRECTORY = new Directory(STAGING_DIRECTORY, 'images');
 const STAGING_AUDIO_DIRECTORY = new Directory(STAGING_DIRECTORY, 'audio');
 
 const ROOT_DIRECTORY_URI = `${toDirectoryHandle(ROOT_DIRECTORY).uri}`;
 const FRAGMENTS_DIRECTORY_URI = `${toDirectoryHandle(FRAGMENTS_DIRECTORY).uri}`;
+const SCRIPTS_DIRECTORY_URI = `${toDirectoryHandle(SCRIPTS_DIRECTORY).uri}`;
 const STAGING_DIRECTORY_URI = `${toDirectoryHandle(STAGING_DIRECTORY).uri}`;
 const STAGING_IMAGE_DIRECTORY_URI = `${STAGING_DIRECTORY_URI}images/`;
 const STAGING_AUDIO_DIRECTORY_URI = `${STAGING_DIRECTORY_URI}audio/`;
@@ -83,6 +85,11 @@ function getFragmentDirectoryUri(fragmentId: string): string {
   return `${FRAGMENTS_DIRECTORY_URI}${fragmentId}/`;
 }
 
+/*按 script id 生成持久化目录，统一承接成稿正文文件。 */
+function getScriptDirectoryUri(scriptId: string): string {
+  return `${SCRIPTS_DIRECTORY_URI}${scriptId}/`;
+}
+
 /*为单条片段创建 meta 子目录，用于放置草稿和辅助文件。 */
 function getFragmentMetaDirectoryUri(fragmentId: string): string {
   return `${getFragmentDirectoryUri(fragmentId)}meta/`;
@@ -106,6 +113,11 @@ function createManagedNativeFile(parentDirectoryUri: string, fileName: string): 
 /*返回片段正式正文文件句柄，供本地镜像持久化基线正文。 */
 export function getFragmentBodyFile(fragmentId: string): ManagedNativeFile {
   return createManagedNativeFile(getFragmentDirectoryUri(fragmentId), 'body.html');
+}
+
+/*返回 script 正式正文文件句柄，供成稿 local-first 真值落盘。 */
+export function getScriptBodyFile(scriptId: string): ManagedNativeFile {
+  return createManagedNativeFile(getScriptDirectoryUri(scriptId), 'body.html');
 }
 
 /*返回兼容草稿正文文件句柄，供未持久化输入临时落盘。 */
@@ -157,6 +169,16 @@ export async function readFragmentBodyFile(fragmentId: string): Promise<string |
   return await readTextFile(getFragmentBodyFile(fragmentId));
 }
 
+/*把正式正文写入 script 目录，供成稿详情和列表镜像消费。 */
+export async function writeScriptBodyFile(scriptId: string, html: string): Promise<string> {
+  return await writeTextFile(getScriptBodyFile(scriptId), html);
+}
+
+/*读取 script 正式正文，缺失时返回 null。 */
+export async function readScriptBodyFile(scriptId: string): Promise<string | null> {
+  return await readTextFile(getScriptBodyFile(scriptId));
+}
+
 /*把兼容草稿正文写到 meta 目录，避免污染正式基线文件。 */
 export async function writeFragmentDraftBodyFile(fragmentId: string, html: string): Promise<string> {
   return await writeTextFile(getFragmentDraftBodyFile(fragmentId), html);
@@ -204,6 +226,36 @@ export async function resetFragmentFiles(): Promise<void> {
   };
 
   for (const entry of toDirectoryHandle(FRAGMENTS_DIRECTORY).list()) {
+    if (entry instanceof Directory) {
+      deleteDirectoryRecursively(entry);
+    } else {
+      toFileHandle(entry).delete();
+    }
+  }
+}
+
+/*递归清空 scripts 目录，供显式恢复或重建成稿本地镜像使用。 */
+export async function resetScriptFiles(): Promise<void> {
+  await ensureDirectoryAsync(SCRIPTS_DIRECTORY_URI);
+
+  const deleteDirectoryRecursively = (directory: Directory): void => {
+    const handle = toDirectoryHandle(directory);
+    if (!handle.exists) {
+      return;
+    }
+
+    for (const entry of handle.list()) {
+      if (entry instanceof Directory) {
+        deleteDirectoryRecursively(entry);
+      } else {
+        toFileHandle(entry).delete();
+      }
+    }
+
+    handle.delete();
+  };
+
+  for (const entry of toDirectoryHandle(SCRIPTS_DIRECTORY).list()) {
     if (entry instanceof Directory) {
       deleteDirectoryRecursively(entry);
     } else {
@@ -321,6 +373,7 @@ export async function ensureFileRuntimeReady(): Promise<void> {
   await Promise.all([
     ensureDirectoryAsync(ROOT_DIRECTORY_URI),
     ensureDirectoryAsync(FRAGMENTS_DIRECTORY_URI),
+    ensureDirectoryAsync(SCRIPTS_DIRECTORY_URI),
     ensureDirectoryAsync(STAGING_DIRECTORY_URI),
     ensureDirectoryAsync(STAGING_IMAGE_DIRECTORY_URI),
     ensureDirectoryAsync(STAGING_AUDIO_DIRECTORY_URI),

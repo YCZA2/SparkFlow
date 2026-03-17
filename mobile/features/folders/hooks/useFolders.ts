@@ -4,6 +4,8 @@ import * as folderApi from '@/features/folders/api';
 import { getOrCreateDeviceId } from '@/features/auth/device';
 import { createLocalFolder, listLocalFolders } from '@/features/folders/localStore';
 import { listLocalFragmentEntities } from '@/features/fragments/store/localEntityStore';
+import { countLocalScriptEntities } from '@/features/scripts/store';
+import { syncRemoteScriptsToLocal } from '@/features/scripts/sync';
 import type { FragmentFolder } from '@/types/folder';
 import { getErrorMessage } from '@/utils/error';
 
@@ -22,6 +24,8 @@ export interface UseFoldersReturn {
   total: number;
   /** 全部碎片数量（用于"全部"虚拟文件夹） */
   allFragmentsCount: number;
+  /** 全部成稿数量（用于系统“成稿”入口） */
+  allScriptsCount: number;
   /** 获取文件夹列表 */
   fetchFolders: () => Promise<void>;
   /** 刷新文件夹列表 */
@@ -42,18 +46,26 @@ export function useFolders(): UseFoldersReturn {
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [allFragmentsCount, setAllFragmentsCount] = useState(0);
+  const [allScriptsCount, setAllScriptsCount] = useState(0);
 
   const fetchFolders = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [localFolders, localFragments] = await Promise.all([
+      try {
+        await syncRemoteScriptsToLocal();
+      } catch {
+        // 首页文件夹不应因为成稿同步失败而整体报错，仍优先展示本地内容。
+      }
+      const [localFolders, localFragments, localScriptsCount] = await Promise.all([
         listLocalFolders(),
         listLocalFragmentEntities(),
+        countLocalScriptEntities(),
       ]);
       setFolders(localFolders);
       setTotal(localFolders.length);
       setAllFragmentsCount(localFragments.length);
+      setAllScriptsCount(localScriptsCount);
     } catch (err) {
       setError(getErrorMessage(err, '获取文件夹列表失败'));
     } finally {
@@ -64,13 +76,20 @@ export function useFolders(): UseFoldersReturn {
   const refreshFolders = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [localFolders, localFragments] = await Promise.all([
+      try {
+        await syncRemoteScriptsToLocal();
+      } catch {
+        // 刷新时允许成稿同步失败后继续展示本地文件夹结果。
+      }
+      const [localFolders, localFragments, localScriptsCount] = await Promise.all([
         listLocalFolders(),
         listLocalFragmentEntities(),
+        countLocalScriptEntities(),
       ]);
       setFolders(localFolders);
       setTotal(localFolders.length);
       setAllFragmentsCount(localFragments.length);
+      setAllScriptsCount(localScriptsCount);
     } catch (err) {
       setError(getErrorMessage(err, '刷新文件夹列表失败'));
     } finally {
@@ -107,6 +126,7 @@ export function useFolders(): UseFoldersReturn {
     error,
     total,
     allFragmentsCount,
+    allScriptsCount,
     fetchFolders,
     refreshFolders,
     createNewFolder,

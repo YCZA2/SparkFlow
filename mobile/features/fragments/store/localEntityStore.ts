@@ -59,6 +59,8 @@ export async function createLocalFragmentEntity(input: {
     nextRetryAt: null,
     retryCount: 0,
     deletedAt: null,
+    isFilmed: 0,
+    filmedAt: null,
     backupStatus: 'pending',
     lastBackupAt: null,
     entityVersion: 1,
@@ -175,6 +177,8 @@ export async function updateLocalFragmentEntity(
       lastModifiedDeviceId:
         patch.last_modified_device_id ?? current.lastModifiedDeviceId ?? undefined,
       deletedAt: patch.deleted_at ?? current.deletedAt ?? undefined,
+      isFilmed: patch.is_filmed === undefined ? current.isFilmed : patch.is_filmed ? 1 : 0,
+      filmedAt: patch.filmed_at === undefined ? current.filmedAt : patch.filmed_at,
     })
     .where(eq(fragmentsTable.id, id));
   useFragmentStore.getState().deleteDetail(id);
@@ -243,4 +247,18 @@ export async function deleteLocalFragmentEntity(
   });
   useFragmentStore.getState().deleteDetail(id);
   useFragmentStore.getState().clearCache();
+}
+
+export async function markLocalFragmentFilmed(
+  id: string,
+  options?: { filmedAt?: string; deviceId?: string | null }
+): Promise<Fragment | null> {
+  /*将碎片标记为已拍，统一走 local-first 内容资产状态。 */
+  const filmedAt = options?.filmedAt ?? new Date().toISOString();
+  return await updateLocalFragmentEntity(id, {
+    is_filmed: true,
+    filmed_at: filmedAt,
+    backup_status: 'pending',
+    last_modified_device_id: options?.deviceId ?? null,
+  });
 }

@@ -2,6 +2,10 @@
 
 最后更新：2026-03-10
 
+> 历史方案文档：本文件形成于 `body_markdown` 仍是内容主线的阶段，现已过期。
+> 当前实现已经收敛为 `fragments.body_html` / `scripts.body_html` 与本地 local-first 内容层；只有 `knowledge` 仍继续使用 `body_markdown`。
+> 当前真实状态请以 [`architecture.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/architecture.md)、[`mobile/README.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/README.md) 和 [`backend/README.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/README.md) 为准。
+
 ## 当前已落地
 
 - 数据库继续作为事实源。

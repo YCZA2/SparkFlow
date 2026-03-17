@@ -3,12 +3,16 @@ import { getLocalDatabase } from '@/features/core/db/database';
 import {
   downloadRemoteFileToFragment,
   getFragmentBodyFile,
+  getScriptBodyFile,
   resetFragmentFiles,
   writeFragmentBodyFile,
 } from '@/features/core/files/runtime';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { useFragmentStore } from '@/features/fragments/store/fragmentStore';
 import { ensureFragmentStoreReady } from '@/features/fragments/store/runtime';
+import { markScriptsStale } from '@/features/scripts/refreshSignal';
+import { useScriptStore } from '@/features/scripts/store/scriptStore';
+import { mergeRestoredScriptRow } from '@/features/scripts/store';
 
 import { createRestoreSession, fetchBackupSnapshot, refreshBackupAssetAccess } from './api';
 import {
@@ -16,6 +20,7 @@ import {
   type BackupRestorePlan,
   type RestoredFragmentRow,
   type RestoredMediaAssetRow,
+  type RestoredScriptRow,
 } from './restoreState';
 
 export interface BackupRestoreResult {
@@ -23,6 +28,7 @@ export interface BackupRestoreResult {
   fragmentCount: number;
   folderCount: number;
   mediaAssetCount: number;
+  scriptCount: number;
   snapshotGeneratedAt: string;
 }
 
@@ -157,6 +163,41 @@ async function hydrateBackupFileCache(plan: BackupRestorePlan): Promise<void> {
   ]);
 }
 
+async function mergeRestoredScripts(plan: BackupRestorePlan): Promise<void> {
+  /*script 恢复按“现存本地 > 远端快照 > 回收站”规则合并，不粗暴覆盖本地稿。 */
+  for (const script of plan.scripts) {
+    const bodyHtml = script.deletedAt ? '' : script.bodyHtml;
+    await mergeRestoredScriptRow({
+      row: {
+        id: script.id,
+        title: script.title,
+        mode: script.mode,
+        generationKind: script.generationKind,
+        sourceFragmentIdsJson: script.sourceFragmentIdsJson,
+        isDailyPush: script.isDailyPush,
+        createdAt: script.createdAt,
+        updatedAt: script.updatedAt,
+        generatedAt: script.generatedAt,
+        plainTextSnapshot: script.plainTextSnapshot,
+        bodyFileUri: script.deletedAt ? null : getScriptBodyFile(script.id).uri,
+        isFilmed: script.isFilmed,
+        filmedAt: script.filmedAt,
+        copyOfScriptId: script.copyOfScriptId,
+        copyReason: script.copyReason,
+        trashedAt: script.trashedAt,
+        deletedAt: script.deletedAt,
+        backupStatus: script.backupStatus,
+        lastBackupAt: script.lastBackupAt,
+        entityVersion: script.entityVersion,
+        lastModifiedDeviceId: script.lastModifiedDeviceId,
+        cachedAt: script.cachedAt,
+      },
+      bodyHtml,
+      lastModifiedDeviceId: script.lastModifiedDeviceId,
+    });
+  }
+}
+
 /*用远端备份快照覆盖本地 SQLite 与正文文件，显式完成一次恢复流程。 */
 export async function restoreFromBackup(reason?: string): Promise<BackupRestoreResult> {
   await ensureFragmentStoreReady();
@@ -213,6 +254,8 @@ export async function restoreFromBackup(reason?: string): Promise<BackupRestoreR
         nextRetryAt: fragment.nextRetryAt,
         retryCount: fragment.retryCount,
         deletedAt: fragment.deletedAt,
+        isFilmed: fragment.isFilmed,
+        filmedAt: fragment.filmedAt,
         backupStatus: fragment.backupStatus,
         lastBackupAt: fragment.lastBackupAt,
         entityVersion: fragment.entityVersion,
@@ -227,14 +270,19 @@ export async function restoreFromBackup(reason?: string): Promise<BackupRestoreR
     await database.insert(mediaAssetsTable).values(plan.mediaAssets);
   }
 
+  await mergeRestoredScripts(plan);
+
   useFragmentStore.getState().clearCache();
+  useScriptStore.getState().clearCache();
   markFragmentsStale();
+  markScriptsStale();
 
   return {
     restoreSessionId: restoreSession.restore_session_id,
     fragmentCount: plan.fragments.filter((item) => !item.deletedAt).length,
     folderCount: plan.folders.filter((item) => !item.deletedAt).length,
     mediaAssetCount: plan.mediaAssets.filter((item) => !item.deletedAt).length,
+    scriptCount: plan.scripts.filter((item) => !item.deletedAt && !item.trashedAt).length,
     snapshotGeneratedAt: snapshot.server_generated_at,
   };
 }

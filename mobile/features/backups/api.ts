@@ -1,6 +1,7 @@
 import { API_ENDPOINTS } from '@/constants/config';
 import { buildMultipartFilePart } from '@/features/core/files/runtime';
 import { post, get, sendForm } from '@/features/core/api/client';
+import type { ScriptCopyReason, ScriptGenerationKind, ScriptMode } from '@/types/script';
 
 /* 备份协议里的 fragment payload，保留 legacy 绑定字段以兼容现有服务端快照。 */
 export type BackupFragmentContractPayload = Record<string, unknown> & {
@@ -21,6 +22,8 @@ export type BackupFragmentContractPayload = Record<string, unknown> & {
   body_html: string;
   plain_text_snapshot: string;
   content_state: string | null;
+  is_filmed: boolean;
+  filmed_at: string | null;
   deleted_at: string | null;
 };
 
@@ -55,13 +58,35 @@ export type BackupMediaAssetContractPayload = Record<string, unknown> & {
   deleted_at: string | null;
 };
 
+/* 备份协议里的 script payload，统一承接成稿正文、本地资产状态与来源关系。 */
+export type BackupScriptContractPayload = Record<string, unknown> & {
+  id: string;
+  title: string | null;
+  mode: ScriptMode;
+  generation_kind: ScriptGenerationKind;
+  source_fragment_ids: string[];
+  is_daily_push: boolean;
+  created_at: string;
+  updated_at: string;
+  generated_at: string;
+  body_html: string;
+  plain_text_snapshot: string;
+  is_filmed: boolean;
+  filmed_at: string | null;
+  copy_of_script_id: string | null;
+  copy_reason: ScriptCopyReason | null;
+  trashed_at: string | null;
+  deleted_at: string | null;
+};
+
 export type BackupContractPayload =
   | BackupFragmentContractPayload
   | BackupFolderContractPayload
-  | BackupMediaAssetContractPayload;
+  | BackupMediaAssetContractPayload
+  | BackupScriptContractPayload;
 
 export interface BackupMutationItem<TPayload extends Record<string, unknown> | null = Record<string, unknown> | null> {
-  entity_type: 'fragment' | 'folder' | 'media_asset';
+  entity_type: 'fragment' | 'folder' | 'media_asset' | 'script';
   entity_id: string;
   entity_version: number;
   operation: 'upsert' | 'delete';

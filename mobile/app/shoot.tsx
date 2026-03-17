@@ -26,12 +26,16 @@ const FALLBACK_TEXT =
 export default function ShootScreen() {
   const router = useRouter();
   const theme = useAppTheme();
-  const { script_id, body_html } = useLocalSearchParams<{
+  const { script_id, fragment_id, body_html } = useLocalSearchParams<{
     script_id?: string;
+    fragment_id?: string;
     body_html?: string;
   }>();
+  const scriptId = typeof script_id === 'string' ? script_id : undefined;
+  const fragmentId = typeof fragment_id === 'string' ? fragment_id : undefined;
+  const bodyHtml = typeof body_html === 'string' ? body_html : '';
   const [permission, requestPermission] = useCameraPermissions();
-  const recorder = useVideoRecorder(script_id);
+  const recorder = useVideoRecorder({ scriptId, fragmentId });
 
   const handleClose = useCallback(() => {
     if (recorder.isRecording) return;
@@ -89,8 +93,8 @@ export default function ShootScreen() {
     );
   }
 
-  const teleprompterText = body_html?.trim()
-    ? extractPlainTextFromHtml(body_html)
+  const teleprompterText = bodyHtml.trim()
+    ? extractPlainTextFromHtml(bodyHtml)
     : FALLBACK_TEXT;
 
   return (

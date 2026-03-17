@@ -2,9 +2,10 @@ import { and, eq, isNull, or } from 'drizzle-orm';
 
 import { getOrCreateDeviceId } from '@/features/auth/device';
 import { getLocalDatabase } from '@/features/core/db/database';
-import { fragmentFoldersTable, fragmentsTable, mediaAssetsTable } from '@/features/core/db/schema';
-import { readFragmentBodyFile } from '@/features/core/files/runtime';
+import { fragmentFoldersTable, fragmentsTable, mediaAssetsTable, scriptsTable } from '@/features/core/db/schema';
+import { readFragmentBodyFile, readScriptBodyFile } from '@/features/core/files/runtime';
 import { deserializeSpeakerSegments, deserializeTags } from '@/features/fragments/store/shared';
+import { deserializeSourceFragmentIds } from '@/features/scripts/store/shared';
 
 import {
   pushBackupBatch,
@@ -12,6 +13,7 @@ import {
   type BackupFragmentContractPayload,
   type BackupFolderContractPayload,
   type BackupMediaAssetContractPayload,
+  type BackupScriptContractPayload,
   type BackupMutationItem,
 } from './api';
 
@@ -45,6 +47,8 @@ async function buildFragmentItems(deviceId: string): Promise<BackupMutationItem[
             body_html: (await readFragmentBodyFile(row.id)) ?? '',
             plain_text_snapshot: row.plainTextSnapshot,
             content_state: row.contentState,
+            is_filmed: row.isFilmed === 1,
+            filmed_at: row.filmedAt ?? null,
             deleted_at: row.deletedAt,
           };
       return {
@@ -150,6 +154,48 @@ async function buildMediaAssetItems(deviceId: string): Promise<BackupMutationIte
   return nextItems;
 }
 
+async function buildScriptItems(deviceId: string): Promise<BackupMutationItem[]> {
+  const database = await getLocalDatabase();
+  const rows = await database
+    .select()
+    .from(scriptsTable)
+    .where(or(eq(scriptsTable.backupStatus, 'pending'), eq(scriptsTable.backupStatus, 'failed')));
+  return await Promise.all(
+    rows.map(async (row) => {
+      const payload: BackupScriptContractPayload | null = row.deletedAt
+        ? null
+        : {
+            id: row.id,
+            title: row.title ?? null,
+            mode: row.mode as BackupScriptContractPayload['mode'],
+            generation_kind: row.generationKind as BackupScriptContractPayload['generation_kind'],
+            source_fragment_ids: deserializeSourceFragmentIds(row.sourceFragmentIdsJson),
+            is_daily_push: row.isDailyPush === 1,
+            created_at: row.createdAt,
+            updated_at: row.updatedAt,
+            generated_at: row.generatedAt,
+            body_html: (await readScriptBodyFile(row.id)) ?? '',
+            plain_text_snapshot: row.plainTextSnapshot,
+            is_filmed: row.isFilmed === 1,
+            filmed_at: row.filmedAt ?? null,
+            copy_of_script_id: row.copyOfScriptId ?? null,
+            copy_reason: (row.copyReason as BackupScriptContractPayload['copy_reason']) ?? null,
+            trashed_at: row.trashedAt ?? null,
+            deleted_at: row.deletedAt ?? null,
+          };
+      return {
+        entity_type: 'script' as const,
+        entity_id: row.id,
+        entity_version: row.entityVersion,
+        operation: row.deletedAt ? 'delete' : 'upsert',
+        payload,
+        modified_at: row.updatedAt,
+        last_modified_device_id: row.lastModifiedDeviceId ?? deviceId,
+      };
+    })
+  );
+}
+
 async function markBackupsSynced(serverGeneratedAt: string): Promise<void> {
   const database = await getLocalDatabase();
   await database
@@ -164,6 +210,10 @@ async function markBackupsSynced(serverGeneratedAt: string): Promise<void> {
     .update(mediaAssetsTable)
     .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
     .where(or(eq(mediaAssetsTable.backupStatus, 'pending'), eq(mediaAssetsTable.backupStatus, 'failed')));
+  await database
+    .update(scriptsTable)
+    .set({ backupStatus: 'synced', lastBackupAt: serverGeneratedAt })
+    .where(or(eq(scriptsTable.backupStatus, 'pending'), eq(scriptsTable.backupStatus, 'failed')));
 }
 
 async function markBackupsFailed(): Promise<void> {
@@ -180,6 +230,10 @@ async function markBackupsFailed(): Promise<void> {
     .update(mediaAssetsTable)
     .set({ backupStatus: 'failed' })
     .where(eq(mediaAssetsTable.backupStatus, 'pending'));
+  await database
+    .update(scriptsTable)
+    .set({ backupStatus: 'failed' })
+    .where(eq(scriptsTable.backupStatus, 'pending'));
 }
 
 export async function flushBackupQueue(): Promise<void> {
@@ -190,6 +244,7 @@ export async function flushBackupQueue(): Promise<void> {
         ...(await buildFolderItems(deviceId)),
         ...(await buildMediaAssetItems(deviceId)),
         ...(await buildFragmentItems(deviceId)),
+        ...(await buildScriptItems(deviceId)),
       ];
       if (items.length === 0) {
         return;

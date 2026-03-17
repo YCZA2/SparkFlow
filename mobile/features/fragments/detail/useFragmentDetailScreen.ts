@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Share } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 
@@ -6,9 +6,8 @@ import { getOrCreateDeviceId } from '@/features/auth/device';
 import { useFragmentAudioPlayer } from '@/features/fragments/hooks/useFragmentAudioPlayer';
 import { getActiveSegmentIndex } from '@/features/fragments/presenters/speakerSegments';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
-import {
-  deleteLocalFragmentEntity,
-} from '@/features/fragments/store';
+import { deleteLocalFragmentEntity } from '@/features/fragments/store';
+import { listLocalScriptsBySourceFragment } from '@/features/scripts/store';
 import { getErrorMessage } from '@/utils/error';
 
 import { useFragmentBodySession } from './useFragmentBodySession';
@@ -27,6 +26,7 @@ export function useFragmentDetailScreen(
   const resource = useFragmentDetailResource(fragmentId);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [relatedScriptsCount, setRelatedScriptsCount] = useState(0);
   const fragment = resource.fragment;
 
   const editor = useFragmentBodySession({
@@ -41,6 +41,47 @@ export function useFragmentDetailScreen(
     if (!segments?.length) return null;
     return getActiveSegmentIndex(segments, player.positionMs);
   }, [fragment?.speaker_segments, isSheetOpen, player.positionMs]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const nextFragmentId = fragment?.id;
+    if (!nextFragmentId) {
+      setRelatedScriptsCount(0);
+      return;
+    }
+    void (async () => {
+      try {
+        const scripts = await listLocalScriptsBySourceFragment(nextFragmentId);
+        if (!cancelled) {
+          setRelatedScriptsCount(scripts.length);
+        }
+      } catch {
+        if (!cancelled) {
+          setRelatedScriptsCount(0);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fragment?.id, fragment?.updated_at]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const nextFragmentId = fragment?.id;
+    if (!isSheetOpen || !nextFragmentId) {
+      return;
+    }
+    void (async () => {
+      const scripts = await listLocalScriptsBySourceFragment(nextFragmentId);
+      if (!cancelled) {
+        setRelatedScriptsCount(scripts.length);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fragment?.id, isSheetOpen]);
 
   const exitScreen = async () => {
     /*离开详情前先保证最新输入已落本地，并把上云动作交给后台收敛，同时标记列表待刷新。 */
@@ -112,6 +153,33 @@ export function useFragmentDetailScreen(
     await exitScreen();
   };
 
+  const openShoot = () => {
+    /*碎片拍摄也走统一提词页，并优先携带当前编辑快照。 */
+    const currentHtml =
+      editor.editorRef.current?.getSnapshot?.()?.body_html ?? fragment?.body_html ?? '';
+    if (!fragment?.id) return;
+    setIsSheetOpen(false);
+    router.push({
+      pathname: '/shoot',
+      params: {
+        fragment_id: fragment.id,
+        body_html: currentHtml,
+      },
+    });
+  };
+
+  const openRelatedScripts = () => {
+    /*从碎片详情跳到关联成稿列表，保持列表与详情边界分离。 */
+    if (!fragment?.id) return;
+    setIsSheetOpen(false);
+    router.push({
+      pathname: '/scripts',
+      params: {
+        source_fragment_id: fragment.id,
+      },
+    });
+  };
+
   return {
     resource: {
       fragment,
@@ -142,6 +210,8 @@ export function useFragmentDetailScreen(
             audioSource: fragment.audio_source ?? null,
             createdAt: fragment.created_at,
             folderName: fragment.folder?.name ?? '未归档',
+            isFilmed: fragment.is_filmed ?? false,
+            relatedScriptsCount,
           }
         : null,
       tools: {
@@ -152,6 +222,8 @@ export function useFragmentDetailScreen(
       actions: {
         isDeleting,
         onClose: () => setIsSheetOpen(false),
+        onShoot: openShoot,
+        onOpenRelatedScripts: openRelatedScripts,
         onDelete: requestDelete,
       },
     },

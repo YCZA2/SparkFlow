@@ -167,7 +167,9 @@ http://<your-lan-ip>:8000
 
 - Prefer modular changes; do not collapse new logic into one large file
 - Respect current backend layering: presentation/application/domain/service responsibilities should stay separated
-- 当前 fragments / folders 正在向 **local-first + backup/recovery** 演进；默认假设移动端本地 SQLite / 文件系统是真值，远端只负责自动备份与显式恢复
+- 当前 fragments / folders / scripts 正在向 **local-first + backup/recovery** 演进；默认假设移动端本地 SQLite / 文件系统是真值，远端只负责自动备份与显式恢复
+- `fragment` 与 `script` 是两个独立领域对象：fragment 是素材池，script 是派生成稿；两者可以共享 editor / `body_html` / backup 基础设施，但不要把它们合并成统一业务实体
+- `script.source_fragment_ids` 只表示首次生成来源；不要让 script 重新进入 fragment 检索、聚类、每日推盘选材或再生成输入
 - 处理旧缓存、旧云端绑定或旧正文草稿兼容层时，命名统一使用 `legacy*` / `compat*`；不要再新增会让人误以为远端仍是主真值的 `remote*` / `server*` / `localDraft*` 业务命名
 - Treat `pipeline_runs` / `pipeline_step_runs` as the backend task source of truth for async media ingestion and script generation
 - Do not reintroduce fragment-level task state compatibility fields or `agent_runs`; task progress must stay on `pipeline_runs` / `pipeline_step_runs`

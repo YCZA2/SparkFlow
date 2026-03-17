@@ -3,6 +3,7 @@ export {
   createLocalFragmentEntity,
   deleteLocalFragmentEntity,
   listLocalFragmentEntities,
+  markLocalFragmentFilmed,
   readLocalFragmentEntity,
   stageLocalFragmentPendingImage,
   updateLocalFragmentEntity,

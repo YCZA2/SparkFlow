@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ScriptCard } from '@/components/ScriptCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -14,7 +14,20 @@ import { useAppTheme } from '@/theme/useAppTheme';
 export default function ScriptsScreen() {
   const router = useRouter();
   const theme = useAppTheme();
-  const { items, isLoading, isRefreshing, error, reload, refresh } = useScripts();
+  const { source_fragment_id } = useLocalSearchParams<{ source_fragment_id?: string }>();
+  const sourceFragmentId = typeof source_fragment_id === 'string' ? source_fragment_id : null;
+  const { items, isLoading, isRefreshing, error, reload, refresh } = useScripts({
+    sourceFragmentId,
+  });
+  const isRelatedScriptsMode = Boolean(sourceFragmentId);
+  const title = isRelatedScriptsMode ? '关联成稿' : '成稿';
+  const subtitle = isRelatedScriptsMode
+    ? '查看这条碎片已经衍生出的成稿，继续修改或进入拍摄。'
+    : '查看已经生成的稿件，继续修改、拍摄或回看。';
+  const emptyTitle = isRelatedScriptsMode ? '还没有关联成稿' : '还没有口播稿';
+  const emptyMessage = isRelatedScriptsMode
+    ? '这条碎片暂时还没有生成过成稿。'
+    : '去碎片页选择灵感，生成你的第一篇口播稿';
 
   useFocusEffect(
     useCallback(() => {
@@ -25,7 +38,7 @@ export default function ScriptsScreen() {
   if (isLoading && items.length === 0) {
     return (
       <ScreenContainer>
-        <Stack.Screen options={{ title: '我的口播稿', headerShown: false }} />
+        <Stack.Screen options={{ title, headerShown: false }} />
         <LoadingState message="正在加载口播稿..." />
       </ScreenContainer>
     );
@@ -34,7 +47,7 @@ export default function ScriptsScreen() {
   if (error && items.length === 0) {
     return (
       <ScreenContainer>
-        <Stack.Screen options={{ title: '我的口播稿', headerShown: false }} />
+        <Stack.Screen options={{ title, headerShown: false }} />
         <ScreenState
           icon="⚠️"
           title="加载失败"
@@ -50,7 +63,7 @@ export default function ScriptsScreen() {
 
   return (
     <ScreenContainer>
-      <Stack.Screen options={{ title: '我的口播稿', headerShown: false }} />
+      <Stack.Screen options={{ title, headerShown: false }} />
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
@@ -60,13 +73,13 @@ export default function ScriptsScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <ScreenHeader
-              title="我的口播稿"
-              subtitle="查看已经生成的稿件，继续修改、拍摄或回看。"
+              title={title}
+              subtitle={subtitle}
               leading={<BackButton color={theme.colors.primary} />}
             />
             {items.length > 0 ? (
               <Text style={[styles.headerText, { color: theme.colors.textSubtle }]}>
-                共 {items.length} 篇口播稿
+                共 {items.length} 篇成稿
               </Text>
             ) : null}
           </View>
@@ -74,8 +87,8 @@ export default function ScriptsScreen() {
         ListEmptyComponent={
           <ScreenState
             icon="📄"
-            title="还没有口播稿"
-            message="去碎片页选择灵感，生成你的第一篇口播稿"
+            title={emptyTitle}
+            message={emptyMessage}
           />
         }
         contentContainerStyle={items.length === 0 ? styles.emptyList : styles.list}

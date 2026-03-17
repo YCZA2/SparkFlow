@@ -33,6 +33,8 @@ interface FragmentDetailSheetProps {
     audioSource: Fragment['audio_source'] | null;
     createdAt: string;
     folderName: string;
+    isFilmed: boolean;
+    relatedScriptsCount: number;
   };
   activeSegmentIndex: number | null;
   player: {
@@ -57,6 +59,8 @@ interface FragmentDetailSheetProps {
   actions: {
     isDeleting: boolean;
     onClose: () => void;
+    onShoot: () => void;
+    onOpenRelatedScripts: () => void;
     onDelete: () => void;
   };
 }
@@ -231,6 +235,33 @@ function ToolsSection({ tools }: Pick<FragmentDetailSheetProps, 'tools'>) {
   );
 }
 
+function ActionsSection({
+  metadata,
+  actions,
+}: Pick<FragmentDetailSheetProps, 'metadata' | 'actions'>) {
+  /*把拍摄入口和关联成稿收进快捷操作，和 script 详情保持一致节奏。 */
+  return (
+    <Section title="快捷操作">
+      <ToolRow
+        icon="video"
+        title="进入拍摄"
+        subtitle="直接使用当前正文作为提词内容开始拍摄。"
+        onPress={actions.onShoot}
+      />
+      <ToolRow
+        icon="text.document"
+        title="查看关联成稿"
+        subtitle={
+          metadata.relatedScriptsCount > 0
+            ? `已找到 ${metadata.relatedScriptsCount} 篇来源包含这条碎片的成稿。`
+            : '还没有关联成稿，之后生成的稿件会出现在这里。'
+        }
+        onPress={actions.onOpenRelatedScripts}
+      />
+    </Section>
+  );
+}
+
 function MetadataSection({
   content,
   metadata,
@@ -257,6 +288,7 @@ function MetadataSection({
         {audioSourceLabel ? <InfoRow label="音频来源" value={audioSourceLabel} /> : null}
         <InfoRow label="创建时间" value={formatDate(metadata.createdAt)} />
         <InfoRow label="文件夹" value={metadata.folderName} />
+        <InfoRow label="拍摄状态" value={metadata.isFilmed ? '已拍摄' : '未拍摄'} />
       </InfoCard>
 
       {tags.length > 0 ? (
@@ -359,6 +391,7 @@ export function FragmentDetailSheet({
               player={player}
             />
             <ToolsSection tools={tools} />
+            <ActionsSection metadata={metadata} actions={actions} />
             <MetadataSection content={content} metadata={metadata} />
             <DangerSection actions={actions} />
           </ScrollView>

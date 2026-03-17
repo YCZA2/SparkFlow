@@ -38,6 +38,8 @@ test('buildBackupRestorePlan converts snapshot items into local restore rows', (
           summary: '摘要',
           tags: ['口播'],
           content_state: 'body_present',
+          is_filmed: true,
+          filmed_at: '2026-03-17T09:35:00Z',
         },
         modified_at: '2026-03-17T09:30:00Z',
         last_modified_device_id: 'device-a',
@@ -60,6 +62,32 @@ test('buildBackupRestorePlan converts snapshot items into local restore rows', (
         modified_at: '2026-03-17T09:31:00Z',
         last_modified_device_id: 'device-a',
       },
+      {
+        entity_type: 'script',
+        entity_id: 'script-1',
+        entity_version: 4,
+        operation: 'upsert',
+        payload: {
+          title: '今天这条怎么讲',
+          mode: 'mode_a',
+          generation_kind: 'daily_push',
+          source_fragment_ids: ['fragment-1'],
+          is_daily_push: true,
+          created_at: '2026-03-17T09:40:00Z',
+          updated_at: '2026-03-17T09:45:00Z',
+          generated_at: '2026-03-17T09:41:00Z',
+          body_html: '<p>成稿正文</p>',
+          plain_text_snapshot: '成稿正文',
+          is_filmed: true,
+          filmed_at: '2026-03-17T09:50:00Z',
+          copy_of_script_id: null,
+          copy_reason: null,
+          trashed_at: null,
+          deleted_at: null,
+        },
+        modified_at: '2026-03-17T09:45:00Z',
+        last_modified_device_id: 'device-a',
+      },
     ],
   });
 
@@ -68,8 +96,15 @@ test('buildBackupRestorePlan converts snapshot items into local restore rows', (
   assert.equal(plan.fragments[0]?.audioObjectKey, 'audio/original/test-user-001/fragment-1/demo.m4a');
   assert.equal(plan.fragments[0]?.bodyHtml, '<p>正文</p>');
   assert.equal(plan.fragments[0]?.plainTextSnapshot, '正文');
+  assert.equal(plan.fragments[0]?.isFilmed, 1);
+  assert.equal(plan.fragments[0]?.filmedAt, '2026-03-17T09:35:00Z');
   assert.equal(plan.mediaAssets[0]?.remoteFileUrl, 'https://example.com/cover.png');
   assert.equal(plan.mediaAssets[0]?.remoteAssetId, 'backups/assets/demo.png');
+  assert.equal(plan.scripts[0]?.title, '今天这条怎么讲');
+  assert.equal(plan.scripts[0]?.generationKind, 'daily_push');
+  assert.equal(plan.scripts[0]?.sourceFragmentIdsJson, '["fragment-1"]');
+  assert.equal(plan.scripts[0]?.isFilmed, 1);
+  assert.equal(plan.scripts[0]?.filmedAt, '2026-03-17T09:50:00Z');
 });
 
 test('buildBackupRestorePlan preserves delete tombstones with fallback values', () => {
@@ -92,4 +127,29 @@ test('buildBackupRestorePlan preserves delete tombstones with fallback values', 
   assert.equal(plan.fragments[0]?.source, 'manual');
   assert.equal(plan.fragments[0]?.bodyHtml, '');
   assert.equal(plan.fragments[0]?.backupStatus, 'synced');
+});
+
+test('buildBackupRestorePlan preserves script tombstones and trash metadata', () => {
+  const plan = buildBackupRestorePlan({
+    server_generated_at: '2026-03-17T10:00:00Z',
+    items: [
+      {
+        entity_type: 'script',
+        entity_id: 'script-deleted',
+        entity_version: 6,
+        operation: 'delete',
+        payload: {
+          title: '旧成稿',
+          trashed_at: '2026-03-17T07:00:00Z',
+        },
+        modified_at: '2026-03-17T08:00:00Z',
+        last_modified_device_id: 'device-c',
+      },
+    ],
+  });
+
+  assert.equal(plan.scripts[0]?.deletedAt, '2026-03-17T08:00:00Z');
+  assert.equal(plan.scripts[0]?.trashedAt, '2026-03-17T07:00:00Z');
+  assert.equal(plan.scripts[0]?.bodyHtml, '');
+  assert.equal(plan.scripts[0]?.backupStatus, 'synced');
 });

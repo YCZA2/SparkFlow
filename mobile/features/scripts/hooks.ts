@@ -1,14 +1,17 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 
 import { waitForPipelineTerminal } from '@/features/pipelines/api';
 import {
   fetchDailyPush,
-  fetchScripts,
   forceTriggerDailyPush,
   generateScript,
   triggerDailyPush,
 } from '@/features/scripts/api';
-import { useAsyncList } from '@/hooks/useAsyncList';
+import { consumeScriptsStale, markScriptsStale } from '@/features/scripts/refreshSignal';
+import { listLocalScriptEntities, readLocalScriptEntity, upsertLocalScriptEntity } from '@/features/scripts/store';
+import { useScriptList, useScriptStore } from '@/features/scripts/store/scriptStore';
+import { syncRemoteScriptDetailToLocal, syncRemoteScriptsToLocal } from '@/features/scripts/sync';
 import type { Fragment } from '@/types/fragment';
 import type { Script, ScriptMode } from '@/types/script';
 import { getErrorMessage } from '@/utils/error';
@@ -49,6 +52,8 @@ export function useGenerateScript() {
       if (!scriptId) {
         throw new Error(pipeline.error_message || '生成失败');
       }
+      await syncRemoteScriptDetailToLocal(scriptId);
+      markScriptsStale();
       setStatus('success');
       return scriptId;
     } catch (err) {
@@ -65,16 +70,101 @@ export function useGenerateScript() {
   };
 }
 
-export function useScripts() {
-  /**
-   拉取脚本列表并适配给通用异步列表状态。
-   */
-  const loadScripts = useCallback(async (): Promise<Script[]> => {
-    const response = await fetchScripts();
-    return response.items || [];
-  }, []);
+export function useScripts(options?: { sourceFragmentId?: string | null }) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cacheKey = useMemo(
+    () => (options?.sourceFragmentId ? `source:${options.sourceFragmentId}` : null),
+    [options?.sourceFragmentId]
+  );
+  const cachedScripts = useScriptList(cacheKey) ?? [];
+  const items = useMemo(() => cachedScripts, [cachedScripts]);
 
-  return useAsyncList(loadScripts);
+  const loadScripts = useCallback(
+    async (mode: 'load' | 'refresh' | 'silent' = 'load') => {
+      const isSilent = mode === 'silent';
+      if (mode === 'refresh') {
+        setIsRefreshing(true);
+      } else if (!isSilent) {
+        setIsLoading(true);
+      }
+
+      try {
+        const nextItems = await listLocalScriptEntities({ sourceFragmentId: options?.sourceFragmentId });
+        useScriptStore.getState().setList(cacheKey, nextItems);
+        setError(null);
+
+        if (mode !== 'silent' || nextItems.length === 0) {
+          try {
+            await syncRemoteScriptsToLocal();
+            const refreshedItems = await listLocalScriptEntities({ sourceFragmentId: options?.sourceFragmentId });
+            useScriptStore.getState().setList(cacheKey, refreshedItems);
+          } catch (syncError) {
+            if (nextItems.length === 0) {
+              throw syncError;
+            }
+          }
+        }
+      } catch (err) {
+        setError(getErrorMessage(err, '加载口播稿失败'));
+      } finally {
+        if (mode === 'refresh') {
+          setIsRefreshing(false);
+        }
+        if (!isSilent) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [cacheKey, options?.sourceFragmentId]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const nextItems = await listLocalScriptEntities({ sourceFragmentId: options?.sourceFragmentId });
+        if (cancelled) return;
+        useScriptStore.getState().setList(cacheKey, nextItems);
+        setError(null);
+        setIsLoading(false);
+        if (nextItems.length === 0) {
+          await loadScripts('silent');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(getErrorMessage(err, '加载口播稿失败'));
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheKey, loadScripts, options?.sourceFragmentId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (consumeScriptsStale()) {
+        void loadScripts('load');
+      }
+    }, [loadScripts])
+  );
+
+  return {
+    items,
+    isLoading,
+    isRefreshing,
+    error,
+    reload: useCallback(async () => {
+      await loadScripts('load');
+    }, [loadScripts]),
+    refresh: useCallback(async () => {
+      await loadScripts('refresh');
+    }, [loadScripts]),
+  };
 }
 
 export function useTodayDailyPush() {
@@ -90,6 +180,9 @@ export function useTodayDailyPush() {
       setIsLoading(true);
       setError(null);
       const nextScript = await fetchDailyPush();
+      if (nextScript) {
+        await upsertLocalScriptEntity(nextScript, { backupStatus: 'synced' });
+      }
       setScript(nextScript);
     } catch (err) {
       setError(getErrorMessage(err, '加载每日推盘失败'));
@@ -118,6 +211,8 @@ export function useDailyPushTrigger() {
       setStatus('loading');
       setError(null);
       const script = await triggerDailyPush();
+      await upsertLocalScriptEntity(script, { backupStatus: 'synced' });
+      markScriptsStale();
       setStatus('success');
       return script;
     } catch (err) {
@@ -146,6 +241,8 @@ export function useForceDailyPushTrigger() {
       setStatus('loading');
       setError(null);
       const script = await forceTriggerDailyPush();
+      await upsertLocalScriptEntity(script, { backupStatus: 'synced' });
+      markScriptsStale();
       setStatus('success');
       return script;
     } catch (err) {

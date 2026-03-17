@@ -20,8 +20,8 @@ SparkFlow（灵感编导 AI）- A mobile-first app for knowledge content creator
 
 ```
 Expo Mobile App (React Native)
-  ├─ expo-sqlite + drizzle-orm  ← local-first truth for fragments/folders
-  ├─ expo-file-system           ← body.html, images, audio staging
+  ├─ expo-sqlite + drizzle-orm  ← local-first truth for fragments/folders/scripts
+  ├─ expo-file-system           ← fragment/script body.html, images, audio staging
   └─ AsyncStorage               ← token, backend URL, device_id
         │ HTTP :8000
 FastAPI Backend (Python)
@@ -32,7 +32,7 @@ FastAPI Backend (Python)
   └─ pipeline_runs tables       ← async task source of truth (not Celery/Redis)
 ```
 
-**Local-first principle**: mobile SQLite/file system is the truth for fragments. The backend is an automatic backup target and explicit recovery source — not the primary store.
+**Local-first principle**: mobile SQLite/file system is the truth for fragments, folders, and scripts. The backend is an automatic backup target and explicit recovery source — not the primary store.
 
 ## Development Commands
 
@@ -124,8 +124,8 @@ mobile/
 
 ## Database Schema (Key Tables)
 
-- `fragments` — containers with `transcript`, `summary`, `tags`, `body_markdown`
-- `scripts` — generated scripts (mode, status, linked fragment IDs, `body_markdown`)
+- `fragments` — material assets with `transcript`, `summary`, `tags`, `body_html`
+- `scripts` — derived deliverables (mode, lineage, filmed state, `body_html`)
 - `pipeline_runs` / `pipeline_step_runs` — async task source of truth (step retries, external refs)
 - `knowledge_docs` — knowledge base docs + vector embeddings
 - `media_assets` / `content_media_links` — media file metadata and content references
@@ -141,6 +141,8 @@ Full schema in `memory-bank/tech-stack.md`.
 - **Local-first naming**: use `legacy*` / `compat*` for old cloud-binding fields; never introduce new `remote*` / `server*` / `localDraft*` business names
 - **Async tasks**: `pipeline_runs` / `pipeline_step_runs` are the only task state; do not reintroduce `agent_runs` or fragment-level task fields
 - **New mobile entities** needing remote persistence: hook into `/api/backups/*` + local `entity_version / backup_status` — do not default to "create remote record first"
+- **Fragment vs Script boundary**: keep `fragment` as the source-material pool and `script` as the derived deliverable; they may share editor / backup infrastructure, but they must not collapse into one business entity
+- **Script lineage**: `script.source_fragment_ids` is immutable first-generation lineage only; do not feed scripts back into fragment retrieval, clustering, daily-push selection, or later script generation
 - **Backend tests**: smoke/contract tests must not connect to PostgreSQL; integration tests (requiring DB) must be marked `@pytest.mark.integration`
 - **Backend storage**: PostgreSQL only; no SQLite fallback branches
 - **File storage**: use unified object storage abstraction; do not expose disk paths or `storage_path` / `audio_path` as external contracts

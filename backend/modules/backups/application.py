@@ -24,7 +24,7 @@ from .schemas import (
     BackupSnapshotResponse,
 )
 
-VALID_ENTITY_TYPES = {"fragment", "folder", "media_asset"}
+VALID_ENTITY_TYPES = {"fragment", "folder", "media_asset", "script"}
 
 
 def _parse_datetime(value: str | None) -> datetime | None:

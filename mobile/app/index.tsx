@@ -41,10 +41,12 @@ function FolderCard({
   folder,
   onPress,
   icon,
+  countLabel,
 }: {
   folder: FragmentFolder;
   onPress: (folder: FragmentFolder) => void;
   icon?: SymbolName;
+  countLabel?: string;
 }) {
   const theme = useAppTheme();
 
@@ -76,7 +78,7 @@ function FolderCard({
           {folder.name}
         </Text>
         <Text style={[styles.folderCount, { color: theme.colors.textSubtle }]}>
-          {folder.fragment_count} 条碎片
+          {countLabel ?? `${folder.fragment_count} 条碎片`}
         </Text>
       </View>
       <SymbolView
@@ -93,7 +95,7 @@ export default function FoldersScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { toggle } = useDrawer();
-  const { folders, isLoading, isRefreshing, isCreating, error, total, allFragmentsCount, fetchFolders, refreshFolders, createNewFolder } =
+  const { folders, isLoading, isRefreshing, isCreating, error, total, allFragmentsCount, allScriptsCount, fetchFolders, refreshFolders, createNewFolder } =
     useFolders();
   const [showCreateDialog, setShowCreateDialog] = React.useState(false);
 
@@ -106,8 +108,18 @@ export default function FoldersScreen() {
       created_at: null,
       updated_at: null,
     };
-    return [allFolder, ...folders];
-  }, [folders, allFragmentsCount]);
+    const scriptFolder: FragmentFolder | null =
+      allScriptsCount > 0
+        ? {
+            id: '__scripts__',
+            name: '成稿',
+            fragment_count: allScriptsCount,
+            created_at: null,
+            updated_at: null,
+          }
+        : null;
+    return [allFolder, ...(scriptFolder ? [scriptFolder] : []), ...folders];
+  }, [allFragmentsCount, allScriptsCount, folders]);
 
   // 页面聚焦时刷新
   useFocusEffect(
@@ -118,6 +130,10 @@ export default function FoldersScreen() {
 
   const handleFolderPress = useCallback(
     (folder: FragmentFolder) => {
+      if (folder.id === '__scripts__') {
+        router.push('/scripts');
+        return;
+      }
       router.push({
         pathname: '/folder/[id]',
         params: { id: folder.id, name: folder.name },
@@ -192,11 +208,12 @@ export default function FoldersScreen() {
         data={displayFolders}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <FolderCard
-            folder={item}
-            onPress={handleFolderPress}
-            icon={item.id === '__all__' ? 'tray.full' : 'folder.fill'}
-          />
+            <FolderCard
+              folder={item}
+              onPress={handleFolderPress}
+              icon={item.id === '__all__' ? 'tray.full' : item.id === '__scripts__' ? 'doc.text.fill' : 'folder.fill'}
+              countLabel={item.id === '__scripts__' ? `${item.fragment_count} 篇成稿` : undefined}
+            />
         )}
         ListEmptyComponent={
           <ScreenState

@@ -13,12 +13,18 @@ import * as MediaLibrary from 'expo-media-library';
 
 import { getOrCreateDeviceId } from '@/features/auth/device';
 import { ApiError } from '@/features/core/api/client';
-import { createLocalFragmentEntity, updateLocalFragmentEntity } from '@/features/fragments/store';
+import {
+  createLocalFragmentEntity,
+  markLocalFragmentFilmed,
+  updateLocalFragmentEntity,
+} from '@/features/fragments/store';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { waitForPipelineTerminal } from '@/features/pipelines/api';
 import { applyMediaIngestionPipelineResult } from '@/features/pipelines/mediaIngestion';
 import { uploadAudio } from '@/features/recording/api';
 import { updateScriptStatus } from '@/features/scripts/api';
+import { markScriptsStale } from '@/features/scripts/refreshSignal';
+import { markLocalScriptFilmed } from '@/features/scripts/store';
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -292,7 +298,7 @@ export function useAudioUpload() {
   };
 }
 
-export function useVideoRecorder(scriptId?: string) {
+export function useVideoRecorder(options?: { scriptId?: string; fragmentId?: string }) {
   const cameraRef = useRef<CameraView>(null);
   const [facing, setFacing] = useState<CameraType>('front');
   const [isRecording, setIsRecording] = useState(false);
@@ -331,11 +337,28 @@ export function useVideoRecorder(scriptId?: string) {
 
         if (video?.uri) {
           const saved = await saveVideoToLibrary(video.uri);
-          if (saved && scriptId) {
-            try {
-              await updateScriptStatus(scriptId, 'filmed');
-            } catch (err) {
-              console.error('[Shoot] 更新口播稿状态失败:', err);
+          if (saved) {
+            const deviceId = await getOrCreateDeviceId();
+            if (options?.scriptId) {
+              try {
+                await markLocalScriptFilmed(options.scriptId, { deviceId });
+                markScriptsStale();
+              } catch (err) {
+                console.error('[Shoot] 更新本地成稿拍摄状态失败:', err);
+              }
+              try {
+                await updateScriptStatus(options.scriptId, 'filmed');
+              } catch (err) {
+                console.error('[Shoot] 更新口播稿状态失败:', err);
+              }
+            }
+            if (options?.fragmentId) {
+              try {
+                await markLocalFragmentFilmed(options.fragmentId, { deviceId });
+                markFragmentsStale();
+              } catch (err) {
+                console.error('[Shoot] 更新本地碎片拍摄状态失败:', err);
+              }
             }
           }
           if (saved) {
@@ -349,7 +372,7 @@ export function useVideoRecorder(scriptId?: string) {
         setIsRecording(false);
       }
     },
-    [saveVideoToLibrary, scriptId]
+    [options?.fragmentId, options?.scriptId, saveVideoToLibrary]
   );
 
   const stopRecording = useCallback(() => {

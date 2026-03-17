@@ -1,8 +1,10 @@
 # SparkFlow — 开发进度跟踪
 
 > 最后更新：2026-03-10
+> 历史文档：本文件记录的是 2026-03-10 时点的阶段性快照，包含当时的 `body_markdown`、缓存优先等旧口径，不再代表当前实现。
+> 当前真实状态请以 [`PRD.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/PRD.md)、[`architecture.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/architecture.md)、[`mobile/README.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/README.md) 和 [`backend/README.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/README.md) 为准。
 
-这份文档记录“当前代码仓库的真实状态”。对历史阶段的原始计划，如与现状不一致，应以当前实现、[`PRD.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/PRD.md) 和 [`architecture.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/architecture.md) 为准。
+这份文档保留当时的阶段判断，便于回看项目在 2026-03-10 的范围、取舍和阶段目标；如与现状不一致，应以当前实现和最新架构文档为准。
 
 ## 总体进度概览
 

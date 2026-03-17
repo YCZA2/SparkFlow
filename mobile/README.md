@@ -7,6 +7,8 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - `fragments / folders` 的 local-first phase 1 已经落地完成：列表、详情、编辑、删除都以本地 SQLite + 文件系统为真值，远端只负责备份与恢复。
 - 录音转写、抖音链接导入、脚本生成都已经切到“客户端上传本地快照或本地媒体”驱动，不再默认依赖服务端 fragment 业务表作为输入真值。
 - “创作工作台”已接入显式恢复；恢复时会重建本地 SQLite、`body.html` 与媒体缓存，并在需要时按 `object_key` 向后端刷新最新访问地址。
+- `script` 本轮已接入 local-first：生成成功后立即落本地 SQLite + `body.html` 文件，后续编辑、回收站、冲突恢复副本和拍摄状态都先写本地，再异步备份。
+- `fragment` 与 `script` 继续是两个独立领域对象：碎片负责素材沉淀与生成输入，成稿负责派生正文与拍摄消费；两者共享 editor / `body_html` / 导出与媒体能力，但不共享生命周期语义。
 - 本轮清理已经移除旧的 `localFragmentSyncQueue / localDraftStore / remoteFragments / remoteBodyDrafts` 主链路依赖，兼容层命名统一改成 `legacy*`。
 - 以后在移动端新增代码时，`server_id / sync_status / remote_id` 只允许作为 legacy cloud-binding 兼容字段出现，不能再被当作当前领域模型的核心语义。
 
@@ -33,7 +35,10 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 碎片详情内部仍保留 `detail resource / editor session / sheet / screen actions` 四层，但 resource 已经切换为只读本地实体；后台由 backup queue 负责把改动推到远端备份。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
 - 碎片正文详情和列表已接入本地真值与 legacy 兼容层：详情会优先读本地 HTML 与实体缓存，再按需叠加升级期兼容数据；正文与媒体改动统一留在本地真值并由 backup queue 异步备份。
-- 脚本详情页已从只读改为 `remote-only` 正文编辑：页面内维持内存态，`blur`、显式完成和应用退后台时会尝试调用 `PATCH /api/scripts/{id}` 保存最新 `body_html`，失败时会停留当前页并提示重试。
+- 脚本详情页现在也采用 local-first：先读本地 script 真值，再按需补远端详情；`blur`、显式完成和应用退后台时会先落本地正文，再尽力调用 `PATCH /api/scripts/{id}` 做远端收敛。
+- 首页系统区当前包含“全部”和按需出现的“成稿”；只有用户真的存在 script 时才会显示“成稿”入口，成稿列表与碎片列表继续分开，不做混排。
+- fragment 与 script 详情页统一成“正文主舞台 + 更多底部抽屉”交互；来源碎片、关联成稿、拍摄入口和附加元信息都收口到抽屉中。
+- `fragment` 与 `script` 都可以进入拍摄页；拍摄完成后会记录本地 `is_filmed / filmed_at`，默认不在列表卡片展示，只用于详情与后续筛选。
 - 移动端正文输入统一使用 `react-native-enriched` 原生富文本；fragment 支持标题、列表、引用、粗体、斜体和图片，script 支持相同文本格式但不支持图片和“更多”抽屉；Android 与 iOS 16+ 默认通过系统原生编辑菜单触发格式操作。
 - 碎片详情里的正文基线解析、自动保存队列、AI fallback patch、图片 fallback 插入和素材去重都已下沉为独立 session helper / reducer，纯状态回归统一由 `mobile/tests/*.test.ts` 覆盖。
 - fragments 列表现在统一从 SQLite 本地真值读取；首页与文件夹页共享同一套“本地秒开 + 标记 stale 后重新读库”的策略。
@@ -42,23 +47,25 @@ SparkFlow 的 Expo / React Native 移动端工程。
 ## 本地数据层说明
 
 - `mobile/features/core/db/`：SQLite 连接、schema、迁移和 Drizzle 查询入口
-- `mobile/features/core/files/`：fragment 正文文件、远端正文草稿和图片/音频 staging 文件管理
+- `mobile/features/core/files/`：fragment / script 正文文件和图片/音频 staging 文件管理
 - `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `localEntityStore / legacyMigration / legacyRemoteSnapshotStore / runtime` 拆分职责；主链路统一从 `store/index.ts` 读取本地实体能力，legacy 文件只负责升级迁移
+- `mobile/features/scripts/store/`：scripts 本地数据入口，负责成稿真值、lineage、回收站、冲突副本和恢复合并
 - `mobile/features/editor/html.ts`：唯一 HTML / 纯文本快照 helper 真值源，fragment 与 script 共用
 
 补充约定：
 - SQLite 物理列仍保留 `server_id / sync_status / remote_id` 以兼容旧库，但 Drizzle 层属性名已经切到 `legacyServerBindingId / legacyCloudBindingStatus / legacyRemoteId`；新增代码不要再把这些字段当本地真值主语义。
 - 兼容旧缓存、旧正文草稿、旧云端绑定时，命名统一使用 `legacy*` / `compat*`；不要再新增 `remote*`、`server*`、`localDraft*` 这类会混淆主链路语义的名字。
 
-当前 fragments / folders 读写规则：
+当前 fragments / folders / scripts 读写规则：
 
 - 列表页和详情页都只读本地 SQLite + `body.html`
 - 编辑、删除、创建文件夹都会先修改本地实体并增加 `entity_version`
 - 图片、音频等大对象先存本地 staging，再由 `/api/backups/assets` 补传
-- 远端备份统一通过 `features/backups/queue.ts` 扫描 `backup_status=pending|failed` 的实体批量推送
-- “创作工作台”页已提供显式“从备份恢复”入口：会先创建 restore session，再拉取 `/api/backups/snapshot` 覆盖本地 SQLite 与 `body.html`，并尽量把音频/图片重新缓存到 app sandbox
+- 远端备份统一通过 `features/backups/queue.ts` 扫描 `backup_status=pending|failed` 的实体批量推送；当前 snapshot 已覆盖 fragment / folder / media_asset / script
+- “创作工作台”页已提供显式“从备份恢复”入口：会先创建 restore session，再拉取 `/api/backups/snapshot` 重建本地 SQLite 与 `body.html`，并尽量把音频/图片重新缓存到 app sandbox
 - 恢复媒体缓存前，移动端会先调用 `/api/backups/assets/access` 按 `object_key` 刷新最新访问地址，减少签名 URL 过期导致的恢复失败
 - fragment 自身音频现在也会把 `audio_object_key` 持久化到本地真值与备份快照，恢复时会和媒体素材一起刷新访问地址并重建本地缓存
+- script 恢复当前不会粗暴覆盖本地稿；若本地已有活跃成稿，远端同 ID 快照会恢复为副本并自动追加标题后缀
 - 若后端返回“当前设备会话已失效”，前端不会再自动抢回 token，而是停留在本地只读态；用户可在“创作工作台”页显式点击“重新连接当前设备”
 
 ## 一、推荐用法：统一走 `scripts/dev-mobile.sh`

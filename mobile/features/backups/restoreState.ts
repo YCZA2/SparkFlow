@@ -2,6 +2,7 @@ import type {
   BackupFolderContractPayload,
   BackupFragmentContractPayload,
   BackupMediaAssetContractPayload,
+  BackupScriptContractPayload,
   BackupSnapshotResponse,
 } from '@/features/backups/api';
 
@@ -46,6 +47,8 @@ export interface RestoredFragmentRow {
   nextRetryAt: null;
   retryCount: number;
   deletedAt: string | null;
+  isFilmed: number;
+  filmedAt: string | null;
   backupStatus: 'synced';
   lastBackupAt: string;
   entityVersion: number;
@@ -83,6 +86,33 @@ export interface BackupRestorePlan {
   folders: RestoredFolderRow[];
   fragments: RestoredFragmentRow[];
   mediaAssets: RestoredMediaAssetRow[];
+  scripts: RestoredScriptRow[];
+}
+
+export interface RestoredScriptRow {
+  id: string;
+  title: string | null;
+  mode: 'mode_a' | 'mode_b';
+  generationKind: 'manual' | 'daily_push';
+  sourceFragmentIdsJson: string;
+  isDailyPush: number;
+  createdAt: string;
+  updatedAt: string;
+  generatedAt: string;
+  plainTextSnapshot: string;
+  bodyHtml: string;
+  bodyFileUri: string | null;
+  isFilmed: number;
+  filmedAt: string | null;
+  copyOfScriptId: string | null;
+  copyReason: 'conflict' | 'restore' | 'manual_duplicate' | null;
+  trashedAt: string | null;
+  deletedAt: string | null;
+  backupStatus: 'synced';
+  lastBackupAt: string;
+  entityVersion: number;
+  lastModifiedDeviceId: string | null;
+  cachedAt: string;
 }
 
 function readString(value: unknown): string | null {
@@ -130,6 +160,7 @@ export function buildBackupRestorePlan(snapshot: BackupSnapshotResponse): Backup
     folders: [],
     fragments: [],
     mediaAssets: [],
+    scripts: [],
   };
 
   for (const item of snapshot.items) {
@@ -190,6 +221,8 @@ export function buildBackupRestorePlan(snapshot: BackupSnapshotResponse): Backup
         nextRetryAt: null,
         retryCount: 0,
         deletedAt,
+        isFilmed: fragmentPayload.is_filmed ? 1 : 0,
+        filmedAt: readString(fragmentPayload.filmed_at),
         backupStatus: 'synced',
         lastBackupAt: snapshot.server_generated_at,
         entityVersion: item.entity_version,
@@ -229,6 +262,40 @@ export function buildBackupRestorePlan(snapshot: BackupSnapshotResponse): Backup
         lastBackupAt: snapshot.server_generated_at,
         entityVersion: item.entity_version,
         lastModifiedDeviceId: item.last_modified_device_id ?? null,
+      });
+    }
+
+    if (item.entity_type === 'script') {
+      const scriptPayload = (item.payload ?? {}) as Partial<BackupScriptContractPayload>;
+      const bodyHtml = deletedAt ? '' : readString(scriptPayload.body_html) ?? '';
+      const createdAt = readString(scriptPayload.created_at) ?? baseTimestamp;
+      plan.scripts.push({
+        id: item.entity_id,
+        title: readString(scriptPayload.title),
+        mode: scriptPayload.mode === 'mode_b' ? 'mode_b' : 'mode_a',
+        generationKind: scriptPayload.generation_kind === 'daily_push' ? 'daily_push' : 'manual',
+        sourceFragmentIdsJson: JSON.stringify(readStringArray(scriptPayload.source_fragment_ids)),
+        isDailyPush: scriptPayload.is_daily_push ? 1 : 0,
+        createdAt,
+        updatedAt: baseTimestamp,
+        generatedAt: readString(scriptPayload.generated_at) ?? createdAt,
+        plainTextSnapshot: readString(scriptPayload.plain_text_snapshot) ?? '',
+        bodyHtml,
+        bodyFileUri: deletedAt ? null : null,
+        isFilmed: scriptPayload.is_filmed ? 1 : 0,
+        filmedAt: readString(scriptPayload.filmed_at),
+        copyOfScriptId: readString(scriptPayload.copy_of_script_id),
+        copyReason:
+          scriptPayload.copy_reason === 'conflict' || scriptPayload.copy_reason === 'restore' || scriptPayload.copy_reason === 'manual_duplicate'
+            ? scriptPayload.copy_reason
+            : null,
+        trashedAt: readString(scriptPayload.trashed_at),
+        deletedAt,
+        backupStatus: 'synced',
+        lastBackupAt: snapshot.server_generated_at,
+        entityVersion: item.entity_version,
+        lastModifiedDeviceId: item.last_modified_device_id ?? null,
+        cachedAt: snapshot.server_generated_at,
       });
     }
   }

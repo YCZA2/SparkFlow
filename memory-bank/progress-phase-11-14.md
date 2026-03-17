@@ -1,6 +1,8 @@
 # SparkFlow — 阶段 11-14 现状记录
 
 > 最后更新：2026-03-10
+> 历史文档：本文件记录的是 2026-03-10 对阶段 11-14 的实现快照，包含 `body_markdown`、旧内容层规划等当时口径，不再代表当前实现。
+> 当前真实状态请以 [`PRD.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/PRD.md)、[`architecture.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/architecture.md)、[`mobile/README.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/README.md) 和 [`backend/README.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/README.md) 为准。
 
 本文档只记录阶段 11-14 在当前仓库中的真实落地状态，不再沿用已经失真的旧路径和旧任务描述。
 

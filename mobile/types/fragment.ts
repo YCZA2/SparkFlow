@@ -95,6 +95,8 @@ export interface Fragment {
   entity_version?: number;
   last_backup_at?: string | null;
   deleted_at?: string | null;
+  is_filmed?: boolean;
+  filmed_at?: string | null;
 }
 
 export interface FragmentListResponse {
