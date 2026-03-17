@@ -4,4 +4,3 @@ import { normalizeBodyHtml } from '@/features/editor/html';
 export function resolveLegacyDraftHtml(raw: { html?: string; markdown?: string }): string {
   return normalizeBodyHtml(raw.html ?? raw.markdown ?? '');
 }
-

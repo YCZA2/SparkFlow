@@ -16,6 +16,24 @@ import type { Fragment } from '@/types/fragment';
 import type { Script, ScriptMode } from '@/types/script';
 import { getErrorMessage } from '@/utils/error';
 
+async function resolveScriptFromPipelineTask(
+  pipelineRunId: string,
+  fallbackMessage: string
+): Promise<Script> {
+  /*统一消费任务态脚本结果，并在成功后落本地真值。 */
+  const pipeline = await waitForPipelineTerminal(pipelineRunId);
+  const scriptId =
+    pipeline.status === 'succeeded' && pipeline.resource.resource_type === 'script'
+      ? pipeline.resource.resource_id
+      : null;
+  if (!scriptId) {
+    throw new Error(pipeline.error_message || fallbackMessage);
+  }
+  const script = await syncRemoteScriptDetailToLocal(scriptId);
+  markScriptsStale();
+  return script;
+}
+
 export function useGenerateScript() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -44,18 +62,9 @@ export function useGenerateScript() {
         })),
         mode,
       });
-      const pipeline = await waitForPipelineTerminal(task.pipeline_run_id);
-      const scriptId =
-        pipeline.status === 'succeeded' && pipeline.resource.resource_type === 'script'
-          ? pipeline.resource.resource_id
-          : null;
-      if (!scriptId) {
-        throw new Error(pipeline.error_message || '生成失败');
-      }
-      await syncRemoteScriptDetailToLocal(scriptId);
-      markScriptsStale();
+      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, '生成失败');
       setStatus('success');
-      return scriptId;
+      return script.id;
     } catch (err) {
       setStatus('error');
       setError(getErrorMessage(err, '生成失败'));
@@ -210,9 +219,8 @@ export function useDailyPushTrigger() {
     try {
       setStatus('loading');
       setError(null);
-      const script = await triggerDailyPush();
-      await upsertLocalScriptEntity(script, { backupStatus: 'synced' });
-      markScriptsStale();
+      const task = await triggerDailyPush();
+      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, '生成灵感卡片失败');
       setStatus('success');
       return script;
     } catch (err) {
@@ -240,9 +248,8 @@ export function useForceDailyPushTrigger() {
     try {
       setStatus('loading');
       setError(null);
-      const script = await forceTriggerDailyPush();
-      await upsertLocalScriptEntity(script, { backupStatus: 'synced' });
-      markScriptsStale();
+      const task = await forceTriggerDailyPush();
+      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, '强制生成灵感卡片失败');
       setStatus('success');
       return script;
     } catch (err) {

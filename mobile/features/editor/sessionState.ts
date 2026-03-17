@@ -82,7 +82,6 @@ export type EditorSessionEvent =
   | { type: 'SAVE_REQUESTED' }
   | { type: 'SAVE_STARTED' }
   | { type: 'LOCAL_SAVE_SUCCEEDED'; document: EditorSourceDocument | null; savedHtml: string }
-  | { type: 'SAVE_SUCCEEDED'; document: EditorSourceDocument | null; savedHtml: string }
   | { type: 'SAVE_FAILED'; attemptedHtml: string; message: string | null };
 
 // ============================================================================
@@ -183,7 +182,7 @@ export function reduceEditorSession(
       snapshot: event.snapshot,
       hasConfirmedLocalEdit: hasMeaningfulChange ? true : state.hasConfirmedLocalEdit,
       syncStatus: hasMeaningfulChange
-        ? state.source.document?.is_legacy_local_document
+        ? state.source.document?.legacy_save_state != null
           ? 'syncing'
           : state.syncStatus === 'synced'
             ? 'idle'
@@ -258,43 +257,6 @@ export function reduceEditorSession(
       source: {
         ...state.source,
         local_draft_html: normalizedSavedHtml,
-        document: nextDocument,
-      },
-      phase: resolveSessionPhase({
-        ...state,
-        baseline: nextBaseline,
-        snapshot: nextSnapshot,
-        errorMessage: null,
-      }),
-    };
-  }
-
-  if (event.type === 'SAVE_SUCCEEDED') {
-    const normalizedSavedHtml = normalizeBodyHtml(event.savedHtml);
-    const nextSnapshot = buildEditorDocumentSnapshot(normalizedSavedHtml);
-    const nextDocument = event.document ?? state.source.document;
-    const nextBaseline: EditorSessionBaseline | null = state.baseline
-      ? {
-          ...state.baseline,
-          snapshot: nextSnapshot,
-          baseline_body_html: normalizedSavedHtml,
-          media_assets: nextDocument?.media_assets ?? state.mediaAssets,
-          save_state: 'synced',
-        }
-      : null;
-    return {
-      ...state,
-      baseline: nextBaseline,
-      snapshot: nextSnapshot,
-      mediaAssets: nextDocument
-        ? mergeVisibleMediaAssets(nextDocument.media_assets, state.mediaAssets)
-        : state.mediaAssets,
-      syncStatus: 'synced',
-      hasConfirmedLocalEdit: false,
-      errorMessage: null,
-      source: {
-        ...state.source,
-        local_draft_html: null,
         document: nextDocument,
       },
       phase: resolveSessionPhase({

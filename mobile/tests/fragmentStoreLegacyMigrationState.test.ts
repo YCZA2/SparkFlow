@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { resolveLegacyDraftHtml } from '../features/fragments/store/legacyMigrationState';
+import { resolveLegacyDraftHtml } from '../features/fragments/store/legacyMigrationUtils';
 
 test('resolveLegacyDraftHtml prefers html over markdown and normalizes whitespace', () => {
   assert.equal(

@@ -5,7 +5,7 @@
  */
 
 import { extractPlainTextFromHtml } from '@/features/editor/html';
-import type { EditorMediaAsset, EditorSaveState, EditorSourceDocument } from '@/features/editor/types';
+import type { EditorMediaAsset } from '@/features/editor/types';
 
 /*统一抽取素材 id，用于比较当前展示态是否已同步。 */
 export function collectMediaAssetIds(mediaAssets: EditorMediaAsset[] | null | undefined): string[] {
@@ -25,14 +25,4 @@ export function resolveMeaningfulTextLength(html: string | null | undefined): nu
 /*只把真正有正文文本的内容视为可用正文，空白和纯格式不算。 */
 export function hasMeaningfulBody(html: string | null | undefined): boolean {
   return resolveMeaningfulTextLength(html) > 0;
-}
-
-/*把兼容云端绑定状态映射为统一的编辑器保存状态。 */
-export function resolveLegacyCloudBindingSaveState(
-  document: EditorSourceDocument | null
-): EditorSaveState {
-  if (!document?.is_legacy_local_document) return 'idle';
-  if (document.legacy_cloud_binding_status === 'synced') return 'synced';
-  if (document.legacy_cloud_binding_status === 'pending') return 'syncing';
-  return 'idle';
 }

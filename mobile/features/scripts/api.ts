@@ -54,15 +54,15 @@ export async function fetchDailyPush(): Promise<Script | null> {
 /**
  触发今日推盘生成。
  */
-export async function triggerDailyPush(): Promise<Script> {
-  return post<Script>(API_ENDPOINTS.SCRIPTS.TRIGGER_DAILY_PUSH, {});
+export async function triggerDailyPush(): Promise<ScriptGenerationTask> {
+  return post<ScriptGenerationTask>(API_ENDPOINTS.SCRIPTS.TRIGGER_DAILY_PUSH, {});
 }
 
 /**
  忽略聚合约束强制生成今日推盘。
  */
-export async function forceTriggerDailyPush(): Promise<Script> {
-  return post<Script>(API_ENDPOINTS.SCRIPTS.FORCE_TRIGGER_DAILY_PUSH, {});
+export async function forceTriggerDailyPush(): Promise<ScriptGenerationTask> {
+  return post<ScriptGenerationTask>(API_ENDPOINTS.SCRIPTS.FORCE_TRIGGER_DAILY_PUSH, {});
 }
 
 /**

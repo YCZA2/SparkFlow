@@ -95,41 +95,8 @@ test('local-first save success keeps session in unsynced state until remote reco
   assert.equal(state.baseline?.baseline_body_html, '<p>更新后的正文</p>');
 });
 
-test('remote-only save success clears local error and marks session synced', () => {
-  let state = createInitialEditorSessionState('script-1', 'remote-only');
-  state = reduceEditorSession(state, {
-    type: 'SOURCE_DOCUMENT_LOADED',
-    document: buildDocument({ id: 'script-1', body_html: '<p>远端正文</p>' }),
-  });
-  state = reduceEditorSession(state, {
-    type: 'LOCAL_DRAFT_HTML_LOADED',
-    html: null,
-  });
-  state = reduceEditorSession(state, {
-    type: 'CACHED_BASELINE_LOADED',
-    html: null,
-  });
-  state = reduceEditorSession(state, {
-    type: 'SNAPSHOT_CHANGED',
-    snapshot: {
-      body_html: '<p>修改后的正文</p>',
-      plain_text: '修改后的正文',
-      asset_ids: [],
-    },
-  });
-  state = reduceEditorSession(state, {
-    type: 'SAVE_SUCCEEDED',
-    document: buildDocument({ id: 'script-1', body_html: '<p>修改后的正文</p>' }),
-    savedHtml: '<p>修改后的正文</p>',
-  });
-
-  assert.equal(state.syncStatus, 'synced');
-  assert.equal(state.errorMessage, null);
-  assert.equal(state.source.local_draft_html, null);
-});
-
 test('save failure keeps attempted snapshot and exposes unsynced state', () => {
-  let state = createInitialEditorSessionState('script-1', 'remote-only');
+  let state = createInitialEditorSessionState('script-1', 'local-first');
   state = reduceEditorSession(state, {
     type: 'SAVE_FAILED',
     attemptedHtml: '<p>失败正文</p>',

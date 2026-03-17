@@ -1,4 +1,3 @@
-export { resolveLegacyDraftHtml } from './legacyMigrationState';
 export {
   createLocalFragmentEntity,
   deleteLocalFragmentEntity,

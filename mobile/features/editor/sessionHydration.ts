@@ -16,7 +16,6 @@ import {
   areAssetIdsEqual,
   collectMediaAssetIds,
   hasMeaningfulBody,
-  resolveLegacyCloudBindingSaveState,
 } from './sessionUtils';
 import type {
   EditorDocumentSnapshot,
@@ -190,9 +189,7 @@ export function resolveEditorSessionBaseline(options: {
     local_draft_html: options.draftHtml,
     media_assets: options.document.media_assets ?? [],
     persistence_mode: options.persistenceMode,
-    save_state: options.document.is_legacy_local_document
-      ? resolveLegacyCloudBindingSaveState(options.document)
-      : hydrated.syncStatus,
+    save_state: options.document.legacy_save_state ?? hydrated.syncStatus,
   };
 }
 
@@ -254,12 +251,12 @@ export function reconcileHydration(state: EditorSessionState): EditorSessionStat
     };
   }
 
-  const nextSyncStatus = document.is_legacy_local_document
-    ? resolveLegacyCloudBindingSaveState(document)
-    : state.source.local_draft_html === null &&
-        normalizeBodyHtml(document.body_html) === normalizeBodyHtml(state.snapshot.body_html)
+  const nextSyncStatus =
+    document.legacy_save_state ??
+    (state.source.local_draft_html === null &&
+    normalizeBodyHtml(document.body_html) === normalizeBodyHtml(state.snapshot.body_html)
       ? 'synced'
-      : state.syncStatus;
+      : state.syncStatus);
 
   return {
     ...state,

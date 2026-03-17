@@ -48,7 +48,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 - `mobile/features/core/db/`：SQLite 连接、schema、迁移和 Drizzle 查询入口
 - `mobile/features/core/files/`：fragment / script 正文文件和图片/音频 staging 文件管理
-- `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `localEntityStore / legacyMigration / legacyRemoteSnapshotStore / runtime` 拆分职责；主链路统一从 `store/index.ts` 读取本地实体能力，legacy 文件只负责升级迁移
+- `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `localEntityStore / legacyMigration / runtime` 拆分职责；主链路统一从 `store/index.ts` 读取本地实体能力，legacy 运行时逻辑集中在迁移主文件中，只有少量纯工具函数独立保留给迁移测试复用
 - `mobile/features/scripts/store/`：scripts 本地数据入口，负责成稿真值、lineage、回收站、冲突副本和恢复合并
 - `mobile/features/editor/html.ts`：唯一 HTML / 纯文本快照 helper 真值源，fragment 与 script 共用
 

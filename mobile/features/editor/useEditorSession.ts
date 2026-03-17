@@ -41,7 +41,6 @@ export interface EditorSessionConfig<TDocument> {
   loadLocalDraft?: (id: string) => Promise<string | null>;
   loadCache?: (id: string) => Promise<string | null>;
   saveLocally?: (id: string, snapshot: EditorDocumentSnapshot) => Promise<void>;
-  saveRemotely?: (id: string, snapshot: EditorDocumentSnapshot) => Promise<TDocument>;
   commitOptimistic?: (doc: TDocument) => Promise<void>;
 
   // 功能开关
@@ -133,7 +132,6 @@ export function useEditorSession<TDocument>(
     loadLocalDraft,
     loadCache,
     saveLocally,
-    saveRemotely,
     commitOptimistic,
     supportsImages = false,
     determineAutoFocus,
@@ -258,18 +256,11 @@ export function useEditorSession<TDocument>(
       dispatch({ type: 'SAVE_STARTED' });
 
       try {
-        if (persistenceMode === 'local-first' && saveLocally) {
+        if (saveLocally) {
           await saveLocally(currentDocumentId, latestSnapshot);
           dispatch({
             type: 'LOCAL_SAVE_SUCCEEDED',
             document: buildSourceDocument(currentDocument),
-            savedHtml: latestSnapshot.body_html,
-          });
-        } else if (saveRemotely) {
-          const updatedDocument = await saveRemotely(currentDocumentId, latestSnapshot);
-          dispatch({
-            type: 'SAVE_SUCCEEDED',
-            document: buildSourceDocument(updatedDocument),
             savedHtml: latestSnapshot.body_html,
           });
         }
@@ -282,7 +273,7 @@ export function useEditorSession<TDocument>(
         throw error;
       }
     },
-    [buildSourceDocument, getLiveSnapshot, persistenceMode, saveLocally, saveRemotely]
+    [buildSourceDocument, getLiveSnapshot, saveLocally]
   );
 
   // 图片插入
@@ -306,7 +297,7 @@ export function useEditorSession<TDocument>(
       let mediaAsset: EditorMediaAsset;
 
       // 本地草稿路径
-      if (persistenceMode === 'local-first' && attachPendingLocalImage) {
+      if (attachPendingLocalImage) {
         const pendingAsset = await attachPendingLocalImage(currentDocumentId, {
           local_uri: asset.uri,
           file_name: asset.name ?? 'image.jpg',
@@ -345,7 +336,7 @@ export function useEditorSession<TDocument>(
     } finally {
       setIsUploadingImage(false);
     }
-  }, [attachPendingLocalImage, getLiveSnapshot, persistenceMode, supportsImages, uploadImageAsset]);
+  }, [attachPendingLocalImage, getLiveSnapshot, supportsImages, uploadImageAsset]);
 
   // 回调函数
   const onSnapshotChange = useCallback((snapshot: EditorDocumentSnapshot) => {
@@ -401,14 +392,8 @@ export function useEditorSession<TDocument>(
   const statusLabel = (() => {
     if (!state.isDraftHydrated || !state.isEditorReady) return null;
 
-    if (persistenceMode === 'local-first') {
-      if (state.errorMessage || state.syncStatus === 'unsynced') {
-        return '已保存在本地，稍后同步';
-      }
-    } else {
-      if (state.errorMessage || state.syncStatus === 'unsynced') {
-        return '未保存，请重试';
-      }
+    if (state.errorMessage || state.syncStatus === 'unsynced') {
+      return '已保存在本地，稍后同步';
     }
 
     return null;

@@ -1,6 +1,4 @@
-import type { LegacyCloudBindingStatus } from '@/types/fragment';
-
-export type EditorPersistenceMode = 'local-first' | 'remote-only';
+export type EditorPersistenceMode = 'local-first';
 
 export type EditorSaveState = 'idle' | 'syncing' | 'synced' | 'unsynced';
 
@@ -44,8 +42,7 @@ export interface EditorSourceDocument {
   id: string;
   body_html: string;
   media_assets?: EditorMediaAsset[];
-  is_legacy_local_document?: boolean;
-  legacy_cloud_binding_status?: LegacyCloudBindingStatus | null;
+  legacy_save_state?: EditorSaveState | null;
 }
 
 export interface EditorSessionBaseline {
