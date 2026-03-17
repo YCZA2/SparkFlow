@@ -7,17 +7,15 @@ import { extractPlainTextFromHtml } from '@/features/editor/html';
 import type { Fragment, LocalPendingImageAsset } from '@/types/fragment';
 
 import {
-  buildLocalDraftRowPatch,
   generateFragmentId,
   generateLocalImageId,
   loadMediaRowsByFragmentIds,
   mapLocalEntityRowToFragment,
   persistBodyHtml,
   readFragmentRows,
-  serializeSpeakerSegments,
-  serializeTags,
   stagePendingImage,
 } from './shared';
+import { resolveFragmentEntityUpdate, type FragmentEntityPatch } from './updateState';
 import { useFragmentStore } from './fragmentStore';
 
 export async function createLocalFragmentEntity(input: {
@@ -107,18 +105,10 @@ export async function readLocalFragmentEntity(fragmentId: string): Promise<Fragm
   return fragment;
 }
 
+/*按 local-first 语义更新 fragment 真值，只在真实业务变更时推进排序时间和版本。 */
 export async function updateLocalFragmentEntity(
   id: string,
-  patch: Partial<Fragment> & {
-    backup_status?: Fragment['backup_status'];
-    entity_version?: number;
-    last_backup_at?: string | null;
-    deleted_at?: string | null;
-    last_modified_device_id?: string | null;
-    last_sync_attempt_at?: string | null;
-    next_retry_at?: string | null;
-    retry_count?: number;
-  }
+  patch: FragmentEntityPatch
 ): Promise<Fragment | null> {
   const database = await getLocalDatabase();
   const rows = await database
@@ -137,49 +127,18 @@ export async function updateLocalFragmentEntity(
     plainTextSnapshot = patch.plain_text_snapshot ?? extractPlainTextFromHtml(normalizedHtml);
     bodyFileUri = getFragmentBodyFile(id).uri;
   }
+  const resolvedUpdate = resolveFragmentEntityUpdate({
+    current,
+    patch,
+    plainTextSnapshot: plainTextSnapshot ?? current.plainTextSnapshot,
+    bodyFileUri,
+  });
+  if (!resolvedUpdate.didChangeAnyField) {
+    return await readLocalFragmentEntity(id);
+  }
   await database
     .update(fragmentsTable)
-    .set({
-      ...buildLocalDraftRowPatch(current, {
-        body_html: patch.body_html,
-        plain_text_snapshot: plainTextSnapshot ?? undefined,
-        sync_status: patch.sync_status,
-        last_sync_attempt_at: patch.last_sync_attempt_at,
-        next_retry_at: patch.next_retry_at,
-        retry_count: patch.retry_count,
-      }),
-      legacyServerBindingId:
-        patch.server_id === undefined ? current.legacyServerBindingId : patch.server_id,
-      folderId: patch.folder_id === undefined ? current.folderId : patch.folder_id,
-      source: patch.source === undefined ? current.source : patch.source,
-      audioSource: patch.audio_source === undefined ? current.audioSource : patch.audio_source,
-      createdAt: patch.created_at === undefined ? current.createdAt : patch.created_at,
-      summary: patch.summary === undefined ? current.summary : patch.summary,
-      tagsJson: patch.tags === undefined ? current.tagsJson : serializeTags(patch.tags),
-      transcript: patch.transcript === undefined ? current.transcript : patch.transcript,
-      speakerSegmentsJson:
-        patch.speaker_segments === undefined
-          ? current.speakerSegmentsJson
-          : serializeSpeakerSegments(patch.speaker_segments),
-      audioObjectKey:
-        patch.audio_object_key === undefined ? current.audioObjectKey : patch.audio_object_key,
-      audioFileUrl:
-        patch.audio_file_url === undefined ? current.audioFileUrl : patch.audio_file_url,
-      audioFileExpiresAt:
-        patch.audio_file_expires_at === undefined
-          ? current.audioFileExpiresAt
-          : patch.audio_file_expires_at,
-      bodyFileUri,
-      contentState: patch.content_state === undefined ? current.contentState : patch.content_state,
-      backupStatus: patch.backup_status ?? 'pending',
-      entityVersion: patch.entity_version ?? (current.entityVersion + 1),
-      lastBackupAt: patch.last_backup_at ?? current.lastBackupAt ?? undefined,
-      lastModifiedDeviceId:
-        patch.last_modified_device_id ?? current.lastModifiedDeviceId ?? undefined,
-      deletedAt: patch.deleted_at ?? current.deletedAt ?? undefined,
-      isFilmed: patch.is_filmed === undefined ? current.isFilmed : patch.is_filmed ? 1 : 0,
-      filmedAt: patch.filmed_at === undefined ? current.filmedAt : patch.filmed_at,
-    })
+    .set(resolvedUpdate.nextRow)
     .where(eq(fragmentsTable.id, id));
   useFragmentStore.getState().deleteDetail(id);
   return await readLocalFragmentEntity(id);

@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { buildFragmentSections } from '../features/fragments/fragmentListState';
 
-function buildFragment(createdAt: string, id: string) {
+function buildFragment(createdAt: string, id: string, updatedAt = createdAt) {
   /*构造最小 fragment 载荷，聚焦列表分组规则。 */
   return {
     id,
@@ -14,6 +14,7 @@ function buildFragment(createdAt: string, id: string) {
     tags: null,
     source: 'manual',
     created_at: createdAt,
+    updated_at: updatedAt,
     body_html: '',
   } as const;
 }
@@ -33,6 +34,23 @@ test('buildFragmentSections groups fragments with the same day under one section
   assert.deepEqual(
     sections[0]?.data.map((item) => item.id),
     ['fragment-2', 'fragment-1']
+  );
+});
+
+test('buildFragmentSections uses updated_at for section label and ordering after edits', () => {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 18, 0, 0).toISOString();
+  const lastWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7, 9, 0, 0).toISOString();
+
+  const sections = buildFragmentSections([
+    buildFragment(lastWeek, 'fragment-edited', today) as any,
+    buildFragment(today, 'fragment-new', new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0, 0).toISOString()) as any,
+  ]);
+
+  assert.equal(sections[0]?.title, '今天');
+  assert.deepEqual(
+    sections[0]?.data.map((item) => item.id),
+    ['fragment-edited', 'fragment-new']
   );
 });
 
