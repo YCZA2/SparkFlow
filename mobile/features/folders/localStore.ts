@@ -71,3 +71,69 @@ export async function createLocalFolder(name: string, deviceId?: string | null):
     .limit(1);
   return await mapFolderRow(rows[0]);
 }
+
+/*重命名文件夹：本地先写、递增版本号，由备份队列异步同步远端。 */
+export async function updateLocalFolder(
+  id: string,
+  patch: { name: string },
+  deviceId?: string | null
+): Promise<FragmentFolder | null> {
+  const database = await getLocalDatabase();
+  const rows = await database
+    .select()
+    .from(fragmentFoldersTable)
+    .where(eq(fragmentFoldersTable.id, id))
+    .limit(1);
+  const current = rows[0];
+  if (!current) {
+    return null;
+  }
+  const now = new Date().toISOString();
+  await database
+    .update(fragmentFoldersTable)
+    .set({
+      name: patch.name.trim(),
+      updatedAt: now,
+      backupStatus: 'pending',
+      entityVersion: current.entityVersion + 1,
+      lastModifiedDeviceId: deviceId ?? null,
+    })
+    .where(eq(fragmentFoldersTable.id, id));
+  const updated = await database
+    .select()
+    .from(fragmentFoldersTable)
+    .where(eq(fragmentFoldersTable.id, id))
+    .limit(1);
+  if (!updated[0]) {
+    return null;
+  }
+  return await mapFolderRow(updated[0]);
+}
+
+/*软删除文件夹：设置 deletedAt 并进入备份队列，远端最终也会收到 delete 操作。 */
+export async function deleteLocalFolder(
+  id: string,
+  deviceId?: string | null
+): Promise<void> {
+  const database = await getLocalDatabase();
+  const rows = await database
+    .select()
+    .from(fragmentFoldersTable)
+    .where(eq(fragmentFoldersTable.id, id))
+    .limit(1);
+  const current = rows[0];
+  if (!current) {
+    return;
+  }
+  const now = new Date().toISOString();
+  await database
+    .update(fragmentFoldersTable)
+    .set({
+      deletedAt: now,
+      updatedAt: now,
+      backupStatus: 'pending',
+      entityVersion: current.entityVersion + 1,
+      lastModifiedDeviceId: deviceId ?? null,
+    })
+    .where(eq(fragmentFoldersTable.id, id));
+}

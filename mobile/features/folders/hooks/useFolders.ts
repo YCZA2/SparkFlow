@@ -1,11 +1,14 @@
 import { useCallback, useState } from 'react';
 
-import * as folderApi from '@/features/folders/api';
 import { getOrCreateDeviceId } from '@/features/auth/device';
-import { createLocalFolder, listLocalFolders } from '@/features/folders/localStore';
+import {
+  createLocalFolder,
+  deleteLocalFolder,
+  listLocalFolders,
+  updateLocalFolder,
+} from '@/features/folders/localStore';
 import { listLocalFragmentEntities } from '@/features/fragments/store/localEntityStore';
 import { countLocalScriptEntities } from '@/features/scripts/store';
-import { syncRemoteScriptsToLocal } from '@/features/scripts/sync';
 import type { FragmentFolder } from '@/types/folder';
 import { getErrorMessage } from '@/utils/error';
 
@@ -32,6 +35,10 @@ export interface UseFoldersReturn {
   refreshFolders: () => Promise<void>;
   /** 创建新文件夹 */
   createNewFolder: (name: string) => Promise<void>;
+  /** 重命名文件夹 */
+  renameFolder: (id: string, name: string) => Promise<void>;
+  /** 删除文件夹 */
+  removeFolder: (id: string) => Promise<void>;
 }
 
 /**
@@ -52,11 +59,6 @@ export function useFolders(): UseFoldersReturn {
     setIsLoading(true);
     setError(null);
     try {
-      try {
-        await syncRemoteScriptsToLocal();
-      } catch {
-        // 首页文件夹不应因为成稿同步失败而整体报错，仍优先展示本地内容。
-      }
       const [localFolders, localFragments, localScriptsCount] = await Promise.all([
         listLocalFolders(),
         listLocalFragmentEntities(),
@@ -76,11 +78,6 @@ export function useFolders(): UseFoldersReturn {
   const refreshFolders = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      try {
-        await syncRemoteScriptsToLocal();
-      } catch {
-        // 刷新时允许成稿同步失败后继续展示本地文件夹结果。
-      }
       const [localFolders, localFragments, localScriptsCount] = await Promise.all([
         listLocalFolders(),
         listLocalFragmentEntities(),
@@ -118,6 +115,31 @@ export function useFolders(): UseFoldersReturn {
     }
   }, []);
 
+  const renameFolder = useCallback(async (id: string, name: string) => {
+    try {
+      const deviceId = await getOrCreateDeviceId();
+      const updated = await updateLocalFolder(id, { name }, deviceId);
+      if (updated) {
+        setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)));
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, '重命名文件夹失败'));
+      throw err;
+    }
+  }, []);
+
+  const removeFolder = useCallback(async (id: string) => {
+    try {
+      const deviceId = await getOrCreateDeviceId();
+      await deleteLocalFolder(id, deviceId);
+      setFolders((prev) => prev.filter((f) => f.id !== id));
+      setTotal((prev) => prev - 1);
+    } catch (err) {
+      setError(getErrorMessage(err, '删除文件夹失败'));
+      throw err;
+    }
+  }, []);
+
   return {
     folders,
     isLoading,
@@ -130,5 +152,7 @@ export function useFolders(): UseFoldersReturn {
     fetchFolders,
     refreshFolders,
     createNewFolder,
+    renameFolder,
+    removeFolder,
   };
 }

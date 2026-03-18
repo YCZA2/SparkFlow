@@ -8,7 +8,6 @@ import { useCallback } from 'react';
 
 import { useEditorSession } from '@/features/editor/useEditorSession';
 import type { EditorDocumentSnapshot, EditorSourceDocument } from '@/features/editor/types';
-import { updateScript } from '@/features/scripts/api';
 import { markScriptsStale } from '@/features/scripts/refreshSignal';
 import { updateLocalScriptEntity } from '@/features/scripts/store';
 import type { Script } from '@/types/script';
@@ -58,9 +57,6 @@ export function useScriptBodySession({
         await commitOptimisticScript(updatedScript);
       }
       markScriptsStale();
-      void updateScript(id, {
-        body_html: snapshot.body_html,
-      }).catch(() => undefined);
     },
     [commitOptimisticScript]
   );

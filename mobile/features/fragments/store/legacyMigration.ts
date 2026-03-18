@@ -152,6 +152,10 @@ export async function migrateLegacyAsyncStorageIfNeeded(): Promise<void> {
                 durationMs: null,
                 status: asset.upload_status,
                 createdAt: legacyDraft.created_at,
+                // 迁移时明确设置 backup 字段，不依赖 DDL 默认值以防 drizzle 插入 undefined。
+                backupStatus: 'pending',
+                entityVersion: 1,
+                lastModifiedDeviceId: null,
               })
               .onConflictDoNothing();
           }
@@ -177,7 +181,7 @@ async function saveLegacyRemoteBodyDraft(fragmentId: string, html: string): Prom
   await database
     .update(fragmentsTable)
     .set({
-      legacyCloudBindingStatus: normalizedHtml ? 'unsynced' : 'synced',
+      legacyCloudBindingStatus: normalizedHtml ? 'pending' : 'synced',
       updatedAt: new Date().toISOString(),
     })
     .where(eq(fragmentsTable.id, fragmentId));

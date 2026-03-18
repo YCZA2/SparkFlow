@@ -1,5 +1,5 @@
 import type { SpeakerSegment } from '@/types/fragment';
-import type { PipelineRun } from '@/types/script';
+import type { PipelineRun } from '@/types/pipeline';
 
 export interface MediaIngestionOutput {
   transcript: string | null;

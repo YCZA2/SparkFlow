@@ -5,9 +5,7 @@ import type {
   BackupScriptContractPayload,
   BackupSnapshotResponse,
 } from '@/features/backups/api';
-
-type FragmentSource = 'voice' | 'manual' | 'video_parse';
-type FragmentAudioSource = 'upload' | 'external_link' | null;
+import type { FragmentAudioSource, FragmentSource } from '@/types/fragment';
 
 export interface RestoredFolderRow {
   id: string;
@@ -28,7 +26,7 @@ export interface RestoredFragmentRow {
   legacyServerBindingId: string | null;
   folderId: string | null;
   source: FragmentSource;
-  audioSource: FragmentAudioSource;
+  audioSource: FragmentAudioSource | null;
   audioObjectKey: string | null;
   createdAt: string;
   updatedAt: string;
@@ -135,7 +133,7 @@ function resolveFragmentSource(value: unknown): FragmentSource {
   return value === 'voice' || value === 'manual' || value === 'video_parse' ? value : 'manual';
 }
 
-function resolveAudioSource(value: unknown): FragmentAudioSource {
+function resolveAudioSource(value: unknown): FragmentAudioSource | null {
   /*恢复时保留已知音频来源，其余值忽略。 */
   return value === 'upload' || value === 'external_link' ? value : null;
 }
@@ -281,7 +279,7 @@ export function buildBackupRestorePlan(snapshot: BackupSnapshotResponse): Backup
         generatedAt: readString(scriptPayload.generated_at) ?? createdAt,
         plainTextSnapshot: readString(scriptPayload.plain_text_snapshot) ?? '',
         bodyHtml,
-        bodyFileUri: deletedAt ? null : null,
+        bodyFileUri: null, // 由 mergeRestoredScriptRow 按 getScriptBodyFile 覆盖
         isFilmed: scriptPayload.is_filmed ? 1 : 0,
         filmedAt: readString(scriptPayload.filmed_at),
         copyOfScriptId: readString(scriptPayload.copy_of_script_id),

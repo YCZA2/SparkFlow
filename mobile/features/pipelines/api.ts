@@ -4,7 +4,7 @@ import type {
   PipelineRun,
   PipelineStepListResponse,
   RetryPipelineRequest,
-} from '@/types/script';
+} from '@/types/pipeline';
 
 const TERMINAL_PIPELINE_STATUSES = new Set(['succeeded', 'failed', 'cancelled']);
 

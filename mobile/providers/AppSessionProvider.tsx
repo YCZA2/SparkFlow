@@ -6,6 +6,7 @@ import { getOrCreateDeviceId } from '@/features/auth/device';
 import { useAuthStore } from '@/features/auth/authStore';
 import { flushBackupQueue } from '@/features/backups/queue';
 import { ensureFragmentStoreReady } from '@/features/fragments/store';
+import { ensureScriptStoreReady } from '@/features/scripts/store';
 
 /**
  * App Session Provider
@@ -25,6 +26,7 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
     /*启动时初始化本地镜像、API URL、认证态，并恢复同步队列。*/
     const init = async () => {
       await ensureFragmentStoreReady();
+      await ensureScriptStoreReady();
       await getOrCreateDeviceId();
       await initApiBaseUrl();
       await bootstrap();

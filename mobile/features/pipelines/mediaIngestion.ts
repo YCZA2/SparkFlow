@@ -1,7 +1,7 @@
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { readLocalFragmentEntity, updateLocalFragmentEntity } from '@/features/fragments/store';
 import type { Fragment } from '@/types/fragment';
-import type { PipelineRun } from '@/types/script';
+import type { PipelineRun } from '@/types/pipeline';
 
 export {
   extractMediaIngestionOutput,

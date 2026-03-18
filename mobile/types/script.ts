@@ -2,11 +2,15 @@
  * 口播稿类型定义
  */
 
+import type { PipelineStatus } from './pipeline';
+
+// Pipeline 类型已迁移至 types/pipeline.ts，此处保留再导出以维持旧 import 路径兼容。
+export type { PipelineResourcePreview, PipelineRun, PipelineStatus, PipelineStep, PipelineStepListResponse, RetryPipelineRequest } from './pipeline';
+
 export type ScriptMode = 'mode_a' | 'mode_b';
 export type ScriptStatus = 'draft' | 'ready' | 'filmed';
 export type ScriptGenerationKind = 'manual' | 'daily_push';
 export type ScriptCopyReason = 'conflict' | 'restore' | 'manual_duplicate';
-export type PipelineStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 export interface Script {
   id: string;
@@ -61,42 +65,4 @@ export interface ScriptGenerationTask {
   pipeline_run_id: string;
   pipeline_type: 'script_generation';
   status: PipelineStatus;
-}
-
-export interface PipelineResourcePreview {
-  resource_type: string | null;
-  resource_id: string | null;
-}
-
-export interface PipelineRun {
-  id: string;
-  pipeline_type: 'media_ingestion' | 'script_generation';
-  status: PipelineStatus;
-  current_step: string | null;
-  error_message: string | null;
-  resource: PipelineResourcePreview;
-  output: Record<string, unknown>;
-  created_at: string | null;
-  updated_at: string | null;
-  finished_at: string | null;
-}
-
-export interface PipelineStep {
-  step_name: string;
-  status: PipelineStatus | 'pending' | 'waiting_retry';
-  attempt_count: number;
-  max_attempts: number;
-  error_message: string | null;
-  output: Record<string, unknown>;
-  external_ref: Record<string, unknown>;
-  started_at: string | null;
-  finished_at: string | null;
-}
-
-export interface PipelineStepListResponse {
-  items: PipelineStep[];
-}
-
-export interface RetryPipelineRequest {
-  strategy: 'from_failed_step' | 'from_start';
 }
