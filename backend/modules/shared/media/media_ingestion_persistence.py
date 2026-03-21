@@ -88,6 +88,7 @@ class MediaIngestionPersistenceService:
                 "audio_file_url": access.url if access else audio_payload.get("audio_file_url"),
                 "audio_file_expires_at": access.expires_at if access else audio_payload.get("audio_file_expires_at"),
                 "transcript": transcript_payload.get("transcript"),
+                "speaker_segments": transcript_payload.get("speaker_segments") or [],
                 "summary": enrichment_payload.get("summary"),
                 "tags": enrichment_payload.get("tags") or [],
                 "platform": audio_payload.get("platform") or source_context.get("platform"),

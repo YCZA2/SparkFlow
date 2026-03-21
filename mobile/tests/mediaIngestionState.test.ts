@@ -29,6 +29,26 @@ test('extractMediaIngestionOutput keeps transcript, summary and tags from pipeli
   );
 });
 
+test('extractMediaIngestionOutput extracts valid speaker_segments from pipeline output', () => {
+  const segments = [
+    { speaker_id: 'SPEAKER_0', start_ms: 0, end_ms: 1200, text: '你好' },
+    { speaker_id: 'SPEAKER_1', start_ms: 1300, end_ms: 2500, text: '世界' },
+  ];
+  assert.deepEqual(
+    extractMediaIngestionOutput({
+      output: {
+        transcript: '你好世界',
+        summary: '摘要',
+        tags: ['标签'],
+        speaker_segments: segments,
+        audio_file_url: null,
+        audio_file_expires_at: null,
+      },
+    } as any).speaker_segments,
+    segments
+  );
+});
+
 test('extractMediaIngestionOutput falls back to audio_file payload object key', () => {
   assert.equal(
     extractMediaIngestionOutput({

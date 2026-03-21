@@ -40,6 +40,39 @@ def test_build_finalize_payload_keeps_upload_fields() -> None:
     assert result["resource_id"] == "frag-1"
     assert result["run_output"]["audio_source"] == "upload"
     assert result["run_output"]["audio_file_url"] == "/download/audio/a.m4a"
+    assert result["run_output"]["speaker_segments"] == []
+
+
+def test_build_finalize_payload_includes_speaker_segments() -> None:
+    """转写步骤产出的说话人分段应透传到终态输出。"""
+    service = MediaIngestionPersistenceService()
+    segments = [
+        {"speaker_id": "SPEAKER_0", "start_ms": 0, "end_ms": 1200, "text": "你好"},
+        {"speaker_id": "SPEAKER_1", "start_ms": 1300, "end_ms": 2500, "text": "世界"},
+    ]
+    result = service.build_finalize_payload(
+        file_storage=StubFileStorage(),
+        input_payload={
+            "fragment_id": "frag-3",
+            "source_kind": "upload",
+            "audio_file": {
+                "storage_provider": "local",
+                "bucket": "local",
+                "object_key": "audio/c.m4a",
+                "access_level": "private",
+                "original_filename": "c.m4a",
+                "mime_type": "audio/m4a",
+                "file_size": 1,
+                "checksum": None,
+            },
+            "source_context": {},
+        },
+        audio_payload={},
+        transcript_payload={"transcript": "你好世界", "speaker_segments": segments},
+        enrichment_payload={"summary": "摘要", "tags": []},
+    )
+
+    assert result["run_output"]["speaker_segments"] == segments
 
 
 def test_build_finalize_payload_merges_external_media_context() -> None:
