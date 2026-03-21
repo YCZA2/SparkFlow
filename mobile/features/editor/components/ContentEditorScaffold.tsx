@@ -10,6 +10,7 @@ import { Stack } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/layout/BackButton';
 import { ScreenState } from '@/components/ScreenState';
 import { EditorToolbar } from '@/features/editor/components/EditorToolbar';
 import type {
@@ -149,7 +150,7 @@ export function ContentEditorScaffold({
 
   const renderPageHeader = (options?: { disableActions?: boolean }) => (
     <View style={styles.headerRow}>
-      <HeaderCircleButton symbol="chevron.left" dark={isDark} onPress={onBack} />
+      <BackButton onPress={onBack} />
 
       <View style={styles.headerActions}>
         <HeaderCircleButton

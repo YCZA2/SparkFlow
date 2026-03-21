@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SymbolView } from 'expo-symbols';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 import { FragmentCard } from '@/components/FragmentCard';
+import { BackButton } from '@/components/layout/BackButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
@@ -19,16 +19,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFolderFragments } from '@/features/folders/hooks';
 import { useQuickActionBar } from '@/providers/QuickActionBarProvider';
-
-// 返回按钮组件（与全局统一组件保持一致）
-function FolderBackButton({ onPress, color }: { onPress: () => void; color: string }) {
-  return (
-    <TouchableOpacity onPress={onPress} hitSlop={8} activeOpacity={0.6} style={styles.backButton}>
-      <SymbolView name="chevron.left" size={22} tintColor={color} />
-      <Text style={[styles.backButtonText, { color }]}>返回</Text>
-    </TouchableOpacity>
-  );
-}
 
 // 选择按钮组件
 function SelectButton({
@@ -93,7 +83,7 @@ export default function FolderDetailScreen() {
       {/* 悬浮顶部导航栏 - 移到最前面确保点击事件优先 */}
       <View style={[styles.floatingHeader, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerContent}>
-          <FolderBackButton onPress={handleBack} color={theme.colors.text} />
+          <BackButton onPress={handleBack} />
           <View style={styles.headerTitleContainer}>
             <Text style={[styles.headerTitle, { color: theme.colors.text }]} numberOfLines={1}>
               {name || '文件夹'}
@@ -233,20 +223,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-  },
-  // 返回按钮样式
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-    paddingRight: 8,
-    minWidth: 44,
-    minHeight: 44,
-  },
-  backButtonText: {
-    fontSize: 17,
-    fontWeight: '400',
-    marginLeft: 2,
   },
   // 选择按钮样式
   selectButton: {
