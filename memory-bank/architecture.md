@@ -179,7 +179,7 @@ flowchart TD
 
 ### 4.2 Actual Boundaries
 
-- [`backend/main.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py): 创建 FastAPI app、注册 request-id 中间件、异常处理器、静态文件、路由和 scheduler 生命周期。
+- `backend/main.py`: 创建 FastAPI app、注册 request-id 中间件、异常处理器、静态文件、路由和 scheduler 生命周期。
 - `backend/modules/*/presentation.py`: 对外 HTTP 入口。
 - `backend/modules/*/schemas.py`: 当前模块自有的 API request/response DTO，避免跨目录重复定义 contract。
 - `backend/modules/*/application.py`: 业务编排与用例。
@@ -191,19 +191,22 @@ flowchart TD
 - 模块内 `schemas.py` 是后端 API contract 的单一事实源。
 - `presentation.py` 应显式声明 `response_model=ResponseModel[...]`，让 OpenAPI 可直接作为前后端并行开发的契约。
 - 删除接口统一返回 `200 + ResponseModel[None]`，成功时 `data` 为 `null`。
-- `backend/modules/shared/container.py`: DI 容器入口，只负责 `ServiceContainer`、默认依赖装配和 FastAPI 依赖读取。
-- `backend/modules/shared/infrastructure.py`: 兼容层，统一转发 `storage` / `vector_store` / `providers` 的导出，避免上层导入点一次性迁移。
-- `backend/modules/shared/storage.py`: 本地 / OSS 文件存储实现、对象 key 规则与上传校验。
-- `backend/modules/shared/vector_store.py`: 应用级向量存储适配与 namespace 规则。
-- `backend/modules/shared/providers.py`: 外部媒体、网页搜索与 workflow provider 的默认工厂。
 - `backend/modules/shared/ports.py`: LLM、STT、Embedding、Vector DB、音频存储、外挂工作流等端口抽象。
 - `backend/modules/shared/enrichment.py`: 摘要与标签增强逻辑。
-- `backend/modules/shared/audio_ingestion.py`: 兼容层，对外保留媒体导入统一入口。
-- `backend/modules/shared/audio_ingestion_use_case.py`: 媒体导入任务创建入口，负责 fragment 初始化、入队与前置校验。
-- `backend/modules/shared/media_ingestion_steps.py`: 媒体导入 pipeline 的步骤执行器。
-- `backend/modules/shared/media_ingestion_persistence.py`: 媒体导入链路的音频元数据回写、转写落库与终态输出组装。
-- `backend/modules/shared/stored_file_payloads.py`: `StoredFile` 与 pipeline payload 的互转 helper。
-- `backend/modules/shared/pipeline_runtime.py`: 持久化后台流水线运行时，负责步骤定义、worker 抢占、自动重试与恢复。
+- `backend/modules/shared/warning_throttle.py`: 告警限流工具。
+- `backend/modules/shared/infrastructure/container.py`: DI 容器入口，只负责 `ServiceContainer`、默认依赖装配和 FastAPI 依赖读取。
+- `backend/modules/shared/infrastructure/infrastructure.py`: 兼容层，统一转发 `storage` / `vector_store` / `providers` 的导出，避免上层导入点一次性迁移。
+- `backend/modules/shared/infrastructure/storage.py`: 本地 / OSS 文件存储实现、对象 key 规则与上传校验。
+- `backend/modules/shared/infrastructure/vector_store.py`: 应用级向量存储适配与 namespace 规则。
+- `backend/modules/shared/infrastructure/providers.py`: 外部媒体、网页搜索与 workflow provider 的默认工厂。
+- `backend/modules/shared/media/audio_ingestion.py`: 兼容层，对外保留媒体导入统一入口。
+- `backend/modules/shared/media/audio_ingestion_use_case.py`: 媒体导入任务创建入口，负责 fragment 初始化、入队与前置校验。
+- `backend/modules/shared/media/media_ingestion_steps.py`: 媒体导入 pipeline 的步骤执行器。
+- `backend/modules/shared/media/media_ingestion_persistence.py`: 媒体导入链路的音频元数据回写、转写落库与终态输出组装。
+- `backend/modules/shared/media/stored_file_payloads.py`: `StoredFile` 与 pipeline payload 的互转 helper。
+- `backend/modules/shared/pipeline/pipeline_runtime.py`: 持久化后台流水线运行时，负责步骤定义、worker 抢占、自动重试与恢复。
+- `backend/modules/shared/pipeline/pipeline_types.py`: pipeline 步骤类型定义。
+- `backend/modules/shared/content/`: 正文处理子目录，包含 `content_html.py`、`content_markdown.py`、`content_schemas.py`、`editor_document.py`、`fragment_body_markdown.py`。
 - `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，而不是继续扩散到 legacy service 文件。
 
 当前 `fragments` 模块内部进一步拆分为：
@@ -236,8 +239,8 @@ flowchart TD
 - `backend/alembic/`: 数据库迁移脚本。
 - `backend/tests/`: 后端自动化测试。
 - `docker-compose.postgres.yml`: 本地 PostgreSQL Docker Compose 编排文件。
-- `backend/uploads/`: `local` 文件存储 provider 的对象根目录。
-- `backend/chroma_data/`: 本地向量库持久化目录。
+- `backend/uploads/`: `local` 文件存储 provider 的对象根目录（运行时生成，不纳入版本控制）。
+- `backend/chroma_data/`: 本地向量库持久化目录（运行时生成，不纳入版本控制）。
 - `backend/runtime_logs/`: 运行时日志目录，当前包含后端全量日志、错误日志和移动端错误日志落盘文件。
 - `backend/scripts/`: 后端辅助脚本。
 - 本地路径类配置（如 `UPLOAD_DIR` / `CHROMADB_PATH` / `RUNTIME_LOG_DIR`）即使在 `.env` 中写相对路径，也统一按 `backend/` 目录解析，避免因为启动 cwd 不同漂移到仓库根目录。
@@ -534,28 +537,27 @@ sequenceDiagram
 
 ## 7. Key Entry Files
 
-- Frontend app entry: [`mobile/app/_layout.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/_layout.tsx)
-- Frontend home: [`mobile/app/index.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/index.tsx)
-- Session bootstrap: [`mobile/providers/AppSessionProvider.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/providers/AppSessionProvider.tsx)
-- Fragment list screen model: [`mobile/features/fragments/useFragmentListScreenState.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/useFragmentListScreenState.ts)
-- Fragment screen model: [`mobile/features/fragments/useFragmentsScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/useFragmentsScreen.ts)
-- Fragment detail screen model: [`mobile/features/fragments/detail/useFragmentDetailScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/detail/useFragmentDetailScreen.ts)
-- Generate screen model: [`mobile/features/scripts/useGenerateScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/scripts/useGenerateScreen.ts)
-- Fragment cloud model: [`mobile/features/fragments/useFragmentCloudScreen.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/fragments/useFragmentCloudScreen.ts)
-- Audio state provider: [`mobile/features/recording/AudioCaptureProvider.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/recording/AudioCaptureProvider.tsx)
-- API client: [`mobile/features/core/api/client.ts`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/features/core/api/client.ts)
-- Backend entry: [`backend/main.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py)
-- Service container: [`backend/modules/shared/container.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/container.py)
-- Shared infrastructure: [`backend/modules/shared/infrastructure.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/infrastructure.py)
-- Fragments module: [`backend/modules/fragments/presentation.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/presentation.py)
-- Fragment folders module: [`backend/modules/fragment_folders/presentation.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragment_folders/presentation.py)
-- Fragment visualization: [`backend/modules/fragments/visualization.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/visualization.py)
-- Transcriptions module: [`backend/modules/transcriptions/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/transcriptions/application.py)
-- Scripts application: [`backend/modules/scripts/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/application.py)
-- Scripts pipeline: [`backend/modules/scripts/pipeline.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/pipeline.py)
-- Scripts context builder: [`backend/modules/scripts/context_builder.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/context_builder.py)
-- Knowledge module: [`backend/modules/knowledge/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/knowledge/application.py)
-- Scheduler module: [`backend/modules/scheduler/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scheduler/application.py)
+- Frontend app entry: `mobile/app/_layout.tsx`
+- Frontend home: `mobile/app/index.tsx`
+- Session bootstrap: `mobile/providers/AppSessionProvider.tsx`
+- Fragment list screen model: `mobile/features/fragments/useFragmentListScreenState.ts`
+- Fragment screen model: `mobile/features/fragments/useFragmentsScreen.ts`
+- Fragment detail screen model: `mobile/features/fragments/detail/useFragmentDetailScreen.ts`
+- Generate screen model: `mobile/features/scripts/useGenerateScreen.ts`
+- Fragment cloud model: `mobile/features/fragments/useFragmentCloudScreen.ts`
+- Audio state provider: `mobile/features/recording/AudioCaptureProvider.tsx`
+- API client: `mobile/features/core/api/client.ts`
+- Backend entry: `backend/main.py`
+- Service container: `backend/modules/shared/infrastructure/container.py`
+- Shared infrastructure: `backend/modules/shared/infrastructure/infrastructure.py`
+- Fragments module: `backend/modules/fragments/presentation.py`
+- Fragment folders module: `backend/modules/fragment_folders/presentation.py`
+- Transcriptions module: `backend/modules/transcriptions/application.py`
+- Scripts application: `backend/modules/scripts/application.py`
+- Scripts pipeline: `backend/modules/scripts/pipeline.py`
+- Scripts context builder: `backend/modules/scripts/context_builder.py`
+- Knowledge module: `backend/modules/knowledge/application.py`
+- Scheduler module: `backend/modules/scheduler/application.py`
 
 ## 8. Current Architectural Notes
 
