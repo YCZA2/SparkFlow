@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from models import Fragment, FragmentTag
+from models import ContentMediaLink, Fragment, FragmentTag
 from modules.shared.content.content_html import (
     convert_markdown_to_basic_html,
     extract_plain_text_from_html,
@@ -166,6 +166,11 @@ def create(
 
 
 def delete(db: Session, fragment: Fragment) -> None:
+    """删除指定碎片，同时清理关联的 content_media_links 记录，避免孤儿关联积累。"""
+    db.query(ContentMediaLink).filter(
+        ContentMediaLink.content_type == "fragment",
+        ContentMediaLink.content_id == fragment.id,
+    ).delete()
     db.delete(fragment)
     db.commit()
 

@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import Fragment, Script
+from models import ContentMediaLink, Fragment, Script
 
 
 def list_by_user(db: Session, user_id: str, limit: int, offset: int) -> list[Script]:
@@ -61,7 +61,11 @@ def create(
 
 
 def delete(db: Session, script: Script) -> None:
-    """删除指定稿件。"""
+    """删除指定稿件，同时清理关联的 content_media_links 记录，避免孤儿关联积累。"""
+    db.query(ContentMediaLink).filter(
+        ContentMediaLink.content_type == "script",
+        ContentMediaLink.content_id == script.id,
+    ).delete()
     db.delete(script)
     db.commit()
 

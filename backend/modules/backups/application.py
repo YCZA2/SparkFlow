@@ -199,6 +199,7 @@ class BackupAssetUseCase:
             f"backups/assets/{user_id}/",
             f"audio/original/{user_id}/",
             f"audio/imported/{user_id}/",
+            f"media-assets/{user_id}/",
         )
         items: list[BackupAssetAccessResponseItem] = []
         for item in payload.items:
