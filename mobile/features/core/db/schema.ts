@@ -59,7 +59,6 @@ export const mediaAssetsTable = sqliteTable('media_assets', {
   width: integer('width'),
   height: integer('height'),
   durationMs: integer('duration_ms'),
-  status: text('status').notNull().default('uploaded'),
   createdAt: text('created_at').notNull(),
   deletedAt: text('deleted_at'),
   backupStatus: text('backup_status').notNull().default('pending'),

@@ -49,6 +49,14 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
     };
   }, []);
 
+  useEffect(() => {
+    /*在前台长时间使用时定期重试 failed 条目，补充前后台切换事件的覆盖盲区。*/
+    const intervalId = setInterval(() => {
+      void flushBackupQueue().catch(() => undefined);
+    }, 5 * 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, []);
+
   if (!isReady) {
     return null;
   }

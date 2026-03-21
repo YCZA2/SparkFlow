@@ -204,27 +204,25 @@ export async function listFragmentDraftBodyIds(): Promise<string[]> {
     .filter((fragmentId) => toFileHandle(new File(getFragmentDraftBodyFile(fragmentId).uri)).exists);
 }
 
+/*递归删除目录及其所有内容。 */
+function deleteDirectoryRecursively(directory: Directory): void {
+  const handle = toDirectoryHandle(directory);
+  if (!handle.exists) {
+    return;
+  }
+  for (const entry of handle.list()) {
+    if (entry instanceof Directory) {
+      deleteDirectoryRecursively(entry);
+    } else {
+      toFileHandle(entry).delete();
+    }
+  }
+  handle.delete();
+}
+
 /*递归清空 fragments 目录，供显式恢复时重建本地正文文件使用。 */
 export async function resetFragmentFiles(): Promise<void> {
   await ensureDirectoryAsync(FRAGMENTS_DIRECTORY_URI);
-
-  const deleteDirectoryRecursively = (directory: Directory): void => {
-    const handle = toDirectoryHandle(directory);
-    if (!handle.exists) {
-      return;
-    }
-
-    for (const entry of handle.list()) {
-      if (entry instanceof Directory) {
-        deleteDirectoryRecursively(entry);
-      } else {
-        toFileHandle(entry).delete();
-      }
-    }
-
-    handle.delete();
-  };
-
   for (const entry of toDirectoryHandle(FRAGMENTS_DIRECTORY).list()) {
     if (entry instanceof Directory) {
       deleteDirectoryRecursively(entry);
@@ -234,27 +232,20 @@ export async function resetFragmentFiles(): Promise<void> {
   }
 }
 
+/*删除不在 keepIds 集合中的 fragment 目录，供恢复后清理已删除/过期碎片的文件。
+ * 避免在恢复事务前就清空全部目录，防止 SQLite 写入失败时本地正文数据丢失。 */
+export async function cleanupStaleFragmentDirectories(keepIds: Set<string>): Promise<void> {
+  await ensureDirectoryAsync(FRAGMENTS_DIRECTORY_URI);
+  for (const entry of toDirectoryHandle(FRAGMENTS_DIRECTORY).list()) {
+    if (entry instanceof Directory && !keepIds.has(entry.name)) {
+      deleteDirectoryRecursively(entry);
+    }
+  }
+}
+
 /*递归清空 scripts 目录，供显式恢复或重建成稿本地镜像使用。 */
 export async function resetScriptFiles(): Promise<void> {
   await ensureDirectoryAsync(SCRIPTS_DIRECTORY_URI);
-
-  const deleteDirectoryRecursively = (directory: Directory): void => {
-    const handle = toDirectoryHandle(directory);
-    if (!handle.exists) {
-      return;
-    }
-
-    for (const entry of handle.list()) {
-      if (entry instanceof Directory) {
-        deleteDirectoryRecursively(entry);
-      } else {
-        toFileHandle(entry).delete();
-      }
-    }
-
-    handle.delete();
-  };
-
   for (const entry of toDirectoryHandle(SCRIPTS_DIRECTORY).list()) {
     if (entry instanceof Directory) {
       deleteDirectoryRecursively(entry);

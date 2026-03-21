@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const LATEST_SCHEMA_VERSION = 7;
+const LATEST_SCHEMA_VERSION = 8;
 
 /*创建本地镜像所需的 SQLite 表与索引。 */
 export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Promise<void> {
@@ -276,6 +276,49 @@ export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Prom
 
       DROP TABLE fragment_folders;
       ALTER TABLE fragment_folders_v7 RENAME TO fragment_folders;
+    `);
+  }
+
+  // Version 8: 删除 media_assets 中与 upload_status 语义重叠的冗余 status 列
+  if (currentVersion < 8) {
+    await database.execAsync(`
+      CREATE TABLE media_assets_v8 (
+        id TEXT PRIMARY KEY NOT NULL,
+        fragment_id TEXT NOT NULL,
+        remote_asset_id TEXT,
+        media_kind TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        local_file_uri TEXT,
+        remote_file_url TEXT,
+        remote_expires_at TEXT,
+        upload_status TEXT NOT NULL DEFAULT 'uploaded',
+        file_size INTEGER NOT NULL DEFAULT 0,
+        checksum TEXT,
+        width INTEGER,
+        height INTEGER,
+        duration_ms INTEGER,
+        created_at TEXT NOT NULL,
+        deleted_at TEXT,
+        backup_status TEXT NOT NULL DEFAULT 'pending',
+        last_backup_at TEXT,
+        entity_version INTEGER NOT NULL DEFAULT 1,
+        last_modified_device_id TEXT
+      );
+
+      INSERT INTO media_assets_v8
+        SELECT
+          id, fragment_id, remote_asset_id, media_kind, mime_type, file_name,
+          local_file_uri, remote_file_url, remote_expires_at, upload_status,
+          file_size, checksum, width, height, duration_ms, created_at,
+          deleted_at, backup_status, last_backup_at, entity_version, last_modified_device_id
+        FROM media_assets;
+
+      DROP TABLE media_assets;
+      ALTER TABLE media_assets_v8 RENAME TO media_assets;
+
+      CREATE INDEX IF NOT EXISTS media_assets_fragment_id_idx ON media_assets(fragment_id);
+      CREATE INDEX IF NOT EXISTS media_assets_remote_asset_id_idx ON media_assets(remote_asset_id);
     `);
   }
 

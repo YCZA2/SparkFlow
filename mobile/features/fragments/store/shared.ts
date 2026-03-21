@@ -93,7 +93,7 @@ export function mapMediaAssetRow(row: MediaAssetRow): MediaAsset {
     width: row.width,
     height: row.height,
     duration_ms: row.durationMs,
-    status: row.status,
+    status: row.uploadStatus,
     created_at: row.createdAt,
     file_url: row.localFileUri ?? row.remoteFileUrl,
     expires_at: row.remoteExpiresAt,

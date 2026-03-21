@@ -176,7 +176,6 @@ export async function stageLocalFragmentPendingImage(
     width: null,
     height: null,
     durationMs: null,
-    status: pendingAsset.upload_status,
     createdAt: new Date().toISOString(),
     deletedAt: null,
     backupStatus: 'pending',

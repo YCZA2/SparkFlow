@@ -1,10 +1,10 @@
 import { fragmentFoldersTable, fragmentsTable, mediaAssetsTable } from '@/features/core/db/schema';
 import { getLocalDatabase } from '@/features/core/db/database';
 import {
+  cleanupStaleFragmentDirectories,
   downloadRemoteFileToFragment,
   getFragmentBodyFile,
   getScriptBodyFile,
-  resetFragmentFiles,
   writeFragmentBodyFile,
 } from '@/features/core/files/runtime';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
@@ -207,7 +207,7 @@ export async function restoreFromBackup(reason?: string): Promise<BackupRestoreR
   const plan = buildBackupRestorePlan(snapshot);
   const database = await getLocalDatabase();
 
-  await resetFragmentFiles();
+  // 先刷新 URL、下载媒体缓存，再提交事务——避免事务失败时本地正文文件已被清空
   await refreshFragmentAudioAccess(plan);
   await refreshBackupMediaAssetUrls(plan);
   await hydrateBackupFileCache(plan);
@@ -266,6 +266,12 @@ export async function restoreFromBackup(reason?: string): Promise<BackupRestoreR
     }
     await writeFragmentBodyFile(fragment.id, fragment.bodyHtml);
   }
+
+  // 正文文件写完后再清理不再需要的 fragment 目录，确保清理前本地数据已经完整落盘。
+  const liveFragmentIds = new Set(
+    plan.fragments.filter((f) => !f.deletedAt).map((f) => f.id)
+  );
+  await cleanupStaleFragmentDirectories(liveFragmentIds);
 
   await mergeRestoredScripts(plan);
 

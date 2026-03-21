@@ -63,7 +63,6 @@ export interface RestoredMediaAssetRow {
   width: number | null;
   height: number | null;
   durationMs: number | null;
-  status: 'uploaded';
   createdAt: string;
   deletedAt: string | null;
   backupStatus: 'synced';
@@ -237,7 +236,6 @@ export function buildBackupRestorePlan(snapshot: BackupSnapshotResponse): Backup
         width: typeof mediaPayload.width === 'number' ? mediaPayload.width : null,
         height: typeof mediaPayload.height === 'number' ? mediaPayload.height : null,
         durationMs: typeof mediaPayload.duration_ms === 'number' ? mediaPayload.duration_ms : null,
-        status: 'uploaded',
         createdAt: readString(mediaPayload.created_at) ?? baseTimestamp,
         deletedAt,
         backupStatus: 'synced',
