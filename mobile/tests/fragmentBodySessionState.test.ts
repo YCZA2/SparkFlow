@@ -14,7 +14,6 @@ import type { Fragment, MediaAsset } from '../types/fragment';
 function buildFragment(overrides: Partial<Fragment> = {}): Fragment {
   return {
     id: 'fragment-1',
-    server_id: 'fragment-1',
     audio_file_url: null,
     transcript: null,
     speaker_segments: null,
@@ -24,7 +23,6 @@ function buildFragment(overrides: Partial<Fragment> = {}): Fragment {
     created_at: '2026-03-11T10:00:00.000Z',
     updated_at: '2026-03-11T10:00:00.000Z',
     body_html: '服务端正文',
-    sync_status: 'synced',
     ...overrides,
   };
 }

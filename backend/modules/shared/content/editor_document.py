@@ -9,7 +9,6 @@ from core.exceptions import ValidationError
 ALLOWED_NODE_TYPES = {"doc", "paragraph", "heading", "blockquote", "bulletList", "orderedList", "listItem", "text", "image"}
 ALLOWED_MARKS = {"bold", "italic"}
 EMPTY_EDITOR_DOCUMENT: dict[str, Any] = {"type": "doc", "content": []}
-LEGACY_BLOCK_TYPES = {"paragraph", "heading", "blockquote", "bullet_list", "ordered_list", "image"}
 
 
 def empty_editor_document() -> dict[str, Any]:
@@ -44,49 +43,6 @@ def build_document_from_text(text: str, *, block_type: str = "paragraph") -> dic
     }
 
 
-def convert_legacy_editor_document(document: Any) -> dict[str, Any]:
-    """把旧 blocks/children 文档一次性转换为 ProseMirror 结构。"""
-    if not isinstance(document, dict) or document.get("type") != "doc":
-        return empty_editor_document()
-    raw_blocks = document.get("blocks")
-    if not isinstance(raw_blocks, list):
-        return empty_editor_document()
-    content: list[dict[str, Any]] = []
-    for index, raw_block in enumerate(raw_blocks):
-        if not isinstance(raw_block, dict):
-            continue
-        block_type = str(raw_block.get("type") or "").strip()
-        if block_type not in LEGACY_BLOCK_TYPES:
-            continue
-        if block_type == "image":
-            content.append(
-                {
-                    "type": "image",
-                    "attrs": {
-                        "src": str(raw_block.get("url") or "").strip() or None,
-                        "alt": str(raw_block.get("alt") or "").strip() or None,
-                        "assetId": str(raw_block.get("asset_id") or "").strip() or None,
-                        "width": _coerce_int(raw_block.get("width")),
-                        "height": _coerce_int(raw_block.get("height")),
-                        "legacyId": str(raw_block.get("id") or f"legacy-image-{index + 1}"),
-                    },
-                }
-            )
-            continue
-        paragraph = _build_inline_container_from_legacy_block(raw_block)
-        if block_type == "heading":
-            content.append({"type": "heading", "attrs": {"level": 1}, "content": paragraph["content"]})
-        elif block_type == "blockquote":
-            content.append({"type": "blockquote", "content": [paragraph]})
-        elif block_type == "bullet_list":
-            content.append({"type": "bulletList", "content": [{"type": "listItem", "content": [paragraph]}]})
-        elif block_type == "ordered_list":
-            content.append({"type": "orderedList", "content": [{"type": "listItem", "content": [paragraph]}]})
-        else:
-            content.append(paragraph)
-    return {"type": "doc", "content": content}
-
-
 def normalize_editor_document(document: Any) -> dict[str, Any]:
     """校验并规整 ProseMirror 文档，同时兜底迁移旧结构。"""
     if document is None:
@@ -95,8 +51,6 @@ def normalize_editor_document(document: Any) -> dict[str, Any]:
         raise ValidationError(message="正文文档格式无效", field_errors={"editor_document": "必须是对象"})
     if document.get("type") != "doc":
         raise ValidationError(message="正文文档格式无效", field_errors={"editor_document.type": "必须是 doc"})
-    if "blocks" in document and "content" not in document:
-        document = convert_legacy_editor_document(document)
     raw_content = document.get("content")
     if raw_content is None:
         return empty_editor_document()

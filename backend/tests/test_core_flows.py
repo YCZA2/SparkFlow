@@ -875,7 +875,7 @@ async def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(async_
 
     app.state.container.llm_provider = SimpleNamespace(generate=slow_generate, health_check=AsyncMock(return_value=True))
 
-    with patch("modules.shared.audio_ingestion.ENRICHMENT_TIMEOUT_SECONDS", 0.01):
+    with patch("modules.shared.media.media_ingestion_steps.DEFAULT_ENRICHMENT_TIMEOUT_SECONDS", 0.01):
         response = await async_client.post(
             "/api/transcriptions",
             headers=await _auth_headers(async_client, auth_headers_factory),

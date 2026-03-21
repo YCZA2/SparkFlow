@@ -53,11 +53,9 @@ export async function createLocalFolder(name: string, deviceId?: string | null):
   const id = generateFolderId();
   await database.insert(fragmentFoldersTable).values({
     id,
-    legacyRemoteId: null,
     name: name.trim(),
     createdAt: now,
     updatedAt: now,
-    legacyCloudBindingStatus: 'pending',
     deletedAt: null,
     backupStatus: 'pending',
     lastBackupAt: null,

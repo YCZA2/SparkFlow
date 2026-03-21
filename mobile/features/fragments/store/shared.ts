@@ -1,9 +1,8 @@
-import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 
 import { getLocalDatabase } from '@/features/core/db/database';
 import { fragmentsTable, mediaAssetsTable } from '@/features/core/db/schema';
 import {
-  getFragmentBodyFile,
   prepareManagedImageFile,
   readFragmentBodyFile,
   writeFragmentBodyFile,
@@ -17,17 +16,9 @@ import {
 import { normalizeFragmentTags } from '@/features/fragments/utils';
 import type {
   Fragment,
-  LegacyCloudBindingStatus,
-  LegacyLocalFragmentDraft,
-  LocalPendingImageAsset,
   MediaAsset,
 } from '@/types/fragment';
 
-export const LEGACY_FRAGMENT_DETAIL_PREFIX = '@fragment_cache:v1:detail:';
-export const LEGACY_FRAGMENT_LIST_PREFIX = '@fragment_cache:v1:list:';
-export const LEGACY_FRAGMENT_BODY_DRAFT_PREFIX = '@fragment_body_html_draft:';
-export const LEGACY_LOCAL_DRAFTS_STORAGE_KEY = '@local_fragment_drafts:v1';
-export const LEGACY_MIGRATION_FLAG = '@local_fragment_mirror_migrated:v1';
 export const LOCAL_IMAGE_ASSET_ID_PREFIX = 'local:image:';
 
 export type FragmentRow = typeof fragmentsTable.$inferSelect;
@@ -109,39 +100,6 @@ export function mapMediaAssetRow(row: MediaAssetRow): MediaAsset {
   };
 }
 
-/*按兼容快照行与正文文件组装遗留碎片展示模型。 */
-export async function mapLegacySnapshotRowToFragment(
-  row: FragmentRow,
-  mediaRows: MediaAssetRow[]
-): Promise<Fragment> {
-  const bodyHtml = normalizeBodyHtml(await readFragmentBodyFile(row.id));
-  return {
-    id: row.id,
-    server_id: row.legacyServerBindingId ?? null,
-    sync_status: 'synced',
-    audio_object_key: row.audioObjectKey ?? null,
-    is_filmed: row.isFilmed === 1,
-    filmed_at: row.filmedAt ?? null,
-    audio_file_url: row.audioFileUri ?? row.audioFileUrl,
-    audio_file_expires_at: row.audioFileExpiresAt ?? undefined,
-    transcript: row.transcript,
-    speaker_segments: deserializeSpeakerSegments(row.speakerSegmentsJson),
-    summary: row.summary,
-    tags: deserializeTags(row.tagsJson),
-    source: row.source as Fragment['source'],
-    audio_source: (row.audioSource as Fragment['audio_source']) ?? null,
-    created_at: row.createdAt,
-    updated_at: row.updatedAt,
-    folder_id: row.folderId ?? null,
-    folder: null,
-    body_html: bodyHtml,
-    plain_text_snapshot: row.plainTextSnapshot,
-    content_state:
-      (row.contentState as Fragment['content_state']) ?? (bodyHtml ? 'body_present' : 'empty'),
-    media_assets: mediaRows.map(mapMediaAssetRow),
-  };
-}
-
 /*按本地实体行统一组装 local-first 碎片展示模型。 */
 export async function mapLocalEntityRowToFragment(
   row: FragmentRow,
@@ -150,8 +108,6 @@ export async function mapLocalEntityRowToFragment(
   const bodyHtml = normalizeBodyHtml(await readFragmentBodyFile(row.id));
   return {
     id: row.id,
-    server_id: row.legacyServerBindingId ?? null,
-    sync_status: row.legacyCloudBindingStatus === 'synced' ? 'synced' : 'pending',
     audio_object_key: row.audioObjectKey ?? null,
     backup_status:
       row.backupStatus === 'synced'
@@ -184,104 +140,6 @@ export async function mapLocalEntityRowToFragment(
   };
 }
 
-/*按本地镜像行与待上传素材组装 local draft 记录。 */
-export async function mapLocalDraftRow(
-  row: FragmentRow,
-  mediaRows: MediaAssetRow[]
-): Promise<LegacyLocalFragmentDraft> {
-  const bodyHtml = normalizeBodyHtml(await readFragmentBodyFile(row.id));
-  return {
-    id: row.id,
-    server_id: row.legacyServerBindingId ?? null,
-    folder_id: row.folderId ?? null,
-    body_html: bodyHtml,
-    plain_text_snapshot: row.plainTextSnapshot || extractPlainTextFromHtml(bodyHtml),
-    created_at: row.createdAt,
-    updated_at: row.updatedAt,
-    sync_status: row.legacyCloudBindingStatus === 'synced' ? 'synced' : 'pending',
-    last_sync_attempt_at: row.lastSyncAttemptAt ?? null,
-    next_retry_at: row.nextRetryAt ?? null,
-    retry_count: row.retryCount ?? 0,
-    pending_image_assets: mediaRows.map((asset) => ({
-      local_asset_id: asset.id,
-      local_fragment_id: row.id,
-      local_uri: asset.localFileUri ?? asset.remoteFileUrl ?? '',
-      mime_type: asset.mimeType,
-      file_name: asset.fileName,
-      remote_asset_id: asset.remoteAssetId ?? null,
-      upload_status: asset.uploadStatus as LocalPendingImageAsset['upload_status'],
-    })),
-  };
-}
-
-/*把兼容快照 DTO 映射为 fragments 行，供迁移镜像统一 upsert。 */
-export function buildLegacySnapshotRow(
-  fragment: Fragment,
-  cachedAt?: string
-): typeof fragmentsTable.$inferInsert {
-  const now = new Date().toISOString();
-  return {
-    id: fragment.id,
-    legacyServerBindingId: fragment.id,
-    folderId: fragment.folder_id ?? null,
-    source: fragment.source,
-    audioSource: fragment.audio_source ?? null,
-    createdAt: fragment.created_at,
-    updatedAt: fragment.updated_at ?? fragment.created_at,
-    summary: fragment.summary ?? null,
-    tagsJson: serializeTags(fragment.tags),
-    plainTextSnapshot: String(
-      fragment.plain_text_snapshot ?? extractPlainTextFromHtml(fragment.body_html)
-    ),
-    bodyFileUri: getFragmentBodyFile(fragment.id).uri,
-    transcript: fragment.transcript ?? null,
-    speakerSegmentsJson: serializeSpeakerSegments(fragment.speaker_segments),
-    audioObjectKey: fragment.audio_object_key ?? null,
-    audioFileUri: fragment.audio_file_url ?? null,
-    audioFileUrl: fragment.audio_file_url ?? null,
-    audioFileExpiresAt: fragment.audio_file_expires_at ?? null,
-    legacyCloudBindingStatus: 'synced',
-    lastSyncedAt: now,
-    lastSyncAttemptAt: null,
-    nextRetryAt: null,
-    retryCount: 0,
-    deletedAt: null,
-    isFilmed: fragment.is_filmed ? 1 : 0,
-    filmedAt: fragment.filmed_at ?? null,
-    contentState: fragment.content_state ?? null,
-    cachedAt: cachedAt ?? now,
-  };
-}
-
-/*把旧草稿 patch 映射为 fragments 表更新字段。 */
-export function buildLocalDraftRowPatch(
-  current: FragmentRow,
-  patch: Partial<LegacyLocalFragmentDraft>
-): Partial<typeof fragmentsTable.$inferInsert> {
-  return {
-    legacyServerBindingId:
-      patch.server_id === undefined ? current.legacyServerBindingId : patch.server_id,
-    folderId: patch.folder_id === undefined ? current.folderId : patch.folder_id,
-    updatedAt: new Date().toISOString(),
-    plainTextSnapshot:
-      typeof patch.plain_text_snapshot === 'string'
-        ? patch.plain_text_snapshot
-        : current.plainTextSnapshot,
-    legacyCloudBindingStatus:
-      patch.sync_status === undefined
-        ? current.legacyCloudBindingStatus
-        : (patch.sync_status as LegacyCloudBindingStatus),
-    lastSyncAttemptAt:
-      patch.last_sync_attempt_at === undefined
-        ? current.lastSyncAttemptAt
-        : patch.last_sync_attempt_at,
-    nextRetryAt: patch.next_retry_at === undefined ? current.nextRetryAt : patch.next_retry_at,
-    retryCount: patch.retry_count === undefined ? current.retryCount : patch.retry_count,
-    backupStatus: 'pending',
-    entityVersion: (current.entityVersion ?? 0) + 1,
-  };
-}
-
 /*按 fragment_id 批量读取素材行，避免列表和详情多次往返数据库。 */
 export async function loadMediaRowsByFragmentIds(
   fragmentIds: string[]
@@ -301,86 +159,6 @@ export async function loadMediaRowsByFragmentIds(
     map.set(row.fragmentId, bucket);
   }
   return map;
-}
-
-/*按 id 或 legacy server_id 查询单条 fragments 行，供兼容绑定场景复用。 */
-export async function loadFragmentRowByIdOrServerId(
-  identifier: string
-): Promise<FragmentRow | null> {
-  const database = await getLocalDatabase();
-  const rows = await database
-    .select()
-    .from(fragmentsTable)
-    .where(
-      or(eq(fragmentsTable.id, identifier), eq(fragmentsTable.legacyServerBindingId, identifier))
-    )
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-/*用兼容快照素材替换迁移镜像下的媒体资源，同时保留独立本地草稿的待上传项。 */
-export async function replaceLegacySnapshotMediaAssets(
-  fragmentId: string,
-  mediaAssets: MediaAsset[] | undefined
-): Promise<void> {
-  const database = await getLocalDatabase();
-  const nextAssets = mediaAssets ?? [];
-  const keepIds = new Set(nextAssets.map((asset) => asset.id));
-  const existingRows = await database
-    .select()
-    .from(mediaAssetsTable)
-    .where(eq(mediaAssetsTable.fragmentId, fragmentId));
-
-  await Promise.all(
-    existingRows
-      .filter((row) => !keepIds.has(row.id))
-      .map((row) => database.delete(mediaAssetsTable).where(eq(mediaAssetsTable.id, row.id)))
-  );
-
-  for (const asset of nextAssets) {
-    await database
-      .insert(mediaAssetsTable)
-      .values({
-        id: asset.id,
-        fragmentId,
-        remoteAssetId: asset.id,
-        mediaKind: asset.media_kind,
-        mimeType: asset.mime_type,
-        fileName: asset.original_filename,
-        localFileUri: null,
-        remoteFileUrl: asset.file_url ?? null,
-        remoteExpiresAt: asset.expires_at ?? null,
-        uploadStatus: asset.status ?? 'uploaded',
-        fileSize: asset.file_size ?? 0,
-        checksum: asset.checksum ?? null,
-        width: asset.width ?? null,
-        height: asset.height ?? null,
-        durationMs: asset.duration_ms ?? null,
-        status: asset.status ?? 'uploaded',
-        createdAt: asset.created_at ?? new Date().toISOString(),
-      })
-      .onConflictDoUpdate({
-        target: mediaAssetsTable.id,
-        set: {
-          fragmentId,
-          remoteAssetId: asset.id,
-          mediaKind: asset.media_kind,
-          mimeType: asset.mime_type,
-          fileName: asset.original_filename,
-          localFileUri: null,
-          remoteFileUrl: asset.file_url ?? null,
-          remoteExpiresAt: asset.expires_at ?? null,
-          uploadStatus: asset.status ?? 'uploaded',
-          fileSize: asset.file_size ?? 0,
-          checksum: asset.checksum ?? null,
-          width: asset.width ?? null,
-          height: asset.height ?? null,
-          durationMs: asset.duration_ms ?? null,
-          status: asset.status ?? 'uploaded',
-          createdAt: asset.created_at ?? new Date().toISOString(),
-        },
-      });
-  }
 }
 
 /*创建本地草稿时顺手生成空图片节点，供后续图片插入测试复用。 */

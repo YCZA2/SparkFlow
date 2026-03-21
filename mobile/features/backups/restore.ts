@@ -226,7 +226,6 @@ export async function restoreFromBackup(reason?: string): Promise<BackupRestoreR
       await tx.insert(fragmentsTable).values(
         plan.fragments.map((fragment) => ({
           id: fragment.id,
-          legacyServerBindingId: fragment.legacyServerBindingId,
           folderId: fragment.folderId,
           source: fragment.source,
           audioSource: fragment.audioSource,
@@ -242,11 +241,6 @@ export async function restoreFromBackup(reason?: string): Promise<BackupRestoreR
           audioFileUri: fragment.audioFileUri,
           audioFileUrl: fragment.audioFileUrl,
           audioFileExpiresAt: fragment.audioFileExpiresAt,
-          legacyCloudBindingStatus: fragment.legacyCloudBindingStatus,
-          lastSyncedAt: fragment.lastSyncedAt,
-          lastSyncAttemptAt: fragment.lastSyncAttemptAt,
-          nextRetryAt: fragment.nextRetryAt,
-          retryCount: fragment.retryCount,
           deletedAt: fragment.deletedAt,
           isFilmed: fragment.isFilmed,
           filmedAt: fragment.filmedAt,

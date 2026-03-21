@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const LATEST_SCHEMA_VERSION = 6;
+const LATEST_SCHEMA_VERSION = 7;
 
 /*创建本地镜像所需的 SQLite 表与索引。 */
 export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Promise<void> {
@@ -208,6 +208,74 @@ export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Prom
     await database.execAsync(`
       ALTER TABLE fragments ADD COLUMN is_filmed INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE fragments ADD COLUMN filmed_at TEXT;
+    `);
+  }
+
+  // Version 7: 清理 legacy 云端绑定列，local-first 主链路不再需要
+  if (currentVersion < 7) {
+    await database.execAsync(`
+      CREATE TABLE fragments_v7 (
+        id TEXT PRIMARY KEY NOT NULL,
+        folder_id TEXT,
+        source TEXT NOT NULL,
+        audio_source TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        summary TEXT,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        plain_text_snapshot TEXT NOT NULL DEFAULT '',
+        body_file_uri TEXT,
+        transcript TEXT,
+        speaker_segments_json TEXT,
+        audio_object_key TEXT,
+        audio_file_uri TEXT,
+        audio_file_url TEXT,
+        audio_file_expires_at TEXT,
+        deleted_at TEXT,
+        is_filmed INTEGER NOT NULL DEFAULT 0,
+        filmed_at TEXT,
+        content_state TEXT,
+        backup_status TEXT NOT NULL DEFAULT 'pending',
+        last_backup_at TEXT,
+        entity_version INTEGER NOT NULL DEFAULT 1,
+        last_modified_device_id TEXT,
+        cached_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      INSERT INTO fragments_v7
+        SELECT
+          id, folder_id, source, audio_source, created_at, updated_at,
+          summary, tags_json, plain_text_snapshot, body_file_uri, transcript,
+          speaker_segments_json, audio_object_key, audio_file_uri, audio_file_url,
+          audio_file_expires_at, deleted_at, is_filmed, filmed_at, content_state,
+          backup_status, last_backup_at, entity_version, last_modified_device_id, cached_at
+        FROM fragments;
+
+      DROP TABLE fragments;
+      ALTER TABLE fragments_v7 RENAME TO fragments;
+
+      CREATE INDEX IF NOT EXISTS fragments_folder_id_idx ON fragments(folder_id);
+      CREATE INDEX IF NOT EXISTS fragments_updated_at_idx ON fragments(updated_at DESC);
+
+      CREATE TABLE fragment_folders_v7 (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT,
+        backup_status TEXT NOT NULL DEFAULT 'pending',
+        last_backup_at TEXT,
+        entity_version INTEGER NOT NULL DEFAULT 1,
+        last_modified_device_id TEXT
+      );
+
+      INSERT INTO fragment_folders_v7
+        SELECT id, name, created_at, updated_at, deleted_at,
+               backup_status, last_backup_at, entity_version, last_modified_device_id
+        FROM fragment_folders;
+
+      DROP TABLE fragment_folders;
+      ALTER TABLE fragment_folders_v7 RENAME TO fragment_folders;
     `);
   }
 

@@ -9,11 +9,9 @@ import type { FragmentAudioSource, FragmentSource } from '@/types/fragment';
 
 export interface RestoredFolderRow {
   id: string;
-  legacyRemoteId: string | null;
   name: string;
   createdAt: string;
   updatedAt: string;
-  legacyCloudBindingStatus: 'synced';
   deletedAt: string | null;
   backupStatus: 'synced';
   lastBackupAt: string;
@@ -23,7 +21,6 @@ export interface RestoredFolderRow {
 
 export interface RestoredFragmentRow {
   id: string;
-  legacyServerBindingId: string | null;
   folderId: string | null;
   source: FragmentSource;
   audioSource: FragmentAudioSource | null;
@@ -39,11 +36,6 @@ export interface RestoredFragmentRow {
   audioFileUri: string | null;
   audioFileUrl: string | null;
   audioFileExpiresAt: string | null;
-  legacyCloudBindingStatus: 'synced';
-  lastSyncedAt: string;
-  lastSyncAttemptAt: null;
-  nextRetryAt: null;
-  retryCount: number;
   deletedAt: string | null;
   isFilmed: number;
   filmedAt: string | null;
@@ -177,11 +169,9 @@ export function buildBackupRestorePlan(snapshot: BackupSnapshotResponse): Backup
       const folderPayload = (item.payload ?? {}) as Partial<BackupFolderContractPayload>;
       plan.folders.push({
         id: item.entity_id,
-        legacyRemoteId: readString(folderPayload.remote_id),
         name: readString(folderPayload.name) ?? '已删除文件夹',
         createdAt: readString(folderPayload.created_at) ?? baseTimestamp,
         updatedAt: baseTimestamp,
-        legacyCloudBindingStatus: 'synced',
         deletedAt,
         backupStatus: 'synced',
         lastBackupAt: snapshot.server_generated_at,
@@ -197,7 +187,6 @@ export function buildBackupRestorePlan(snapshot: BackupSnapshotResponse): Backup
       const transcript = readString(fragmentPayload.transcript);
       plan.fragments.push({
         id: item.entity_id,
-        legacyServerBindingId: readString(fragmentPayload.server_id),
         folderId: readString(fragmentPayload.folder_id),
         source: resolveFragmentSource(fragmentPayload.source),
         audioSource: resolveAudioSource(fragmentPayload.audio_source),
@@ -213,11 +202,6 @@ export function buildBackupRestorePlan(snapshot: BackupSnapshotResponse): Backup
         audioFileUri: null,
         audioFileUrl: readString(fragmentPayload.audio_file_url),
         audioFileExpiresAt: readString(fragmentPayload.audio_file_expires_at),
-        legacyCloudBindingStatus: 'synced',
-        lastSyncedAt: snapshot.server_generated_at,
-        lastSyncAttemptAt: null,
-        nextRetryAt: null,
-        retryCount: 0,
         deletedAt,
         isFilmed: fragmentPayload.is_filmed ? 1 : 0,
         filmedAt: readString(fragmentPayload.filmed_at),

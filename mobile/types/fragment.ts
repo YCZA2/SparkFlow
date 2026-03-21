@@ -30,9 +30,6 @@ export interface MediaAsset {
   expires_at?: string | null;
 }
 
-/* 旧云端绑定状态，仅保留给兼容字段 sync_status 使用。 */
-export type LegacyCloudBindingStatus = 'pending' | 'synced';
-
 export type LocalPendingImageUploadStatus =
   | 'pending'
   | 'uploading'
@@ -47,22 +44,6 @@ export interface LocalPendingImageAsset {
   file_name: string;
   remote_asset_id?: string | null;
   upload_status: LocalPendingImageUploadStatus;
-}
-
-/* 旧版本地草稿结构，仅用于升级迁移与兼容态判断。 */
-export interface LegacyLocalFragmentDraft {
-  id: string;
-  server_id?: string | null;
-  folder_id?: string | null;
-  body_html: string;
-  plain_text_snapshot: string;
-  created_at: string;
-  updated_at: string;
-  sync_status: LegacyCloudBindingStatus;
-  last_sync_attempt_at?: string | null;
-  next_retry_at?: string | null;
-  retry_count?: number;
-  pending_image_assets?: LocalPendingImageAsset[];
 }
 
 /**
@@ -86,10 +67,6 @@ export interface Fragment {
   plain_text_snapshot?: string | null;
   content_state?: 'empty' | 'transcript_only' | 'body_present';
   media_assets?: MediaAsset[];
-  /* 兼容字段：旧云端业务记录 ID，local-first 主链路不再把它当主键。 */
-  server_id?: string | null;
-  /* 兼容字段：旧云端绑定状态，仅供迁移期逻辑判断。 */
-  sync_status?: LegacyCloudBindingStatus;
   audio_object_key?: string | null;
   backup_status?: 'pending' | 'synced' | 'failed';
   entity_version?: number;

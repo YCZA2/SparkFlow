@@ -7,7 +7,6 @@ function buildFragmentRow(overrides: Record<string, unknown> = {}) {
   /*构造最小本地 fragment 行，聚焦更新时间与版本推进规则。 */
   return {
     id: 'fragment-1',
-    legacyServerBindingId: null,
     folderId: null,
     source: 'manual',
     audioSource: null,
@@ -23,11 +22,6 @@ function buildFragmentRow(overrides: Record<string, unknown> = {}) {
     audioFileUri: null,
     audioFileUrl: null,
     audioFileExpiresAt: null,
-    legacyCloudBindingStatus: 'synced',
-    lastSyncedAt: null,
-    lastSyncAttemptAt: null,
-    nextRetryAt: null,
-    retryCount: 0,
     deletedAt: null,
     isFilmed: 0,
     filmedAt: null,
@@ -47,8 +41,6 @@ test('resolveFragmentEntityUpdate keeps updatedAt and entityVersion stable for m
   const result = resolveFragmentEntityUpdate({
     current: current as any,
     patch: {
-      next_retry_at: '2026-03-03T08:00:00.000Z',
-      retry_count: 2,
       backup_status: 'failed',
     },
     plainTextSnapshot: current.plainTextSnapshot,
@@ -58,8 +50,6 @@ test('resolveFragmentEntityUpdate keeps updatedAt and entityVersion stable for m
   assert.equal(result.nextRow.updatedAt, current.updatedAt);
   assert.equal(result.nextRow.entityVersion, current.entityVersion);
   assert.equal(result.nextRow.backupStatus, 'failed');
-  assert.equal(result.nextRow.nextRetryAt, '2026-03-03T08:00:00.000Z');
-  assert.equal(result.nextRow.retryCount, 2);
 });
 
 test('resolveFragmentEntityUpdate bumps updatedAt and entityVersion after actual body change', () => {

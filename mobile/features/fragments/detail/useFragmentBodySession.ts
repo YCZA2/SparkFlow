@@ -41,11 +41,6 @@ function buildEditorDocumentFromFragment(fragment: Fragment): EditorSourceDocume
     id: fragment.id,
     body_html: fragment.body_html ?? '',
     media_assets: fragment.media_assets ?? [],
-    legacy_save_state: fragment.server_id
-      ? null
-      : fragment.sync_status === 'synced'
-        ? 'synced'
-        : 'syncing',
   };
 }
 
@@ -86,7 +81,6 @@ export function useFragmentBodySession({
       await updateLocalFragmentEntity(id, {
         body_html: snapshot.body_html,
         plain_text_snapshot: snapshot.plain_text,
-        next_retry_at: null,
       });
 
       const mediaAssets: EditorMediaAsset[] = snapshot.asset_ids.map((assetId) => ({

@@ -10,9 +10,6 @@ export interface FragmentEntityPatch
   last_backup_at?: string | null;
   deleted_at?: string | null;
   last_modified_device_id?: string | null;
-  last_sync_attempt_at?: string | null;
-  next_retry_at?: string | null;
-  retry_count?: number;
 }
 
 interface ResolveFragmentEntityUpdateInput {
@@ -24,7 +21,6 @@ interface ResolveFragmentEntityUpdateInput {
 
 interface ResolveFragmentEntityUpdateResult {
   nextRow: {
-    legacyServerBindingId: string | null;
     folderId: string | null;
     source: string;
     audioSource: string | null;
@@ -40,10 +36,6 @@ interface ResolveFragmentEntityUpdateResult {
     audioFileExpiresAt: string | null;
     bodyFileUri: string | null;
     contentState: string | null;
-    legacyCloudBindingStatus: string;
-    lastSyncAttemptAt: string | null;
-    nextRetryAt: string | null;
-    retryCount: number;
     backupStatus: string;
     entityVersion: number;
     lastBackupAt: string | null;
@@ -79,8 +71,6 @@ function serializeFragmentSpeakerSegments(
 export function resolveFragmentEntityUpdate(input: ResolveFragmentEntityUpdateInput): ResolveFragmentEntityUpdateResult {
   const { current, patch, bodyFileUri, plainTextSnapshot } = input;
   const nextRowBase = {
-    legacyServerBindingId:
-      patch.server_id === undefined ? current.legacyServerBindingId : patch.server_id,
     folderId: patch.folder_id === undefined ? current.folderId : patch.folder_id,
     source: patch.source === undefined ? current.source : patch.source,
     audioSource: patch.audio_source === undefined ? current.audioSource : patch.audio_source,
@@ -103,14 +93,6 @@ export function resolveFragmentEntityUpdate(input: ResolveFragmentEntityUpdateIn
         : patch.audio_file_expires_at,
     bodyFileUri,
     contentState: patch.content_state === undefined ? current.contentState : patch.content_state,
-    legacyCloudBindingStatus:
-      patch.sync_status === undefined ? current.legacyCloudBindingStatus : patch.sync_status,
-    lastSyncAttemptAt:
-      patch.last_sync_attempt_at === undefined
-        ? current.lastSyncAttemptAt
-        : patch.last_sync_attempt_at,
-    nextRetryAt: patch.next_retry_at === undefined ? current.nextRetryAt : patch.next_retry_at,
-    retryCount: patch.retry_count === undefined ? current.retryCount : patch.retry_count,
     lastBackupAt: patch.last_backup_at === undefined ? current.lastBackupAt : patch.last_backup_at,
     deletedAt: patch.deleted_at === undefined ? current.deletedAt : patch.deleted_at,
     isFilmed: patch.is_filmed === undefined ? current.isFilmed : patch.is_filmed ? 1 : 0,
@@ -118,7 +100,6 @@ export function resolveFragmentEntityUpdate(input: ResolveFragmentEntityUpdateIn
   };
 
   const didMeaningfullyChange =
-    hasValueChanged(current.legacyServerBindingId, nextRowBase.legacyServerBindingId) ||
     hasValueChanged(current.folderId, nextRowBase.folderId) ||
     hasValueChanged(current.source, nextRowBase.source) ||
     hasValueChanged(current.audioSource, nextRowBase.audioSource) ||
@@ -161,10 +142,6 @@ export function resolveFragmentEntityUpdate(input: ResolveFragmentEntityUpdateIn
   const didChangeAnyField =
     didMeaningfullyChange ||
     hasValueChanged(current.updatedAt, nextRow.updatedAt) ||
-    hasValueChanged(current.legacyCloudBindingStatus, nextRow.legacyCloudBindingStatus) ||
-    hasValueChanged(current.lastSyncAttemptAt, nextRow.lastSyncAttemptAt) ||
-    hasValueChanged(current.nextRetryAt, nextRow.nextRetryAt) ||
-    hasValueChanged(current.retryCount, nextRow.retryCount) ||
     hasValueChanged(current.backupStatus, nextRow.backupStatus) ||
     hasValueChanged(current.entityVersion, nextRow.entityVersion) ||
     hasValueChanged(current.lastBackupAt, nextRow.lastBackupAt) ||

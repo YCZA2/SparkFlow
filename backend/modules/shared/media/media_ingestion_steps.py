@@ -239,13 +239,11 @@ class MediaIngestionStepExecutor:
 
     async def generate_enrichment(self, transcript: str, *, llm_provider) -> tuple[str, list[str]]:
         """生成摘要与标签，并在超时时落回本地策略。"""
-        import modules.shared.media.audio_ingestion as audio_ingestion_module
-
         try:
             return await generate_summary_and_tags(
                 transcript,
                 llm_provider=llm_provider,
-                timeout_seconds=audio_ingestion_module.ENRICHMENT_TIMEOUT_SECONDS,
+                timeout_seconds=DEFAULT_ENRICHMENT_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError:
             logger.warning("enrichment_timeout", transcript_length=len(transcript or ""))

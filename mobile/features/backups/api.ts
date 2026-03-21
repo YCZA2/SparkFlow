@@ -3,10 +3,9 @@ import { buildMultipartFilePart } from '@/features/core/files/runtime';
 import { post, get, sendForm } from '@/features/core/api/client';
 import type { ScriptCopyReason, ScriptGenerationKind, ScriptMode } from '@/types/script';
 
-/* 备份协议里的 fragment payload，保留 legacy 绑定字段以兼容现有服务端快照。 */
+/* 备份协议里的 fragment payload，统一承接碎片正文与 local-first 资产状态。 */
 export type BackupFragmentContractPayload = Record<string, unknown> & {
   id: string;
-  server_id: string | null;
   folder_id: string | null;
   source: string;
   audio_source: string | null;
@@ -27,10 +26,9 @@ export type BackupFragmentContractPayload = Record<string, unknown> & {
   deleted_at: string | null;
 };
 
-/* 备份协议里的 folder payload，remote_id 仅作兼容字段保留。 */
+/* 备份协议里的 folder payload，统一承接文件夹名称与 local-first 备份元数据。 */
 export type BackupFolderContractPayload = Record<string, unknown> & {
   id: string;
-  remote_id?: string | null;
   name: string;
   created_at: string;
   updated_at: string;

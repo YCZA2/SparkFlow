@@ -35,7 +35,6 @@ export async function createLocalFragmentEntity(input: {
   const normalizedBody = await persistBodyHtml(id, input.bodyHtml ?? '');
   await database.insert(fragmentsTable).values({
     id,
-    legacyServerBindingId: null,
     folderId: input.folderId ?? null,
     source: input.source,
     audioSource: input.audioSource ?? null,
@@ -51,11 +50,6 @@ export async function createLocalFragmentEntity(input: {
     audioFileUri: null,
     audioFileUrl: null,
     audioFileExpiresAt: null,
-    legacyCloudBindingStatus: 'pending',
-    lastSyncedAt: null,
-    lastSyncAttemptAt: null,
-    nextRetryAt: null,
-    retryCount: 0,
     deletedAt: null,
     isFilmed: 0,
     filmedAt: null,

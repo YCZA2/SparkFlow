@@ -31,7 +31,6 @@ async function buildFragmentItems(deviceId: string): Promise<BackupMutationItem[
         ? null
         : {
             id: row.id,
-            server_id: row.legacyServerBindingId,
             folder_id: row.folderId,
             source: row.source,
             audio_source: row.audioSource,
@@ -75,7 +74,6 @@ async function buildFolderItems(deviceId: string): Promise<BackupMutationItem[]>
       ? null
       : {
           id: row.id,
-          remote_id: row.legacyRemoteId,
           name: row.name,
           created_at: row.createdAt,
           updated_at: row.updatedAt,
