@@ -590,110 +590,6 @@ async def test_fragment_tags_listing_filtering_and_delete_consistency(async_clie
 
 
 @pytest.mark.asyncio
-async def test_generate_script_success_and_failures(async_client, auth_headers_factory) -> None:
-    """脚本生成应覆盖成功、缺失碎片和空内容失败分支。"""
-    fragment_id = (
-        await _create_fragment(
-            async_client,
-            auth_headers_factory,
-            {"editor_document": _editor_document("一条可用于生成稿件的碎片"), "source": "manual"},
-        )
-    )["id"]
-
-    response = await async_client.post(
-        "/api/scripts/generation",
-        json={"fragment_ids": [fragment_id], "mode": "mode_a"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    script_data = response.json()["data"]
-    assert response.status_code == 201
-    assert script_data["pipeline_type"] == "script_generation"
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, script_data["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
-    assert pipeline["output"]["script_id"]
-    assert pipeline["output"]["provider"] == {
-        "workflow_id": "wf-script-mode-a-001",
-        "provider_run_id": "provider-run-default",
-        "provider_task_id": "task-default",
-    }
-    steps_response = await async_client.get(
-        f"/api/pipelines/{script_data['pipeline_run_id']}/steps",
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert steps_response.status_code == 200
-    steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
-    assert steps["submit_workflow_run"]["external_ref"] == {
-        "provider_run_id": "provider-run-default",
-        "provider_task_id": "task-default",
-    }
-    assert steps["poll_workflow_run"]["external_ref"] == {
-        "provider_run_id": "provider-run-default",
-        "provider_task_id": "task-default",
-    }
-
-    missing_fragment_response = await async_client.post(
-        "/api/scripts/generation",
-        json={"fragment_ids": ["missing-fragment"], "mode": "mode_a"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert missing_fragment_response.status_code == 404
-
-    empty_fragment_id = (await _create_fragment(async_client, auth_headers_factory, {"source": "voice"}))["id"]
-    empty_response = await async_client.post(
-        "/api/scripts/generation",
-        json={"fragment_ids": [empty_fragment_id], "mode": "mode_a"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert empty_response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_generate_script_mode_b_uses_same_dify_flow(async_client, auth_headers_factory) -> None:
-    """mode_b 应复用统一的 Dify 工作流并成功回流脚本。"""
-    fragment_id = (
-        await _create_fragment(
-            async_client,
-            auth_headers_factory,
-            {"editor_document": _editor_document("一条更自然表达的碎片"), "source": "manual"},
-        )
-    )["id"]
-
-    response = await async_client.post(
-        "/api/scripts/generation",
-        json={"fragment_ids": [fragment_id], "mode": "mode_b"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert response.status_code == 201
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
-    script_id = pipeline["output"]["script_id"]
-    detail_response = await async_client.get(f"/api/scripts/{script_id}", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert detail_response.json()["data"]["mode"] == "mode_b"
-
-
-@pytest.mark.asyncio
-async def test_generate_script_fails_when_workflow_output_has_no_draft(async_client, auth_headers_factory, app) -> None:
-    """外挂工作流缺少 draft 时应按失败处理。"""
-    fragment_id = (
-        await _create_fragment(
-            async_client,
-            auth_headers_factory,
-            {"editor_document": _editor_document("一条缺稿测试碎片"), "source": "manual"},
-        )
-    )["id"]
-    app.state.container.script_mode_a_workflow_provider.queue_success(draft="")  # type: ignore[attr-defined]
-
-    response = await async_client.post(
-        "/api/scripts/generation",
-        json={"fragment_ids": [fragment_id], "mode": "mode_a"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert response.status_code == 201
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "failed"
-
-
-@pytest.mark.asyncio
 async def test_get_daily_push_returns_not_found_when_missing(async_client, auth_headers_factory) -> None:
     """没有每日推盘脚本时应返回未找到。"""
     response = await async_client.get("/api/scripts/daily-push", headers=await _auth_headers(async_client, auth_headers_factory))
@@ -704,20 +600,15 @@ async def test_get_daily_push_returns_not_found_when_missing(async_client, auth_
 @pytest.mark.asyncio
 async def test_scripts_list_detail_update_and_delete(async_client, auth_headers_factory) -> None:
     """脚本列表、详情、更新和删除应形成完整 CRUD。"""
-    fragment_id = (
-        await _create_fragment(
-            async_client,
-            auth_headers_factory,
-            {"editor_document": _editor_document("用于脚本列表和详情测试"), "source": "manual"},
-        )
-    )["id"]
     create_response = await async_client.post(
         "/api/scripts/generation",
-        json={"fragment_ids": [fragment_id], "mode": "mode_a"},
+        json={"topic": "用于脚本列表和详情测试的主题"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
+    assert create_response.status_code == 201
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
-    script_id = pipeline["output"]["script_id"]
+    assert pipeline["status"] == "succeeded"
+    script_id = pipeline["resource"]["resource_id"]
 
     list_response = await async_client.get("/api/scripts", headers=await _auth_headers(async_client, auth_headers_factory))
     assert script_id in {item["id"] for item in list_response.json()["data"]["items"]}
@@ -742,20 +633,15 @@ async def test_scripts_list_detail_update_and_delete(async_client, auth_headers_
 @pytest.mark.asyncio
 async def test_update_script_rejects_invalid_status(async_client, auth_headers_factory) -> None:
     """非法脚本状态更新应被校验层拦截。"""
-    fragment_id = (
-        await _create_fragment(
-            async_client,
-            auth_headers_factory,
-            {"editor_document": _editor_document("用于非法状态测试"), "source": "manual"},
-        )
-    )["id"]
     create_response = await async_client.post(
         "/api/scripts/generation",
-        json={"fragment_ids": [fragment_id], "mode": "mode_a"},
+        json={"topic": "用于非法状态测试的主题"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
+    assert create_response.status_code == 201
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
-    script_id = pipeline["output"]["script_id"]
+    assert pipeline["status"] == "succeeded"
+    script_id = pipeline["resource"]["resource_id"]
 
     response = await async_client.patch(
         f"/api/scripts/{script_id}",

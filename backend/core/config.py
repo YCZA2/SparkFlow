@@ -89,39 +89,7 @@ class Settings(BaseSettings):
         description="抖音 Web Cookie，用于外部媒体导入时提高解析成功率"
     )
 
-    # Dify 外挂工作流配置
-    DIFY_MODE_A_BASE_URL: Optional[str] = Field(
-        default=None,
-        description="mode_a 脚本工作流的 Dify API 基础地址，例如 https://dify.example.com/v1"
-    )
-    DIFY_MODE_A_APP_ID: Optional[str] = Field(
-        default=None,
-        description="mode_a 脚本工作流所属的 Dify 应用标识，用于后续原地更新"
-    )
-    DIFY_MODE_A_API_KEY: Optional[str] = Field(
-        default=None,
-        description="mode_a 脚本工作流的 Dify 应用 API Key"
-    )
-    DIFY_MODE_A_WORKFLOW_ID: Optional[str] = Field(
-        default=None,
-        description="mode_a 脚本工作流标识，用于本地记录和校验"
-    )
-    DIFY_MODE_B_BASE_URL: Optional[str] = Field(
-        default=None,
-        description="mode_b 脚本工作流的 Dify API 基础地址，例如 https://dify.example.com/v1"
-    )
-    DIFY_MODE_B_APP_ID: Optional[str] = Field(
-        default=None,
-        description="mode_b 脚本工作流所属的 Dify 应用标识，用于后续原地更新"
-    )
-    DIFY_MODE_B_API_KEY: Optional[str] = Field(
-        default=None,
-        description="mode_b 脚本工作流的 Dify 应用 API Key"
-    )
-    DIFY_MODE_B_WORKFLOW_ID: Optional[str] = Field(
-        default=None,
-        description="mode_b 脚本工作流标识，用于本地记录和校验"
-    )
+    # Dify 外挂工作流配置（仅每日推盘使用）
     DIFY_BASE_URL: Optional[str] = Field(
         default=None,
         description="daily push 工作流的 Dify API 基础地址，例如 https://dify.example.com/v1"
@@ -311,8 +279,6 @@ class Settings(BaseSettings):
         return value
 
     @field_validator(
-        "DIFY_MODE_A_BASE_URL",
-        "DIFY_MODE_B_BASE_URL",
         "DIFY_BASE_URL",
         mode="before",
     )
@@ -353,26 +319,6 @@ class Settings(BaseSettings):
                 return normalized
             return os.path.abspath(os.path.join(BACKEND_DIR, normalized))
         return value
-
-    @property
-    def dify_mode_a(self) -> DifyWorkflowConfig:
-        """返回 mode_a 工作流的连接配置。"""
-        return DifyWorkflowConfig(
-            base_url=self.DIFY_MODE_A_BASE_URL,
-            app_id=self.DIFY_MODE_A_APP_ID,
-            api_key=self.DIFY_MODE_A_API_KEY,
-            workflow_id=self.DIFY_MODE_A_WORKFLOW_ID,
-        )
-
-    @property
-    def dify_mode_b(self) -> DifyWorkflowConfig:
-        """返回 mode_b 工作流的连接配置。"""
-        return DifyWorkflowConfig(
-            base_url=self.DIFY_MODE_B_BASE_URL,
-            app_id=self.DIFY_MODE_B_APP_ID,
-            api_key=self.DIFY_MODE_B_API_KEY,
-            workflow_id=self.DIFY_MODE_B_WORKFLOW_ID,
-        )
 
     @property
     def dify_daily_push(self) -> DifyWorkflowConfig:

@@ -18,8 +18,6 @@ from services.factory import (
 from .providers import (
     create_daily_push_workflow_provider,
     create_external_media_provider,
-    create_script_mode_a_workflow_provider,
-    create_script_mode_b_workflow_provider,
     create_web_search_provider,
 )
 from .storage import create_file_storage
@@ -49,8 +47,6 @@ class ServiceContainer:
     file_storage: FileStorage
     external_media_provider: ExternalMediaProvider
     web_search_provider: WebSearchProvider
-    script_mode_a_workflow_provider: WorkflowProvider
-    script_mode_b_workflow_provider: WorkflowProvider
     daily_push_workflow_provider: WorkflowProvider
     pipeline_runner: Any | None = None
     pipeline_dispatcher: Any | None = None
@@ -73,8 +69,6 @@ def build_container() -> ServiceContainer:
         file_storage=create_file_storage(settings),
         external_media_provider=create_external_media_provider(),
         web_search_provider=create_web_search_provider(),
-        script_mode_a_workflow_provider=create_script_mode_a_workflow_provider(settings=settings),
-        script_mode_b_workflow_provider=create_script_mode_b_workflow_provider(settings=settings),
         daily_push_workflow_provider=create_daily_push_workflow_provider(settings=settings),
     )
 

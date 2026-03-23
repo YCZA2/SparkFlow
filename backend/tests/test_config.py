@@ -19,15 +19,6 @@ def test_dashscope_strategy_defaults_to_realtime(monkeypatch) -> None:
     assert settings.STT_DASHSCOPE_STRATEGY == "realtime"
 
 
-def test_dify_mode_base_urls_are_normalized(monkeypatch) -> None:
-    """自动移除脚本 Dify 基础地址末尾斜杠。"""
-    monkeypatch.setenv("DIFY_MODE_A_BASE_URL", "https://dify-a.example.com/v1/")
-    monkeypatch.setenv("DIFY_MODE_B_BASE_URL", "https://dify-b.example.com/v1/")
-    settings = Settings()
-    assert settings.DIFY_MODE_A_BASE_URL == "https://dify-a.example.com/v1"
-    assert settings.DIFY_MODE_B_BASE_URL == "https://dify-b.example.com/v1"
-
-
 def test_upload_dir_is_resolved_from_backend_dir(monkeypatch) -> None:
     """相对上传目录始终以 backend 目录为基准。"""
     monkeypatch.setenv("UPLOAD_DIR", "./uploads")

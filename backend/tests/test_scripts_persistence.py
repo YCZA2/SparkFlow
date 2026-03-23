@@ -17,8 +17,8 @@ def _create_script_run(db):
         db=db,
         run_id="script-run-001",
         user_id=TEST_USER_ID,
-        pipeline_type="script_generation",
-        input_payload={"fragment_ids": ["fragment-001"], "mode": "mode_a"},
+        pipeline_type="rag_script_generation",
+        input_payload={"topic": "测试主题", "fragment_ids": [], "mode": "mode_rag"},
         resource_type=None,
         resource_id=None,
         steps=[],
@@ -63,7 +63,7 @@ def test_persistence_service_rejects_missing_draft(db_session_factory) -> None:
             service.persist_script(
                 db=db,
                 run=run,
-                input_payload={"fragment_ids": ["fragment-001"], "mode": "mode_a"},
+                input_payload={"topic": "测试主题", "fragment_ids": [], "mode": "mode_rag"},
                 parsed_result={"title": "缺正文"},
             )
 
@@ -80,14 +80,14 @@ def test_persistence_service_persists_script_idempotently(db_session_factory) ->
         first = service.persist_script(
             db=db,
             run=run,
-            input_payload={"fragment_ids": ["fragment-001"], "mode": "mode_a"},
+            input_payload={"topic": "测试主题", "fragment_ids": [], "mode": "mode_rag"},
             parsed_result={"title": "标题", "draft": "正文"},
         )
         db.refresh(run)
         second = service.persist_script(
             db=db,
             run=run,
-            input_payload={"fragment_ids": ["fragment-001"], "mode": "mode_a"},
+            input_payload={"topic": "测试主题", "fragment_ids": [], "mode": "mode_rag"},
             parsed_result={"title": "标题", "draft": "正文"},
         )
         refreshed_run = pipeline_repository.get_by_id(db=db, user_id=TEST_USER_ID, run_id=run.id)

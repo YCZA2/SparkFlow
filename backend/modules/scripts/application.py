@@ -12,7 +12,6 @@ from utils.time import get_local_day_bounds
 
 from domains.scripts import repository as script_repository
 from .daily_push_pipeline import DailyPushPipelineService, PIPELINE_TYPE_DAILY_PUSH_GENERATION
-from .pipeline import ScriptGenerationPipelineService
 from .rag_pipeline import RagScriptPipelineService
 from .schemas import ScriptDetail, ScriptGenerationResponse, ScriptItem, ScriptListResponse
 
@@ -33,45 +32,6 @@ def map_script(script: Script) -> ScriptDetail:
         is_daily_push=script.is_daily_push,
         created_at=format_iso_datetime(script.created_at),
     )
-
-
-class ScriptGenerationUseCase:
-    """封装旧版脚本生成任务创建入口（已废弃，保留供遗留 pipeline_run 处理）。"""
-
-    def __init__(
-        self,
-        *,
-        pipeline_service: ScriptGenerationPipelineService,
-    ) -> None:
-        """装配脚本生成任务态依赖。"""
-        self.pipeline_service = pipeline_service
-
-    async def generate_async(
-        self,
-        *,
-        db: Session,
-        user_id: str,
-        fragment_ids: list[str],
-        fragment_snapshots: list[dict] | None,
-        mode: str,
-        query_hint: str | None,
-        include_web_search: bool,
-    ) -> ScriptGenerationResponse:
-        """创建异步脚本生成流水线（旧版接口，已废弃）。"""
-        run = await self.pipeline_service.create_run(
-            db=db,
-            user_id=user_id,
-            fragment_ids=fragment_ids,
-            fragment_snapshots=fragment_snapshots or [],
-            mode=mode,
-            query_hint=query_hint,
-            include_web_search=include_web_search,
-        )
-        return ScriptGenerationResponse(
-            pipeline_run_id=run.id,
-            pipeline_type="script_generation",
-            status=run.status,
-        )
 
 
 class RagScriptGenerationUseCase:

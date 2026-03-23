@@ -15,6 +15,4 @@ def test_app_container_uses_split_shared_modules() -> None:
     assert isinstance(container.file_storage, LocalFileStorage)
     assert isinstance(container.vector_store, AppVectorStore)
 
-    asyncio.run(container.script_mode_a_workflow_provider.aclose())
-    asyncio.run(container.script_mode_b_workflow_provider.aclose())
     asyncio.run(container.daily_push_workflow_provider.aclose())
