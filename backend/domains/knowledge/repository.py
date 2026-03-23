@@ -92,6 +92,7 @@ def create(
     content: str,
     body_markdown: str,
     doc_type: str,
+    processing_status: str = "ready",
 ) -> KnowledgeDoc:
     """
     创建知识库文档
@@ -102,6 +103,7 @@ def create(
         title: 文档标题
         content: 文档内容
         doc_type: 文档类型
+        processing_status: 初始处理状态，reference_script 类型传入 "pending"
 
     Returns:
         创建的 KnowledgeDoc 实例
@@ -112,6 +114,7 @@ def create(
         content=content,
         body_markdown=body_markdown,
         doc_type=doc_type,
+        processing_status=processing_status,
     )
 
     db.add(doc)

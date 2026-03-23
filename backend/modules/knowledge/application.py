@@ -26,8 +26,8 @@ def map_knowledge_doc(doc: KnowledgeDoc) -> KnowledgeDocItem:
         body_markdown=doc.body_markdown,
         doc_type=doc.doc_type,
         vector_ref_id=doc.vector_ref_id,
-        processing_status=getattr(doc, "processing_status", "ready"),
-        style_description=getattr(doc, "style_description", None),
+        processing_status=doc.processing_status,
+        style_description=doc.style_description,
         created_at=format_iso_datetime(doc.created_at),
     )
 
@@ -139,12 +139,8 @@ class KnowledgeUseCase:
             content=plain_text,
             body_markdown=normalized_markdown,
             doc_type="reference_script",
+            processing_status="pending",
         )
-        # 标记为待处理状态
-        doc.processing_status = "pending"
-        db.add(doc)
-        db.commit()
-        db.refresh(doc)
 
         if self.pipeline_runner is None:
             # pipeline_runner 未注入（如测试环境），跳过异步处理

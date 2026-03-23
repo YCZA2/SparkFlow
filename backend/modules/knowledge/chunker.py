@@ -46,7 +46,7 @@ def chunk_text(text: str) -> list[tuple[int, str]]:
         if sentence_len > _CHUNK_SIZE:
             # 先把已有积累刷出
             if current_parts:
-                chunk_text_str = last_tail + " ".join(current_parts)
+                chunk_text_str = last_tail + "".join(current_parts)
                 chunks.append((chunk_index, chunk_text_str.strip()))
                 last_tail = chunk_text_str[-_OVERLAP_CHARS:] if len(chunk_text_str) > _OVERLAP_CHARS else chunk_text_str
                 chunk_index += 1
@@ -62,7 +62,7 @@ def chunk_text(text: str) -> list[tuple[int, str]]:
 
         # 加上本句后超出上限：先刷出当前块
         if current_len + sentence_len > _CHUNK_SIZE and current_parts:
-            chunk_text_str = last_tail + " ".join(current_parts)
+            chunk_text_str = last_tail + "".join(current_parts)
             chunks.append((chunk_index, chunk_text_str.strip()))
             last_tail = chunk_text_str[-_OVERLAP_CHARS:] if len(chunk_text_str) > _OVERLAP_CHARS else chunk_text_str
             chunk_index += 1
@@ -74,7 +74,7 @@ def chunk_text(text: str) -> list[tuple[int, str]]:
 
     # 写出剩余句子
     if current_parts:
-        chunk_text_str = last_tail + " ".join(current_parts)
+        chunk_text_str = last_tail + "".join(current_parts)
         chunks.append((chunk_index, chunk_text_str.strip()))
 
     return [(i, c) for i, c in chunks if c]

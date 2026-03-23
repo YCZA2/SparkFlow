@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from core.exceptions import ValidationError
+from core.logging_config import get_logger
 from domains.fragments import repository as fragment_repository
 from domains.knowledge import repository as knowledge_repository
 from models import PipelineRun
@@ -27,6 +28,8 @@ from .persistence import ScriptGenerationPersistenceService
 from .rag_context_builder import build_generation_prompt, build_generation_system_prompt
 
 PIPELINE_TYPE_RAG_SCRIPT_GENERATION = "rag_script_generation"
+
+logger = get_logger(__name__)
 
 # SOP 大纲生成提示词路径
 _OUTLINE_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "rag_outline.txt"
@@ -117,12 +120,14 @@ class RagScriptPipelineService:
             top_k=3,
         )
         style_description = ""
-        if results:
+        if not results:
+            logger.info("retrieve_examples_empty", topic=topic, user_id=user_id)
+        else:
             # 取最高相关度块所属文档的风格描述
             top_doc_id = results[0].get("doc_id")
             if top_doc_id:
                 doc = knowledge_repository.get_by_id(db=context.db, user_id=user_id, doc_id=top_doc_id)
-                if doc and getattr(doc, "style_description", None):
+                if doc and doc.style_description:
                     style_description = doc.style_description
         return {"example_chunks": results, "style_description": style_description}
 

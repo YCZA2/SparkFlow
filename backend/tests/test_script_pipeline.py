@@ -97,7 +97,6 @@ async def test_rag_script_generation_with_optional_fragments(
     """带可选碎片的 RAG 生成应正常完成并写入 script 记录。"""
     fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于早起习惯的碎片背景")
     llm_provider = app.state.container.llm_provider
-    llm_provider.queue_text('{"sop_type":"教育结构","sections":[]}')
 
     # 第一次调用（大纲）和第二次调用（脚本草稿）
     call_index = 0
