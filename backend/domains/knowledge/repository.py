@@ -143,6 +143,25 @@ def update(
     return doc
 
 
+def update_style_description(
+    db: Session,
+    *,
+    doc_id: str,
+    user_id: str,
+    style_description: str,
+    processing_status: str,
+) -> Optional[KnowledgeDoc]:
+    """更新 reference_script 的风格描述和处理状态。"""
+    doc = get_by_id(db=db, user_id=user_id, doc_id=doc_id)
+    if not doc:
+        return None
+    doc.style_description = style_description
+    doc.processing_status = processing_status
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
 def delete(db: Session, doc: KnowledgeDoc) -> None:
     """
     删除知识库文档

@@ -25,6 +25,8 @@ class KnowledgeDocItem(BaseModel):
     body_markdown: str | None = None
     doc_type: str
     vector_ref_id: str | None = None
+    processing_status: str = "ready"
+    style_description: str | None = None
     created_at: str | None = None
 
 

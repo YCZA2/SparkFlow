@@ -13,7 +13,9 @@ class KnowledgeDoc(Base):
     """
     知识库文档表
 
-    存储用户上传的高赞文案或语言习惯文档，用于 Mode B 风格模仿
+    存储用户上传的高赞文案、语言习惯文档或参考脚本，用于风格模仿和 RAG 生成
+    doc_type 取值：'high_likes' | 'language_habit' | 'reference_script'
+    reference_script 类型通过异步 pipeline 提取风格描述并分块向量化
     """
     __tablename__ = "knowledge_docs"
 
@@ -22,8 +24,10 @@ class KnowledgeDoc(Base):
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)  # 由 Markdown 派生的纯文本索引载荷
     body_markdown = Column(Text, nullable=False)  # Markdown 正文
-    doc_type = Column(String, nullable=False)  # 'high_likes'|'language_habit'
+    doc_type = Column(String, nullable=False)  # 'high_likes'|'language_habit'|'reference_script'
     vector_ref_id = Column(String, nullable=True)  # 向量库中的引用ID，格式：docs_{user_id}:{doc_id}
+    style_description = Column(Text, nullable=True)  # LLM 提取的风格描述，仅 reference_script 使用
+    processing_status = Column(String, nullable=False, default="ready")  # 处理状态：pending|processing|ready|failed
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     # 关联关系

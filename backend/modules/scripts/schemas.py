@@ -3,26 +3,9 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
-class ScriptGenerationFragmentSnapshot(BaseModel):
-    id: str = Field(..., description="本地 fragment ID")
-    body_html: str | None = Field(None, description="HTML 正文")
-    plain_text_snapshot: str | None = Field(None, description="纯文本快照")
-    summary: str | None = Field(None, description="摘要")
-    tags: list[str] = Field(default_factory=list, description="标签列表")
-    source: str = Field("manual", description="来源")
-    created_at: str | None = Field(None, description="创建时间")
-
-
 class ScriptGenerationRequest(BaseModel):
-    fragment_ids: list[str] = Field(default_factory=list, description="选中的远端碎片 ID 列表", max_length=20)
-    fragment_snapshots: list[ScriptGenerationFragmentSnapshot] = Field(
-        default_factory=list,
-        description="local-first 场景下由客户端直接上传的 fragment 快照",
-        max_length=20,
-    )
-    mode: str = Field(..., description="生成模式：mode_a (导师爆款) 或 mode_b (专属二脑)")
-    query_hint: str | None = Field(None, description="可选的生成提示词或研究问题")
-    include_web_search: bool = Field(False, description="是否额外补充网页搜索结果")
+    topic: str = Field(..., description="脚本主题（必填），作为大纲生成和向量检索的核心输入", min_length=1, max_length=200)
+    fragment_ids: list[str] = Field(default_factory=list, description="可选碎片 ID 列表，内容作为补充背景注入脚本", max_length=20)
 
 
 class ScriptGenerationResponse(BaseModel):

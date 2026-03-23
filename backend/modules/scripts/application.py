@@ -13,6 +13,7 @@ from utils.time import get_local_day_bounds
 from domains.scripts import repository as script_repository
 from .daily_push_pipeline import DailyPushPipelineService, PIPELINE_TYPE_DAILY_PUSH_GENERATION
 from .pipeline import ScriptGenerationPipelineService
+from .rag_pipeline import RagScriptPipelineService
 from .schemas import ScriptDetail, ScriptGenerationResponse, ScriptItem, ScriptListResponse
 
 VALID_SCRIPT_STATUSES = {"draft", "ready", "filmed"}
@@ -35,7 +36,7 @@ def map_script(script: Script) -> ScriptDetail:
 
 
 class ScriptGenerationUseCase:
-    """封装脚本生成任务创建入口。"""
+    """封装旧版脚本生成任务创建入口（已废弃，保留供遗留 pipeline_run 处理）。"""
 
     def __init__(
         self,
@@ -56,7 +57,7 @@ class ScriptGenerationUseCase:
         query_hint: str | None,
         include_web_search: bool,
     ) -> ScriptGenerationResponse:
-        """创建异步脚本生成流水线。"""
+        """创建异步脚本生成流水线（旧版接口，已废弃）。"""
         run = await self.pipeline_service.create_run(
             db=db,
             user_id=user_id,
@@ -69,6 +70,33 @@ class ScriptGenerationUseCase:
         return ScriptGenerationResponse(
             pipeline_run_id=run.id,
             pipeline_type="script_generation",
+            status=run.status,
+        )
+
+
+class RagScriptGenerationUseCase:
+    """封装 RAG 脚本生成任务创建入口。"""
+
+    def __init__(self, *, pipeline_service: RagScriptPipelineService) -> None:
+        """装配 RAG 脚本生成流水线依赖。"""
+        self.pipeline_service = pipeline_service
+
+    async def generate_async(
+        self,
+        *,
+        user_id: str,
+        topic: str,
+        fragment_ids: list[str],
+    ) -> ScriptGenerationResponse:
+        """创建基于主题和参考脚本 RAG 的异步脚本生成流水线。"""
+        run = await self.pipeline_service.create_run(
+            user_id=user_id,
+            topic=topic,
+            fragment_ids=fragment_ids,
+        )
+        return ScriptGenerationResponse(
+            pipeline_run_id=run.id,
+            pipeline_type="rag_script_generation",
             status=run.status,
         )
 

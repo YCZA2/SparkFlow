@@ -74,6 +74,21 @@ class VectorStore(Protocol):
         top_k: int,
     ) -> list[dict[str, Any]]: ...
     async def delete_knowledge_doc(self, *, user_id: str, doc_id: str) -> bool: ...
+    async def upsert_reference_script_chunks(
+        self,
+        *,
+        user_id: str,
+        doc_id: str,
+        chunks: list[tuple[int, str]],
+    ) -> list[str]: ...
+    async def query_reference_script_chunks(
+        self,
+        *,
+        user_id: str,
+        query_text: str,
+        top_k: int,
+    ) -> list[dict[str, Any]]: ...
+    async def delete_reference_script_chunks(self, *, user_id: str, doc_id: str) -> bool: ...
     async def health_check(self) -> bool: ...
 
 

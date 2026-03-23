@@ -20,7 +20,8 @@ from .schemas import (
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"], responses={401: {"description": "未认证"}})
 
 def get_knowledge_use_case(container: ServiceContainer = Depends(get_container)) -> KnowledgeUseCase:
-    return KnowledgeUseCase(vector_store=container.vector_store)
+    """构建知识库用例，注入向量存储和流水线运行时。"""
+    return KnowledgeUseCase(vector_store=container.vector_store, pipeline_runner=container.pipeline_runner)
 
 
 @router.post(

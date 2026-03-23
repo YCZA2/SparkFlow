@@ -7,18 +7,18 @@ from core import ResponseModel, success_response
 from core.auth import get_current_user
 from modules.shared.infrastructure.container import ServiceContainer, get_container, get_db_session
 
-from .application import DailyPushUseCase, ScriptCommandService, ScriptGenerationUseCase, ScriptQueryService, map_script
+from .application import DailyPushUseCase, RagScriptGenerationUseCase, ScriptCommandService, ScriptQueryService, map_script
 from .daily_push_pipeline import build_daily_push_pipeline_service
-from .pipeline import build_script_generation_pipeline_service
+from .rag_pipeline import build_rag_script_pipeline_service
 from .schemas import ScriptDetail, ScriptGenerationRequest, ScriptGenerationResponse, ScriptListResponse, ScriptUpdateRequest
 
 router = APIRouter(prefix="/api/scripts", tags=["scripts"], responses={401: {"description": "未认证"}})
 
 
-def get_script_generation_use_case(container: ServiceContainer = Depends(get_container)) -> ScriptGenerationUseCase:
-    """构建统一脚本生成用例。"""
-    return ScriptGenerationUseCase(
-        pipeline_service=build_script_generation_pipeline_service(container),
+def get_rag_script_generation_use_case(container: ServiceContainer = Depends(get_container)) -> RagScriptGenerationUseCase:
+    """构建 RAG 脚本生成用例。"""
+    return RagScriptGenerationUseCase(
+        pipeline_service=build_rag_script_pipeline_service(container),
     )
 
 
@@ -34,22 +34,17 @@ def get_daily_push_use_case(container: ServiceContainer = Depends(get_container)
     status_code=status.HTTP_201_CREATED,
     response_model=ResponseModel[ScriptGenerationResponse],
     summary="生成口播稿",
-    description="基于选中的碎片和生成模式，创建一条异步脚本生成流水线。",
+    description="基于主题和可选碎片，通过 RAG 参考脚本和 SOP 大纲创建异步脚本生成流水线。",
 )
 async def generate_script(
     data: ScriptGenerationRequest,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db_session),
-    use_case: ScriptGenerationUseCase = Depends(get_script_generation_use_case),
+    use_case: RagScriptGenerationUseCase = Depends(get_rag_script_generation_use_case),
 ):
     payload = await use_case.generate_async(
-        db=db,
         user_id=current_user["user_id"],
+        topic=data.topic,
         fragment_ids=data.fragment_ids,
-        fragment_snapshots=[item.model_dump() for item in data.fragment_snapshots],
-        mode=data.mode,
-        query_hint=data.query_hint,
-        include_web_search=data.include_web_search,
     )
     return success_response(data=payload, message="口播稿生成任务已创建")
 

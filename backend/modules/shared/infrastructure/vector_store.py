@@ -175,6 +175,99 @@ class AppVectorStore(VectorStore):
         ref_id = f"docs_{user_id}:{doc_id}"
         return await self.vector_db_provider.delete(namespace=_knowledge_namespace(user_id), doc_ids=[ref_id])
 
+    async def upsert_reference_script_chunks(
+        self,
+        *,
+        user_id: str,
+        doc_id: str,
+        chunks: list[tuple[int, str]],
+    ) -> list[str]:
+        """把参考脚本的分块写入向量库，每块单独存储以支持细粒度检索。
+
+        ID 格式为 refscript_{doc_id}:chunk_{n}，metadata 携带 doc_type=reference_script
+        以便后续按类型过滤，与知识库其他文档共用同一命名空间。
+        """
+        if not chunks:
+            return []
+        namespace = _knowledge_namespace(user_id)
+        ref_ids: list[str] = []
+        documents = []
+        for chunk_index, chunk_text in chunks:
+            normalized = chunk_text.strip()
+            if not normalized:
+                continue
+            embedding_result = await self.embedding_provider.embed(normalized)
+            ref_id = f"refscript_{doc_id}:chunk_{chunk_index}"
+            ref_ids.append(ref_id)
+            documents.append(
+                VectorDocument(
+                    id=ref_id,
+                    text=normalized,
+                    embedding=embedding_result.embedding,
+                    metadata={
+                        "user_id": user_id,
+                        "doc_id": doc_id,
+                        "doc_type": "reference_script",
+                        "chunk_index": chunk_index,
+                    },
+                )
+            )
+        if documents:
+            await self.vector_db_provider.upsert(namespace=namespace, documents=documents)
+        return ref_ids
+
+    async def query_reference_script_chunks(
+        self,
+        *,
+        user_id: str,
+        query_text: str,
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        """按文本检索参考脚本分块，通过 doc_type 元数据过滤只返回 reference_script 类型。
+
+        返回 [{doc_id, chunk_index, content, score}]，供下游提取风格描述和示例。
+        """
+        normalized_query = query_text.strip()
+        if not normalized_query:
+            return []
+        namespace = _knowledge_namespace(user_id)
+        if not await self.vector_db_provider.namespace_exists(namespace):
+            return []
+        results = await self.vector_db_provider.query_by_text(
+            namespace=namespace,
+            query_text=normalized_query,
+            embedding_service=self.embedding_provider,
+            top_k=top_k,
+            filter_metadata={"doc_type": {"$eq": "reference_script"}},
+        )
+        items: list[dict[str, Any]] = []
+        for result in results:
+            metadata = result.metadata or {}
+            items.append(
+                {
+                    "doc_id": metadata.get("doc_id"),
+                    "chunk_index": metadata.get("chunk_index"),
+                    "content": result.text,
+                    "score": result.score,
+                }
+            )
+        return items
+
+    async def delete_reference_script_chunks(self, *, user_id: str, doc_id: str) -> bool:
+        """删除某参考脚本的全部分块向量。
+
+        通过 ID 前缀 refscript_{doc_id}: 过滤，批量删除该文档的所有向量块。
+        """
+        namespace = _knowledge_namespace(user_id)
+        if not await self.vector_db_provider.namespace_exists(namespace):
+            return True
+        all_docs = await self.vector_db_provider.list_documents(namespace=namespace, include_embeddings=False)
+        prefix = f"refscript_{doc_id}:chunk_"
+        chunk_ids = [doc.id for doc in all_docs if doc.id.startswith(prefix)]
+        if not chunk_ids:
+            return True
+        return await self.vector_db_provider.delete(namespace=namespace, document_ids=chunk_ids)
+
     async def health_check(self) -> bool:
         """检查向量服务健康状态。"""
         return await self.vector_db_provider.health_check()

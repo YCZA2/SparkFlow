@@ -32,7 +32,11 @@ from modules.scripts.daily_push_pipeline import (
     PIPELINE_TYPE_DAILY_PUSH_GENERATION,
     build_daily_push_pipeline_service,
 )
-from modules.scripts.pipeline import build_script_generation_pipeline_service, PIPELINE_TYPE_SCRIPT_GENERATION
+from modules.knowledge.rag_processing_pipeline import (
+    build_reference_script_processing_pipeline_service,
+    PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING,
+)
+from modules.scripts.rag_pipeline import build_rag_script_pipeline_service, PIPELINE_TYPE_RAG_SCRIPT_GENERATION
 from modules.scripts.presentation import router as scripts_router
 from modules.shared.media.audio_ingestion import build_media_ingestion_pipeline_service, PIPELINE_TYPE_MEDIA_INGESTION
 from modules.shared.infrastructure.container import ServiceContainer, build_container
@@ -266,14 +270,20 @@ def _configure_pipeline_runtime(container: ServiceContainer) -> None:
     _register_pipeline(
         definition_registry=definition_registry,
         executor_registry=executor_registry,
-        pipeline_type=PIPELINE_TYPE_SCRIPT_GENERATION,
-        definitions=build_script_generation_pipeline_service(container).build_pipeline_definitions(),
+        pipeline_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+        definitions=build_daily_push_pipeline_service(container).build_pipeline_definitions(),
     )
     _register_pipeline(
         definition_registry=definition_registry,
         executor_registry=executor_registry,
-        pipeline_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
-        definitions=build_daily_push_pipeline_service(container).build_pipeline_definitions(),
+        pipeline_type=PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING,
+        definitions=build_reference_script_processing_pipeline_service(container).build_pipeline_definitions(),
+    )
+    _register_pipeline(
+        definition_registry=definition_registry,
+        executor_registry=executor_registry,
+        pipeline_type=PIPELINE_TYPE_RAG_SCRIPT_GENERATION,
+        definitions=build_rag_script_pipeline_service(container).build_pipeline_definitions(),
     )
 
 

@@ -1,4 +1,4 @@
-"""脚本 pipeline 任务态测试。"""
+"""RAG 脚本生成 pipeline 任务态测试。"""
 
 from __future__ import annotations
 
@@ -6,9 +6,8 @@ import asyncio
 
 import pytest
 
-from tests.support import FakeWebSearchProvider, FakeWorkflowProvider
-
 pytestmark = pytest.mark.integration
+
 
 async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
     """生成脚本 pipeline 测试使用的鉴权请求头。"""
@@ -26,19 +25,8 @@ async def _create_fragment(async_client, auth_headers_factory, transcript: str) 
     return response.json()["data"]["id"]
 
 
-async def _create_knowledge_doc(async_client, auth_headers_factory, *, title: str, body_markdown: str) -> str:
-    """创建知识库文档并返回其 ID。"""
-    response = await async_client.post(
-        "/api/knowledge",
-        json={"title": title, "body_markdown": body_markdown, "doc_type": "high_likes"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert response.status_code == 200
-    return response.json()["data"]["id"]
-
-
 async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, attempts: int = 40) -> dict:
-    """轮询直到脚本流水线进入终态。"""
+    """轮询直到流水线进入终态。"""
     headers = await _auth_headers(async_client, auth_headers_factory)
     for _ in range(attempts):
         response = await async_client.get(f"/api/pipelines/{run_id}", headers=headers)
@@ -50,160 +38,138 @@ async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, att
     raise AssertionError(f"pipeline {run_id} did not finish")
 
 
-@pytest.fixture
-def web_search_provider() -> FakeWebSearchProvider:
-    """提供可记录查询词的 Web 搜索替身。"""
-    return FakeWebSearchProvider()
-
-
-@pytest.fixture
-def script_mode_a_workflow_provider() -> FakeWorkflowProvider:
-    """提供可观察结构化上下文的 mode_a workflow provider 替身。"""
-    provider = FakeWorkflowProvider()
-    provider.provider_workflow_id = "wf-script-mode-a-001"
-    provider.queue_success(draft="这是 pipeline 生成的口播稿")
-    return provider
-
-
 @pytest.mark.asyncio
-async def test_script_generation_pipeline_collects_context_and_persists_script(
+async def test_rag_script_generation_pipeline_runs_and_persists_script(
     async_client,
     auth_headers_factory,
     app,
-    web_search_provider,
-    script_mode_a_workflow_provider,
 ) -> None:
-    """脚本生成应把结构化上下文传给 provider，并在成功后暴露 script 资源。"""
-    fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于定位的一条碎片")
-    knowledge_doc_id = await _create_knowledge_doc(async_client, auth_headers_factory, title="定位文档", body_markdown="关于定位的经验")
-    app.state.container.vector_store.knowledge_results = [{"doc_id": knowledge_doc_id, "score": 0.91}]
+    """RAG 脚本生成应经过全部步骤，并在成功后写入 script 记录。"""
+    # LLM 替身按调用顺序返回：大纲 JSON → 脚本草稿
+    llm_provider = app.state.container.llm_provider
+    call_index = 0
+    original_generate = llm_provider.generate
+
+    async def multi_generate(**kwargs):
+        nonlocal call_index
+        responses = [
+            '{"sop_type":"爆款结构","sections":[{"name":"钩子","key_points":["吸引眼球"]}]}',
+            "这是通过 RAG 生成的口播稿正文",
+        ]
+        text = responses[call_index] if call_index < len(responses) else "补充生成内容"
+        call_index += 1
+        return text
+
+    llm_provider.generate = multi_generate
 
     create_response = await async_client.post(
         "/api/scripts/generation",
-        json={
-            "fragment_ids": [fragment_id],
-            "mode": "mode_a",
-            "query_hint": "写一篇关于定位的口播稿",
-            "include_web_search": True,
-        },
+        json={"topic": "如何坚持早起"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert create_response.status_code == 201
     payload = create_response.json()["data"]
-    assert payload["pipeline_type"] == "script_generation"
+    assert payload["pipeline_type"] == "rag_script_generation"
 
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
     assert pipeline["status"] == "succeeded"
     assert pipeline["resource"]["resource_type"] == "script"
-    assert pipeline["resource"]["resource_id"] == pipeline["output"]["script_id"]
-    assert pipeline["output"]["provider"] == {
-        "workflow_id": "wf-script-mode-a-001",
-        "provider_run_id": "provider-run-default",
-        "provider_task_id": "task-default",
-    }
-
-    steps_response = await async_client.get(
-        f"/api/pipelines/{payload['pipeline_run_id']}/steps",
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert steps_response.status_code == 200
-    steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
-    assert steps["submit_workflow_run"]["external_ref"]["provider_task_id"] == "task-default"
-    assert steps["poll_workflow_run"]["external_ref"]["provider_run_id"] == "provider-run-default"
 
     detail_response = await async_client.get(
         f"/api/scripts/{pipeline['resource']['resource_id']}",
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert detail_response.status_code == 200
-    assert detail_response.json()["data"]["body_html"] == "<p>这是 pipeline 生成的口播稿</p>"
+    script_data = detail_response.json()["data"]
+    assert "RAG" in script_data["body_html"]
+    assert script_data["mode"] == "mode_rag"
 
-    assert len(web_search_provider.calls) == 1
-    inputs = script_mode_a_workflow_provider.last_submitted_inputs()
-    assert "关于定位的一条碎片" in inputs["fragments_text"]
-    assert "定位文档" in inputs["knowledge_context"]
-    assert "https://example.com" in inputs["web_context"]
-    assert inputs["query_hint"] == "写一篇关于定位的口播稿"
+    # 恢复 LLM 替身
+    llm_provider.generate = original_generate
 
 
 @pytest.mark.asyncio
-async def test_script_generation_pipeline_marks_failed_when_provider_fails(
+async def test_rag_script_generation_with_optional_fragments(
     async_client,
     auth_headers_factory,
-    script_mode_a_workflow_provider,
+    app,
 ) -> None:
-    """provider 失败时应把 pipeline 标记为失败并回写错误信息。"""
-    fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于选题的一条碎片")
-    script_mode_a_workflow_provider.queue_failure()
+    """带可选碎片的 RAG 生成应正常完成并写入 script 记录。"""
+    fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于早起习惯的碎片背景")
+    llm_provider = app.state.container.llm_provider
+    llm_provider.queue_text('{"sop_type":"教育结构","sections":[]}')
+
+    # 第一次调用（大纲）和第二次调用（脚本草稿）
+    call_index = 0
+    responses = [
+        '{"sop_type":"教育结构","sections":[{"name":"引入","key_points":["问题开场"]}]}',
+        "这是含碎片背景的口播稿正文",
+    ]
+
+    async def multi_generate(**kwargs):
+        nonlocal call_index
+        text = responses[call_index] if call_index < len(responses) else "生成内容"
+        call_index += 1
+        return text
+
+    original_generate = llm_provider.generate
+    llm_provider.generate = multi_generate
 
     create_response = await async_client.post(
         "/api/scripts/generation",
-        json={"fragment_ids": [fragment_id], "mode": "mode_a"},
+        json={"topic": "早起的好处", "fragment_ids": [fragment_id]},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert create_response.status_code == 201
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
+    assert pipeline["status"] == "succeeded"
+
+    llm_provider.generate = original_generate
+
+
+@pytest.mark.asyncio
+async def test_rag_script_generation_missing_topic_returns_validation_error(
+    async_client,
+    auth_headers_factory,
+) -> None:
+    """缺少 topic 字段时应返回 422 验证错误。"""
+    create_response = await async_client.post(
+        "/api/scripts/generation",
+        json={"fragment_ids": []},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert create_response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_rag_script_generation_pipeline_fails_when_llm_returns_empty_draft(
+    async_client,
+    auth_headers_factory,
+    app,
+) -> None:
+    """LLM 返回空草稿时 pipeline 应标记为失败。"""
+    llm_provider = app.state.container.llm_provider
+    call_index = 0
+
+    async def multi_generate(**kwargs):
+        nonlocal call_index
+        # 大纲正常返回，草稿返回空字符串
+        responses = ['{"sop_type":"爆款","sections":[]}', ""]
+        text = responses[call_index] if call_index < len(responses) else ""
+        call_index += 1
+        return text
+
+    original_generate = llm_provider.generate
+    llm_provider.generate = multi_generate
+
+    create_response = await async_client.post(
+        "/api/scripts/generation",
+        json={"topic": "健康饮食"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert create_response.status_code == 201
 
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
     assert pipeline["status"] == "failed"
-    assert "workflow failed" in (pipeline["error_message"] or "")
 
-
-@pytest.mark.asyncio
-async def test_script_generation_pipeline_keeps_submit_task_id_when_poll_response_omits_it(
-    async_client,
-    auth_headers_factory,
-    script_mode_a_workflow_provider,
-) -> None:
-    """轮询结果缺少 task_id 时应继续保留提交阶段返回的 provider 句柄。"""
-    fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于复盘的一条碎片")
-    script_mode_a_workflow_provider.poll_provider_task_id = None
-
-    create_response = await async_client.post(
-        "/api/scripts/generation",
-        json={"fragment_ids": [fragment_id], "mode": "mode_a"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert create_response.status_code == 201
-
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
-    assert pipeline["output"]["provider"]["provider_task_id"] == "task-default"
-
-    steps_response = await async_client.get(
-        f"/api/pipelines/{create_response.json()['data']['pipeline_run_id']}/steps",
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert steps_response.status_code == 200
-    steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
-    assert steps["submit_workflow_run"]["external_ref"]["provider_task_id"] == "task-default"
-    assert steps["poll_workflow_run"]["external_ref"]["provider_task_id"] == "task-default"
-
-
-@pytest.mark.asyncio
-async def test_script_generation_pipeline_routes_mode_b_to_mode_b_provider(
-    async_client,
-    auth_headers_factory,
-    app,
-    script_mode_a_workflow_provider,
-    script_mode_b_workflow_provider,
-) -> None:
-    """mode_b 请求应提交到独立的 mode_b workflow provider。"""
-    fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于表达风格的一条碎片")
-    script_mode_b_workflow_provider.queue_success(draft="这是 mode_b 生成的口播稿")
-
-    create_response = await async_client.post(
-        "/api/scripts/generation",
-        json={"fragment_ids": [fragment_id], "mode": "mode_b"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert create_response.status_code == 201
-
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
-    assert pipeline["output"]["provider"] == {
-        "workflow_id": "wf-script-mode-b-001",
-        "provider_run_id": "provider-run-mode-b",
-        "provider_task_id": "task-mode-b",
-    }
-    assert script_mode_a_workflow_provider.submitted_calls() == []
-    assert "关于表达风格的一条碎片" in script_mode_b_workflow_provider.last_submitted_inputs()["fragments_text"]
+    llm_provider.generate = original_generate

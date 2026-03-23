@@ -74,6 +74,34 @@ class FakeVectorStore:
         self.knowledge_docs.pop(doc_id, None)
         return True
 
+    async def upsert_reference_script_chunks(self, *, user_id: str, doc_id: str, chunks):
+        """内存存储参考脚本分块。"""
+        ref_ids = []
+        for chunk_index, chunk_text in chunks:
+            ref_id = f"refscript_{doc_id}:chunk_{chunk_index}"
+            self.knowledge_docs[ref_id] = {
+                "user_id": user_id,
+                "doc_id": doc_id,
+                "doc_type": "reference_script",
+                "chunk_index": chunk_index,
+                "content": chunk_text,
+            }
+            ref_ids.append(ref_id)
+        return ref_ids
+
+    async def query_reference_script_chunks(self, *, user_id: str, query_text: str, top_k: int):
+        """返回内存中的参考脚本分块检索结果。"""
+        if hasattr(self, "reference_script_results"):
+            return self.reference_script_results[:top_k]
+        return []
+
+    async def delete_reference_script_chunks(self, *, user_id: str, doc_id: str):
+        """删除内存中的参考脚本分块。"""
+        prefix = f"refscript_{doc_id}:chunk_"
+        for key in [k for k in self.knowledge_docs if k.startswith(prefix)]:
+            del self.knowledge_docs[key]
+        return True
+
     async def health_check(self):
         return True
 
