@@ -5,21 +5,12 @@
 """
 
 import os
-from dataclasses import dataclass
 from functools import lru_cache
 from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-@dataclass
-class DifyWorkflowConfig:
-    """单个 Dify 工作流的连接参数。"""
-    base_url: Optional[str]
-    app_id: Optional[str]
-    api_key: Optional[str]
-    workflow_id: Optional[str]
 
 FALSEY_DEBUG_VALUES = {"0", "false", "off", "no", "release", "prod", "production"}
 TRUTHY_DEBUG_VALUES = {"1", "true", "on", "yes", "debug", "dev", "development"}
@@ -89,47 +80,6 @@ class Settings(BaseSettings):
         description="抖音 Web Cookie，用于外部媒体导入时提高解析成功率"
     )
 
-    # Dify 外挂工作流配置（仅每日推盘使用）
-    DIFY_BASE_URL: Optional[str] = Field(
-        default=None,
-        description="daily push 工作流的 Dify API 基础地址，例如 https://dify.example.com/v1"
-    )
-    DIFY_API_KEY: Optional[str] = Field(
-        default=None,
-        description="daily push 工作流默认复用的 Dify 应用 API Key"
-    )
-    DIFY_DAILY_PUSH_API_KEY: Optional[str] = Field(
-        default=None,
-        description="每日推盘工作流 API Key；未配置时复用 DIFY_API_KEY"
-    )
-    DIFY_DAILY_PUSH_WORKFLOW_ID: Optional[str] = Field(
-        default=None,
-        description="每日推盘工作流标识，用于本地记录和校验"
-    )
-    DIFY_CONSOLE_EMAIL: Optional[str] = Field(
-        default=None,
-        description="Dify console 登录邮箱，仅供本地导入脚本使用"
-    )
-    DIFY_CONSOLE_PASSWORD: Optional[str] = Field(
-        default=None,
-        description="Dify console 登录密码，仅供本地导入脚本使用"
-    )
-    DIFY_CONSOLE_ACCESS_TOKEN: Optional[str] = Field(
-        default=None,
-        description="Dify console access token，仅供本地导入脚本使用"
-    )
-    DIFY_CONSOLE_CSRF_TOKEN: Optional[str] = Field(
-        default=None,
-        description="Dify console csrf token，仅供本地导入脚本使用"
-    )
-    DIFY_POLL_INTERVAL_SECONDS: int = Field(
-        default=2,
-        description="轮询 Dify 运行状态的建议间隔"
-    )
-    DIFY_POLL_TIMEOUT_SECONDS: int = Field(
-        default=120,
-        description="等待 Dify 运行完成的超时时间"
-    )
     # STT 配置
     STT_PROVIDER: str = Field(
         default="dashscope",
@@ -278,17 +228,6 @@ class Settings(BaseSettings):
                 return True
         return value
 
-    @field_validator(
-        "DIFY_BASE_URL",
-        mode="before",
-    )
-    @classmethod
-    def normalize_dify_base_url(cls, value):
-        if isinstance(value, str):
-            normalized = value.strip().rstrip("/")
-            return normalized or None
-        return value
-
     @field_validator("FILE_STORAGE_PROVIDER", mode="before")
     @classmethod
     def normalize_file_storage_provider(cls, value):
@@ -319,16 +258,6 @@ class Settings(BaseSettings):
                 return normalized
             return os.path.abspath(os.path.join(BACKEND_DIR, normalized))
         return value
-
-    @property
-    def dify_daily_push(self) -> DifyWorkflowConfig:
-        """返回每日推盘工作流的连接配置；api_key 优先取专属 key，否则复用默认 key。"""
-        return DifyWorkflowConfig(
-            base_url=self.DIFY_BASE_URL,
-            app_id=None,
-            api_key=self.DIFY_DAILY_PUSH_API_KEY or self.DIFY_API_KEY,
-            workflow_id=self.DIFY_DAILY_PUSH_WORKFLOW_ID,
-        )
 
     def ensure_directories(self):
         """确保所需目录存在"""

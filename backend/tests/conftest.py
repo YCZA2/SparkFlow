@@ -15,12 +15,6 @@ DEFAULT_TEST_DATABASE_URL = "postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:
 os.environ.setdefault("DEBUG", "false")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("DASHSCOPE_API_KEY", "test-dashscope-key")
-os.environ.setdefault("DIFY_BASE_URL", "https://dify-daily.example.com/v1")
-os.environ.setdefault("DIFY_API_KEY", "test-daily-default-key")
-os.environ.setdefault("DIFY_DAILY_PUSH_API_KEY", "test-daily-push-key")
-os.environ.setdefault("DIFY_DAILY_PUSH_WORKFLOW_ID", "wf-daily-push-001")
-os.environ.setdefault("DIFY_POLL_INTERVAL_SECONDS", "0")
-os.environ.setdefault("DIFY_POLL_TIMEOUT_SECONDS", "1")
 os.environ.setdefault("DATABASE_URL", os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL))
 
 from main import create_app
@@ -33,7 +27,6 @@ from tests.support import (
     FakeSTTProvider,
     FakeVectorStore,
     FakeWebSearchProvider,
-    FakeWorkflowProvider,
 )
 
 
@@ -98,14 +91,6 @@ def stt_provider() -> FakeSTTProvider:
     return FakeSTTProvider()
 
 
-@pytest.fixture
-def daily_push_workflow_provider() -> FakeWorkflowProvider:
-    """提供每日推盘专用的 workflow provider 替身。"""
-    provider = FakeWorkflowProvider()
-    provider.queue_success(draft="生成后的口播稿")
-    return provider
-
-
 @pytest_asyncio.fixture
 async def app(
     db_session_factory,
@@ -115,7 +100,6 @@ async def app(
     web_search_provider,
     llm_provider,
     stt_provider,
-    daily_push_workflow_provider,
 ):
     """创建挂载测试依赖的 FastAPI 应用。"""
     test_app = create_app()
@@ -126,12 +110,10 @@ async def app(
     test_app.state.container.web_search_provider = web_search_provider
     test_app.state.container.llm_provider = llm_provider
     test_app.state.container.stt_provider = stt_provider
-    test_app.state.container.daily_push_workflow_provider = daily_push_workflow_provider
     yield test_app
     test_app.state.scheduler_service.stop()
     if test_app.state.container.pipeline_dispatcher:
         await test_app.state.container.pipeline_dispatcher.stop()
-    await test_app.state.container.daily_push_workflow_provider.aclose()
 
 
 @pytest_asyncio.fixture
@@ -142,7 +124,6 @@ async def stateless_app():
     test_app.state.scheduler_service.stop()
     if test_app.state.container.pipeline_dispatcher:
         await test_app.state.container.pipeline_dispatcher.stop()
-    await test_app.state.container.daily_push_workflow_provider.aclose()
 
 
 @pytest_asyncio.fixture

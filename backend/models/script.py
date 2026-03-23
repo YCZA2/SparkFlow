@@ -21,7 +21,7 @@ class Script(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=True)
     body_html = Column(Text, nullable=False)  # HTML 正文
-    mode = Column(String, nullable=False)  # 'mode_rag'（用户生成）| 'mode_a'（每日推盘，历史兼容）
+    mode = Column(String, nullable=False)  # 'mode_rag'（用户生成）| 'mode_daily_push'（每日推盘）| 'mode_a'（历史兼容）
     source_fragment_ids = Column(String, nullable=True)  # JSON数组字符串，关联碎片ID
     status = Column(String, default="draft", nullable=False)  # 'draft'|'ready'|'filmed'
     is_daily_push = Column(Boolean, default=False, nullable=False)  # 是否每日自动生成

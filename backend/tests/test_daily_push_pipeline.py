@@ -44,9 +44,8 @@ async def test_daily_push_pipeline_creates_script_and_reuses_same_run(
     async_client,
     auth_headers_factory,
     app,
-    daily_push_workflow_provider,
 ) -> None:
-    """每日推盘应走异步 workflow，并在同一天复用同一条结果。"""
+    """每日推盘应直接调用 LLM 生成脚本，并在同一天复用同一条结果。"""
     fragment_ids = [
         await _create_fragment(async_client, auth_headers_factory, f"同主题每日推盘碎片 {index}")
         for index in range(3)
@@ -79,11 +78,6 @@ async def test_daily_push_pipeline_creates_script_and_reuses_same_run(
     assert get_response.status_code == 200
     assert get_response.json()["data"]["id"] == pipeline["resource"]["resource_id"]
 
-    inputs = daily_push_workflow_provider.last_submitted_inputs()
-    assert inputs["trigger_kind"] == "manual"
-    assert len(inputs["selected_fragments"]) == 3
-    assert inputs["fragments_text"]
-
 
 @pytest.mark.asyncio
 async def test_daily_push_pipeline_force_trigger_reuses_existing_result(async_client, auth_headers_factory, app) -> None:
@@ -112,13 +106,12 @@ async def test_daily_push_pipeline_force_trigger_reuses_existing_result(async_cl
 
 
 @pytest.mark.asyncio
-async def test_daily_push_pipeline_marks_failed_when_provider_fails(
+async def test_daily_push_pipeline_marks_failed_when_llm_fails(
     async_client,
     auth_headers_factory,
     app,
-    daily_push_workflow_provider,
 ) -> None:
-    """每日推盘 provider 失败时应把 pipeline 标记为失败。"""
+    """LLM 生成失败时应把 pipeline 标记为失败。"""
     fragment_ids = [
         await _create_fragment(async_client, auth_headers_factory, f"失败测试碎片 {index}")
         for index in range(3)
@@ -132,13 +125,12 @@ async def test_daily_push_pipeline_marks_failed_when_provider_fails(
             "summary": None,
             "tags": [],
         }
-    daily_push_workflow_provider.queue_failure()
+    app.state.container.llm_provider.queue_error(RuntimeError("LLM error"))
 
     response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
     assert response.status_code == 200
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, response.json()["data"]["pipeline_run_id"])
     assert pipeline["status"] == "failed"
-    assert "workflow failed" in (pipeline["error_message"] or "")
 
 
 @pytest.mark.asyncio

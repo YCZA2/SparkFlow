@@ -82,7 +82,6 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
             scheduler_service.stop()
             if container.pipeline_dispatcher:
                 await container.pipeline_dispatcher.stop()
-            await container.daily_push_workflow_provider.aclose()
 
     app = FastAPI(
         title=settings.APP_NAME,

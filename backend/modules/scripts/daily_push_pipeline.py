@@ -1,68 +1,38 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timezone
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.exceptions import ValidationError
+from core.logging_config import get_logger
 from domains.fragments import repository as fragment_repository
 from domains.pipelines import repository as pipeline_repository
 from domains.scripts import repository as script_repository
 from models import Fragment, PipelineRun, User
 from modules.shared.pipeline.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
-from modules.shared.ports import VectorStore, WorkflowProvider
+from modules.shared.ports import VectorStore
 from modules.shared.content.content_html import convert_markdown_to_basic_html
 from utils.serialization import format_iso_datetime, parse_json_list
 from utils.time import get_app_timezone, get_local_day_bounds
 
 from .daily_push import DailyPushFragmentSelector, read_fragment_content
 
-SUCCESS_STATUSES = {"succeeded", "success", "completed"}
-FAILED_STATUSES = {"failed", "error", "stopped"}
+logger = get_logger(__name__)
+
 PIPELINE_TYPE_DAILY_PUSH_GENERATION = "daily_push_generation"
 
-
-def _build_poll_max_attempts(timeout_seconds: int) -> int:
-    """根据指数退避窗口推导 workflow 轮询步骤的最大尝试次数。"""
-    attempts = 1
-    total_wait = 0
-    while total_wait < timeout_seconds:
-        total_wait += max(1, (2 ** attempts) - 1)
-        attempts += 1
-    return max(4, attempts)
+# 每日推盘生成系统提示路径
+_DAILY_PUSH_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "daily_push.txt"
 
 
-@dataclass
-class DailyPushContext:
-    """描述每日推盘提交给工作流的结构化上下文。"""
-
-    mode: str
-    selected_fragments: list[dict[str, Any]]
-    fragments_text: str
-    target_date: str
-    trigger_kind: str
-    force: bool
-    generation_metadata: dict[str, Any]
-
-    def to_dict(self) -> dict[str, Any]:
-        """将上下文稳定转换为可持久化字典。"""
-        return asdict(self)
-
-
-def _build_fragment_payload(fragment: Fragment) -> dict[str, Any]:
-    """构造每日推盘工作流使用的碎片载荷。"""
-    return {
-        "id": fragment.id,
-        "transcript": _fragment_content(fragment),
-        "summary": fragment.summary,
-        "tags": parse_json_list(fragment.tags),
-        "source": fragment.source,
-        "created_at": format_iso_datetime(fragment.created_at),
-    }
+def _load_daily_push_prompt() -> str:
+    """读取每日推盘生成系统提示文本。"""
+    return _DAILY_PUSH_PROMPT_PATH.read_text(encoding="utf-8").strip()
 
 
 def _fragment_content(fragment: Fragment) -> str:
@@ -70,48 +40,19 @@ def _fragment_content(fragment: Fragment) -> str:
     return read_fragment_content(fragment)
 
 
-def build_daily_push_workflow_inputs(context: DailyPushContext) -> dict[str, Any]:
-    """构造每日推盘提交给 provider 的统一输入。"""
-    return {
-        "mode": context.mode,
-        "selected_fragments": context.selected_fragments,
-        "fragments_text": context.fragments_text,
-        "target_date": context.target_date,
-        "trigger_kind": context.trigger_kind,
-        "force": context.force,
-        "generation_metadata": context.generation_metadata,
-    }
+def _build_fragment_summary(fragment: Fragment) -> str:
+    """构造碎片摘要文本，优先使用 summary，补充 tags。"""
+    parts = []
+    content = _fragment_content(fragment)
+    if content:
+        parts.append(content)
+    if fragment.summary:
+        parts.append(f"（摘要：{fragment.summary}）")
+    return "\n".join(parts)
 
 
 class DailyPushPersistenceService:
-    """封装每日推盘结果解析与落库。"""
-
-    @staticmethod
-    def build_provider_metadata(*, workflow_id: str | None, provider_run_id: str | None, provider_task_id: str | None) -> dict[str, str]:
-        """构造流水线结果中可复用的 provider 元数据。"""
-        provider: dict[str, str] = {}
-        if workflow_id:
-            provider["workflow_id"] = workflow_id
-        if provider_run_id:
-            provider["provider_run_id"] = provider_run_id
-        if provider_task_id:
-            provider["provider_task_id"] = provider_task_id
-        return provider
-
-    def parse_outputs(self, outputs: dict[str, Any]) -> dict[str, Any]:
-        """规范化每日推盘工作流输出字段。"""
-        if not isinstance(outputs, dict):
-            return {}
-        return {
-            "title": outputs.get("title"),
-            "draft": outputs.get("draft") or outputs.get("content") or outputs.get("body_markdown"),
-            "outline": outputs.get("outline"),
-            "model_metadata": outputs.get("model_metadata"),
-        }
-
-    def resolve_failure_message(self, payload: dict[str, Any]) -> str:
-        """提取 provider 失败时最可读的错误信息。"""
-        return payload.get("error") or payload.get("message") or payload.get("status") or "每日推盘工作流执行失败"
+    """封装每日推盘结果落库。"""
 
     def persist_script(
         self,
@@ -119,13 +60,13 @@ class DailyPushPersistenceService:
         db: Session,
         run: PipelineRun,
         input_payload: dict[str, Any],
-        parsed_result: dict[str, Any],
-        provider_metadata: dict[str, str] | None = None,
+        draft: str,
+        title: str | None = None,
     ) -> dict[str, Any]:
-        """在工作流成功后回流创建每日推盘稿件。"""
-        draft = (parsed_result.get("draft") or "").strip()
+        """将 LLM 草稿写入脚本记录，已存在则复用。"""
+        draft = draft.strip()
         if not draft:
-            raise ValidationError(message="每日推盘工作流输出缺少 draft，无法创建稿件", field_errors={"generation": "工作流执行失败"})
+            raise ValidationError(message="每日推盘 LLM 输出缺少 draft，无法创建稿件", field_errors={"generation": "LLM 返回为空"})
         existing = script_repository.get_by_id(db=db, user_id=run.user_id, script_id=run.resource_id or "")
         if existing is None:
             existing = self._get_existing_script_for_target_date(
@@ -134,78 +75,28 @@ class DailyPushPersistenceService:
                 target_date=input_payload["target_date"],
             )
         if existing:
-            return self._build_run_output(
-                script_id=existing.id,
-                parsed_result=parsed_result,
-                target_date=input_payload["target_date"],
-                provider_metadata=provider_metadata,
-            )
+            return {"script_id": existing.id}
 
         local_date = input_payload["target_date"]
-        title = parsed_result.get("title") or f"{input_payload['title_prefix']}灵感推盘 · {local_date}"
+        resolved_title = title or f"{input_payload['title_prefix']}灵感推盘 · {local_date}"
         script = script_repository.create(
             db=db,
             user_id=run.user_id,
             body_html=convert_markdown_to_basic_html(draft),
-            mode="mode_a",
+            mode="mode_daily_push",
             source_fragment_ids=json.dumps(input_payload["fragment_ids"], ensure_ascii=False),
-            title=title,
+            title=resolved_title,
             status="ready",
             is_daily_push=True,
-        )
-        run_output = self._build_run_output(
-            script_id=script.id,
-            parsed_result=parsed_result,
-            target_date=input_payload["target_date"],
-            provider_metadata=provider_metadata,
         )
         pipeline_repository.update_run_resource(
             db=db,
             run_id=run.id,
             resource_type="script",
             resource_id=script.id,
-            output_payload=run_output,
+            output_payload={"script_id": script.id, "target_date": local_date, "is_daily_push": True},
         )
-        return run_output
-
-    def build_finalize_payload(
-        self,
-        *,
-        script_id: str,
-        parsed_result: dict[str, Any],
-        target_date: str,
-        provider_metadata: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
-        """构造结束流水线所需的最终返回。"""
-        return {
-            "resource_type": "script",
-            "resource_id": script_id,
-            "run_output": self._build_run_output(
-                script_id=script_id,
-                parsed_result=parsed_result,
-                target_date=target_date,
-                provider_metadata=provider_metadata,
-            ),
-        }
-
-    @staticmethod
-    def _build_run_output(
-        *,
-        script_id: str,
-        parsed_result: dict[str, Any],
-        target_date: str,
-        provider_metadata: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
-        """构造每日推盘流水线输出载荷。"""
-        payload = {
-            "script_id": script_id,
-            "result": parsed_result,
-            "target_date": target_date,
-            "is_daily_push": True,
-        }
-        if provider_metadata:
-            payload["provider"] = provider_metadata
-        return payload
+        return {"script_id": script.id}
 
     @staticmethod
     def _get_existing_script_for_target_date(*, db: Session, user_id: str, target_date: str):
@@ -227,14 +118,12 @@ class DailyPushPipelineService:
     def __init__(
         self,
         *,
-        workflow_provider: WorkflowProvider,
         vector_store: VectorStore,
         persistence_service: DailyPushPersistenceService,
         pipeline_runner,
         fragment_selector: DailyPushFragmentSelector | None = None,
     ) -> None:
         """装配每日推盘流水线依赖。"""
-        self.workflow_provider = workflow_provider
         self.fragment_selector = fragment_selector or DailyPushFragmentSelector(vector_store=vector_store)
         self.persistence_service = persistence_service
         self.pipeline_runner = pipeline_runner
@@ -349,22 +238,13 @@ class DailyPushPipelineService:
         """返回每日推盘流水线的固定步骤。"""
         return [
             PipelineStepDefinition(step_name="collect_daily_push_context", executor=self.collect_daily_push_context, max_attempts=1),
-            PipelineStepDefinition(step_name="submit_daily_push_workflow", executor=self.submit_daily_push_workflow, max_attempts=2),
-            PipelineStepDefinition(
-                step_name="poll_daily_push_workflow",
-                executor=self.poll_daily_push_workflow,
-                max_attempts=_build_poll_max_attempts(settings.DIFY_POLL_TIMEOUT_SECONDS),
-            ),
+            PipelineStepDefinition(step_name="generate_daily_push_draft", executor=self.generate_daily_push_draft, max_attempts=2),
             PipelineStepDefinition(step_name="persist_daily_push_script", executor=self.persist_daily_push_script, max_attempts=2),
             PipelineStepDefinition(step_name="finalize_daily_push_run", executor=self.finalize_daily_push_run, max_attempts=1),
         ]
 
-    def _runtime_workflow_provider(self, context: PipelineExecutionContext) -> WorkflowProvider:
-        """按当前容器状态读取每日推盘运行时 provider。"""
-        return context.container.daily_push_workflow_provider
-
     async def collect_daily_push_context(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """根据已选碎片组装每日推盘工作流上下文。"""
+        """根据已选碎片组装每日推盘上下文文本。"""
         payload = context.input_payload
         fragments = fragment_repository.get_by_ids(
             db=context.db,
@@ -372,104 +252,63 @@ class DailyPushPipelineService:
             fragment_ids=payload["fragment_ids"],
         )
         fragment_map = {fragment.id: fragment for fragment in fragments}
-        ordered_fragments = [fragment_map[fragment_id] for fragment_id in payload["fragment_ids"] if fragment_id in fragment_map]
+        ordered_fragments = [fragment_map[fid] for fid in payload["fragment_ids"] if fid in fragment_map]
         if len(ordered_fragments) != len(payload["fragment_ids"]):
             raise ValidationError(message="每日推盘引用的碎片不存在或无权访问", field_errors={"fragment_ids": "碎片缺失"})
-        content_parts = [_fragment_content(fragment) for fragment in ordered_fragments if _fragment_content(fragment)]
+        content_parts = [_fragment_content(f) for f in ordered_fragments if _fragment_content(f)]
         if not content_parts:
             raise ValidationError(message="选中的碎片均无可用文本，无法生成每日推盘", field_errors={"fragment_ids": "碎片内容为空"})
-        daily_push_context = DailyPushContext(
-            mode="mode_a",
-            selected_fragments=[_build_fragment_payload(fragment) for fragment in ordered_fragments],
-            fragments_text="\n\n---\n\n".join(content_parts),
-            target_date=payload["target_date"],
-            trigger_kind=payload["trigger_kind"],
-            force=bool(payload.get("force")),
-            generation_metadata={
-                "source_day_offset": payload.get("source_day_offset"),
-                "source_window_start": payload.get("source_window_start"),
-                "source_window_end": payload.get("source_window_end"),
-            },
-        )
-        return {"daily_push_context": daily_push_context.to_dict()}
+        return {"fragments_text": "\n\n---\n\n".join(content_parts)}
 
-    async def submit_daily_push_workflow(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """向每日推盘 workflow provider 提交运行。"""
-        workflow_context = context.get_step_output("collect_daily_push_context").get("daily_push_context") or {}
-        workflow_run = await self._runtime_workflow_provider(context).submit_run(
-            inputs=build_daily_push_workflow_inputs(DailyPushContext(**workflow_context)),
-            user_id=context.run.user_id,
+    async def generate_daily_push_draft(self, context: PipelineExecutionContext) -> dict[str, Any]:
+        """调用 LLM 基于碎片文本生成每日推盘草稿。"""
+        fragments_text = context.get_step_output("collect_daily_push_context").get("fragments_text", "")
+        try:
+            system_prompt = _load_daily_push_prompt()
+        except Exception as exc:
+            raise PipelineExecutionError(f"读取每日推盘提示词失败: {exc}", retryable=False) from exc
+        draft = await context.container.llm_provider.generate(
+            system_prompt=system_prompt,
+            user_message=f"以下是今天的灵感碎片：\n\n{fragments_text}",
+            temperature=0.7,
         )
-        provider_run_id = workflow_run.provider_run_id or workflow_run.run_id
-        return {
-            "provider_run_id": provider_run_id,
-            "provider_task_id": workflow_run.provider_task_id,
-            "workflow_id": workflow_run.provider_workflow_id,
-            "raw_payload": workflow_run.raw_payload,
-            "external_ref": {
-                "provider_run_id": provider_run_id,
-                "provider_task_id": workflow_run.provider_task_id,
-            },
-        }
-
-    async def poll_daily_push_workflow(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """查询每日推盘 workflow provider 的最新运行状态。"""
-        provider_run_id = context.get_step_output("submit_daily_push_workflow").get("provider_run_id")
-        submit_task_id = context.get_step_output("submit_daily_push_workflow").get("provider_task_id")
-        if not provider_run_id:
-            raise ValidationError(message="每日推盘工作流尚未成功提交到 provider", field_errors={"run_id": "缺少 provider 运行 ID"})
-        workflow_run = await self._runtime_workflow_provider(context).get_run(run_id=provider_run_id)
-        parsed = self.persistence_service.parse_outputs(workflow_run.outputs)
-        if workflow_run.status in FAILED_STATUSES:
-            raise PipelineExecutionError(self.persistence_service.resolve_failure_message(workflow_run.raw_payload), retryable=False)
-        if workflow_run.status not in SUCCESS_STATUSES:
-            raise PipelineExecutionError("workflow still running", retryable=True)
-        provider_run_id = workflow_run.provider_run_id or provider_run_id
-        provider_task_id = workflow_run.provider_task_id or submit_task_id
-        return {
-            "workflow_id": workflow_run.provider_workflow_id,
-            "provider_run_id": provider_run_id,
-            "provider_task_id": provider_task_id,
-            "result": parsed,
-            "raw_payload": workflow_run.raw_payload,
-            "external_ref": {
-                "provider_run_id": provider_run_id,
-                "provider_task_id": provider_task_id,
-            },
-        }
+        if not draft or not draft.strip():
+            raise PipelineExecutionError("LLM 未返回每日推盘草稿", retryable=True)
+        # 尝试从首行提取标题
+        lines = draft.strip().splitlines()
+        title = lines[0].strip() if lines else None
+        body = "\n".join(lines[2:]).strip() if len(lines) > 2 else draft.strip()
+        if not body:
+            body = draft.strip()
+            title = None
+        return {"draft": body, "title": title}
 
     async def persist_daily_push_script(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """在 workflow 成功后回流创建每日推盘脚本记录。"""
-        payload = context.input_payload
-        poll_payload = context.get_step_output("poll_daily_push_workflow")
+        """将 LLM 草稿写入脚本记录。"""
+        draft_output = context.get_step_output("generate_daily_push_draft")
         return self.persistence_service.persist_script(
             db=context.db,
             run=context.run,
-            input_payload=payload,
-            parsed_result=poll_payload.get("result") or {},
-            provider_metadata=self.persistence_service.build_provider_metadata(
-                workflow_id=poll_payload.get("workflow_id"),
-                provider_run_id=poll_payload.get("provider_run_id"),
-                provider_task_id=poll_payload.get("provider_task_id"),
-            ),
+            input_payload=context.input_payload,
+            draft=draft_output.get("draft", ""),
+            title=draft_output.get("title"),
         )
 
     async def finalize_daily_push_run(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """结束每日推盘流水线并固化最终脚本结果。"""
-        payload = context.input_payload
+        """结束每日推盘流水线。"""
         persist_payload = context.get_step_output("persist_daily_push_script")
-        return self.persistence_service.build_finalize_payload(
-            script_id=persist_payload["script_id"],
-            parsed_result=persist_payload.get("result") or {},
-            target_date=payload["target_date"],
-            provider_metadata=persist_payload.get("provider"),
-        )
+        script_id = persist_payload["script_id"]
+        return {
+            "resource_type": "script",
+            "resource_id": script_id,
+            "target_date": context.input_payload["target_date"],
+            "is_daily_push": True,
+        }
 
 
 def build_daily_push_pipeline_service(container) -> DailyPushPipelineService:
     """基于容器组装每日推盘流水线服务。"""
     return DailyPushPipelineService(
-        workflow_provider=container.daily_push_workflow_provider,
         vector_store=container.vector_store,
         persistence_service=DailyPushPersistenceService(),
         pipeline_runner=container.pipeline_runner,

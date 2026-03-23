@@ -5,7 +5,6 @@ from fastapi import BackgroundTasks
 from modules.shared.ports import JobRunner
 from .providers import (
     NoopWebSearchProvider,
-    create_daily_push_workflow_provider,
     create_external_media_provider,
     create_web_search_provider,
 )
