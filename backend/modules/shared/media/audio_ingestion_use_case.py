@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.exceptions import ServiceUnavailableError
-from domains.fragments import repository as fragment_repository
 
 from modules.shared.media.media_ingestion_persistence import MediaIngestionPersistenceService
 from modules.shared.media.media_ingestion_steps import MediaIngestionStepExecutor
@@ -69,27 +68,8 @@ class AudioIngestionUseCase:
         """创建上传音频流水线并返回异步任务句柄。"""
         self.step_executor.validate_audio_source(request.audio_source)
         self.step_executor.validate_folder_exists(db=db, user_id=request.user_id, folder_id=request.folder_id)
+        # local_fragment_id 由移动端先行创建并传入，后端不再兜底建立 fragment 记录
         fragment_id = request.fragment_id
-        if fragment_id is None and request.local_fragment_id is None:
-            fragment = fragment_repository.create(
-                db=db,
-                user_id=request.user_id,
-                transcript=None,
-                source="voice",
-                audio_source=request.audio_source,
-                audio_storage_provider=request.audio_file.storage_provider if request.audio_file else None,
-                audio_bucket=request.audio_file.bucket if request.audio_file else None,
-                audio_object_key=request.audio_file.object_key if request.audio_file else None,
-                audio_access_level=request.audio_file.access_level if request.audio_file else None,
-                audio_original_filename=request.audio_file.original_filename if request.audio_file else None,
-                audio_mime_type=request.audio_file.mime_type if request.audio_file else None,
-                audio_file_size=request.audio_file.file_size if request.audio_file else None,
-                audio_checksum=request.audio_file.checksum if request.audio_file else None,
-                body_html="",
-                plain_text_snapshot="",
-                folder_id=request.folder_id,
-            )
-            fragment_id = fragment.id
         resource_id = request.local_fragment_id or fragment_id
         resource_type = "local_fragment" if request.local_fragment_id else "fragment"
         run = await self.pipeline_runner.create_run(
@@ -127,27 +107,8 @@ class AudioIngestionUseCase:
     ) -> AudioIngestionResult:
         """创建外链导入流水线并返回异步任务句柄。"""
         self.step_executor.validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
-        fragment = None
-        if local_fragment_id is None:
-            fragment = fragment_repository.create(
-                db=db,
-                user_id=user_id,
-                transcript=None,
-                source="voice",
-                audio_source="external_link",
-                audio_storage_provider=None,
-                audio_bucket=None,
-                audio_object_key=None,
-                audio_access_level=None,
-                audio_original_filename=None,
-                audio_mime_type=None,
-                audio_file_size=None,
-                audio_checksum=None,
-                body_html="",
-                plain_text_snapshot="",
-                folder_id=folder_id,
-            )
-        fragment_id = fragment.id if fragment else None
+        # local_fragment_id 由移动端先行创建并传入，后端不再兜底建立 fragment 记录
+        fragment_id = None
         run = await self.pipeline_runner.create_run(
             run_id=None,
             user_id=user_id,
