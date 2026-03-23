@@ -83,6 +83,8 @@ async def test_rag_script_generation_pipeline_runs_and_persists_script(
     script_data = detail_response.json()["data"]
     assert "RAG" in script_data["body_html"]
     assert script_data["mode"] == "mode_rag"
+    assert script_data["source_fragment_ids"] == []
+    assert script_data["source_fragment_count"] == 0
 
     # 恢复 LLM 替身
     llm_provider.generate = original_generate

@@ -20,7 +20,8 @@ VALID_SCRIPT_STATUSES = {"draft", "ready", "filmed"}
 
 def map_script(script: Script) -> ScriptDetail:
     """将脚本模型映射为对外响应结构。"""
-    source_fragment_ids = parse_json_list(script.source_fragment_ids, allow_csv_fallback=False)
+    # 中文注释：空 JSON 数组或缺失来源碎片时，接口应稳定返回 []，避免详情/列表对 None 取长度。
+    source_fragment_ids = parse_json_list(script.source_fragment_ids, allow_csv_fallback=False) or []
     return ScriptDetail(
         id=script.id,
         title=script.title,

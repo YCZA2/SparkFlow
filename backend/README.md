@@ -360,6 +360,7 @@ bash scripts/postgres-local.sh stop
 - `POST /api/external-media/audio-imports` 请求体支持 `share_url`、`platform` 和可选 `folder_id`，返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
 - `POST /api/scripts/generation` 返回 `pipeline_run_id`、`pipeline_type`、`status`
 - `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 返回 `pipeline_run_id`、`pipeline_type`、`status`
+- `GET /api/scripts` / `GET /api/scripts/{script_id}` 在没有来源碎片时会稳定返回 `source_fragment_ids=[]` 与 `source_fragment_count=0`，不使用 `null`
 - 文件类响应不再暴露 `audio_path` / `storage_path`，统一返回签名 `*_file_url` 与过期时间
 - `fragments` 列表 / 详情与 `GET /api/transcriptions/{fragment_id}` 不再返回 `sync_status`
 - `fragments.transcript` 表示机器转写原文，`body_html` 表示用户整理后的正式正文；正文消费统一按 `body_html -> transcript` 回退
