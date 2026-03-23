@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""通过真实后端接口触发一次 Dify 脚本生成联调。"""
+"""通过真实后端接口触发一次脚本生成联调。"""
 
 from __future__ import annotations
 
@@ -112,10 +112,8 @@ def trigger_generation(
     *,
     backend_base_url: str,
     headers: dict[str, str],
+    topic: str,
     fragment_ids: list[str],
-    mode: str,
-    query_hint: str | None,
-    include_web_search: bool,
 ) -> str:
     """发起一次真实脚本生成任务，并返回 pipeline_run_id。"""
     payload = request_json(
@@ -124,10 +122,8 @@ def trigger_generation(
         f"{backend_base_url}/api/scripts/generation",
         headers=headers,
         json_body={
+            "topic": topic,
             "fragment_ids": fragment_ids,
-            "mode": mode,
-            "query_hint": query_hint,
-            "include_web_search": include_web_search,
         },
     )
     data = extract_response_data(payload)
@@ -232,11 +228,9 @@ def build_default_fragments() -> list[str]:
 
 def parse_args() -> argparse.Namespace:
     """解析命令行参数。"""
-    parser = argparse.ArgumentParser(description="通过真实后端接口触发一次 Dify 脚本生成联调")
+    parser = argparse.ArgumentParser(description="通过真实后端接口触发一次脚本生成联调")
     parser.add_argument("--backend-base-url", default=DEFAULT_BACKEND_BASE_URL, help="后端基址，例如 http://127.0.0.1:8000")
-    parser.add_argument("--mode", default="mode_a", help="脚本生成模式，默认 mode_a")
-    parser.add_argument("--query-hint", default="写一篇关于时间管理误区的短视频口播稿", help="本次生成的提示词")
-    parser.add_argument("--include-web-search", action="store_true", help="是否启用网页搜索补充")
+    parser.add_argument("--topic", default="写一篇关于时间管理误区的短视频口播稿", help="本次生成的主题")
     parser.add_argument(
         "--fragment-text",
         action="append",
@@ -251,7 +245,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """执行真实 Dify 生成联调并输出结果摘要。"""
+    """执行真实脚本生成联调并输出结果摘要。"""
     args = parse_args()
     backend_base_url = normalize_backend_base_url(args.backend_base_url)
     fragment_texts = args.fragment_text or build_default_fragments()
@@ -273,10 +267,8 @@ def main() -> int:
                 client,
                 backend_base_url=backend_base_url,
                 headers=headers,
+                topic=args.topic,
                 fragment_ids=resources.fragment_ids,
-                mode=args.mode,
-                query_hint=args.query_hint,
-                include_web_search=args.include_web_search,
             )
             pipeline = poll_pipeline(
                 client,
