@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { Stack } from 'expo-router';
 
 import { BottomActionBar } from '@/components/layout/BottomActionBar';
@@ -80,8 +80,30 @@ export default function GenerateScreen() {
       <ScreenHeader
         eyebrow="生成"
         title="AI 编导"
-        subtitle="确认选中的碎片和生成模式，整理成一篇可直接拍摄的口播稿。"
+        subtitle="先给这组素材一个主题，AI 会按 SOP 和 few-shot 参考整理成可直接拍摄的口播稿。"
       />
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>主题</Text>
+        <View
+          style={[
+            styles.topicCard,
+            theme.shadow.card,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          <TextInput
+            value={screen.topic}
+            onChangeText={screen.setTopic}
+            placeholder="例如：为什么稳定输出比追热点更重要"
+            placeholderTextColor={theme.colors.textSubtle}
+            style={[styles.topicInput, { color: theme.colors.text }]}
+          />
+          <Text style={[styles.topicHint, { color: theme.colors.textSubtle }]}>
+            主题用于驱动大纲选择和参考示例检索，你可以在推荐主题基础上继续细化。
+          </Text>
+        </View>
+      </View>
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
@@ -107,31 +129,6 @@ export default function GenerateScreen() {
           ))
         )}
       </View>
-
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>生成模式</Text>
-        {screen.modeOptions.map((option) => (
-          <TouchableOpacity
-            key={option.value}
-            style={[
-              styles.modeCard,
-              theme.shadow.card,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor:
-                  screen.mode === option.value ? theme.colors.primary : 'transparent',
-              },
-            ]}
-            onPress={() => screen.setMode(option.value)}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.modeTitle, { color: theme.colors.text }]}>{option.title}</Text>
-            <Text style={[styles.modeDesc, { color: theme.colors.textSubtle }]}>
-              {option.description}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
     </ScreenContainer>
   );
 }
@@ -153,17 +150,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  modeCard: {
+  topicCard: {
     borderRadius: 12,
     padding: 14,
-    borderWidth: 2,
+    borderWidth: 1,
   },
-  modeTitle: {
+  topicInput: {
     fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
+    fontWeight: '600',
+    paddingVertical: 0,
   },
-  modeDesc: {
+  topicHint: {
+    marginTop: 10,
     fontSize: 13,
     lineHeight: 18,
   },

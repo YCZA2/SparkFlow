@@ -13,7 +13,7 @@ class Script(Base):
     """
     口播稿表
 
-    存储 AI 生成的口播稿内容，支持两种生成模式
+    存储 AI 生成的口播稿内容，当前统一使用主题生成与每日推盘两类语义
     """
     __tablename__ = "scripts"
 
@@ -21,7 +21,7 @@ class Script(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=True)
     body_html = Column(Text, nullable=False)  # HTML 正文
-    mode = Column(String, nullable=False)  # 'mode_rag'（用户生成）| 'mode_daily_push'（每日推盘）| 'mode_a'（历史兼容）
+    mode = Column(String, nullable=False)  # 'mode_rag'（主题 + SOP + few-shot）| 'mode_daily_push'（每日推盘）
     source_fragment_ids = Column(String, nullable=True)  # JSON数组字符串，关联碎片ID
     status = Column(String, default="draft", nullable=False)  # 'draft'|'ready'|'filmed'
     is_daily_push = Column(Boolean, default=False, nullable=False)  # 是否每日自动生成

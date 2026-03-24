@@ -1,5 +1,5 @@
 """
-RAG 脚本生成流水线（替换 mode_a / mode_b）。
+RAG 脚本生成流水线。
 
 主题驱动 + 参考脚本 RAG 的脚本生成 pipeline：
   1. generate_outline   - LLM 按 SOP 生成大纲

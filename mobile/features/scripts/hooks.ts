@@ -12,8 +12,7 @@ import { consumeScriptsStale, markScriptsStale } from '@/features/scripts/refres
 import { listLocalScriptEntities, readLocalScriptEntity, upsertLocalScriptEntity } from '@/features/scripts/store';
 import { useScriptList, useScriptStore } from '@/features/scripts/store/scriptStore';
 import { syncRemoteScriptDetailToLocal, syncRemoteScriptsToLocal } from '@/features/scripts/sync';
-import type { Fragment } from '@/types/fragment';
-import type { Script, ScriptMode } from '@/types/script';
+import type { Script } from '@/types/script';
 import { getErrorMessage } from '@/utils/error';
 
 async function resolveScriptFromPipelineTask(
@@ -43,24 +42,14 @@ export function useGenerateScript() {
    */
   const run = async (
     fragmentIds: string[],
-    mode: ScriptMode,
-    fragments?: Fragment[]
+    topic: string,
   ): Promise<string> => {
     try {
       setStatus('loading');
       setError(null);
       const task = await generateScript({
+        topic,
         fragment_ids: fragmentIds,
-        fragment_snapshots: (fragments ?? []).map((fragment) => ({
-          id: fragment.id,
-          body_html: fragment.body_html,
-          plain_text_snapshot: fragment.plain_text_snapshot ?? null,
-          summary: fragment.summary ?? null,
-          tags: fragment.tags ?? [],
-          source: fragment.source,
-          created_at: fragment.created_at,
-        })),
-        mode,
       });
       const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, '生成失败');
       setStatus('success');

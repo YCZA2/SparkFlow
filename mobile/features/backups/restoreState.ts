@@ -6,6 +6,7 @@ import type {
   BackupSnapshotResponse,
 } from '@/features/backups/api';
 import type { FragmentAudioSource, FragmentSource } from '@/types/fragment';
+import type { ScriptMode } from '@/types/script';
 
 export interface RestoredFolderRow {
   id: string;
@@ -81,7 +82,7 @@ export interface BackupRestorePlan {
 export interface RestoredScriptRow {
   id: string;
   title: string | null;
-  mode: 'mode_a' | 'mode_b';
+  mode: ScriptMode;
   generationKind: 'manual' | 'daily_push';
   sourceFragmentIdsJson: string;
   isDailyPush: number;
@@ -141,6 +142,17 @@ function resolveContentState(bodyHtml: string, transcript: string | null, value:
     return 'transcript_only';
   }
   return 'empty';
+}
+
+function resolveScriptMode(value: unknown, generationKind: 'manual' | 'daily_push', isDailyPush: boolean): ScriptMode {
+  /*恢复脚本快照时只承认当前两种模式，缺省按生成类型推断。 */
+  if (generationKind === 'daily_push' || isDailyPush) {
+    return 'mode_daily_push';
+  }
+  if (value === 'mode_daily_push' || value === 'mode_rag') {
+    return value;
+  }
+  return 'mode_rag';
 }
 
 /*把远端 snapshot 规整成可直接重建本地 SQLite 的恢复计划。 */
@@ -249,13 +261,15 @@ export function buildBackupRestorePlan(snapshot: BackupSnapshotResponse): Backup
       const scriptPayload = (item.payload ?? {}) as Partial<BackupScriptContractPayload>;
       const bodyHtml = deletedAt ? '' : readString(scriptPayload.body_html) ?? '';
       const createdAt = readString(scriptPayload.created_at) ?? baseTimestamp;
+      const generationKind = scriptPayload.generation_kind === 'daily_push' ? 'daily_push' : 'manual';
+      const isDailyPush = Boolean(scriptPayload.is_daily_push);
       plan.scripts.push({
         id: item.entity_id,
         title: readString(scriptPayload.title),
-        mode: scriptPayload.mode === 'mode_b' ? 'mode_b' : 'mode_a',
-        generationKind: scriptPayload.generation_kind === 'daily_push' ? 'daily_push' : 'manual',
+        mode: resolveScriptMode(scriptPayload.mode, generationKind, isDailyPush),
+        generationKind,
         sourceFragmentIdsJson: JSON.stringify(readStringArray(scriptPayload.source_fragment_ids)),
-        isDailyPush: scriptPayload.is_daily_push ? 1 : 0,
+        isDailyPush: isDailyPush ? 1 : 0,
         createdAt,
         updatedAt: baseTimestamp,
         generatedAt: readString(scriptPayload.generated_at) ?? createdAt,

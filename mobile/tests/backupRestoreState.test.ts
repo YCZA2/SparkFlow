@@ -69,7 +69,7 @@ test('buildBackupRestorePlan converts snapshot items into local restore rows', (
         operation: 'upsert',
         payload: {
           title: '今天这条怎么讲',
-          mode: 'mode_a',
+          mode: 'mode_rag',
           generation_kind: 'daily_push',
           source_fragment_ids: ['fragment-1'],
           is_daily_push: true,
@@ -101,6 +101,7 @@ test('buildBackupRestorePlan converts snapshot items into local restore rows', (
   assert.equal(plan.mediaAssets[0]?.remoteFileUrl, 'https://example.com/cover.png');
   assert.equal(plan.mediaAssets[0]?.remoteAssetId, 'backups/assets/demo.png');
   assert.equal(plan.scripts[0]?.title, '今天这条怎么讲');
+  assert.equal(plan.scripts[0]?.mode, 'mode_daily_push');
   assert.equal(plan.scripts[0]?.generationKind, 'daily_push');
   assert.equal(plan.scripts[0]?.sourceFragmentIdsJson, '["fragment-1"]');
   assert.equal(plan.scripts[0]?.isFilmed, 1);
@@ -152,4 +153,35 @@ test('buildBackupRestorePlan preserves script tombstones and trash metadata', ()
   assert.equal(plan.scripts[0]?.trashedAt, '2026-03-17T07:00:00Z');
   assert.equal(plan.scripts[0]?.bodyHtml, '');
   assert.equal(plan.scripts[0]?.backupStatus, 'synced');
+});
+
+test('buildBackupRestorePlan normalizes legacy manual script modes to mode_rag', () => {
+  const plan = buildBackupRestorePlan({
+    server_generated_at: '2026-03-17T10:00:00Z',
+    items: [
+      {
+        entity_type: 'script',
+        entity_id: 'script-legacy',
+        entity_version: 2,
+        operation: 'upsert',
+        payload: {
+          title: '主题生成成稿',
+          mode: 'mode_rag',
+          generation_kind: 'manual',
+          source_fragment_ids: [],
+          is_daily_push: false,
+          created_at: '2026-03-17T09:40:00Z',
+          updated_at: '2026-03-17T09:45:00Z',
+          generated_at: '2026-03-17T09:41:00Z',
+          body_html: '<p>成稿正文</p>',
+          plain_text_snapshot: '成稿正文',
+          is_filmed: false,
+        },
+        modified_at: '2026-03-17T09:45:00Z',
+      },
+    ],
+  });
+
+  assert.equal(plan.scripts[0]?.mode, 'mode_rag');
+  assert.equal(plan.scripts[0]?.generationKind, 'manual');
 });

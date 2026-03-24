@@ -71,7 +71,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function modeLabel(mode: string): string {
-  return mode === 'mode_a' ? '导师爆款模式' : '我的专属二脑';
+  if (mode === 'mode_daily_push') return '每日推盘生成';
+  return '主题 + SOP + few-shot';
 }
 
 function generationLabel(kind: string): string {

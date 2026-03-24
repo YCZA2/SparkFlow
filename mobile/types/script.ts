@@ -7,7 +7,7 @@ import type { PipelineStatus } from './pipeline';
 // Pipeline 类型已迁移至 types/pipeline.ts，此处保留再导出以维持旧 import 路径兼容。
 export type { PipelineResourcePreview, PipelineRun, PipelineStatus, PipelineStep, PipelineStepListResponse, RetryPipelineRequest } from './pipeline';
 
-export type ScriptMode = 'mode_a' | 'mode_b';
+export type ScriptMode = 'mode_rag' | 'mode_daily_push';
 export type ScriptStatus = 'draft' | 'ready' | 'filmed';
 export type ScriptGenerationKind = 'manual' | 'daily_push';
 export type ScriptCopyReason = 'conflict' | 'restore' | 'manual_duplicate';
@@ -46,23 +46,12 @@ export interface ScriptListResponse {
 }
 
 export interface GenerateScriptRequest {
+  topic: string;
   fragment_ids: string[];
-  fragment_snapshots?: Array<{
-    id: string;
-    body_html?: string | null;
-    plain_text_snapshot?: string | null;
-    summary?: string | null;
-    tags?: string[] | null;
-    source?: string;
-    created_at?: string | null;
-  }>;
-  mode: ScriptMode;
-  query_hint?: string;
-  include_web_search?: boolean;
 }
 
 export interface ScriptGenerationTask {
   pipeline_run_id: string;
-  pipeline_type: 'script_generation';
+  pipeline_type: 'rag_script_generation';
   status: PipelineStatus;
 }

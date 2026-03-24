@@ -29,7 +29,7 @@ flowchart LR
     DB[("PostgreSQL<br/>SQLAlchemy")]
     FS[("File Storage<br/>local uploads / Aliyun OSS")]
     CHROMA[("ChromaDB<br/>fragments_* / knowledge_*")]
-    WFP["Workflow Provider<br/>当前为 Dify adapter<br/>脚本生成 + 每日推盘"]
+    WFP["Workflow Provider<br/>实验性外挂工作流<br/>当前不承载主脚本生成"]
     STT["STT Provider<br/>DashScope / Aliyun"]
     LLM["LLM Provider<br/>Qwen<br/>轻量摘要/标签增强"]
     EMB["Embedding Provider<br/>Qwen"]
@@ -58,7 +58,7 @@ flowchart LR
 - `backend/`: FastAPI 后端，业务入口已经收敛到 `modules/*`。
 - `scripts/dev-mobile.sh`: 推荐本地联调入口，同时启动后端与 Expo。
 - `scripts/postgres-local.sh`: 本地 PostgreSQL Docker 管理脚本，默认负责拉起 `sparkflow` / `sparkflow_test`。
-- `scripts/dify-local.sh`: 本地自托管 Dify 启停脚本，会拉取官方 release 并在 `backend/.vendor/dify` 下准备 Docker 部署目录。
+- `scripts/dify-local.sh`: 本地自托管 Dify 启停脚本，当前主要保留给实验性外挂工作流联调。
 - `memory-bank/`: 产品、架构、进度与实施记录。
 
 ## 3. Mobile Architecture
@@ -225,7 +225,7 @@ flowchart TD
 
 - `application.py`: 脚本查询、写操作与每日推盘编排入口。
 - `pipeline.py`: `script_generation` 流水线步骤定义与协调。
-- `daily_push_pipeline.py`: `daily_push_generation` 流水线步骤定义、Dify 调用与结果回流。
+- `daily_push_pipeline.py`: `daily_push_generation` 流水线步骤定义与结果回流。
 - `context_builder.py`: fragment 校验、query 构造、knowledge/web hits 聚合。
 - `persistence.py`: workflow 输出解析、失败消息提取、脚本幂等落库。
 - `daily_push.py`: 每日推盘的碎片文本拼接与相似度筛选规则。
@@ -263,7 +263,6 @@ flowchart TD
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
 - `exports`: 单条 Markdown 导出与批量 zip 导出。
 - `pipelines`: 后台流水线详情、步骤查询与手动重跑入口。
-- `backend/dify_dsl/`: 仓库内置的 Dify DSL 模板目录，当前提供 `sparkflow_script_generation_mode_a.workflow.yml` 与 `sparkflow_script_generation_mode_b.workflow.yml` 供导入。
 - `debug_logs`: 移动端调试日志接收，并复用结构化日志链路落盘。
 - `scheduler`: APScheduler 装配与启停。
 
@@ -283,10 +282,8 @@ flowchart TD
 - STT: 默认 `DashScope`，保留 Aliyun 兼容实现。
 - Embedding: 默认 `Qwen text-embedding-v2`。
 - Vector DB: 默认 `ChromaDB`。
-- Workflow Provider: 当前通过通用 `workflow_provider` 端口接入，默认实现为 `DifyWorkflowProvider`；脚本生成按 `mode_a` / `mode_b` 路由到两套独立 Dify app，每日推盘继续走独立 Dify 配置。
-- 脚本生成 workflow 入参已收敛为 `mode`、`query_hint`、`fragments_text`、`knowledge_context`、`web_context`，提示词模板仅保留在 Dify DSL 内部；后端只传碎片正文和实际参考内容，不再把整包 JSON 研究上下文或无意义元数据暴露给 Start 节点。
-- 仓库内置 `backend/scripts/import_dify_workflow.py` 用于按 mode 导入或更新脚本生成 DSL，并把 `DIFY_MODE_A_*` / `DIFY_MODE_B_*` 回填到 `backend/.env`；脚本后续默认优先按对应 mode 的 `DIFY_MODE_*_APP_ID` 对现有 Dify app 执行原地更新。
-- Dify adapter 当前采用“streaming 首包建单 + 后续轮询终态”的异步模式：提交时只拿 `workflow_run_id` / `task_id`，最终输出统一在 pipeline 轮询步骤读取。
+- Workflow Provider: 当前保留通用 `workflow_provider` 端口与 `DifyWorkflowProvider` 实现，供未来外挂工作流或实验性链路复用；当前主脚本生成链路已经收口到后端 `RagScriptPipelineService`。
+- 当前脚本生成输入收敛为 `topic` + `fragment_ids`：后端先用主题生成 SOP 大纲，再从 `reference_script` 向量索引检索 few-shot 示例，最后拼装草稿并落库。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 统一 `FileStorage` 端口；本地开发默认 `local` provider，线上默认私有阿里云 OSS，通过签名 URL 暴露文件访问。
 - Database: PostgreSQL（本地开发默认由 Docker 提供，默认库为 `sparkflow` / `sparkflow_test`）。
@@ -425,10 +422,8 @@ sequenceDiagram
 
 - 外挂工作流 provider 只负责远程执行步骤，不直接访问 PostgreSQL、ChromaDB 或业务表。
 - fragments、knowledge hits 和可选 web hits 都由 SparkFlow 后端先收集。
-- SparkFlow 后端向 provider 传递结构化上下文；当前 Dify adapter 会在适配层把复杂字段序列化为 JSON 字符串，以兼容 Dify Start 节点。
-- SparkFlow 后端不会把 Dify 原始 SSE 事件流直接暴露给客户端；客户端继续只消费 `pipeline_run_id` 和 `/api/pipelines/*`。
+- SparkFlow 后端向内部 pipeline 传递主题、SOP 大纲、few-shot 示例和可选碎片背景；客户端继续只消费 `pipeline_run_id` 和 `/api/pipelines/*`。
 - `pipeline_runs` / `pipeline_step_runs` 是后台状态唯一事实源；`agent_runs` 与 `/api/agent/*` 已移除。
-- 仓库内置的 DSL 模板位于 `backend/dify_dsl/sparkflow_script_generation_mode_a.workflow.yml` 与 `backend/dify_dsl/sparkflow_script_generation_mode_b.workflow.yml`，可直接导入本地 Dify。
 
 ### 5.4 Script Generation Notes
 
@@ -450,11 +445,10 @@ sequenceDiagram
 
 关键点：
 
-- 当前支持 `mode_a` 和 `mode_b`。
 - `POST /api/scripts/generation` 只负责创建任务，不再同步返回 `Script`。
 - 客户端应统一经由 `/api/pipelines/{run_id}` 读取最终 `script_id`，再跳转脚本详情。
-- `mode_a` / `mode_b` 目前共享同一条 Dify 工作流，但脚本域只依赖通用 provider 端口。
-- 如需排查 Dify 侧执行，优先查看 `GET /api/pipelines/{run_id}/steps` 中 `submit_workflow_run` / `poll_workflow_run` 的 `external_ref`，其中包含 `provider_run_id` / `provider_task_id`。
+- 当前生成链路使用 `topic` 作为大纲选择和 few-shot 检索的统一驱动输入。
+- pipeline 关键步骤为 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`。
 
 ### 5.5 Fragment Visualization
 
@@ -487,14 +481,14 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant VDB as VectorStore
     participant PIPE as Pipeline Runner
-    participant Dify as Dify Workflow
+    participant LLM as LLM Provider
 
     Scheduler->>UseCase: run_daily_job()
     UseCase->>DB: load yesterday fragments
     UseCase->>VDB: semantic relatedness check
     UseCase->>PIPE: create daily_push_generation run
-    PIPE->>Dify: submit / poll workflow
-    Dify-->>PIPE: draft/title
+    PIPE->>LLM: generate draft/title
+    LLM-->>PIPE: daily push result
     PIPE->>DB: save ready daily push script
 ```
 
@@ -502,7 +496,7 @@ sequenceDiagram
 
 - scheduler 在 FastAPI lifespan 内启动与停止。
 - 手动触发接口已存在：`/api/scripts/daily-push/trigger` 和 `/api/scripts/daily-push/force-trigger`，当前返回异步 `pipeline_run_id`。
-- 每日推盘与脚本生成统一走 Dify workflow；摘要/标签增强仍保留在后端直连 LLM。
+- 每日推盘当前和脚本生成一样，统一走后端直连 LLM + pipeline 编排；摘要/标签增强沿用同一组基础 provider。
 - 当前后端链路已完成，但首页“每日灵感卡片”还没有稳定接入到实际主页面。
 
 ## 6. Current API Surface

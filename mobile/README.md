@@ -34,6 +34,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 移动端编辑器已抽出 `features/editor/*` 共享底座：统一承载 HTML helper、editor session reducer、`react-native-enriched` 富文本桥接、toolbar 和页面 scaffold，fragment 与 script 详情共用同一套正文编辑协议。
 - 碎片详情内部仍保留 `detail resource / editor session / sheet / screen actions` 四层，但 resource 已经切换为只读本地实体；后台由 backup queue 负责把改动推到远端备份。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
+- 生成页已经从旧的 `Mode A / Mode B` 双选切到统一主题输入：用户补一个主题后，后端按 `topic + SOP + few-shot/reference-script` 创建脚本任务。
 - 碎片正文详情和列表已接入本地真值与 legacy 兼容层：详情会优先读本地 HTML 与实体缓存，再按需叠加升级期兼容数据；正文与媒体改动统一留在本地真值并由 backup queue 异步备份。
 - 脚本详情页现在也采用 local-first：先读本地 script 真值，再按需补远端详情；`blur`、显式完成和应用退后台时会先落本地正文，再尽力调用 `PATCH /api/scripts/{id}` 做远端收敛。
 - 首页系统区当前包含“全部”和按需出现的“成稿”；只有用户真的存在 script 时才会显示“成稿”入口，成稿列表与碎片列表继续分开，不做混排。

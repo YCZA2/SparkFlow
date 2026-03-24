@@ -14,14 +14,16 @@ import { useAppTheme } from '@/theme/useAppTheme';
  * 获取模式标签
  */
 function getModeLabel(mode: ScriptMode): string {
-  return mode === 'mode_a' ? '导师爆款' : '专属二脑';
+  if (mode === 'mode_daily_push') return '每日推盘';
+  return '主题生成';
 }
 
 /**
  * 获取模式颜色
  */
 function getModeColor(mode: ScriptMode): string {
-  return mode === 'mode_a' ? 'danger' : 'primary';
+  if (mode === 'mode_daily_push') return 'warning';
+  return 'primary';
 }
 
 interface ScriptCardProps {
@@ -39,7 +41,13 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
     '无标题口播稿';
   const previewText = extractPlainTextFromHtml(script.body_html ?? '').trim();
   const modeLabel = getModeLabel(script.mode);
-  const modeColor = getModeColor(script.mode) === 'danger' ? theme.colors.danger : theme.colors.primary;
+  const modeColorToken = getModeColor(script.mode);
+  const modeColor =
+    modeColorToken === 'danger'
+      ? theme.colors.danger
+      : modeColorToken === 'warning'
+        ? theme.colors.warning
+        : theme.colors.primary;
 
   return (
     <TouchableOpacity

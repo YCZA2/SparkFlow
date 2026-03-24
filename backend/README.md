@@ -53,120 +53,22 @@ bash scripts/test-all.sh
 本地联调默认测试账号 `test-user-001` 会在应用启动和 `POST /api/auth/token` 时自动补齐到数据库，避免切库后出现外键错误。
 `POST /api/auth/token` 现在会接收 `device_id` 并创建 `device session`，用于单设备在线校验。
 
-如果启用当前默认的 Dify workflow provider adapter，还需要配置：
+当前脚本生成已经统一为“主题 + SOP 大纲 + few-shot/reference-script 检索”链路，不再使用 `mode_a / mode_b` 两套独立工作流配置。
 
-```bash
-DIFY_MODE_A_BASE_URL=https://your-dify.example.com/v1
-DIFY_MODE_A_API_KEY=app-mode-a-xxx
-DIFY_MODE_A_WORKFLOW_ID=wf-script-mode-a
-DIFY_MODE_B_BASE_URL=https://your-dify.example.com/v1
-DIFY_MODE_B_API_KEY=app-mode-b-xxx
-DIFY_MODE_B_WORKFLOW_ID=wf-script-mode-b
-DIFY_API_KEY=app-daily-default-xxx  # 可选，daily push 未单独配置时复用
-DIFY_DAILY_PUSH_API_KEY=app-daily-push-xxx  # 可选，未配置时复用 DIFY_API_KEY
-DIFY_DAILY_PUSH_WORKFLOW_ID=wf-daily-push
-```
+当前生成链路依赖：
 
-如果要在本地自托管 Dify，可在仓库根目录执行：
+- `LLM_PROVIDER` 对应的文本生成能力，用于大纲和草稿生成
+- `Embedding + VectorStore`，用于检索 `reference_script` few-shot 示例
+- `POST /api/scripts/generation` 的输入收敛为 `topic` + `fragment_ids`
 
-```bash
-bash scripts/dify-local.sh start
-```
-
-这个脚本会：
-
-1. 从官方 `langgenius/dify` 仓库拉取最新 release（或使用 `DIFY_VERSION` 指定版本）
-2. 在 `backend/.vendor/dify` 下准备官方 Docker 部署目录
-3. 自动生成 `docker/.env`
-4. 以 `postgresql` profile 启动 Dify，并默认暴露到 `http://127.0.0.1:18080`
-
-随后把后端 `.env` 中的 Dify 配置改为类似：
-
-```bash
-DIFY_BASE_URL=http://127.0.0.1:18080/v1
-DIFY_MODE_A_BASE_URL=http://127.0.0.1:18080/v1
-DIFY_MODE_A_API_KEY=app-mode-a-xxx
-DIFY_MODE_A_WORKFLOW_ID=wf-script-mode-a
-DIFY_MODE_B_BASE_URL=http://127.0.0.1:18080/v1
-DIFY_MODE_B_API_KEY=app-mode-b-xxx
-DIFY_MODE_B_WORKFLOW_ID=wf-script-mode-b
-DIFY_API_KEY=app-daily-default-xxx
-DIFY_DAILY_PUSH_API_KEY=app-daily-push-xxx
-DIFY_DAILY_PUSH_WORKFLOW_ID=wf-daily-push
-```
-
-如果不想在 Dify 页面里手工从零搭工作流，仓库已经提供可直接导入的 DSL 模板：
-
-```bash
-backend/dify_dsl/sparkflow_script_generation_mode_a.workflow.yml
-backend/dify_dsl/sparkflow_script_generation_mode_b.workflow.yml
-```
-
-导入后建议检查两项：
-
-1. LLM 节点模型是否已经切到你在 Dify 中真实可用的 provider / model
-2. 导入后的应用 API Key 和 workflow 标识是否已经回填到后端 `.env`
-
-当前脚本生成 workflow 的输入约定已经收敛为少量文本字段：
-
-- `mode`
-- `query_hint`
-- `fragments_text`
-- `knowledge_context`
-- `web_context`
-
-其中提示词模板本身保留在 Dify workflow 内部，SparkFlow 后端只负责把碎片正文和实际命中的参考内容整理成尽量精简的文本，不再把大段 JSON 上下文或无意义占位说明塞给 Start 节点。
-
-当前推荐把两套脚本生成 Dify app 的标识都持久化到后端环境变量：
-
-- `DIFY_MODE_A_APP_ID`
-- `DIFY_MODE_B_APP_ID`
-
-这样导入脚本在后续再次执行时会按 mode 原地更新对应 app，而不是新建同名副本。
-
-如果想把“导入 DSL + 读取 workflow id + 创建/复用 app API key + 回填 `backend/.env`”串起来，可以直接运行：
-
-```bash
-cd backend
-.venv/bin/python scripts/import_dify_workflow.py \
-  --mode mode_a \
-  --console-email your-email@example.com \
-  --console-password 'your-password'
-
-.venv/bin/python scripts/import_dify_workflow.py \
-  --mode mode_b \
-  --console-email your-email@example.com \
-  --console-password 'your-password'
-```
-
-脚本默认会：
-
-- 按 `--mode` 导入对应 DSL 模板
-- 调用 Dify `console/api` 导入应用；若存在该 mode 对应的 `DIFY_MODE_*_APP_ID`，则优先更新该 app
-- 读取应用详情中的 `workflow.id`
-- 复用已有 app API key，没有则自动创建
-- 把对应 mode 的 `DIFY_MODE_*_BASE_URL`、`DIFY_MODE_*_APP_ID`、`DIFY_MODE_*_API_KEY`、`DIFY_MODE_*_WORKFLOW_ID` 写回 `backend/.env`
-
-脚本后续默认会优先读取对应 mode 的 `DIFY_MODE_*_APP_ID`，因此同一套配置下再次执行时会优先原地更新现有 Dify app，而不是新建。
-
-如果你已经手里有 console token，也可以改用：
-
-```bash
-cd backend
-.venv/bin/python scripts/import_dify_workflow.py \
-  --mode mode_a \
-  --console-access-token <token> \
-  --console-csrf-token <csrf-token>
-```
-
-如果你想验证“真实后端 + 真实 Dify workflow”的整条生成链路，可以运行：
+如果你想验证“真实后端 + 当前脚本生成 pipeline”的整条链路，可以运行：
 
 ```bash
 cd backend
 .venv/bin/python scripts/test_dify_script_generation.py --cleanup
 ```
 
-这个脚本会：
+这个联调脚本会：
 
 - 调用 `POST /api/auth/token` 获取测试用户 token
 - 创建 1-2 条手动文本碎片
@@ -175,13 +77,7 @@ cd backend
 - 成功后读取 `GET /api/scripts/{script_id}` 并打印结果摘要
 - 传入 `--cleanup` 时自动删除本次联调创建的碎片和脚本
 
-当前 Dify adapter 的运行方式：
-
-1. `submit_run` 使用 Dify streaming 首包建单，只拿 `workflow_run_id` / `task_id`
-2. SparkFlow 后端把 provider 句柄写入 `pipeline_step_runs.external_ref`
-3. 后续由后台 pipeline 继续轮询 Dify 运行状态并在成功后回流脚本
-
-因此客户端只需要继续轮询 SparkFlow 自己的 `/api/pipelines/{run_id}`，不需要直接消费 Dify SSE。
+客户端只需要继续轮询 SparkFlow 自己的 `/api/pipelines/{run_id}`，不需要感知大纲生成、few-shot 检索和草稿落库的后端内部步骤。
 
 ## Backend Architecture
 
@@ -246,10 +142,10 @@ cd backend
 当前 `modules/scripts/` 内部约定：
 
 - `application.py` 只保留查询、命令和每日推盘编排入口。
-- `pipeline.py` 只负责 `script_generation` 步骤定义与协调。
-- `daily_push_pipeline.py` 只负责 `daily_push_generation` 步骤定义、Dify 调用与结果回流。
-- `context_builder.py` 负责脚本生成的输入校验和研究上下文构建。
-- `persistence.py` 负责 workflow 输出解析与脚本幂等落库。
+- `rag_pipeline.py` 只负责 `rag_script_generation` 步骤定义与协调。
+- `daily_push_pipeline.py` 只负责 `daily_push_generation` 步骤定义与结果回流。
+- `rag_context_builder.py` 负责主题、SOP 和 few-shot 提示词拼装。
+- `persistence.py` 负责脚本幂等落库。
 - `daily_push.py` 负责每日推盘的碎片拼接和相似度筛选规则。
 
 当前 `modules/fragments/` 内部约定：
@@ -264,13 +160,13 @@ cd backend
 
 - `domains/`: 各业务领域仓储，按聚合拆分 repository。
 - `models/`: SQLAlchemy ORM 模型和数据库 session 工厂。
-- `services/`: 外部 provider 适配器与工厂，当前包含 LLM / STT / Embedding 和 `DifyWorkflowProvider`。
+- `services/`: 外部 provider 适配器与工厂，当前包含 LLM / STT / Embedding，以及保留给实验性外挂工作流的 `DifyWorkflowProvider`。
 - `prompts/`: Prompt 模板文件。
 
 当前职责边界：
 
-- `llm_provider` 只承担轻量增强能力，例如碎片摘要、标签，以及对应 fallback。
-- `workflow_provider` 承担内容生成类能力，例如脚本生成和每日推盘。
+- `llm_provider` 承担碎片摘要/标签增强，以及当前脚本生成和每日推盘所需的文本生成能力。
+- `workflow_provider` 当前不在主脚本生成链路上，主要保留给实验性外挂工作流接入。
 
 ### Runtime data and maintenance
 
@@ -352,11 +248,8 @@ bash scripts/postgres-local.sh stop
 - `POST /api/external-media/audio-imports` 不再同步解析或下载媒体；`resolve_external_media` / `download_media` 也属于 `media_ingestion` pipeline 步骤
 - `media_ingestion` 当前固定步骤为 `resolve_external_media`（按需）、`download_media`、`transcribe_audio`、`finalize_fragment`；`GET /api/pipelines/{run_id}` 成功时允许 `summary=null`、`tags=[]`
 - transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` pipeline，异步执行摘要、标签和向量回填；该回填失败不会回滚已成功的 ingest
-- SparkFlow 后端先收集 fragments、knowledge hits 和可选 web hits
-- SparkFlow 后端先把这些内容组装为结构化上下文，再交给通用 `workflow_provider`
-- 当前脚本生成 workflow 只接收 `mode`、`query_hint`、`fragments_text`、`knowledge_context`、`web_context` 五个字段
-- Dify 提交阶段只会拿到 `workflow_run_id` / `task_id`，最终 `draft` 等结果统一在后续轮询步骤获取
-- 外挂工作流 provider 只消费整理后的上下文并返回结构化输出
+- SparkFlow 后端先收集主题、few-shot/reference-script 和可选碎片背景
+- `rag_script_generation` pipeline 依次执行 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`
 - `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源
 - `agent_runs` 与 `/api/agent/*` 已移除，脚本生成公开链路完全收口到 `scripts + pipelines`
 
@@ -372,15 +265,8 @@ bash scripts/postgres-local.sh stop
 - `fragments.transcript` 表示机器转写原文，`body_html` 表示用户整理后的正式正文；正文消费统一按 `body_html -> transcript` 回退
 - 非语音碎片创建走 `POST /api/fragments/content`；当前允许先创建空 `body_html`，再由客户端后续补正文，`transcript` 仅保留给语音转写链路
 - 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`；对 transcript 任务来说，首个成功仅保证 transcript 已可用，`summary` / `tags` 可能在下一次详情刷新时补齐
-- 如需排查 Dify 侧问题，优先查看 `GET /api/pipelines/{run_id}/steps` 中 `submit_workflow_run` / `poll_workflow_run` 的 `external_ref`，其中会暴露 `provider_run_id` / `provider_task_id`
 - 外链导入成功后的 `platform`、`share_url`、`media_id`、`title`、`author`、`cover_url`、`content_type`、`audio_file_url` 统一从 `GET /api/pipelines/{run_id}` 的 `output` 读取
 - 当前移动端已切脚本生成任务态；外链导入也已接入底部 `+` 抽屉、导入页和任务态轮询
-
-当前仓库附带的 Dify DSL 目录：
-
-- `backend/dify_dsl/README.md`
-- `backend/dify_dsl/sparkflow_script_generation_mode_a.workflow.yml`
-- `backend/dify_dsl/sparkflow_script_generation_mode_b.workflow.yml`
 
 ## Frontend Debug Logs
 
@@ -464,27 +350,3 @@ When `DEBUG=true`:
 
 - Swagger UI: `/docs`
 - ReDoc: `/redoc`
-
-## Local Dify Operations
-
-仓库已内置 Dify 本地部署脚本：
-
-```bash
-bash scripts/dify-local.sh install
-bash scripts/dify-local.sh start
-bash scripts/dify-local.sh status
-bash scripts/dify-local.sh logs
-bash scripts/dify-local.sh stop
-```
-
-补充说明：
-
-- 该脚本依赖本机已安装 `Docker Desktop`、`docker compose`、`git`、`curl`、`python3`
-- 为避免占用本机 `80` 端口，脚本会把 Dify 默认映射到 `18080`
-- 官方源码会落在 `backend/.vendor/dify/`，已加入 `.gitignore`
-- 本地联调已验证链路：SparkFlow 后端 -> 本地 Dify Workflow -> 脚本落库
-- 如果想固定官方版本，可执行：
-
-```bash
-DIFY_VERSION=v1.11.2 bash scripts/dify-local.sh start
-```

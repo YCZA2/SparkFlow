@@ -73,7 +73,7 @@
 
 ### 当前缺口
 
-- `mode_b` 还没有系统化利用相似碎片作为风格参考。
+- few-shot/reference-script 还需要继续打磨风格参考命中质量。
 - 知识库侧还没有 chunk、混合检索、重排序等增强策略。
 - 碎片多模态 block 还没有开放，当前只有 Markdown block。
 
