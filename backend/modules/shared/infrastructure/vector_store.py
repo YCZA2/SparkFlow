@@ -6,7 +6,7 @@ from typing import Any
 from core.exceptions import ValidationError
 from services.base import VectorDocument
 
-from modules.shared.ports import EmbeddingProvider, VectorStore
+from modules.shared.ports import EmbeddingProvider, KnowledgeChunk, KnowledgeIndexStore, KnowledgeSearchHit, VectorStore
 
 FRAGMENT_NAMESPACE_PREFIX = "fragments"
 KNOWLEDGE_NAMESPACE_PREFIX = "knowledge"
@@ -22,7 +22,14 @@ def _knowledge_namespace(user_id: str) -> str:
     return f"{KNOWLEDGE_NAMESPACE_PREFIX}_{user_id}"
 
 
-class AppVectorStore(VectorStore):
+def _knowledge_doc_prefix(doc_type: str, doc_id: str) -> str:
+    """为知识库文档构造分块向量 ID 前缀。"""
+    if doc_type == "reference_script":
+        return f"refscript_{doc_id}"
+    return f"knowdoc_{doc_id}"
+
+
+class AppVectorStore(VectorStore, KnowledgeIndexStore):
     """封装应用层使用的向量存储适配。"""
 
     def __init__(self, embedding_provider: EmbeddingProvider, vector_db_provider: Any) -> None:
@@ -109,39 +116,53 @@ class AppVectorStore(VectorStore):
             include_embeddings=include_embeddings,
         )
 
-    async def upsert_knowledge_doc(
+    async def index_document(
         self,
         *,
         user_id: str,
         doc_id: str,
         title: str,
-        content: str,
         doc_type: str,
-    ) -> str:
-        """把知识库文档写入向量库。"""
+        chunks: list[KnowledgeChunk],
+    ) -> str | None:
+        """把知识库文档分块写入向量库。"""
         normalized_title = title.strip()
-        normalized_content = content.strip()
         if not normalized_title:
             raise ValidationError(message="知识库标题不能为空", field_errors={"title": "请输入标题"})
-        if not normalized_content:
+        valid_chunks = [chunk for chunk in chunks if chunk.content.strip()]
+        if not valid_chunks:
             raise ValidationError(message="知识库内容不能为空", field_errors={"content": "请输入内容"})
-        embedding_result = await self.embedding_provider.embed(normalized_content)
-        ref_id = f"docs_{user_id}:{doc_id}"
-        await self.vector_db_provider.upsert(
-            namespace=_knowledge_namespace(user_id),
-            documents=[
+        ref_prefix = _knowledge_doc_prefix(doc_type, doc_id)
+        documents: list[VectorDocument] = []
+        for chunk in valid_chunks:
+            normalized_content = chunk.content.strip()
+            embedding_result = await self.embedding_provider.embed(normalized_content)
+            documents.append(
                 VectorDocument(
-                    id=ref_id,
+                    id=f"{ref_prefix}:chunk_{chunk.chunk_index}",
                     text=normalized_content,
                     embedding=embedding_result.embedding,
-                    metadata={"user_id": user_id, "doc_id": doc_id, "title": normalized_title, "doc_type": doc_type},
+                    metadata={
+                        "user_id": user_id,
+                        "doc_id": doc_id,
+                        "title": normalized_title,
+                        "doc_type": doc_type,
+                        "chunk_index": chunk.chunk_index,
+                    },
                 )
-            ],
-        )
-        return ref_id
+            )
+        await self.vector_db_provider.upsert(namespace=_knowledge_namespace(user_id), documents=documents)
+        return documents[0].id if documents else None
 
-    async def query_knowledge_docs(self, *, user_id: str, query_text: str, top_k: int) -> list[dict[str, Any]]:
-        """按文本查询相关知识库文档。"""
+    async def search(
+        self,
+        *,
+        user_id: str,
+        query_text: str,
+        top_k: int,
+        doc_types: list[str] | None = None,
+    ) -> list[KnowledgeSearchHit]:
+        """按文本查询相关知识库文档，并聚合为文档级结果。"""
         normalized_query = query_text.strip()
         if not normalized_query:
             raise ValidationError(message="查询文本不能为空", field_errors={"query_text": "请输入要检索的文本内容"})
@@ -154,119 +175,150 @@ class AppVectorStore(VectorStore):
             namespace=namespace,
             query_text=normalized_query,
             embedding_service=self.embedding_provider,
-            top_k=top_k,
+            top_k=max(top_k * 4, 12),
         )
-        items: list[dict[str, Any]] = []
+        allowed_doc_types = set(doc_types or [])
+        aggregated: dict[str, KnowledgeSearchHit] = {}
         for result in results:
             metadata = result.metadata or {}
-            items.append(
-                {
-                    "doc_id": metadata.get("doc_id"),
-                    "title": metadata.get("title"),
-                    "doc_type": metadata.get("doc_type"),
-                    "score": result.score,
-                    "content": result.text,
-                }
-            )
-        return items
-
-    async def delete_knowledge_doc(self, *, user_id: str, doc_id: str) -> bool:
-        """删除知识库向量文档。"""
-        ref_id = f"docs_{user_id}:{doc_id}"
-        return await self.vector_db_provider.delete(namespace=_knowledge_namespace(user_id), doc_ids=[ref_id])
-
-    async def upsert_reference_script_chunks(
-        self,
-        *,
-        user_id: str,
-        doc_id: str,
-        chunks: list[tuple[int, str]],
-    ) -> list[str]:
-        """把参考脚本的分块写入向量库，每块单独存储以支持细粒度检索。
-
-        ID 格式为 refscript_{doc_id}:chunk_{n}，metadata 携带 doc_type=reference_script
-        以便后续按类型过滤，与知识库其他文档共用同一命名空间。
-        """
-        if not chunks:
-            return []
-        namespace = _knowledge_namespace(user_id)
-        ref_ids: list[str] = []
-        documents = []
-        for chunk_index, chunk_text in chunks:
-            normalized = chunk_text.strip()
-            if not normalized:
+            doc_id = metadata.get("doc_id")
+            doc_type = metadata.get("doc_type")
+            if not doc_id or not doc_type:
                 continue
-            embedding_result = await self.embedding_provider.embed(normalized)
-            ref_id = f"refscript_{doc_id}:chunk_{chunk_index}"
-            ref_ids.append(ref_id)
-            documents.append(
-                VectorDocument(
-                    id=ref_id,
-                    text=normalized,
-                    embedding=embedding_result.embedding,
-                    metadata={
-                        "user_id": user_id,
-                        "doc_id": doc_id,
-                        "doc_type": "reference_script",
-                        "chunk_index": chunk_index,
-                    },
+            if allowed_doc_types and doc_type not in allowed_doc_types:
+                continue
+            matched_chunk = result.text.strip()
+            existing = aggregated.get(doc_id)
+            if existing is None:
+                aggregated[doc_id] = KnowledgeSearchHit(
+                    doc_id=doc_id,
+                    title=metadata.get("title") or "",
+                    doc_type=doc_type,
+                    score=float(result.score),
+                    chunk_count=1,
+                    matched_chunks=[matched_chunk] if matched_chunk else [],
                 )
-            )
-        if documents:
-            await self.vector_db_provider.upsert(namespace=namespace, documents=documents)
-        return ref_ids
+                continue
+            existing.score = max(existing.score, float(result.score))
+            existing.chunk_count += 1
+            if matched_chunk and existing.matched_chunks is not None and matched_chunk not in existing.matched_chunks:
+                existing.matched_chunks.append(matched_chunk)
+        ranked = sorted(aggregated.values(), key=lambda item: item.score, reverse=True)
+        return ranked[:top_k]
 
-    async def query_reference_script_chunks(
+    async def search_reference_examples(
         self,
         *,
         user_id: str,
         query_text: str,
         top_k: int,
-    ) -> list[dict[str, Any]]:
-        """按文本检索参考脚本分块，通过 doc_type 元数据过滤只返回 reference_script 类型。
-
-        返回 [{doc_id, chunk_index, content, score}]，供下游提取风格描述和示例。
-        """
-        normalized_query = query_text.strip()
-        if not normalized_query:
-            return []
-        namespace = _knowledge_namespace(user_id)
-        if not await self.vector_db_provider.namespace_exists(namespace):
-            return []
-        results = await self.vector_db_provider.query_by_text(
-            namespace=namespace,
-            query_text=normalized_query,
-            embedding_service=self.embedding_provider,
+    ) -> list[KnowledgeSearchHit]:
+        """按文本检索 reference_script 分块，并保留 chunk 级示例内容。"""
+        hits = await self.search(
+            user_id=user_id,
+            query_text=query_text,
             top_k=top_k,
-            filter_metadata={"doc_type": {"$eq": "reference_script"}},
+            doc_types=["reference_script"],
         )
-        items: list[dict[str, Any]] = []
-        for result in results:
-            metadata = result.metadata or {}
-            items.append(
-                {
-                    "doc_id": metadata.get("doc_id"),
-                    "chunk_index": metadata.get("chunk_index"),
-                    "content": result.text,
-                    "score": result.score,
-                }
-            )
-        return items
+        return hits
 
-    async def delete_reference_script_chunks(self, *, user_id: str, doc_id: str) -> bool:
-        """删除某参考脚本的全部分块向量。
-
-        通过 ID 前缀 refscript_{doc_id}: 过滤，批量删除该文档的所有向量块。
-        """
+    async def delete_document(self, *, user_id: str, doc_id: str) -> bool:
+        """删除某知识库文档的全部分块向量。"""
         namespace = _knowledge_namespace(user_id)
         if not await self.vector_db_provider.namespace_exists(namespace):
             return True
         all_docs = await self.vector_db_provider.list_documents(namespace=namespace, include_embeddings=False)
-        prefix = f"refscript_{doc_id}:chunk_"
-        chunk_ids = [doc.id for doc in all_docs if doc.id.startswith(prefix)]
+        chunk_ids = []
+        for doc in all_docs:
+            metadata = doc.metadata or {}
+            if metadata.get("doc_id") == doc_id:
+                chunk_ids.append(doc.id)
         if not chunk_ids:
             return True
         return await self.vector_db_provider.delete(namespace=namespace, document_ids=chunk_ids)
+
+    async def refresh_document(
+        self,
+        *,
+        user_id: str,
+        doc_id: str,
+        title: str,
+        doc_type: str,
+        chunks: list[KnowledgeChunk],
+    ) -> str | None:
+        """删除旧索引并重建知识库文档分块索引。"""
+        await self.delete_document(user_id=user_id, doc_id=doc_id)
+        return await self.index_document(user_id=user_id, doc_id=doc_id, title=title, doc_type=doc_type, chunks=chunks)
+
+    async def upsert_knowledge_doc(
+        self,
+        *,
+        user_id: str,
+        doc_id: str,
+        title: str,
+        content: str,
+        doc_type: str,
+    ) -> str | None:
+        """兼容旧调用：把整篇文档包装成单块写入索引。"""
+        return await self.index_document(
+            user_id=user_id,
+            doc_id=doc_id,
+            title=title,
+            doc_type=doc_type,
+            chunks=[KnowledgeChunk(chunk_index=0, content=content)],
+        )
+
+    async def query_knowledge_docs(self, *, user_id: str, query_text: str, top_k: int) -> list[dict[str, Any]]:
+        """兼容旧调用：返回文档级聚合结果。"""
+        hits = await self.search(user_id=user_id, query_text=query_text, top_k=top_k)
+        return [
+            {
+                "doc_id": hit.doc_id,
+                "title": hit.title,
+                "doc_type": hit.doc_type,
+                "score": hit.score,
+                "content": (hit.matched_chunks or [""])[0],
+                "chunk_count": hit.chunk_count,
+                "matched_chunks": hit.matched_chunks or [],
+            }
+            for hit in hits
+        ]
+
+    async def delete_knowledge_doc(self, *, user_id: str, doc_id: str) -> bool:
+        """兼容旧调用：删除某知识库文档的全部索引。"""
+        return await self.delete_document(user_id=user_id, doc_id=doc_id)
+
+    async def upsert_reference_script_chunks(self, *, user_id: str, doc_id: str, chunks: list[tuple[int, str]]) -> list[str]:
+        """兼容旧调用：把 reference_script 分块写入统一知识索引。"""
+        knowledge_chunks = [KnowledgeChunk(chunk_index=index, content=text) for index, text in chunks]
+        await self.refresh_document(
+            user_id=user_id,
+            doc_id=doc_id,
+            title=doc_id,
+            doc_type="reference_script",
+            chunks=knowledge_chunks,
+        )
+        return [f"{_knowledge_doc_prefix('reference_script', doc_id)}:chunk_{index}" for index, _ in chunks]
+
+    async def query_reference_script_chunks(self, *, user_id: str, query_text: str, top_k: int) -> list[dict[str, Any]]:
+        """兼容旧调用：返回 reference_script 示例分块。"""
+        hits = await self.search_reference_examples(user_id=user_id, query_text=query_text, top_k=top_k)
+        items: list[dict[str, Any]] = []
+        for hit in hits:
+            for chunk_index, content in enumerate(hit.matched_chunks or []):
+                items.append(
+                    {
+                        "doc_id": hit.doc_id,
+                        "chunk_index": chunk_index,
+                        "content": content,
+                        "score": hit.score,
+                    }
+                )
+        return items[:top_k]
+
+    async def delete_reference_script_chunks(self, *, user_id: str, doc_id: str) -> bool:
+        """兼容旧调用：删除某参考脚本的全部索引。"""
+        return await self.delete_document(user_id=user_id, doc_id=doc_id)
 
     async def health_check(self) -> bool:
         """检查向量服务健康状态。"""

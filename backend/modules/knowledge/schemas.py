@@ -27,7 +27,13 @@ class KnowledgeDocItem(BaseModel):
     vector_ref_id: str | None = None
     processing_status: str = "ready"
     style_description: str | None = None
+    source_type: str = "manual"
+    source_filename: str | None = None
+    source_mime_type: str | None = None
+    chunk_count: int = 0
+    processing_error: str | None = None
     created_at: str | None = None
+    updated_at: str | None = None
 
 
 class KnowledgeDocListResponse(BaseModel):
@@ -39,6 +45,7 @@ class KnowledgeDocListResponse(BaseModel):
 
 class KnowledgeSearchItem(KnowledgeDocItem):
     score: float
+    matched_chunks: list[str] | None = None
 
 
 class KnowledgeSearchResponse(BaseModel):

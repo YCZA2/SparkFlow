@@ -177,13 +177,41 @@ class DailyPushPipelineService:
             end_at=source_end,
         )
         if len(recent_fragments) < settings.DAILY_PUSH_MIN_FRAGMENTS:
+            fallback_fragments = fragment_repository.list_created_in_range(
+                db=db,
+                user_id=user_id,
+                start_at=source_start,
+                end_at=source_end,
+            )
+            recent_fragments = [fragment for fragment in fallback_fragments if read_fragment_content(fragment)]
+        if len(recent_fragments) < settings.DAILY_PUSH_MIN_FRAGMENTS:
+            if trigger_kind.startswith("manual"):
+                manual_fallback = fragment_repository.list_by_user(
+                    db=db,
+                    user_id=user_id,
+                    limit=max(settings.DAILY_PUSH_MIN_FRAGMENTS * 4, 12),
+                    offset=0,
+                )
+                recent_fragments = [fragment for fragment in manual_fallback if read_fragment_content(fragment)]
+                recent_fragments.sort(key=lambda fragment: fragment.created_at)
+        if len(recent_fragments) < settings.DAILY_PUSH_MIN_FRAGMENTS:
             raise ValidationError(
                 message=f"今天至少需要 {settings.DAILY_PUSH_MIN_FRAGMENTS} 条已转写碎片，才能生成灵感卡片",
                 field_errors={"fragments": "碎片数量不足"},
             )
         selected = recent_fragments if force else await self.fragment_selector.select_related_fragments(user_id=user_id, fragments=recent_fragments)
         if len(selected) < settings.DAILY_PUSH_MIN_FRAGMENTS:
-            raise ValidationError(message="今天的碎片主题还不够集中，暂时无法生成灵感卡片", field_errors={"fragments": "语义关联不足"})
+            # 中文注释：当相似度图临时不可用或召回退化时，手动触发仍优先兜底使用当天碎片，避免功能完全不可用。
+            if len(recent_fragments) >= settings.DAILY_PUSH_MIN_FRAGMENTS:
+                logger.warning(
+                    "daily_push_selector_fallback_to_recent_fragments",
+                    user_id=user_id,
+                    recent_fragment_count=len(recent_fragments),
+                    selected_count=len(selected),
+                )
+                selected = recent_fragments
+            else:
+                raise ValidationError(message="今天的碎片主题还不够集中，暂时无法生成灵感卡片", field_errors={"fragments": "语义关联不足"})
 
         local_date = target_time.astimezone(get_app_timezone()).date().isoformat()
         return await self.pipeline_runner.create_run(

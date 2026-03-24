@@ -15,7 +15,9 @@ def build_generation_prompt(
     topic: str,
     outline_json: str,
     style_description: str,
-    example_chunks: list[dict[str, Any]],
+    reference_examples: list[str],
+    high_like_examples: list[str],
+    language_habit_examples: list[str],
     fragment_texts: list[str],
 ) -> str:
     """拼装 RAG 脚本生成的最终用户提示词。
@@ -28,14 +30,32 @@ def build_generation_prompt(
     if style_description:
         parts.append(f"[风格描述]\n{style_description}")
 
-    if example_chunks:
+    if reference_examples:
         example_lines = []
-        for i, chunk in enumerate(example_chunks[:3], start=1):
-            content = chunk.get("content", "").strip()
+        for i, content in enumerate(reference_examples[:3], start=1):
+            content = content.strip()
             if content:
                 example_lines.append(f"示例{i}：\n{content}")
         if example_lines:
             parts.append("[参考示例]\n" + "\n\n".join(example_lines))
+
+    if high_like_examples:
+        high_like_lines = []
+        for i, content in enumerate(high_like_examples[:2], start=1):
+            normalized = content.strip()
+            if normalized:
+                high_like_lines.append(f"参考{i}：\n{normalized}")
+        if high_like_lines:
+            parts.append("[高赞结构与表达参考]\n" + "\n\n".join(high_like_lines))
+
+    if language_habit_examples:
+        habit_lines = []
+        for i, content in enumerate(language_habit_examples[:2], start=1):
+            normalized = content.strip()
+            if normalized:
+                habit_lines.append(f"习惯{i}：\n{normalized}")
+        if habit_lines:
+            parts.append("[语言习惯参考]\n" + "\n\n".join(habit_lines))
 
     if outline_json:
         parts.append(f"[内容大纲]\n{outline_json}")
@@ -61,8 +81,10 @@ def build_generation_system_prompt() -> str:
         "要求：\n"
         "1. 严格按照内容大纲的段落结构展开，每段之间有清晰过渡\n"
         "2. 模仿参考示例的写作风格，包括句式节奏、钩子方式和词汇风格\n"
-        "3. 语言自然流畅，适合口播朗读，避免书面化表达\n"
-        "4. 脚本总字数控制在 400-800 字\n"
-        "5. 如有补充背景，将相关知识点自然融入正文\n\n"
+        "3. 如有高赞结构参考，优先借鉴其信息组织与开场方式\n"
+        "4. 如有语言习惯参考，尽量贴近对应的语气、措辞和表达偏好\n"
+        "5. 语言自然流畅，适合口播朗读，避免书面化表达\n"
+        "6. 脚本总字数控制在 400-800 字\n"
+        "7. 如有补充背景，将相关知识点自然融入正文\n\n"
         "直接输出脚本正文，不需要标注段落名称或额外说明。"
     )

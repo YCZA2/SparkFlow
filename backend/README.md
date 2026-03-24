@@ -131,7 +131,7 @@ cd backend
 - `modules/transcriptions/`: 音频上传、后台转写、转写状态查询；主任务以 transcript 成功为准，摘要标签随后异步补齐。
 - `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接；请求入口只创建任务，解析链接、下载转 m4a、转写先在主流水线完成，摘要/标签/向量由后续衍生流水线回填。
 - `modules/scripts/`: 口播稿生成、脚本生成 pipeline 定义、上下文构建、结果回流、列表、详情、更新、删除、每日推盘。
-- `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
+- `modules/knowledge/`: 知识库文档创建、上传、搜索、删除；当前已按 `parsers / chunking / indexing / application` 拆层，文本型上传支持 `txt/docx/pdf/xlsx`。
 - `modules/pipelines/`: 后台流水线详情、步骤和重跑 API。
 - `modules/debug_logs/`: 接收移动端调试日志，并通过结构化日志链路写入本地文件。
 - `modules/media_assets/`: 统一媒体资源上传、列表和删除。
@@ -167,6 +167,7 @@ cd backend
 
 - `llm_provider` 承担碎片摘要/标签增强，以及当前脚本生成和每日推盘所需的文本生成能力。
 - `workflow_provider` 当前不在主脚本生成链路上，主要保留给实验性外挂工作流接入。
+- `knowledge_index_store` 是知识库索引的独立抽象；默认实现仍由 `AppVectorStore` 适配 Chroma，未来若切到 LightRAG 之类底层引擎，应优先替换这一层，而不是改 `knowledge`/`scripts` 业务模块。
 
 ### Runtime data and maintenance
 
@@ -207,6 +208,9 @@ Current business modules include `auth`, `fragment_folders`, `fragments`, `trans
 - `fragments` 与 `scripts` 对外接口统一暴露 `body_html` 作为正文真值；导出链路再统一转换 Markdown。
 - `fragments` 与 `scripts` 数据库层只保留 `body_html`，不再保留正文 Markdown 真值列。
 - `knowledge` 对外接口仍接收和返回 `body_markdown`；数据库中的 `content` 仅保留为 Markdown 派生的纯文本索引载荷。
+- `knowledge_docs` 现在额外记录 `source_type / source_filename / source_mime_type / chunk_count / processing_error / updated_at`，用于上传来源、索引状态和未来索引迁移。
+- `POST /api/knowledge/search` 对外仍返回文档级结果，但内部已经改为 chunk 召回后聚合，并会附带 `matched_chunks` 供后续 citation 能力兼容。
+- `scripts` 的 RAG 生成现在会自动消费三类知识文档：`reference_script` 提供风格描述和示例块，`high_likes` 提供高赞结构参考，`language_habit` 提供措辞与语气习惯约束。
 
 文件存储相关配置：
 

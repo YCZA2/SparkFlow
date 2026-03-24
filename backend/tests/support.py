@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
-from modules.shared.ports import ExternalMediaResolvedAudio, WebSearchResult
+from modules.shared.ports import ExternalMediaResolvedAudio, KnowledgeChunk, KnowledgeSearchHit, WebSearchResult
 
 
 class FakeVectorStore:
@@ -57,6 +57,7 @@ class FakeVectorStore:
             "content": content,
             "doc_type": doc_type,
             "vector_ref_id": vector_ref_id,
+            "matched_chunks": [content],
         }
         return vector_ref_id
 
@@ -69,6 +70,74 @@ class FakeVectorStore:
             if payload["user_id"] == user_id and query_text in payload["content"]
         ]
         return items[:top_k]
+
+    async def index_document(self, *, user_id: str, doc_id: str, title: str, doc_type: str, chunks: list[KnowledgeChunk]):
+        """按文档级聚合保存知识分块，用于替身检索。"""
+        matched_chunks = [chunk.content for chunk in chunks if chunk.content]
+        self.knowledge_docs[doc_id] = {
+            "user_id": user_id,
+            "title": title,
+            "content": "\n".join(matched_chunks),
+            "doc_type": doc_type,
+            "vector_ref_id": f"knowledge_{user_id}:{doc_id}",
+            "matched_chunks": matched_chunks,
+        }
+        return self.knowledge_docs[doc_id]["vector_ref_id"]
+
+    async def refresh_document(self, *, user_id: str, doc_id: str, title: str, doc_type: str, chunks: list[KnowledgeChunk]):
+        """重建替身中的知识文档内容。"""
+        await self.delete_document(user_id=user_id, doc_id=doc_id)
+        return await self.index_document(user_id=user_id, doc_id=doc_id, title=title, doc_type=doc_type, chunks=chunks)
+
+    async def delete_document(self, *, user_id: str, doc_id: str):
+        """删除替身中的知识文档聚合记录。"""
+        self.knowledge_docs.pop(doc_id, None)
+        return True
+
+    async def search(self, *, user_id: str, query_text: str, top_k: int, doc_types=None):
+        """返回知识文档级聚合结果。"""
+        allowed = set(doc_types or [])
+        hits: list[KnowledgeSearchHit] = []
+        for doc_id, payload in self.knowledge_docs.items():
+            if payload["user_id"] != user_id:
+                continue
+            if allowed and payload["doc_type"] not in allowed:
+                continue
+            matched_chunks = [
+                chunk for chunk in payload.get("matched_chunks", [])
+                if query_text in chunk or query_text in payload.get("content", "")
+            ] or payload.get("matched_chunks", [])[:1]
+            hits.append(
+                KnowledgeSearchHit(
+                    doc_id=doc_id,
+                    title=payload["title"],
+                    doc_type=payload["doc_type"],
+                    score=0.95 if query_text and query_text in payload.get("content", "") else 0.8,
+                    chunk_count=len(matched_chunks),
+                    matched_chunks=matched_chunks,
+                )
+            )
+        hits.sort(key=lambda item: item.score, reverse=True)
+        return hits[:top_k]
+
+    async def search_reference_examples(self, *, user_id: str, query_text: str, top_k: int):
+        """返回 reference_script 文档的示例块。"""
+        hits = await self.search(user_id=user_id, query_text=query_text, top_k=top_k, doc_types=["reference_script"])
+        if hasattr(self, "reference_script_results"):
+            custom_hits = []
+            for item in self.reference_script_results[:top_k]:
+                custom_hits.append(
+                    KnowledgeSearchHit(
+                        doc_id=item["doc_id"],
+                        title=item.get("title", item["doc_id"]),
+                        doc_type="reference_script",
+                        score=float(item.get("score", 0.9)),
+                        chunk_count=1,
+                        matched_chunks=[item.get("content", "")],
+                    )
+                )
+            return custom_hits
+        return hits
 
     async def delete_knowledge_doc(self, *, user_id: str, doc_id: str):
         self.knowledge_docs.pop(doc_id, None)
@@ -93,14 +162,16 @@ class FakeVectorStore:
         """返回内存中的参考脚本分块检索结果。"""
         if hasattr(self, "reference_script_results"):
             return self.reference_script_results[:top_k]
-        return []
+        hits = await self.search_reference_examples(user_id=user_id, query_text=query_text, top_k=top_k)
+        results = []
+        for hit in hits:
+            for chunk_index, content in enumerate(hit.matched_chunks or []):
+                results.append({"doc_id": hit.doc_id, "chunk_index": chunk_index, "content": content, "score": hit.score})
+        return results[:top_k]
 
     async def delete_reference_script_chunks(self, *, user_id: str, doc_id: str):
         """删除内存中的参考脚本分块。"""
-        prefix = f"refscript_{doc_id}:chunk_"
-        for key in [k for k in self.knowledge_docs if k.startswith(prefix)]:
-            del self.knowledge_docs[key]
-        return True
+        return await self.delete_document(user_id=user_id, doc_id=doc_id)
 
     async def health_check(self):
         return True

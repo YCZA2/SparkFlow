@@ -37,6 +37,8 @@ gmssl==3.2.2
 httpx==0.28.1
 pydub==0.25.1
 python-docx==1.1.2
+pypdf==5.4.0
+openpyxl==3.1.5
 
 # Authentication
 PyJWT==2.10.1

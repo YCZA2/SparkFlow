@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-import tempfile
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
@@ -9,10 +7,13 @@ from sqlalchemy.orm import Session
 from core.exceptions import NotFoundError, ValidationError
 from models import KnowledgeDoc
 from modules.shared.content.content_markdown import extract_plain_text
+from modules.shared.ports import KnowledgeIndexStore
 from utils.serialization import format_iso_datetime
 
 from domains.knowledge import repository as knowledge_repository
-from modules.shared.ports import VectorStore
+from .chunking import build_knowledge_chunks
+from .indexing import KnowledgeIndexingService
+from .parsers import parse_uploaded_text
 from .schemas import KnowledgeDocItem, KnowledgeDocListResponse, KnowledgeSearchItem, KnowledgeSearchResponse
 
 VALID_DOC_TYPES = {"high_likes", "language_habit", "reference_script"}
@@ -28,41 +29,20 @@ def map_knowledge_doc(doc: KnowledgeDoc) -> KnowledgeDocItem:
         vector_ref_id=doc.vector_ref_id,
         processing_status=doc.processing_status,
         style_description=doc.style_description,
+        source_type=doc.source_type or "manual",
+        source_filename=doc.source_filename,
+        source_mime_type=doc.source_mime_type,
+        chunk_count=doc.chunk_count or 0,
+        processing_error=doc.processing_error,
         created_at=format_iso_datetime(doc.created_at),
+        updated_at=format_iso_datetime(doc.updated_at),
     )
 
 
-def parse_uploaded_file(file_content: bytes, filename: str) -> str:
-    filename_lower = filename.lower()
-    if not (filename_lower.endswith(".txt") or filename_lower.endswith(".docx")):
-        raise ValidationError(message="文件格式不支持", field_errors={"file": "仅支持 .txt 和 .docx 格式"})
-    if filename_lower.endswith(".txt"):
-        try:
-            content = file_content.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise ValidationError(message="文件编码错误", field_errors={"file": "文件必须是 UTF-8 编码"}) from exc
-    else:
-        try:
-            from docx import Document
-        except ImportError as exc:
-            raise ValidationError(message="服务器缺少依赖", field_errors={"file": "服务器未安装 python-docx 库"}) from exc
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_file:
-            tmp_file.write(file_content)
-            tmp_path = tmp_file.name
-        try:
-            document = Document(tmp_path)
-            content = "\n".join(paragraph.text for paragraph in document.paragraphs)
-        finally:
-            os.unlink(tmp_path)
-    if not content.strip():
-        raise ValidationError(message="文件内容为空", field_errors={"file": "上传的文件没有有效内容"})
-    return content
-
-
 class KnowledgeUseCase:
-    def __init__(self, *, vector_store: VectorStore, pipeline_runner: Any = None) -> None:
-        """装配知识库用例依赖。pipeline_runner 用于 reference_script 的异步处理。"""
-        self.vector_store = vector_store
+    def __init__(self, *, knowledge_index_store: KnowledgeIndexStore, pipeline_runner: Any = None) -> None:
+        """装配知识库用例依赖。"""
+        self.indexing_service = KnowledgeIndexingService(store=knowledge_index_store)
         self.pipeline_runner = pipeline_runner
 
     async def create_doc(
@@ -73,16 +53,13 @@ class KnowledgeUseCase:
         title: str,
         body_markdown: str,
         doc_type: str,
+        source_type: str = "manual",
+        source_filename: str | None = None,
+        source_mime_type: str | None = None,
     ) -> KnowledgeDoc:
-        """创建知识库文档。
-
-        reference_script 类型：写入数据库后触发异步处理流水线（风格分析+分块向量化）。
-        其他类型：直接同步写入向量索引。
-        """
-        if doc_type not in VALID_DOC_TYPES:
-            raise ValidationError(message="文档类型无效", field_errors={"doc_type": f"必须是以下之一: {', '.join(sorted(VALID_DOC_TYPES))}"})
-        normalized_markdown = body_markdown.strip()
-        plain_text = extract_plain_text(normalized_markdown) or normalized_markdown
+        """创建知识库文档，并按类型决定同步或异步索引。"""
+        _validate_doc_type(doc_type)
+        normalized_markdown, plain_text, chunks = _normalize_markdown_payload(body_markdown)
 
         if doc_type == "reference_script":
             return await self._create_reference_script_doc(
@@ -91,6 +68,10 @@ class KnowledgeUseCase:
                 title=title,
                 plain_text=plain_text,
                 normalized_markdown=normalized_markdown,
+                chunks=chunks,
+                source_type=source_type,
+                source_filename=source_filename,
+                source_mime_type=source_mime_type,
             )
 
         doc = knowledge_repository.create(
@@ -100,21 +81,59 @@ class KnowledgeUseCase:
             content=plain_text,
             body_markdown=normalized_markdown,
             doc_type=doc_type,
+            processing_status="ready",
+            source_type=source_type,
+            source_filename=source_filename,
+            source_mime_type=source_mime_type,
+            chunk_count=len(chunks),
         )
         try:
-            doc.vector_ref_id = await self.vector_store.upsert_knowledge_doc(
+            vector_ref_id = await self.indexing_service.index_document(
                 user_id=user_id,
                 doc_id=doc.id,
                 title=title,
-                content=plain_text,
                 doc_type=doc_type,
+                chunks=chunks,
             )
-            db.add(doc)
-            db.commit()
-            db.refresh(doc)
-        except Exception:
-            db.rollback()
-        return doc
+            updated = knowledge_repository.update(
+                db=db,
+                doc=doc,
+                vector_ref_id=vector_ref_id,
+                chunk_count=len(chunks),
+                processing_error=None,
+            )
+            return updated
+        except Exception as exc:
+            return knowledge_repository.update(
+                db=db,
+                doc=doc,
+                processing_status="failed",
+                processing_error=str(exc),
+            )
+
+    async def create_doc_from_upload(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        title: str,
+        file_content: bytes,
+        filename: str,
+        mime_type: str | None,
+        doc_type: str,
+    ) -> KnowledgeDoc:
+        """解析上传文件并创建知识库文档。"""
+        body_markdown = parse_uploaded_text(file_content=file_content, filename=filename)
+        return await self.create_doc(
+            db=db,
+            user_id=user_id,
+            title=title,
+            body_markdown=body_markdown,
+            doc_type=doc_type,
+            source_type="upload",
+            source_filename=filename,
+            source_mime_type=mime_type,
+        )
 
     async def _create_reference_script_doc(
         self,
@@ -124,12 +143,12 @@ class KnowledgeUseCase:
         title: str,
         plain_text: str,
         normalized_markdown: str,
+        chunks,
+        source_type: str,
+        source_filename: str | None,
+        source_mime_type: str | None,
     ) -> KnowledgeDoc:
-        """创建 reference_script 文档并触发异步处理 pipeline。
-
-        写入时 processing_status=pending，pipeline 完成后更新为 ready。
-        如果 pipeline_runner 未配置则直接标记为 failed 并告知调用方。
-        """
+        """创建 reference_script 文档并触发异步处理 pipeline。"""
         from .rag_processing_pipeline import ReferenceScriptProcessingPipelineService
 
         doc = knowledge_repository.create(
@@ -140,51 +159,105 @@ class KnowledgeUseCase:
             body_markdown=normalized_markdown,
             doc_type="reference_script",
             processing_status="pending",
+            source_type=source_type,
+            source_filename=source_filename,
+            source_mime_type=source_mime_type,
+            chunk_count=len(chunks),
         )
-
         if self.pipeline_runner is None:
-            # pipeline_runner 未注入（如测试环境），跳过异步处理
-            return doc
-
-        pipeline_service = ReferenceScriptProcessingPipelineService(pipeline_runner=self.pipeline_runner)
+            return knowledge_repository.update(
+                db=db,
+                doc=doc,
+                processing_status="failed",
+                processing_error="reference_script pipeline runner 未配置",
+            )
+        pipeline_service = ReferenceScriptProcessingPipelineService(
+            pipeline_runner=self.pipeline_runner,
+            knowledge_index_store=self.indexing_service.store,
+        )
         await pipeline_service.create_run(
             doc_id=doc.id,
             user_id=user_id,
             script_text=plain_text,
+            title=title,
+            doc_type="reference_script",
         )
         return doc
 
-    async def update_doc(self, *, db: Session, user_id: str, doc_id: str, title: str | None, body_markdown: str | None) -> KnowledgeDoc:
-        """更新知识库文档正文并刷新向量索引。"""
+    async def update_doc(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        doc_id: str,
+        title: str | None,
+        body_markdown: str | None,
+    ) -> KnowledgeDoc:
+        """更新知识库文档正文并刷新索引。"""
         doc = self.get_doc(db=db, user_id=user_id, doc_id=doc_id)
-        normalized_markdown = body_markdown.strip() if body_markdown is not None else (doc.body_markdown or "")
-        plain_text = extract_plain_text(normalized_markdown) or doc.content
+        normalized_markdown, plain_text, chunks = _normalize_markdown_payload(body_markdown or (doc.body_markdown or ""))
         updated = knowledge_repository.update(
             db=db,
             doc=doc,
             title=title,
             content=plain_text,
             body_markdown=normalized_markdown,
+            processing_status="pending" if doc.doc_type == "reference_script" else "ready",
+            processing_error=None,
+            chunk_count=len(chunks),
         )
+
+        if updated.doc_type == "reference_script":
+            from .rag_processing_pipeline import ReferenceScriptProcessingPipelineService
+
+            if self.pipeline_runner is None:
+                return knowledge_repository.update(
+                    db=db,
+                    doc=updated,
+                    processing_status="failed",
+                    processing_error="reference_script pipeline runner 未配置",
+                )
+            pipeline_service = ReferenceScriptProcessingPipelineService(
+                pipeline_runner=self.pipeline_runner,
+                knowledge_index_store=self.indexing_service.store,
+            )
+            await pipeline_service.create_run(
+                doc_id=updated.id,
+                user_id=user_id,
+                script_text=plain_text,
+                title=updated.title,
+                doc_type=updated.doc_type,
+            )
+            return updated
+
         try:
-            updated.vector_ref_id = await self.vector_store.upsert_knowledge_doc(
+            vector_ref_id = await self.indexing_service.refresh_document(
                 user_id=user_id,
                 doc_id=updated.id,
                 title=updated.title,
-                content=updated.content,
                 doc_type=updated.doc_type,
+                chunks=chunks,
             )
-            db.add(updated)
-            db.commit()
-            db.refresh(updated)
-        except Exception:
-            db.rollback()
-        return updated
+            return knowledge_repository.update(
+                db=db,
+                doc=updated,
+                vector_ref_id=vector_ref_id,
+                chunk_count=len(chunks),
+                processing_status="ready",
+                processing_error=None,
+            )
+        except Exception as exc:
+            return knowledge_repository.update(
+                db=db,
+                doc=updated,
+                processing_status="failed",
+                processing_error=str(exc),
+            )
 
     def list_docs(self, *, db: Session, user_id: str, doc_type: Optional[str], limit: int, offset: int) -> KnowledgeDocListResponse:
         """分页返回用户知识库文档列表，可按 doc_type 过滤。"""
-        if doc_type and doc_type not in VALID_DOC_TYPES:
-            raise ValidationError(message="文档类型无效", field_errors={"doc_type": f"必须是以下之一: {', '.join(sorted(VALID_DOC_TYPES))}"})
+        if doc_type:
+            _validate_doc_type(doc_type)
         docs = knowledge_repository.list_by_user(db=db, user_id=user_id, doc_type=doc_type, limit=limit, offset=offset)
         total = knowledge_repository.count_by_user(db=db, user_id=user_id, doc_type=doc_type)
         return KnowledgeDocListResponse(
@@ -195,33 +268,56 @@ class KnowledgeUseCase:
         )
 
     def get_doc(self, *, db: Session, user_id: str, doc_id: str) -> KnowledgeDoc:
+        """读取单条知识库文档。"""
         doc = knowledge_repository.get_by_id(db=db, user_id=user_id, doc_id=doc_id)
         if not doc:
             raise NotFoundError(message="知识库文档不存在或无权访问", resource_type="knowledge_doc", resource_id=doc_id)
         return doc
 
     async def search_docs(self, *, db: Session, user_id: str, query_text: str, top_k: int) -> KnowledgeSearchResponse:
-        results = await self.vector_store.query_knowledge_docs(user_id=user_id, query_text=query_text, top_k=top_k)
-        doc_ids = [item["doc_id"] for item in results]
-        docs = {doc.id: doc for doc in knowledge_repository.list_by_user(db=db, user_id=user_id, limit=100, offset=0) if doc.id in doc_ids}
+        """按查询文本返回知识库文档级命中列表。"""
+        hits = await self.indexing_service.search(user_id=user_id, query_text=query_text, top_k=top_k)
+        doc_ids = [item.doc_id for item in hits]
+        docs = {
+            doc.id: doc
+            for doc in knowledge_repository.list_by_user(db=db, user_id=user_id, limit=200, offset=0)
+            if doc.id in doc_ids
+        }
         items: list[KnowledgeSearchItem] = []
-        for item in results:
-            doc = docs.get(item["doc_id"])
+        for hit in hits:
+            doc = docs.get(hit.doc_id)
             if not doc:
                 continue
             payload = map_knowledge_doc(doc)
-            items.append(KnowledgeSearchItem(**payload.model_dump(), score=float(item["score"])))
+            items.append(
+                KnowledgeSearchItem(
+                    **payload.model_dump(),
+                    score=float(hit.score),
+                    matched_chunks=hit.matched_chunks,
+                )
+            )
         return KnowledgeSearchResponse(items=items, total=len(items), query_text=query_text)
 
     async def delete_doc(self, *, db: Session, user_id: str, doc_id: str) -> None:
-        """删除知识库文档，并同步清理向量库中对应的向量数据。
-
-        reference_script 删除分块向量（ID 前缀 refscript_{doc_id}:chunk_*）；
-        其他类型删除整文档向量（ID 格式 docs_{user_id}:{doc_id}）。
-        """
+        """删除知识库文档，并同步删除其全部索引。"""
         doc = self.get_doc(db=db, user_id=user_id, doc_id=doc_id)
         knowledge_repository.delete(db=db, doc=doc)
-        if doc.doc_type == "reference_script":
-            await self.vector_store.delete_reference_script_chunks(user_id=user_id, doc_id=doc_id)
-        else:
-            await self.vector_store.delete_knowledge_doc(user_id=user_id, doc_id=doc_id)
+        await self.indexing_service.delete_document(user_id=user_id, doc_id=doc_id)
+
+
+def _validate_doc_type(doc_type: str) -> None:
+    """校验知识库文档类型。"""
+    if doc_type not in VALID_DOC_TYPES:
+        raise ValidationError(message="文档类型无效", field_errors={"doc_type": f"必须是以下之一: {', '.join(sorted(VALID_DOC_TYPES))}"})
+
+
+def _normalize_markdown_payload(body_markdown: str) -> tuple[str, str, list]:
+    """规范化 Markdown、纯文本与分块结果，作为知识库索引输入。"""
+    normalized_markdown = body_markdown.strip()
+    if not normalized_markdown:
+        raise ValidationError(message="知识库内容不能为空", field_errors={"body_markdown": "请输入文档内容"})
+    plain_text = extract_plain_text(normalized_markdown) or normalized_markdown
+    chunks = build_knowledge_chunks(plain_text)
+    if not chunks:
+        raise ValidationError(message="知识库内容不能为空", field_errors={"body_markdown": "请输入文档内容"})
+    return normalized_markdown, plain_text, chunks

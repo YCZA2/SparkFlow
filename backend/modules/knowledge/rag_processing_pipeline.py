@@ -11,13 +11,14 @@ from typing import Any
 
 from core.logging_config import get_logger
 from domains.knowledge import repository as knowledge_repository
+from modules.shared.ports import KnowledgeIndexStore
 from modules.shared.pipeline.pipeline_runtime import (
     PipelineExecutionContext,
     PipelineExecutionError,
     PipelineStepDefinition,
 )
 
-from .chunker import chunk_text
+from .chunking import build_knowledge_chunks
 
 logger = get_logger(__name__)
 
@@ -35,9 +36,10 @@ def _load_style_analysis_prompt() -> str:
 class ReferenceScriptProcessingPipelineService:
     """负责参考脚本处理流水线的步骤定义与执行。"""
 
-    def __init__(self, *, pipeline_runner: Any) -> None:
+    def __init__(self, *, pipeline_runner: Any, knowledge_index_store: KnowledgeIndexStore) -> None:
         """装配参考脚本处理流水线依赖。"""
         self.pipeline_runner = pipeline_runner
+        self.knowledge_index_store = knowledge_index_store
 
     async def create_run(
         self,
@@ -45,6 +47,8 @@ class ReferenceScriptProcessingPipelineService:
         doc_id: str,
         user_id: str,
         script_text: str,
+        title: str,
+        doc_type: str,
     ) -> Any:
         """创建参考脚本处理流水线任务。"""
         return await self.pipeline_runner.create_run(
@@ -55,6 +59,8 @@ class ReferenceScriptProcessingPipelineService:
                 "doc_id": doc_id,
                 "user_id": user_id,
                 "script_text": script_text,
+                "title": title,
+                "doc_type": doc_type,
             },
             resource_type="knowledge_doc",
             resource_id=doc_id,
@@ -93,15 +99,19 @@ class ReferenceScriptProcessingPipelineService:
         script_text = context.input_payload.get("script_text", "")
         doc_id = context.input_payload.get("doc_id", "")
         user_id = context.run.user_id
-        chunks = chunk_text(script_text)
+        title = context.input_payload.get("title", "") or doc_id
+        doc_type = context.input_payload.get("doc_type", "reference_script")
+        chunks = build_knowledge_chunks(script_text)
         if not chunks:
             raise PipelineExecutionError("脚本文本无法切分成有效块", retryable=False)
-        ref_ids = await context.container.vector_store.upsert_reference_script_chunks(
+        ref_id = await self.knowledge_index_store.refresh_document(
             user_id=user_id,
             doc_id=doc_id,
+            title=title,
+            doc_type=doc_type,
             chunks=chunks,
         )
-        return {"chunk_count": len(chunks), "ref_ids": ref_ids}
+        return {"chunk_count": len(chunks), "ref_ids": [ref_id] if ref_id else []}
 
     async def persist_style(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """将风格描述和就绪状态回写到知识库文档记录。"""
@@ -114,9 +124,21 @@ class ReferenceScriptProcessingPipelineService:
             user_id=user_id,
             style_description=style_description,
             processing_status="ready",
+            processing_error=None,
         )
         if not doc:
             raise PipelineExecutionError(f"知识库文档不存在，无法回写风格描述: {doc_id}", retryable=False)
+        updated = knowledge_repository.update_processing_state(
+            context.db,
+            doc_id=doc_id,
+            user_id=user_id,
+            processing_status="ready",
+            processing_error=None,
+            vector_ref_id=(context.get_step_output("chunk_and_vectorize").get("ref_ids") or [None])[0],
+            chunk_count=context.get_step_output("chunk_and_vectorize").get("chunk_count"),
+        )
+        if not updated:
+            raise PipelineExecutionError(f"知识库文档不存在，无法更新索引状态: {doc_id}", retryable=False)
         return {"doc_id": doc_id, "processing_status": "ready"}
 
     async def finalize_run(self, context: PipelineExecutionContext) -> dict[str, Any]:
@@ -132,4 +154,7 @@ class ReferenceScriptProcessingPipelineService:
 
 def build_reference_script_processing_pipeline_service(container: Any) -> ReferenceScriptProcessingPipelineService:
     """基于服务容器装配参考脚本处理流水线服务。"""
-    return ReferenceScriptProcessingPipelineService(pipeline_runner=container.pipeline_runner)
+    return ReferenceScriptProcessingPipelineService(
+        pipeline_runner=container.pipeline_runner,
+        knowledge_index_store=container.knowledge_index_store,
+    )

@@ -25,6 +25,7 @@ from modules.shared.ports import (
     EmbeddingProvider,
     ExternalMediaProvider,
     FileStorage,
+    KnowledgeIndexStore,
     SpeechToTextProvider,
     TextGenerationProvider,
     VectorStore,
@@ -42,6 +43,7 @@ class ServiceContainer:
     stt_provider: SpeechToTextProvider
     embedding_provider: EmbeddingProvider
     vector_store: VectorStore
+    knowledge_index_store: KnowledgeIndexStore
     file_storage: FileStorage
     external_media_provider: ExternalMediaProvider
     web_search_provider: WebSearchProvider
@@ -56,13 +58,15 @@ def build_container() -> ServiceContainer:
     stt_provider = create_stt_service()
     embedding_provider = create_embedding_service()
     vector_db_provider = create_vector_db_service()
+    vector_store = create_vector_store(embedding_provider=embedding_provider, vector_db_provider=vector_db_provider)
     return ServiceContainer(
         settings=settings,
         session_factory=SessionLocal,
         llm_provider=llm_provider,
         stt_provider=stt_provider,
         embedding_provider=embedding_provider,
-        vector_store=create_vector_store(embedding_provider=embedding_provider, vector_db_provider=vector_db_provider),
+        vector_store=vector_store,
+        knowledge_index_store=vector_store,
         file_storage=create_file_storage(settings),
         external_media_provider=create_external_media_provider(),
         web_search_provider=create_web_search_provider(),

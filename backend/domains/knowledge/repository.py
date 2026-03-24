@@ -93,6 +93,11 @@ def create(
     body_markdown: str,
     doc_type: str,
     processing_status: str = "ready",
+    source_type: str = "manual",
+    source_filename: str | None = None,
+    source_mime_type: str | None = None,
+    chunk_count: int = 0,
+    processing_error: str | None = None,
 ) -> KnowledgeDoc:
     """
     创建知识库文档
@@ -115,6 +120,11 @@ def create(
         body_markdown=body_markdown,
         doc_type=doc_type,
         processing_status=processing_status,
+        source_type=source_type,
+        source_filename=source_filename,
+        source_mime_type=source_mime_type,
+        chunk_count=chunk_count,
+        processing_error=processing_error,
     )
 
     db.add(doc)
@@ -131,6 +141,10 @@ def update(
     title: str | None = None,
     content: str | None = None,
     body_markdown: str | None = None,
+    vector_ref_id: str | None = None,
+    chunk_count: int | None = None,
+    processing_status: str | None = None,
+    processing_error: str | None = None,
 ) -> KnowledgeDoc:
     """更新知识库文档基础字段。"""
     if title is not None:
@@ -141,6 +155,14 @@ def update(
         doc.body_markdown = body_markdown
         if content is None:
             doc.content = body_markdown
+    if vector_ref_id is not None:
+        doc.vector_ref_id = vector_ref_id
+    if chunk_count is not None:
+        doc.chunk_count = chunk_count
+    if processing_status is not None:
+        doc.processing_status = processing_status
+    if processing_error is not None or processing_error == "":
+        doc.processing_error = processing_error
     db.commit()
     db.refresh(doc)
     return doc
@@ -153,6 +175,7 @@ def update_style_description(
     user_id: str,
     style_description: str,
     processing_status: str,
+    processing_error: str | None = None,
 ) -> Optional[KnowledgeDoc]:
     """更新 reference_script 的风格描述和处理状态。"""
     doc = get_by_id(db=db, user_id=user_id, doc_id=doc_id)
@@ -160,6 +183,32 @@ def update_style_description(
         return None
     doc.style_description = style_description
     doc.processing_status = processing_status
+    doc.processing_error = processing_error
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
+def update_processing_state(
+    db: Session,
+    *,
+    doc_id: str,
+    user_id: str,
+    processing_status: str,
+    processing_error: str | None = None,
+    vector_ref_id: str | None = None,
+    chunk_count: int | None = None,
+) -> Optional[KnowledgeDoc]:
+    """更新知识库文档的处理状态与索引元数据。"""
+    doc = get_by_id(db=db, user_id=user_id, doc_id=doc_id)
+    if not doc:
+        return None
+    doc.processing_status = processing_status
+    doc.processing_error = processing_error
+    if vector_ref_id is not None:
+        doc.vector_ref_id = vector_ref_id
+    if chunk_count is not None:
+        doc.chunk_count = chunk_count
     db.commit()
     db.refresh(doc)
     return doc

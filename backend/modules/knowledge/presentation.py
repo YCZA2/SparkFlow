@@ -7,7 +7,7 @@ from core import ResponseModel, success_response
 from core.auth import get_current_user
 from modules.shared.infrastructure.container import ServiceContainer, get_container, get_db_session
 
-from .application import KnowledgeUseCase, map_knowledge_doc, parse_uploaded_file
+from .application import KnowledgeUseCase, map_knowledge_doc
 from .schemas import (
     KnowledgeDocCreateRequest,
     KnowledgeDocItem,
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/knowledge", tags=["knowledge"], responses={401: 
 
 def get_knowledge_use_case(container: ServiceContainer = Depends(get_container)) -> KnowledgeUseCase:
     """构建知识库用例，注入向量存储和流水线运行时。"""
-    return KnowledgeUseCase(vector_store=container.vector_store, pipeline_runner=container.pipeline_runner)
+    return KnowledgeUseCase(knowledge_index_store=container.knowledge_index_store, pipeline_runner=container.pipeline_runner)
 
 
 @router.post(
@@ -60,12 +60,13 @@ async def upload_knowledge_doc(
     db: Session = Depends(get_db_session),
     use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
 ):
-    content = parse_uploaded_file(file_content=await file.read(), filename=file.filename or "")
-    doc = await use_case.create_doc(
+    doc = await use_case.create_doc_from_upload(
         db=db,
         user_id=current_user["user_id"],
         title=title,
-        body_markdown=content,
+        file_content=await file.read(),
+        filename=file.filename or "",
+        mime_type=file.content_type,
         doc_type=doc_type,
     )
     return success_response(data=map_knowledge_doc(doc), message="知识库文档上传成功")

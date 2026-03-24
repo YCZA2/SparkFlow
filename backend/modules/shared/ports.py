@@ -31,6 +31,64 @@ class EmbeddingProvider(Protocol):
     async def health_check(self) -> bool: ...
 
 
+@dataclass
+class KnowledgeChunk:
+    """描述知识库文档的标准化分块结果。"""
+
+    chunk_index: int
+    content: str
+
+
+@dataclass
+class KnowledgeSearchHit:
+    """描述知识库检索返回的文档级聚合命中。"""
+
+    doc_id: str
+    title: str
+    doc_type: str
+    score: float
+    chunk_count: int = 0
+    matched_chunks: list[str] | None = None
+
+
+class KnowledgeIndexStore(Protocol):
+    async def index_document(
+        self,
+        *,
+        user_id: str,
+        doc_id: str,
+        title: str,
+        doc_type: str,
+        chunks: list[KnowledgeChunk],
+    ) -> str | None: ...
+    async def delete_document(self, *, user_id: str, doc_id: str) -> bool: ...
+    async def search(
+        self,
+        *,
+        user_id: str,
+        query_text: str,
+        top_k: int,
+        doc_types: list[str] | None = None,
+    ) -> list[KnowledgeSearchHit]: ...
+    async def search_reference_examples(
+        self,
+        *,
+        user_id: str,
+        query_text: str,
+        top_k: int,
+    ) -> list[KnowledgeSearchHit]: ...
+    async def refresh_document(
+        self,
+        *,
+        user_id: str,
+        doc_id: str,
+        title: str,
+        doc_type: str,
+        chunks: list[KnowledgeChunk],
+    ) -> str | None: ...
+    async def health_check(self) -> bool: ...
+
+
 class VectorStore(Protocol):
     async def upsert_fragment(
         self,

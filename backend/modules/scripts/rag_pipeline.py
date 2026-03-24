@@ -17,13 +17,13 @@ from typing import Any
 from core.exceptions import ValidationError
 from core.logging_config import get_logger
 from domains.fragments import repository as fragment_repository
-from domains.knowledge import repository as knowledge_repository
 from models import PipelineRun
 from modules.shared.pipeline.pipeline_runtime import (
     PipelineExecutionContext,
     PipelineExecutionError,
     PipelineStepDefinition,
 )
+from .knowledge_context_builder import build_knowledge_generation_context
 from .persistence import ScriptGenerationPersistenceService
 from .rag_context_builder import build_generation_prompt, build_generation_system_prompt
 
@@ -108,28 +108,23 @@ class RagScriptPipelineService:
         return {"outline_json": outline_json, "raw_outline": raw_outline}
 
     async def retrieve_examples(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """从参考脚本向量库检索与主题最相关的 top-3 块，并提取对应风格描述。
-
-        如果没有上传过参考脚本，返回空列表，后续步骤将在无示例模式下生成。
-        """
+        """聚合 reference_script、高赞案例和语言习惯知识命中。"""
         topic = context.input_payload.get("topic", "")
         user_id = context.run.user_id
-        results = await context.container.vector_store.query_reference_script_chunks(
+        knowledge_context = await build_knowledge_generation_context(
+            db=context.db,
             user_id=user_id,
             query_text=topic,
-            top_k=3,
+            knowledge_index_store=context.container.knowledge_index_store,
         )
-        style_description = ""
-        if not results:
+        if not knowledge_context.reference_examples and not knowledge_context.high_like_examples and not knowledge_context.language_habit_examples:
             logger.info("retrieve_examples_empty", topic=topic, user_id=user_id)
-        else:
-            # 取最高相关度块所属文档的风格描述
-            top_doc_id = results[0].get("doc_id")
-            if top_doc_id:
-                doc = knowledge_repository.get_by_id(db=context.db, user_id=user_id, doc_id=top_doc_id)
-                if doc and doc.style_description:
-                    style_description = doc.style_description
-        return {"example_chunks": results, "style_description": style_description}
+        return {
+            "reference_examples": knowledge_context.reference_examples,
+            "high_like_examples": knowledge_context.high_like_examples,
+            "language_habit_examples": knowledge_context.language_habit_examples,
+            "style_description": knowledge_context.style_description,
+        }
 
     async def generate_script_draft(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """综合风格描述、示例、大纲和可选碎片背景，调用 LLM 生成最终脚本草稿。"""
@@ -140,7 +135,9 @@ class RagScriptPipelineService:
         outline_json = outline_output.get("outline_json", "") or outline_output.get("raw_outline", "")
 
         examples_output = context.get_step_output("retrieve_examples")
-        example_chunks = examples_output.get("example_chunks") or []
+        reference_examples = examples_output.get("reference_examples") or []
+        high_like_examples = examples_output.get("high_like_examples") or []
+        language_habit_examples = examples_output.get("language_habit_examples") or []
         style_description = examples_output.get("style_description", "")
 
         # 如有可选碎片 ID，从数据库读取其纯文本内容作为补充背景
@@ -160,7 +157,9 @@ class RagScriptPipelineService:
             topic=topic,
             outline_json=outline_json,
             style_description=style_description,
-            example_chunks=example_chunks,
+            reference_examples=reference_examples,
+            high_like_examples=high_like_examples,
+            language_habit_examples=language_habit_examples,
             fragment_texts=fragment_texts,
         )
         system_prompt = build_generation_system_prompt()

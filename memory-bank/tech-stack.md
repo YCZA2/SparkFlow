@@ -1,6 +1,6 @@
 # SparkFlow — 当前技术栈
 
-> 最后更新：2026-03-09
+> 最后更新：2026-03-24
 
 本文档描述当前仓库实际在用的技术栈、关键依赖和本地开发方式，不再保留早期“推荐但未落地”的方案描述。
 
@@ -53,7 +53,7 @@
 - `expo-audio`: 录音、回放、音频模式切换。
 - `expo-camera`: 拍摄页预览与视频录制。
 - `expo-media-library`: 视频写入系统相册。
-- `expo-document-picker`: 为后续知识库上传预留。
+- `expo-document-picker`: 当前主要用于正文图片与文件选择，后续也可复用到知识库移动端上传入口。
 - **SQLite (expo-sqlite + drizzle-orm)**：fragments 本地镜像索引、媒体资源索引、同步状态和本地草稿，作为后端数据的镜像缓存
 - **expo-file-system**：fragment 正文文件（HTML）、待上传图片、音频文件
 - **AsyncStorage**：token、用户信息、后端地址等轻量配置，不再承载 fragment 主流程缓存
@@ -85,6 +85,8 @@
 - `chromadb==0.6.3`
 - `httpx==0.28.1`
 - `python-docx==1.1.2`
+- `pypdf==5.4.0`
+- `openpyxl==3.1.5`
 - `PyJWT==2.10.1`
 - `APScheduler==3.11.0`
 - `structlog==25.4.0`
@@ -132,6 +134,7 @@
 - 默认路径：`./chroma_data`
 - 碎片 namespace：`fragments_{user_id}`
 - 知识库 namespace：`knowledge_{user_id}`
+- 知识库索引策略：当前已切到 chunk 级写入与文档级聚合检索；业务层通过独立 `knowledge_index_store` 抽象接入，后续可替换为 LightRAG 等底层引擎
 
 ## 5. AI and Provider Strategy
 

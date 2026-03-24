@@ -28,7 +28,13 @@ class KnowledgeDoc(Base):
     vector_ref_id = Column(String, nullable=True)  # 向量库中的引用ID，格式：docs_{user_id}:{doc_id}
     style_description = Column(Text, nullable=True)  # LLM 提取的风格描述，仅 reference_script 使用
     processing_status = Column(String, nullable=False, default="ready")  # 处理状态：pending|processing|ready|failed
+    source_type = Column(String, nullable=False, default="manual")  # manual | upload
+    source_filename = Column(String, nullable=True)
+    source_mime_type = Column(String, nullable=True)
+    chunk_count = Column(Integer, nullable=False, default=0)
+    processing_error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     # 关联关系
     user = relationship("User", back_populates="knowledge_docs")

@@ -52,6 +52,14 @@ def normalize_editor_document(document: Any) -> dict[str, Any]:
     if document.get("type") != "doc":
         raise ValidationError(message="正文文档格式无效", field_errors={"editor_document.type": "必须是 doc"})
     raw_content = document.get("content")
+    if raw_content is None and isinstance(document.get("blocks"), list):
+        legacy_blocks = document.get("blocks") or []
+        normalized_blocks = [
+            _build_inline_container_from_legacy_block(block)
+            for block in legacy_blocks
+            if isinstance(block, dict)
+        ]
+        return {"type": "doc", "content": normalized_blocks}
     if raw_content is None:
         return empty_editor_document()
     if not isinstance(raw_content, list):

@@ -106,6 +106,7 @@ async def app(
     test_app.state.container.session_factory = db_session_factory
     test_app.state.container.file_storage = LocalFileStorage(str(tmp_path))
     test_app.state.container.vector_store = vector_store
+    test_app.state.container.knowledge_index_store = vector_store
     test_app.state.container.external_media_provider = external_media_provider
     test_app.state.container.web_search_provider = web_search_provider
     test_app.state.container.llm_provider = llm_provider

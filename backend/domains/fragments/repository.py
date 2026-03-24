@@ -110,6 +110,25 @@ def list_content_ready_in_range(
     )
 
 
+def list_created_in_range(
+    db: Session,
+    user_id: str,
+    start_at: datetime,
+    end_at: datetime,
+) -> list[Fragment]:
+    """查询指定时间窗内创建的全部碎片，供内容回退筛选使用。"""
+    return (
+        db.query(Fragment)
+        .filter(
+            Fragment.user_id == user_id,
+            Fragment.created_at >= start_at,
+            Fragment.created_at < end_at,
+        )
+        .order_by(Fragment.created_at.asc())
+        .all()
+    )
+
+
 def create(
     db: Session,
     user_id: str,
