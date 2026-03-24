@@ -1,0 +1,7 @@
+编辑动作：{instruction_text}
+
+全文内容：
+{document_text}
+
+重点处理内容：
+{focus_text}

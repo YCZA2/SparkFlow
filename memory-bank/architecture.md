@@ -1,10 +1,10 @@
 # SparkFlow Architecture
 
-> 最后更新：2026-03-24
+> 最后更新：2026-03-25
 
 本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为 Docker 管理的 PostgreSQL。
 
-## 0. 今日进展（2026-03-24）
+## 0. 今日进展（2026-03-25）
 
 - `fragments / folders` 的 phase 1 local-first 主链路已经落地：移动端本地 SQLite + `body.html` 为真值，远端只承担自动备份与显式恢复。
 - 后端已经补齐 `backups` 模块、`device session` 单设备在线约束，以及面向本地快照的转写 / 外链导入 / 脚本生成请求入口。
@@ -13,6 +13,7 @@
 - 移动端已经补齐 backup queue、显式恢复、本地媒体缓存重建、音频 `object_key` 持久化与恢复链路。
 - `scripts` 本轮也切入 local-first：脚本生成成功后会立即落本地 SQLite + `body.html` 文件，后续详情编辑、回收站、恢复冲突副本与拍摄状态都以本地为真值。
 - `knowledge` 后端本轮补齐了文本型知识 ingestion：`txt/docx/pdf/xlsx` 统一走 `parsers -> chunking -> indexing -> application` 四层，默认仍写入 Chroma，但对上已通过独立知识索引接口解耦，后续可替换为 LightRAG 等底层引擎。
+- 脚本生成三层上下文本轮调整为“预置稳定内核 + 缓存方法论 + 实时相关素材召回”：稳定内核当前不再按用户素材动态生成，碎片方法论改由每日后台维护任务在阈值达标后静默刷新。
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
 - 仓库本轮也完成了一次大规模命名清理：旧的 remote-first / local-draft 兼容层统一下沉为 `legacy*` 语义；凡仍映射旧库或旧协议的字段，都明确标记为 legacy cloud-binding / legacy snapshot，而不再伪装成当前领域真值。
 - 这意味着后续新增实现默认应直接接入 local-first 实体、`backup_status / entity_version` 与 `/api/backups/*`；只有升级迁移或历史兼容路径，才允许继续使用 `legacy*` 模块和字段。
@@ -34,7 +35,7 @@ flowchart LR
     STT["STT Provider<br/>DashScope / Aliyun"]
     LLM["LLM Provider<br/>Qwen<br/>轻量摘要/标签增强"]
     EMB["Embedding Provider<br/>Qwen"]
-    SCH["APScheduler<br/>daily push cron"]
+    SCH["APScheduler<br/>daily push + writing context cron"]
     PIPE["Pipeline Dispatcher<br/>DB-backed worker"]
 
     U --> M
@@ -241,6 +242,7 @@ flowchart TD
 - `backend/domains/`: 仓储目录，按业务实体或聚合划分查询与写入逻辑。
 - `backend/models/`: SQLAlchemy ORM 模型和数据库初始化。
 - `backend/services/`: 外部 provider 的适配实现和实例工厂。
+- `backend/prompts/`: 后端 prompt 文本与模板目录；脚本生成、知识处理、标签增强和健康检查等提示词统一从这里读取。
 - `backend/alembic/`: 数据库迁移脚本。
 - `backend/tests/`: 后端自动化测试。
 - `docker-compose.postgres.yml`: 本地 PostgreSQL Docker Compose 编排文件。
@@ -286,8 +288,8 @@ flowchart TD
 - Workflow Provider: 当前保留通用 `workflow_provider` 端口与 `DifyWorkflowProvider` 实现，供未来外挂工作流或实验性链路复用；当前主脚本生成链路已经收口到后端 `RagScriptPipelineService`。
 - Knowledge Index Store: 当前知识库索引通过独立 `knowledge_index_store` 抽象接入；默认实现仍由 `AppVectorStore` 适配 Chroma，未来若切换 LightRAG，目标是只替换这一层。
 - 当前脚本生成输入收敛为 `topic` + `fragment_ids`：后端先构建三层写作上下文，再生成 SOP 大纲并拼装草稿。其中：
-- `稳定内核层` 来源于历史碎片和上传/预置长期资料，不使用 AI 历史脚本反哺人格层。
-- `方法论层` 来源于碎片提炼、上传资料和预置方法模板。
+- `稳定内核层` 当前使用系统预置文案，不再在生成链路里按用户历史碎片或知识库动态生成。
+- `方法论层` 由“已缓存的碎片提炼结果 + 上传资料映射条目 + 预置方法模板”组成；碎片提炼改由每日后台维护任务按阈值静默刷新。
 - `相关素材层` 负责召回与当前主题相关的历史脚本、碎片和知识文档。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 统一 `FileStorage` 端口；本地开发默认 `local` provider，线上默认私有阿里云 OSS，通过签名 URL 暴露文件访问。
@@ -314,6 +316,7 @@ flowchart TD
 - 后端错误日志文件: `runtime_logs/backend-error.log`
 - 移动端调试日志文件: `runtime_logs/mobile-debug.log`
 - 每日推盘调度时间：使用 `APP_TIMEZONE`，默认 `Asia/Shanghai`，时间点由 `DAILY_PUSH_HOUR` / `DAILY_PUSH_MINUTE` 控制
+- 每日写作上下文维护时间：使用 `APP_TIMEZONE`，默认 `Asia/Shanghai`，时间点由 `WRITING_CONTEXT_SCHEDULER_HOUR` / `WRITING_CONTEXT_SCHEDULER_MINUTE` 控制
 
 ### 4.8 Logging and Test Baseline
 
@@ -452,7 +455,7 @@ sequenceDiagram
 
 - `POST /api/scripts/generation` 只负责创建任务，不再同步返回 `Script`。
 - 客户端应统一经由 `/api/pipelines/{run_id}` 读取最终 `script_id`，再跳转脚本详情。
-- 当前生成链路使用 `topic` 作为大纲生成和相关素材召回的统一驱动输入；稳定内核与方法论默认由后台自动沉淀和懒刷新。
+- 当前生成链路使用 `topic` 作为大纲生成和相关素材召回的统一驱动输入；稳定内核当前走系统预置，碎片方法论只读取缓存条目，离线维护任务每日检测碎片总量与增量后决定是否重算。
 - pipeline 关键步骤为 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`。
 
 ### 5.5 Fragment Visualization

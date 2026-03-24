@@ -37,6 +37,26 @@ class Settings(BaseSettings):
         default=False,
         description="是否启用服务端 daily push 定时任务；local-first 第一阶段默认关闭",
     )
+    ENABLE_WRITING_CONTEXT_SCHEDULER: bool = Field(
+        default=True,
+        description="是否启用每日写作上下文维护任务；用于静默刷新碎片方法论",
+    )
+    WRITING_CONTEXT_SCHEDULER_HOUR: int = Field(
+        default=4,
+        description="每日写作上下文维护任务执行小时",
+    )
+    WRITING_CONTEXT_SCHEDULER_MINUTE: int = Field(
+        default=0,
+        description="每日写作上下文维护任务执行分钟",
+    )
+    WRITING_CONTEXT_MIN_FRAGMENTS: int = Field(
+        default=8,
+        description="触发碎片方法论首轮提炼所需的最小碎片数",
+    )
+    WRITING_CONTEXT_MIN_INCREMENTAL_FRAGMENTS: int = Field(
+        default=3,
+        description="触发碎片方法论增量重算所需的最小新增碎片数",
+    )
 
     # 服务器配置
     HOST: str = Field(default="0.0.0.0", description="服务器主机")

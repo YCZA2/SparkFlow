@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from modules.shared.prompt_loader import load_prompt_text
+
 from .writing_context import MethodologyPayload, StableCorePayload
+
+_RAG_GENERATION_SYSTEM_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "rag_generation_system.txt"
 
 
 def _build_example_section(examples: list[str], section_label: str, item_label: str, max_count: int) -> str | None:
@@ -102,17 +108,4 @@ def build_generation_prompt(
 
 def build_generation_system_prompt() -> str:
     """返回 RAG 脚本生成的系统提示词。"""
-    return (
-        "你是一位专业的短视频口播脚本创作者。\n"
-        "请根据提供的稳定内核、方法论、相关素材、风格描述和内容大纲，围绕给定主题创作一篇完整的口播脚本。\n\n"
-        "要求：\n"
-        "1. 优先遵循稳定内核，保持价值观、母题、结构偏好和语言底色一致\n"
-        "2. 如有方法论与 SOP，请优先采用其拆题和展开方式\n"
-        "3. 如有相关素材，请只吸收与本次主题强相关的部分，不要机械拼接\n"
-        "4. 如有风格描述和参考示例，请吸收其节奏、钩子方式和表达习惯\n"
-        "5. 严格按照内容大纲的段落结构展开，每段之间有清晰过渡\n"
-        "6. 语言自然流畅，适合口播朗读，避免书面化表达\n"
-        "7. 脚本总字数控制在 400-800 字\n"
-        "8. 如有补充背景，将相关知识点自然融入正文\n\n"
-        "直接输出脚本正文，不需要标注段落名称或额外说明。"
-    )
+    return load_prompt_text(_RAG_GENERATION_SYSTEM_PROMPT_PATH)

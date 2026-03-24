@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from modules.shared.content.fragment_body_markdown import (
     extract_plain_text_from_body_markdown,
     normalize_fragment_body_markdown,
 )
 from modules.shared.ports import TextGenerationProvider
+from modules.shared.prompt_loader import load_prompt_text, render_prompt_template
+
+_AI_EDIT_SYSTEM_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "fragment_ai_edit_system.txt"
+_AI_EDIT_USER_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "fragment_ai_edit_user.txt"
 
 
 class FragmentAiEditService:
@@ -69,11 +75,12 @@ class FragmentAiEditService:
             "title": "请基于全文生成一句简短标题，不要带编号或引号。",
             "script_seed": "请把这段内容整理成适合后续口播脚本生成的草稿段落。",
         }
-        system_prompt = "你是 SparkFlow 的内容编辑助手，只返回用户可直接粘贴到正文中的 Markdown 片段或纯文本。"
-        user_message = (
-            f"编辑动作：{instruction_map.get(instruction, instruction)}\n\n"
-            f"全文内容：\n{document_text.strip()}\n\n"
-            f"重点处理内容：\n{focus_text.strip()}\n"
+        system_prompt = load_prompt_text(_AI_EDIT_SYSTEM_PROMPT_PATH)
+        user_message = render_prompt_template(
+            _AI_EDIT_USER_PROMPT_PATH,
+            instruction_text=instruction_map.get(instruction, instruction),
+            document_text=document_text.strip(),
+            focus_text=focus_text.strip(),
         )
         try:
             result = await self.llm_provider.generate(

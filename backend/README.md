@@ -2,7 +2,7 @@
 
 SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Docker PostgreSQL + ChromaDB 联调；文件存储已统一走对象存储抽象，本地开发默认使用 `local` provider，线上可切阿里云 OSS。
 
-## 今日进展（2026-03-24）
+## 今日进展（2026-03-25）
 
 - 后端已经补齐 phase 1 local-first 所需的备份恢复能力：`/api/backups/batch`、`/api/backups/snapshot`、`/api/backups/restore`、`/api/backups/assets` 与 `/api/backups/assets/access`。
 - 认证链路已经加入 `device_id + session_version` 语义；登录、刷新 token、备份、恢复和 AI / 转写相关请求都受单设备在线约束。
@@ -11,6 +11,8 @@ SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Doc
 - Chroma 查询适配层已兼容当前 `list_collections()` 返回字符串列表的行为，`/api/fragments/similar`、向量文档列表和 namespace 统计不会再因版本差异误判为空。
 - `backups` 快照当前已扩展覆盖 `script` 实体，服务端会按和 fragment / folder / media 一致的 batch contract 接收与返回成稿快照。
 - scheduler 侧的 `daily push` 已降级为兼容壳；因为 fragments 真值已经回到客户端，后续若继续演进应优先走客户端触发而不是恢复服务器真值模式。
+- 脚本生成链路的 `稳定内核` 当前改为系统预置文案，不再在生成时按用户碎片和知识库动态生成。
+- `碎片方法论` 已从脚本生成主链路移出：生成时只读取已缓存条目；后台通过每日定时维护按“总量达标 / 增量达标”阈值静默刷新。
 - 仓库当前仍保留 `fragments / fragment_folders` 的历史业务表与少量兼容读取能力，但它们已不是移动端 fragments / folders 的主读取来源。
 - `script` 继续保留独立后端业务表与路由层；local-first 共享的是 backup/recovery 基础设施，不是把 fragment / script 合并为同一业务实体。
 
@@ -57,7 +59,7 @@ bash scripts/test-all.sh
 
 当前生成链路依赖：
 
-- `LLM_PROVIDER` 对应的文本生成能力，用于稳定内核、方法论、大纲和草稿生成
+- `LLM_PROVIDER` 对应的文本生成能力，用于碎片方法论离线提炼、大纲和草稿生成
 - `Embedding + VectorStore`，用于检索相关知识与相关碎片
 - `POST /api/scripts/generation` 的输入收敛为 `topic` + `fragment_ids`
 
@@ -95,7 +97,7 @@ cd backend
 - 成功后读取 `GET /api/scripts/{script_id}` 并输出搜索命中和脚本摘要
 - 传入 `--cleanup` 时自动删除本次联调创建的知识文档、碎片和脚本
 
-客户端只需要继续轮询 SparkFlow 自己的 `/api/pipelines/{run_id}`，不需要感知稳定内核/方法论刷新、大纲生成和草稿落库的后端内部步骤。
+客户端只需要继续轮询 SparkFlow 自己的 `/api/pipelines/{run_id}`，不需要感知后台每日方法论刷新、大纲生成和草稿落库的后端内部步骤。
 
 ## Backend Architecture
 
@@ -120,6 +122,7 @@ cd backend
    - 外部能力抽象与适配层。
    - 负责 LLM、STT、Embedding、VectorStore、FileStorage、WorkflowProvider 等端口与实现。
    - `modules/shared/container.py` 只负责 `ServiceContainer` 和默认依赖装配。
+   - `backend/prompts/` 是当前后端 prompt 文本与模板的统一存放位置；代码层只负责读取与填充变量，不再直接内嵌长 prompt 文本。
    - `modules/shared/infrastructure.py` 只保留兼容导出，真实实现拆到 `storage.py`、`vector_store.py`、`providers.py`。
    - `modules/shared/audio_ingestion_use_case.py` 负责媒体导入入口编排，`media_ingestion_steps.py` 负责 transcript-first 步骤执行，`media_ingestion_persistence.py` 负责落库与终态输出。
    - `modules/shared/audio_ingestion.py` 保留统一入口导出，供现有依赖平滑迁移。
@@ -154,7 +157,7 @@ cd backend
 - `modules/debug_logs/`: 接收移动端调试日志，并通过结构化日志链路写入本地文件。
 - `modules/media_assets/`: 统一媒体资源上传、列表和删除。
 - `modules/exports/`: Markdown 单条导出和批量 zip 导出。
-- `modules/scheduler/`: APScheduler 装配与每日推盘调度入口。
+- `modules/scheduler/`: APScheduler 装配与每日推盘、写作上下文维护调度入口。
 - `modules/shared/`: 模块共享端口、DI 容器、增强逻辑，不承载独立业务模块。
 
 当前 `modules/scripts/` 内部约定：
@@ -162,7 +165,7 @@ cd backend
 - `application.py` 只保留查询、命令和每日推盘编排入口。
 - `rag_pipeline.py` 只负责 `rag_script_generation` 步骤定义与协调。
 - `daily_push_pipeline.py` 只负责 `daily_push_generation` 步骤定义与结果回流。
-- `writing_context_builder.py` 负责稳定内核、方法论和相关素材三层上下文构建。
+- `writing_context_builder.py` 负责预置稳定内核、缓存方法论读取、相关素材召回，以及每日碎片方法论维护任务。
 - `rag_context_builder.py` 负责把三层上下文、大纲和当前碎片背景拼成最终提示词。
 - `persistence.py` 负责脚本幂等落库。
 - `daily_push.py` 负责每日推盘的碎片拼接和相似度筛选规则。
@@ -271,7 +274,7 @@ bash scripts/postgres-local.sh stop
 - `POST /api/external-media/audio-imports` 不再同步解析或下载媒体；`resolve_external_media` / `download_media` 也属于 `media_ingestion` pipeline 步骤
 - `media_ingestion` 当前固定步骤为 `resolve_external_media`（按需）、`download_media`、`transcribe_audio`、`finalize_fragment`；`GET /api/pipelines/{run_id}` 成功时允许 `summary=null`、`tags=[]`
 - transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` pipeline，异步执行摘要、标签和向量回填；该回填失败不会回滚已成功的 ingest
-- SparkFlow 后端先收集稳定内核、方法论、相关素材和可选碎片背景，再生成大纲与草稿
+- SparkFlow 后端先收集预置稳定内核、已缓存方法论、相关素材和可选碎片背景，再生成大纲与草稿
 - `rag_script_generation` pipeline 依次执行 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`
 - `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源
 - `agent_runs` 与 `/api/agent/*` 已移除，脚本生成公开链路完全收口到 `scripts + pipelines`

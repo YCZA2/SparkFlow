@@ -23,6 +23,7 @@ from modules.shared.pipeline.pipeline_runtime import (
     PipelineExecutionError,
     PipelineStepDefinition,
 )
+from modules.shared.prompt_loader import load_prompt_text, render_prompt_template
 from .persistence import ScriptGenerationPersistenceService
 from .rag_context_builder import build_generation_prompt, build_generation_system_prompt
 from .writing_context import MethodologyPayload, StableCorePayload
@@ -34,11 +35,12 @@ logger = get_logger(__name__)
 
 # SOP 大纲生成提示词路径
 _OUTLINE_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "rag_outline.txt"
+_OUTLINE_USER_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "rag_outline_user.txt"
 
 
 def _load_outline_prompt() -> str:
     """读取 SOP 大纲生成系统提示词。"""
-    return _OUTLINE_PROMPT_PATH.read_text(encoding="utf-8").strip()
+    return load_prompt_text(_OUTLINE_PROMPT_PATH)
 
 
 class RagScriptPipelineService:
@@ -99,7 +101,7 @@ class RagScriptPipelineService:
             raise PipelineExecutionError(f"读取大纲提示词失败: {exc}", retryable=False) from exc
         raw_outline = await context.container.llm_provider.generate(
             system_prompt=system_prompt,
-            user_message=f"请为以下主题生成内容大纲：{topic}",
+            user_message=render_prompt_template(_OUTLINE_USER_PROMPT_PATH, topic=topic),
             temperature=0.5,
         )
         if not raw_outline or not raw_outline.strip():

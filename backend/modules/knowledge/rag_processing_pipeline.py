@@ -17,6 +17,7 @@ from modules.shared.pipeline.pipeline_runtime import (
     PipelineExecutionError,
     PipelineStepDefinition,
 )
+from modules.shared.prompt_loader import load_prompt_text
 
 from .chunking import build_knowledge_chunks
 
@@ -30,7 +31,7 @@ _STYLE_ANALYSIS_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / 
 
 def _load_style_analysis_prompt() -> str:
     """读取风格分析系统提示文本。"""
-    return _STYLE_ANALYSIS_PROMPT_PATH.read_text(encoding="utf-8").strip()
+    return load_prompt_text(_STYLE_ANALYSIS_PROMPT_PATH)
 
 
 class ReferenceScriptProcessingPipelineService:

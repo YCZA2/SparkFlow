@@ -10,29 +10,26 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from domains.fragments import repository as fragment_repository
 from domains.knowledge import repository as knowledge_repository
 from domains.scripts import repository as script_repository
 from domains.writing_context import repository as writing_context_repository
+from models import User
 from modules.shared.content.content_html import extract_plain_text_from_html
 from modules.shared.ports import KnowledgeIndexStore, TextGenerationProvider, VectorStore
+from modules.shared.prompt_loader import load_prompt_text
 from utils.serialization import parse_json_object_list
 
 from .writing_context import MethodologyPayload, StableCorePayload, WritingContextBundle
 
-_STABLE_CORE_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "stable_core_profile.txt"
 _METHODOLOGY_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "methodology_distillation.txt"
+_STABLE_CORE_PRESET_PATH = Path(__file__).parent.parent.parent / "prompts" / "stable_core_preset.txt"
 _TOKEN_SPLIT_RE = re.compile(r"[\s,，。！？!?:：;；、\n\r\t]+")
-_MAX_STABLE_CORE_SOURCES = 24
 _MAX_METHODOLOGY_FRAGMENT_SOURCES = 30
 _MAX_RELATED_FRAGMENT_HITS = 3
 _MAX_RELATED_KNOWLEDGE_HITS = 3
 _MAX_RELATED_SCRIPT_HITS = 2
-
-
-def _load_prompt(path: Path) -> str:
-    """读取脚本生成上下文相关提示词。"""
-    return path.read_text(encoding="utf-8").strip()
 
 
 def _extract_json_block(text: str) -> str:
@@ -91,72 +88,50 @@ def _build_source_signature(parts: list[str]) -> str:
     return digest.hexdigest()
 
 
-def _build_source_summary(*, fragment_count: int, knowledge_count: int) -> str:
-    """构造稳定内核来源摘要。"""
-    return f"来源碎片 {fragment_count} 条，长期资料 {knowledge_count} 份。"
-
-
 def _preset_methodology_entries() -> list[MethodologyPayload]:
     """返回系统预置的方法论条目，当前默认留空以避免过度影响风格。"""
     return []
 
 
-async def _refresh_stable_core_profile(
-    *,
-    db: Session,
-    user_id: str,
-    llm_provider: TextGenerationProvider,
-) -> StableCorePayload:
-    """在画像缺失或来源变化时重建稳定内核。"""
-    fragments = fragment_repository.list_vectorizable_by_user(db=db, user_id=user_id)
-    eligible_fragments = [fragment for fragment in fragments if (fragment.plain_text_snapshot or "").strip()]
-    knowledge_docs = [
-        doc
-        for doc in knowledge_repository.list_by_user(db=db, user_id=user_id, doc_type=None, limit=200, offset=0)
-        if doc.doc_type != "reference_script" and (doc.content or "").strip()
-    ]
-
-    signature_parts = [
-        *(f"fragment:{fragment.id}:{fragment.updated_at.isoformat()}:{len(fragment.plain_text_snapshot or '')}" for fragment in eligible_fragments),
-        *(f"knowledge:{doc.id}:{doc.updated_at.isoformat()}:{len(doc.content or '')}" for doc in knowledge_docs),
-    ]
-    source_signature = _build_source_signature(signature_parts) if signature_parts else ""
-    existing = writing_context_repository.get_stable_core_profile(db=db, user_id=user_id)
-    if existing and existing.source_signature == source_signature and existing.content.strip():
-        return StableCorePayload(content=existing.content, source_summary=existing.source_summary or "")
-
-    source_texts: list[str] = []
-    for fragment in eligible_fragments[-_MAX_STABLE_CORE_SOURCES:]:
-        source_texts.append(f"[碎片] {_normalize_text(fragment.plain_text_snapshot)}")
-    remaining_slots = max(0, _MAX_STABLE_CORE_SOURCES - len(source_texts))
-    for doc in knowledge_docs[:remaining_slots]:
-        source_texts.append(f"[长期资料:{doc.title}] {_normalize_text(doc.content)}")
-
-    if not source_texts:
-        return StableCorePayload(content="", source_summary="")
-
-    profile_text = await llm_provider.generate(
-        system_prompt=_load_prompt(_STABLE_CORE_PROMPT_PATH),
-        user_message="\n\n".join(source_texts),
-        temperature=0.2,
-        max_tokens=900,
+def _build_preset_stable_core() -> StableCorePayload:
+    """返回当前阶段固定预置的稳定内核，不再按用户素材动态生成。"""
+    return StableCorePayload(
+        content=load_prompt_text(_STABLE_CORE_PRESET_PATH),
+        source_summary="当前阶段使用系统预置稳定内核。",
     )
-    normalized_profile = str(profile_text or "").strip()
-    if not normalized_profile:
-        return StableCorePayload(content="", source_summary="")
 
-    source_summary = _build_source_summary(
-        fragment_count=len(eligible_fragments),
-        knowledge_count=len(knowledge_docs),
-    )
-    writing_context_repository.upsert_stable_core_profile(
+
+def _list_cached_fragment_methodology_entries(*, db: Session, user_id: str) -> list[MethodologyPayload]:
+    """仅读取已落库的碎片方法论条目，不在生成链路中触发重算。"""
+    existing_entries = writing_context_repository.list_methodology_entries_by_source_type(
         db=db,
         user_id=user_id,
-        content=normalized_profile,
-        source_summary=source_summary,
-        source_signature=source_signature,
+        source_type="fragment_distilled",
     )
-    return StableCorePayload(content=normalized_profile, source_summary=source_summary)
+    return [
+        MethodologyPayload(
+            title=entry.title or "",
+            content=entry.content,
+            source_type=entry.source_type,
+        )
+        for entry in existing_entries
+        if entry.enabled and entry.content.strip()
+    ]
+
+
+def _estimate_incremental_fragment_count(existing_entries: list[Any], current_fragment_ids: list[str]) -> int:
+    """根据上次提炼时记录的来源碎片，估算本轮新增碎片数量。"""
+    previous_ids: set[str] = set()
+    for entry in existing_entries:
+        if not getattr(entry, "source_ref_ids", None):
+            continue
+        try:
+            previous_ids.update(str(item) for item in json.loads(entry.source_ref_ids) if str(item).strip())
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+    if not previous_ids:
+        return len(current_fragment_ids)
+    return len([fragment_id for fragment_id in current_fragment_ids if fragment_id not in previous_ids])
 
 
 async def _refresh_fragment_methodology_entries(
@@ -165,28 +140,15 @@ async def _refresh_fragment_methodology_entries(
     user_id: str,
     llm_provider: TextGenerationProvider,
 ) -> list[MethodologyPayload]:
-    """在碎片来源变化时重建自动提炼的方法论条目。"""
+    """在离线维护任务中按阈值重建自动提炼的方法论条目。"""
     fragments = fragment_repository.list_vectorizable_by_user(db=db, user_id=user_id)
     eligible_fragments = [fragment for fragment in fragments if (fragment.plain_text_snapshot or "").strip()]
-    source_signature = _build_source_signature(
-        [f"{fragment.id}:{fragment.updated_at.isoformat()}:{len(fragment.plain_text_snapshot or '')}" for fragment in eligible_fragments]
-    ) if eligible_fragments else ""
 
     existing_entries = writing_context_repository.list_methodology_entries_by_source_type(
         db=db,
         user_id=user_id,
         source_type="fragment_distilled",
     )
-    if existing_entries and all(entry.source_signature == source_signature for entry in existing_entries if entry.source_signature is not None):
-        return [
-            MethodologyPayload(
-                title=entry.title or "",
-                content=entry.content,
-                source_type=entry.source_type,
-            )
-            for entry in existing_entries
-            if entry.enabled and entry.content.strip()
-        ]
 
     if not eligible_fragments:
         writing_context_repository.replace_methodology_entries_for_source(
@@ -197,12 +159,27 @@ async def _refresh_fragment_methodology_entries(
         )
         return []
 
+    current_fragment_ids = [fragment.id for fragment in eligible_fragments[-_MAX_METHODOLOGY_FRAGMENT_SOURCES:]]
+    if len(eligible_fragments) < settings.WRITING_CONTEXT_MIN_FRAGMENTS:
+        return _list_cached_fragment_methodology_entries(db=db, user_id=user_id)
+
+    source_signature = _build_source_signature(
+        [f"{fragment.id}:{fragment.updated_at.isoformat()}:{len(fragment.plain_text_snapshot or '')}" for fragment in eligible_fragments]
+    )
+    if existing_entries and all(entry.source_signature == source_signature for entry in existing_entries if entry.source_signature is not None):
+        return _list_cached_fragment_methodology_entries(db=db, user_id=user_id)
+
+    if existing_entries:
+        incremental_count = _estimate_incremental_fragment_count(existing_entries, current_fragment_ids)
+        if incremental_count < settings.WRITING_CONTEXT_MIN_INCREMENTAL_FRAGMENTS:
+            return _list_cached_fragment_methodology_entries(db=db, user_id=user_id)
+
     source_text = "\n\n".join(
         f"[碎片] {_normalize_text(fragment.plain_text_snapshot)}"
         for fragment in eligible_fragments[-_MAX_METHODOLOGY_FRAGMENT_SOURCES:]
     )
     raw = await llm_provider.generate(
-        system_prompt=_load_prompt(_METHODOLOGY_PROMPT_PATH),
+        system_prompt=load_prompt_text(_METHODOLOGY_PROMPT_PATH),
         user_message=source_text,
         temperature=0.2,
         max_tokens=900,
@@ -217,7 +194,7 @@ async def _refresh_fragment_methodology_entries(
             {
                 "title": str(item.get("title") or "").strip() or None,
                 "content": content,
-                "source_ref_ids": json.dumps([fragment.id for fragment in eligible_fragments[-_MAX_METHODOLOGY_FRAGMENT_SOURCES:]], ensure_ascii=False),
+                "source_ref_ids": json.dumps(current_fragment_ids, ensure_ascii=False),
                 "source_signature": source_signature,
                 "enabled": True,
             }
@@ -238,6 +215,54 @@ async def _refresh_fragment_methodology_entries(
         for entry in stored_entries
         if entry.enabled and entry.content.strip()
     ]
+
+
+async def refresh_fragment_methodology_entries_for_all_users(
+    *,
+    db: Session,
+    llm_provider: TextGenerationProvider,
+) -> dict[str, Any]:
+    """每日遍历全部用户，按阈值静默刷新碎片方法论。"""
+    user_ids = [row[0] for row in db.query(User.id).all()]
+    refreshed_user_ids: list[str] = []
+    skipped_user_ids: list[str] = []
+    failed_user_ids: list[str] = []
+
+    for user_id in user_ids:
+        before_entries = writing_context_repository.list_methodology_entries_by_source_type(
+            db=db,
+            user_id=user_id,
+            source_type="fragment_distilled",
+        )
+        before_signature = before_entries[0].source_signature if before_entries else None
+        before_count = len(before_entries)
+        try:
+            refreshed_entries = await _refresh_fragment_methodology_entries(
+                db=db,
+                user_id=user_id,
+                llm_provider=llm_provider,
+            )
+        except Exception:
+            failed_user_ids.append(user_id)
+            continue
+
+        after_entries = writing_context_repository.list_methodology_entries_by_source_type(
+            db=db,
+            user_id=user_id,
+            source_type="fragment_distilled",
+        )
+        after_signature = after_entries[0].source_signature if after_entries else None
+        if after_signature != before_signature or (before_count == 0 and len(refreshed_entries) > 0):
+            refreshed_user_ids.append(user_id)
+        else:
+            skipped_user_ids.append(user_id)
+
+    return {
+        "user_count": len(user_ids),
+        "refreshed_user_ids": refreshed_user_ids,
+        "skipped_user_ids": skipped_user_ids,
+        "failed_user_ids": failed_user_ids,
+    }
 
 
 def _build_uploaded_methodology_entries(*, db: Session, user_id: str) -> list[MethodologyPayload]:
@@ -339,16 +364,8 @@ async def build_writing_context_bundle(
     exclude_fragment_ids: list[str] | None = None,
 ) -> WritingContextBundle:
     """构建脚本生成所需的三层写作上下文。"""
-    stable_core = await _refresh_stable_core_profile(
-        db=db,
-        user_id=user_id,
-        llm_provider=llm_provider,
-    )
-    methodologies = await _refresh_fragment_methodology_entries(
-        db=db,
-        user_id=user_id,
-        llm_provider=llm_provider,
-    )
+    stable_core = _build_preset_stable_core()
+    methodologies = _list_cached_fragment_methodology_entries(db=db, user_id=user_id)
     methodologies.extend(_build_uploaded_methodology_entries(db=db, user_id=user_id))
     methodologies.extend(_preset_methodology_entries())
 

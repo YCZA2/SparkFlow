@@ -17,6 +17,7 @@ from models import Fragment, PipelineRun, User
 from modules.shared.pipeline.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
 from modules.shared.ports import VectorStore
 from modules.shared.content.content_html import convert_markdown_to_basic_html
+from modules.shared.prompt_loader import load_prompt_text, render_prompt_template
 from utils.serialization import format_iso_datetime, parse_json_list
 from utils.time import get_app_timezone, get_local_day_bounds
 
@@ -28,11 +29,12 @@ PIPELINE_TYPE_DAILY_PUSH_GENERATION = "daily_push_generation"
 
 # 每日推盘生成系统提示路径
 _DAILY_PUSH_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "daily_push.txt"
+_DAILY_PUSH_USER_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "daily_push_user.txt"
 
 
 def _load_daily_push_prompt() -> str:
     """读取每日推盘生成系统提示文本。"""
-    return _DAILY_PUSH_PROMPT_PATH.read_text(encoding="utf-8").strip()
+    return load_prompt_text(_DAILY_PUSH_PROMPT_PATH)
 
 
 def _fragment_content(fragment: Fragment) -> str:
@@ -297,7 +299,7 @@ class DailyPushPipelineService:
             raise PipelineExecutionError(f"读取每日推盘提示词失败: {exc}", retryable=False) from exc
         draft = await context.container.llm_provider.generate(
             system_prompt=system_prompt,
-            user_message=f"以下是今天的灵感碎片：\n\n{fragments_text}",
+            user_message=render_prompt_template(_DAILY_PUSH_USER_PROMPT_PATH, fragments_text=fragments_text),
             temperature=0.7,
         )
         if not draft or not draft.strip():

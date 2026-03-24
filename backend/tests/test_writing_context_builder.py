@@ -2,28 +2,29 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from models import KnowledgeDoc
 from modules.auth.application import TEST_USER_ID
 from modules.shared.ports import KnowledgeChunk
-from modules.scripts.writing_context_builder import build_writing_context_bundle
+from modules.scripts.writing_context_builder import (
+    build_writing_context_bundle,
+    refresh_fragment_methodology_entries_for_all_users,
+)
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_writing_context_bundle_builds_three_layers_and_excludes_scripts_from_stable_core(app) -> None:
-    """稳定内核只应吸收碎片和长期资料，不应把历史脚本当作真值来源。"""
+async def test_writing_context_bundle_uses_preset_stable_core_and_cached_methodologies(app) -> None:
+    """生成链路应使用预置稳定内核，并只读取已缓存的方法论。"""
     llm_provider = app.state.container.llm_provider
     vector_store = app.state.container.vector_store
     knowledge_index_store = app.state.container.knowledge_index_store
-    captured_calls: list[dict] = []
 
     from domains.fragments import repository as fragment_repository
     from domains.scripts import repository as script_repository
+    from domains.writing_context import repository as writing_context_repository
 
     with app.state.container.session_factory() as db:
         fragment = fragment_repository.create(
@@ -64,6 +65,20 @@ async def test_writing_context_bundle_builds_three_layers_and_excludes_scripts_f
             chunk_count=1,
         )
         db.add(knowledge_doc)
+        writing_context_repository.replace_methodology_entries_for_source(
+            db=db,
+            user_id=TEST_USER_ID,
+            source_type="fragment_distilled",
+            entries=[
+                {
+                    "title": "先拆误区",
+                    "content": "先指出大家常见误区，再给替代做法。",
+                    "source_ref_ids": f'["{fragment.id}"]',
+                    "source_signature": "cached-signature",
+                    "enabled": True,
+                }
+            ],
+        )
         db.commit()
         db.refresh(knowledge_doc)
         fragment_id = fragment.id
@@ -90,26 +105,6 @@ async def test_writing_context_bundle_builds_three_layers_and_excludes_scripts_f
         chunks=[KnowledgeChunk(chunk_index=0, content=knowledge_doc_content)],
     )
 
-    async def fake_generate(**kwargs):
-        captured_calls.append(kwargs)
-        system_prompt = kwargs.get("system_prompt", "")
-        if "稳定内核画像" in system_prompt:
-            return "价值观：强调真诚和执行。\n核心母题：把复杂问题讲简单。\n结构偏好：先破后立。\n语言底色：直接、口语化。\n表达立场：提醒式。"
-        if "方法论提炼助手" in system_prompt:
-            return json.dumps(
-                [
-                    {
-                        "title": "先拆误区",
-                        "content": "先指出大家常见误区，再给替代做法。",
-                    }
-                ],
-                ensure_ascii=False,
-            )
-        return "unused"
-
-    original_generate = llm_provider.generate
-    llm_provider.generate = fake_generate
-
     with app.state.container.session_factory() as db:
         bundle = await build_writing_context_bundle(
             db=db,
@@ -121,16 +116,119 @@ async def test_writing_context_bundle_builds_three_layers_and_excludes_scripts_f
             exclude_fragment_ids=[],
         )
 
-    llm_provider.generate = original_generate
-
     assert bundle.stable_core.content
+    assert "把零散灵感整理成可执行" in bundle.stable_core.content
     assert any(item.source_type == "fragment_distilled" for item in bundle.methodologies)
     assert any(item.source_type == "knowledge_upload" for item in bundle.methodologies)
     assert bundle.related_scripts
     assert bundle.related_fragments
     assert bundle.related_knowledge
+    assert llm_provider.calls == []
 
-    stable_core_call = next(call for call in captured_calls if "稳定内核画像" in call.get("system_prompt", ""))
-    assert "我经常先用反常识开头" in stable_core_call["user_message"]
-    assert "讲方法时先拆误区" in stable_core_call["user_message"]
-    assert "这是 AI 历史脚本里的特有表达" not in stable_core_call["user_message"]
+
+@pytest.mark.asyncio
+async def test_daily_writing_context_maintenance_refreshes_only_after_threshold(app) -> None:
+    """每日维护任务应在碎片数量和增量达标后才静默刷新方法论。"""
+    llm_provider = app.state.container.llm_provider
+
+    from domains.fragments import repository as fragment_repository
+    from domains.writing_context import repository as writing_context_repository
+
+    with app.state.container.session_factory() as db:
+        for index in range(7):
+            fragment_repository.create(
+                db=db,
+                user_id=TEST_USER_ID,
+                transcript=None,
+                source="manual",
+                audio_source=None,
+                audio_storage_provider=None,
+                audio_bucket=None,
+                audio_object_key=None,
+                audio_access_level=None,
+                audio_original_filename=None,
+                audio_mime_type=None,
+                audio_file_size=None,
+                audio_checksum=None,
+                body_html=f"<p>首轮阈值碎片 {index}</p>",
+                plain_text_snapshot=f"首轮阈值碎片 {index}",
+                tags=[],
+            )
+
+        first_result = await refresh_fragment_methodology_entries_for_all_users(
+            db=db,
+            llm_provider=llm_provider,
+        )
+        first_entries = writing_context_repository.list_methodology_entries_by_source_type(
+            db=db,
+            user_id=TEST_USER_ID,
+            source_type="fragment_distilled",
+        )
+
+        fragment_repository.create(
+            db=db,
+            user_id=TEST_USER_ID,
+            transcript=None,
+            source="manual",
+            audio_source=None,
+            audio_storage_provider=None,
+            audio_bucket=None,
+            audio_object_key=None,
+            audio_access_level=None,
+            audio_original_filename=None,
+            audio_mime_type=None,
+            audio_file_size=None,
+            audio_checksum=None,
+            body_html="<p>第八条碎片，达到阈值</p>",
+            plain_text_snapshot="第八条碎片，达到阈值",
+            tags=[],
+        )
+        llm_provider.queue_text('[{"title":"首轮方法论","content":"先抛问题，再给动作。"}]')
+        second_result = await refresh_fragment_methodology_entries_for_all_users(
+            db=db,
+            llm_provider=llm_provider,
+        )
+        second_entries = writing_context_repository.list_methodology_entries_by_source_type(
+            db=db,
+            user_id=TEST_USER_ID,
+            source_type="fragment_distilled",
+        )
+        second_signature = second_entries[0].source_signature
+
+        for index in range(2):
+            fragment_repository.create(
+                db=db,
+                user_id=TEST_USER_ID,
+                transcript=None,
+                source="manual",
+                audio_source=None,
+                audio_storage_provider=None,
+                audio_bucket=None,
+                audio_object_key=None,
+                audio_access_level=None,
+                audio_original_filename=None,
+                audio_mime_type=None,
+                audio_file_size=None,
+                audio_checksum=None,
+                body_html=f"<p>增量未达标 {index}</p>",
+                plain_text_snapshot=f"增量未达标 {index}",
+                tags=[],
+            )
+        third_result = await refresh_fragment_methodology_entries_for_all_users(
+            db=db,
+            llm_provider=llm_provider,
+        )
+        third_entries = writing_context_repository.list_methodology_entries_by_source_type(
+            db=db,
+            user_id=TEST_USER_ID,
+            source_type="fragment_distilled",
+        )
+
+    assert first_result["refreshed_user_ids"] == []
+    assert first_entries == []
+    assert second_result["refreshed_user_ids"] == [TEST_USER_ID]
+    assert len(second_entries) == 1
+    assert second_entries[0].title == "首轮方法论"
+    assert third_result["refreshed_user_ids"] == []
+    assert len(third_entries) == 1
+    assert third_entries[0].source_signature == second_signature

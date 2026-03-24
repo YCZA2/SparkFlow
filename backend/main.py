@@ -42,6 +42,7 @@ from modules.knowledge.rag_processing_pipeline import (
 )
 from modules.scripts.rag_pipeline import build_rag_script_pipeline_service, PIPELINE_TYPE_RAG_SCRIPT_GENERATION
 from modules.scripts.presentation import router as scripts_router
+from modules.scripts.writing_context_builder import refresh_fragment_methodology_entries_for_all_users
 from modules.shared.media.audio_ingestion import build_media_ingestion_pipeline_service, PIPELINE_TYPE_MEDIA_INGESTION
 from modules.shared.infrastructure.container import ServiceContainer, build_container
 from modules.shared.pipeline.pipeline_runtime import (
@@ -228,7 +229,7 @@ def register_routes(app: FastAPI) -> None:
 
 
 def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:
-    """构建带每日推盘任务的调度服务。"""
+    """构建带每日推盘和写作上下文维护任务的调度服务。"""
     scheduler = create_scheduler()
 
     async def run_daily_push_job() -> None:
@@ -238,7 +239,18 @@ def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:
             )
             return await use_case.run_daily_job(db=db)
 
-    return SchedulerService(scheduler=scheduler, run_job=run_daily_push_job)
+    async def run_writing_context_job() -> None:
+        with container.session_factory() as db:
+            return await refresh_fragment_methodology_entries_for_all_users(
+                db=db,
+                llm_provider=container.llm_provider,
+            )
+
+    return SchedulerService(
+        scheduler=scheduler,
+        run_job=run_daily_push_job,
+        run_writing_context_job=run_writing_context_job,
+    )
 
 
 def _configure_pipeline_runtime(container: ServiceContainer) -> None:

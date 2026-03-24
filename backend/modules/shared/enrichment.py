@@ -2,41 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 import re
 import time
 
 from core.logging_config import get_logger
 from modules.shared.ports import TextGenerationProvider
+from modules.shared.prompt_loader import load_prompt_text, render_prompt_template
 from modules.shared.warning_throttle import WarningThrottle
 
 logger = get_logger(__name__)
 ENRICHMENT_WARNING_THROTTLE_SECONDS = 60.0
 _enrichment_throttle = WarningThrottle(ENRICHMENT_WARNING_THROTTLE_SECONDS)
 
-SUMMARY_SYSTEM_PROMPT = """你是一个专业的内容摘要助手。你的任务是根据用户提供的口述内容，生成一句简短的中文摘要，描述核心主题。
-
-要求：
-1. 摘要长度控制在 20 字以内
-2. 使用简洁、准确的语言
-3. 突出核心主题或关键观点
-4. 只返回摘要文本，不要有其他说明或标点符号外的额外内容"""
-
-SUMMARY_USER_PROMPT_TEMPLATE = """请为以下内容生成一句话摘要：
-
-{transcript}"""
-
-TAGS_SYSTEM_PROMPT = """你是一个专业的内容标签助手。你的任务是根据用户提供的内容，生成 2-4 个中文标签关键词。
-
-要求：
-1. 生成 2-4 个标签
-2. 每个标签 2-6 个字
-3. 标签应准确概括内容的核心主题、关键词或分类
-4. 以 JSON 数组格式返回，如 ["标签1", "标签2", "标签3"]
-5. 只返回 JSON 数组，不要有其他说明"""
-
-TAGS_USER_PROMPT_TEMPLATE = """请为以下内容生成标签关键词：
-
-{transcript}"""
+_ENRICHMENT_TAGS_SYSTEM_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "enrichment_tags_system.txt"
+_ENRICHMENT_TAGS_USER_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "enrichment_tags_user.txt"
 
 
 def _log_enrichment_failure(*, phase: str, exc: Exception) -> None:
@@ -141,10 +121,10 @@ async def _generate_summary(
 
 async def _generate_tags(transcript: str, *, llm_provider: TextGenerationProvider) -> list[str]:
     """调用 LLM 生成标签，并在失败时回退。"""
-    user_message = TAGS_USER_PROMPT_TEMPLATE.format(transcript=transcript)
+    user_message = render_prompt_template(_ENRICHMENT_TAGS_USER_PROMPT_PATH, transcript=transcript)
     try:
         response = await llm_provider.generate(
-            system_prompt=TAGS_SYSTEM_PROMPT,
+            system_prompt=load_prompt_text(_ENRICHMENT_TAGS_SYSTEM_PROMPT_PATH),
             user_message=user_message,
             temperature=0.3,
             max_tokens=100,

@@ -106,10 +106,6 @@ async def test_rag_script_generation_with_optional_fragments(
 
     async def multi_generate(**kwargs):
         system_prompt = kwargs.get("system_prompt", "")
-        if "稳定内核画像" in system_prompt:
-            return "价值观：强调长期主义。\n核心母题：效率与自我管理。\n结构偏好：先讲误区再给方法。\n语言底色：直接、口语化。\n表达立场：提醒式而非说教式。"
-        if "方法论提炼助手" in system_prompt:
-            return '[{"title":"先破后立","content":"先指出错误做法，再给替代动作。"}]'
         if "SOP" in system_prompt:
             return '{"sop_type":"教育结构","sections":[{"name":"引入","key_points":["问题开场"]}]}'
         return "这是含碎片背景的口播稿正文"
@@ -189,6 +185,8 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
     captured_user_messages: list[str] = []
 
     with app.state.container.session_factory() as db:
+        from domains.writing_context import repository as writing_context_repository
+
         reference_doc = KnowledgeDoc(
             user_id=TEST_USER_ID,
             title="参考脚本",
@@ -221,6 +219,20 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
             chunk_count=1,
         )
         db.add_all([reference_doc, high_like_doc, habit_doc])
+        writing_context_repository.replace_methodology_entries_for_source(
+            db=db,
+            user_id=TEST_USER_ID,
+            source_type="fragment_distilled",
+            entries=[
+                {
+                    "title": "先抛反常识",
+                    "content": "开头先给反直觉判断，再展开解释。",
+                    "source_ref_ids": "[]",
+                    "source_signature": "cached-signature",
+                    "enabled": True,
+                }
+            ],
+        )
         db.commit()
         db.refresh(reference_doc)
         db.refresh(high_like_doc)
@@ -253,10 +265,6 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
     async def multi_generate(**kwargs):
         system_prompt = kwargs.get("system_prompt", "")
         captured_user_messages.append(kwargs.get("user_message", ""))
-        if "稳定内核画像" in system_prompt:
-            return "价值观：强调表达要有立场。\n核心母题：复杂问题简单讲清。\n结构偏好：先抛反常识，再讲原因和动作。\n语言底色：快节奏、口语化。\n表达立场：结论先行。"
-        if "方法论提炼助手" in system_prompt:
-            return '[{"title":"先抛反常识","content":"开头先给反直觉判断，再展开解释。"}]'
         if "SOP" in system_prompt:
             return '{"sop_type":"知识结构","sections":[{"name":"开场","key_points":["反常识"]}]}'
         return "这是融合三层上下文后的口播稿正文"

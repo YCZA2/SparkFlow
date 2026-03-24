@@ -6,9 +6,15 @@
 
 import os
 import asyncio
+from pathlib import Path
 from typing import Optional, AsyncGenerator
 
+from modules.shared.prompt_loader import load_prompt_text
+
 from .base import BaseLLMService, LLMError, LLMRateLimitError, LLMAuthenticationError, LLMTimeoutError
+
+_HEALTHCHECK_SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "health_check_system.txt"
+_HEALTHCHECK_USER_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "health_check_user.txt"
 
 
 class QwenLLMService(BaseLLMService):
@@ -191,8 +197,8 @@ class QwenLLMService(BaseLLMService):
         try:
             # 尝试简单生成以检查连接性
             await self.generate(
-                system_prompt="You are a helpful assistant.",
-                user_message="Hi",
+                system_prompt=load_prompt_text(_HEALTHCHECK_SYSTEM_PROMPT_PATH),
+                user_message=load_prompt_text(_HEALTHCHECK_USER_PROMPT_PATH),
                 max_tokens=5
             )
             return True
