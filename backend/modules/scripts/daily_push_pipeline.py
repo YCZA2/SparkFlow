@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import functools
 import json
 from datetime import date, datetime, time, timezone
 from pathlib import Path
@@ -33,9 +32,8 @@ _DAILY_PUSH_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "dai
 _DAILY_PUSH_USER_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "daily_push_user.txt"
 
 
-@functools.cache
 def _load_daily_push_prompt() -> str:
-    """读取每日推盘生成系统提示文本（首次调用后常驻内存）。"""
+    """读取每日推盘生成系统提示文本。"""
     return load_prompt_text(_DAILY_PUSH_PROMPT_PATH)
 
 

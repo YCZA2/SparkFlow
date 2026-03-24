@@ -11,7 +11,6 @@ RAG 脚本生成流水线。
 
 from __future__ import annotations
 
-import functools
 from pathlib import Path
 from typing import Any
 
@@ -39,9 +38,8 @@ _OUTLINE_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "rag_ou
 _OUTLINE_USER_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "rag_outline_user.txt"
 
 
-@functools.cache
 def _load_outline_prompt() -> str:
-    """读取 SOP 大纲生成系统提示词（首次调用后常驻内存）。"""
+    """读取 SOP 大纲生成系统提示词。"""
     return load_prompt_text(_OUTLINE_PROMPT_PATH)
 
 

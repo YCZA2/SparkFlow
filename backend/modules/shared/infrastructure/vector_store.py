@@ -136,6 +136,8 @@ class AppVectorStore(VectorStore, KnowledgeIndexStore):
         # 批量嵌入减少 API 调用次数（相比逐块调用 embed()）
         contents = [chunk.content.strip() for chunk in valid_chunks]
         embedding_results = await self.embedding_provider.embed_batch(contents)
+        if len(embedding_results) != len(valid_chunks) or any(result is None for result in embedding_results):
+            raise RuntimeError("知识库向量化失败，存在未成功生成 embedding 的分块")
         documents: list[VectorDocument] = [
             VectorDocument(
                 id=f"{ref_prefix}:chunk_{chunk.chunk_index}",
@@ -150,7 +152,6 @@ class AppVectorStore(VectorStore, KnowledgeIndexStore):
                 },
             )
             for chunk, content, result in zip(valid_chunks, contents, embedding_results)
-            if result is not None  # embed_batch 失败时返回 None，跳过以避免崩溃
         ]
         await self.vector_db_provider.upsert(namespace=_knowledge_namespace(user_id), documents=documents)
         return documents[0].id if documents else None
