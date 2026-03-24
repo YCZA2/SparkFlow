@@ -9,6 +9,7 @@
 - `fragments / folders` 的 phase 1 local-first 主链路已经落地：移动端本地 SQLite + `body.html` 为真值，远端只承担自动备份与显式恢复。
 - 后端已经补齐 `backups` 模块、`device session` 单设备在线约束，以及面向本地快照的转写 / 外链导入 / 脚本生成请求入口。
 - `media_ingestion` 已改成 transcript-first：上传录音和外链导入都会在 transcript 落库后立刻结束主 pipeline，摘要 / 标签 / 向量由单独的 fragment derivative pipeline 异步回填。
+- 向量检索链路已补齐对当前 Chroma 版本的兼容：`list_collections()` 返回字符串集合名时，namespace 检查、相似检索和文档枚举都按同一适配层处理。
 - 移动端已经补齐 backup queue、显式恢复、本地媒体缓存重建、音频 `object_key` 持久化与恢复链路。
 - `scripts` 本轮也切入 local-first：脚本生成成功后会立即落本地 SQLite + `body.html` 文件，后续详情编辑、回收站、恢复冲突副本与拍摄状态都以本地为真值。
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
@@ -199,6 +200,7 @@ flowchart TD
 - `backend/modules/shared/infrastructure/infrastructure.py`: 兼容层，统一转发 `storage` / `vector_store` / `providers` 的导出，避免上层导入点一次性迁移。
 - `backend/modules/shared/infrastructure/storage.py`: 本地 / OSS 文件存储实现、对象 key 规则与上传校验。
 - `backend/modules/shared/infrastructure/vector_store.py`: 应用级向量存储适配与 namespace 规则。
+- `backend/services/chroma_vector_db.py`: Chroma 持久化实现，兼容不同版本 `list_collections()` 返回的集合名结构。
 - `backend/modules/shared/infrastructure/providers.py`: 外部媒体、网页搜索与 workflow provider 的默认工厂。
 - `backend/modules/shared/media/audio_ingestion.py`: 兼容层，对外保留媒体导入统一入口。
 - `backend/modules/shared/media/audio_ingestion_use_case.py`: 媒体导入任务创建入口，负责 fragment 初始化、入队与前置校验。

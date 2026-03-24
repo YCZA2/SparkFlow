@@ -8,6 +8,7 @@ SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Doc
 - 认证链路已经加入 `device_id + session_version` 语义；登录、刷新 token、备份、恢复和 AI / 转写相关请求都受单设备在线约束。
 - `transcriptions`、`external_media`、`scripts/generation` 现已支持客户端本地快照 / 本地 placeholder 驱动，不再把“先创建远端 fragment 业务记录”作为默认入口。
 - `media_ingestion` 已调整为 transcript-first：主 pipeline 在转写落库后即可成功，`summary` / `tags` / vector 改为异步衍生回填，不再阻塞上传和抖音导入主链路。
+- Chroma 查询适配层已兼容当前 `list_collections()` 返回字符串列表的行为，`/api/fragments/similar`、向量文档列表和 namespace 统计不会再因版本差异误判为空。
 - `backups` 快照当前已扩展覆盖 `script` 实体，服务端会按和 fragment / folder / media 一致的 batch contract 接收与返回成稿快照。
 - scheduler 侧的 `daily push` 已降级为兼容壳；因为 fragments 真值已经回到客户端，后续若继续演进应优先走客户端触发而不是恢复服务器真值模式。
 - 仓库当前仍保留 `fragments / fragment_folders` 的历史业务表与少量兼容读取能力，但它们已不是移动端 fragments / folders 的主读取来源。
@@ -279,6 +280,7 @@ cd backend
 - `../docker-compose.postgres.yml`: 本地 PostgreSQL Docker 编排文件。
 - `uploads/`: `local` 文件存储 provider 的对象根目录，配置层会固定解析到 `backend/uploads/`，不依赖启动 cwd。
 - `chroma_data/`: 本地 ChromaDB 数据目录，相对路径同样固定解析到 `backend/chroma_data/`。
+- 当前 Chroma 版本的 `list_collections()` 可能直接返回集合名字符串；应用适配层已统一兼容字符串和旧对象结构，避免 namespace 存在性检查误判。
 - `runtime_logs/`: 运行时日志目录，当前包含后端全量日志、错误日志和移动端错误日志文件。
 
 ## Coding Conventions
