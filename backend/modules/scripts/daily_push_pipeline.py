@@ -283,7 +283,7 @@ class DailyPushPipelineService:
         ordered_fragments = [fragment_map[fid] for fid in payload["fragment_ids"] if fid in fragment_map]
         if len(ordered_fragments) != len(payload["fragment_ids"]):
             raise ValidationError(message="每日推盘引用的碎片不存在或无权访问", field_errors={"fragment_ids": "碎片缺失"})
-        content_parts = [_fragment_content(f) for f in ordered_fragments if _fragment_content(f)]
+        content_parts = [c for f in ordered_fragments if (c := _fragment_content(f))]
         if not content_parts:
             raise ValidationError(message="选中的碎片均无可用文本，无法生成每日推盘", field_errors={"fragment_ids": "碎片内容为空"})
         return {"fragments_text": "\n\n---\n\n".join(content_parts)}

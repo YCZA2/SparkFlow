@@ -10,6 +10,18 @@ from __future__ import annotations
 from typing import Any
 
 
+def _build_example_section(examples: list[str], section_label: str, item_label: str, max_count: int) -> str | None:
+    """将示例列表拼装成带标题的提示词段落，无有效内容时返回 None。"""
+    lines = []
+    for i, content in enumerate(examples[:max_count], start=1):
+        stripped = content.strip()
+        if stripped:
+            lines.append(f"{item_label}{i}：\n{stripped}")
+    if not lines:
+        return None
+    return f"{section_label}\n" + "\n\n".join(lines)
+
+
 def build_generation_prompt(
     *,
     topic: str,
@@ -30,32 +42,13 @@ def build_generation_prompt(
     if style_description:
         parts.append(f"[风格描述]\n{style_description}")
 
-    if reference_examples:
-        example_lines = []
-        for i, content in enumerate(reference_examples[:3], start=1):
-            content = content.strip()
-            if content:
-                example_lines.append(f"示例{i}：\n{content}")
-        if example_lines:
-            parts.append("[参考示例]\n" + "\n\n".join(example_lines))
-
-    if high_like_examples:
-        high_like_lines = []
-        for i, content in enumerate(high_like_examples[:2], start=1):
-            normalized = content.strip()
-            if normalized:
-                high_like_lines.append(f"参考{i}：\n{normalized}")
-        if high_like_lines:
-            parts.append("[高赞结构与表达参考]\n" + "\n\n".join(high_like_lines))
-
-    if language_habit_examples:
-        habit_lines = []
-        for i, content in enumerate(language_habit_examples[:2], start=1):
-            normalized = content.strip()
-            if normalized:
-                habit_lines.append(f"习惯{i}：\n{normalized}")
-        if habit_lines:
-            parts.append("[语言习惯参考]\n" + "\n\n".join(habit_lines))
+    for section in [
+        _build_example_section(reference_examples, "[参考示例]", "示例", 3),
+        _build_example_section(high_like_examples, "[高赞结构与表达参考]", "参考", 2),
+        _build_example_section(language_habit_examples, "[语言习惯参考]", "习惯", 2),
+    ]:
+        if section:
+            parts.append(section)
 
     if outline_json:
         parts.append(f"[内容大纲]\n{outline_json}")

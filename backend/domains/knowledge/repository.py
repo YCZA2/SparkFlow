@@ -85,6 +85,17 @@ def get_by_id(db: Session, user_id: str, doc_id: str) -> Optional[KnowledgeDoc]:
     )
 
 
+def get_by_ids(db: Session, user_id: str, doc_ids: list[str]) -> list[KnowledgeDoc]:
+    """按 ID 列表批量读取知识库文档。"""
+    if not doc_ids:
+        return []
+    return (
+        db.query(KnowledgeDoc)
+        .filter(KnowledgeDoc.user_id == user_id, KnowledgeDoc.id.in_(doc_ids))
+        .all()
+    )
+
+
 def create(
     db: Session,
     user_id: str,
@@ -161,8 +172,35 @@ def update(
         doc.chunk_count = chunk_count
     if processing_status is not None:
         doc.processing_status = processing_status
-    if processing_error is not None or processing_error == "":
+    if processing_error is not None:
         doc.processing_error = processing_error
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
+def update_style_and_index_state(
+    db: Session,
+    *,
+    doc_id: str,
+    user_id: str,
+    style_description: str,
+    processing_status: str,
+    processing_error: str | None = None,
+    vector_ref_id: str | None = None,
+    chunk_count: int | None = None,
+) -> Optional[KnowledgeDoc]:
+    """原子更新 reference_script 的风格描述与索引元数据，避免双提交不一致。"""
+    doc = get_by_id(db=db, user_id=user_id, doc_id=doc_id)
+    if not doc:
+        return None
+    doc.style_description = style_description
+    doc.processing_status = processing_status
+    doc.processing_error = processing_error
+    if vector_ref_id is not None:
+        doc.vector_ref_id = vector_ref_id
+    if chunk_count is not None:
+        doc.chunk_count = chunk_count
     db.commit()
     db.refresh(doc)
     return doc

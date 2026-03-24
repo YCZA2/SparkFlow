@@ -149,8 +149,6 @@ class KnowledgeUseCase:
         source_mime_type: str | None,
     ) -> KnowledgeDoc:
         """创建 reference_script 文档并触发异步处理 pipeline。"""
-        from .rag_processing_pipeline import ReferenceScriptProcessingPipelineService
-
         doc = knowledge_repository.create(
             db=db,
             user_id=user_id,
@@ -164,25 +162,9 @@ class KnowledgeUseCase:
             source_mime_type=source_mime_type,
             chunk_count=len(chunks),
         )
-        if self.pipeline_runner is None:
-            return knowledge_repository.update(
-                db=db,
-                doc=doc,
-                processing_status="failed",
-                processing_error="reference_script pipeline runner 未配置",
-            )
-        pipeline_service = ReferenceScriptProcessingPipelineService(
-            pipeline_runner=self.pipeline_runner,
-            knowledge_index_store=self.indexing_service.store,
+        return await self._launch_reference_script_pipeline(
+            db=db, doc=doc, user_id=user_id, plain_text=plain_text
         )
-        await pipeline_service.create_run(
-            doc_id=doc.id,
-            user_id=user_id,
-            script_text=plain_text,
-            title=title,
-            doc_type="reference_script",
-        )
-        return doc
 
     async def update_doc(
         self,
@@ -208,27 +190,9 @@ class KnowledgeUseCase:
         )
 
         if updated.doc_type == "reference_script":
-            from .rag_processing_pipeline import ReferenceScriptProcessingPipelineService
-
-            if self.pipeline_runner is None:
-                return knowledge_repository.update(
-                    db=db,
-                    doc=updated,
-                    processing_status="failed",
-                    processing_error="reference_script pipeline runner 未配置",
-                )
-            pipeline_service = ReferenceScriptProcessingPipelineService(
-                pipeline_runner=self.pipeline_runner,
-                knowledge_index_store=self.indexing_service.store,
+            return await self._launch_reference_script_pipeline(
+                db=db, doc=updated, user_id=user_id, plain_text=plain_text
             )
-            await pipeline_service.create_run(
-                doc_id=updated.id,
-                user_id=user_id,
-                script_text=plain_text,
-                title=updated.title,
-                doc_type=updated.doc_type,
-            )
-            return updated
 
         try:
             vector_ref_id = await self.indexing_service.refresh_document(
@@ -254,6 +218,37 @@ class KnowledgeUseCase:
                 processing_error=str(exc),
             )
 
+    async def _launch_reference_script_pipeline(
+        self,
+        *,
+        db: Session,
+        doc: KnowledgeDoc,
+        user_id: str,
+        plain_text: str,
+    ) -> KnowledgeDoc:
+        """启动 reference_script 处理 pipeline；runner 未配置时回写失败状态。"""
+        from .rag_processing_pipeline import ReferenceScriptProcessingPipelineService
+
+        if self.pipeline_runner is None:
+            return knowledge_repository.update(
+                db=db,
+                doc=doc,
+                processing_status="failed",
+                processing_error="reference_script pipeline runner 未配置",
+            )
+        pipeline_service = ReferenceScriptProcessingPipelineService(
+            pipeline_runner=self.pipeline_runner,
+            knowledge_index_store=self.indexing_service.store,
+        )
+        await pipeline_service.create_run(
+            doc_id=doc.id,
+            user_id=user_id,
+            script_text=plain_text,
+            title=doc.title,
+            doc_type=doc.doc_type,
+        )
+        return doc
+
     def list_docs(self, *, db: Session, user_id: str, doc_type: Optional[str], limit: int, offset: int) -> KnowledgeDocListResponse:
         """分页返回用户知识库文档列表，可按 doc_type 过滤。"""
         if doc_type:
@@ -278,11 +273,7 @@ class KnowledgeUseCase:
         """按查询文本返回知识库文档级命中列表。"""
         hits = await self.indexing_service.search(user_id=user_id, query_text=query_text, top_k=top_k)
         doc_ids = [item.doc_id for item in hits]
-        docs = {
-            doc.id: doc
-            for doc in knowledge_repository.list_by_user(db=db, user_id=user_id, limit=200, offset=0)
-            if doc.id in doc_ids
-        }
+        docs = {doc.id: doc for doc in knowledge_repository.get_by_ids(db=db, user_id=user_id, doc_ids=doc_ids)}
         items: list[KnowledgeSearchItem] = []
         for hit in hits:
             doc = docs.get(hit.doc_id)

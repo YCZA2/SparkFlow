@@ -114,31 +114,22 @@ class ReferenceScriptProcessingPipelineService:
         return {"chunk_count": len(chunks), "ref_ids": [ref_id] if ref_id else []}
 
     async def persist_style(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """将风格描述和就绪状态回写到知识库文档记录。"""
+        """原子回写风格描述与索引元数据，避免两次提交之间的状态不一致。"""
         style_description = context.get_step_output("analyze_style").get("style_description", "")
         doc_id = context.input_payload.get("doc_id", "")
-        user_id = context.run.user_id
-        doc = knowledge_repository.update_style_description(
+        chunk_output = context.get_step_output("chunk_and_vectorize")
+        doc = knowledge_repository.update_style_and_index_state(
             context.db,
             doc_id=doc_id,
-            user_id=user_id,
+            user_id=context.run.user_id,
             style_description=style_description,
             processing_status="ready",
             processing_error=None,
+            vector_ref_id=(chunk_output.get("ref_ids") or [None])[0],
+            chunk_count=chunk_output.get("chunk_count"),
         )
         if not doc:
-            raise PipelineExecutionError(f"知识库文档不存在，无法回写风格描述: {doc_id}", retryable=False)
-        updated = knowledge_repository.update_processing_state(
-            context.db,
-            doc_id=doc_id,
-            user_id=user_id,
-            processing_status="ready",
-            processing_error=None,
-            vector_ref_id=(context.get_step_output("chunk_and_vectorize").get("ref_ids") or [None])[0],
-            chunk_count=context.get_step_output("chunk_and_vectorize").get("chunk_count"),
-        )
-        if not updated:
-            raise PipelineExecutionError(f"知识库文档不存在，无法更新索引状态: {doc_id}", retryable=False)
+            raise PipelineExecutionError(f"知识库文档不存在，无法回写风格与索引状态: {doc_id}", retryable=False)
         return {"doc_id": doc_id, "processing_status": "ready"}
 
     async def finalize_run(self, context: PipelineExecutionContext) -> dict[str, Any]:

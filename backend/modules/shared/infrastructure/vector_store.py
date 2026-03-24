@@ -133,24 +133,24 @@ class AppVectorStore(VectorStore, KnowledgeIndexStore):
         if not valid_chunks:
             raise ValidationError(message="知识库内容不能为空", field_errors={"content": "请输入内容"})
         ref_prefix = _knowledge_doc_prefix(doc_type, doc_id)
-        documents: list[VectorDocument] = []
-        for chunk in valid_chunks:
-            normalized_content = chunk.content.strip()
-            embedding_result = await self.embedding_provider.embed(normalized_content)
-            documents.append(
-                VectorDocument(
-                    id=f"{ref_prefix}:chunk_{chunk.chunk_index}",
-                    text=normalized_content,
-                    embedding=embedding_result.embedding,
-                    metadata={
-                        "user_id": user_id,
-                        "doc_id": doc_id,
-                        "title": normalized_title,
-                        "doc_type": doc_type,
-                        "chunk_index": chunk.chunk_index,
-                    },
-                )
+        # 批量嵌入减少 API 调用次数（相比逐块调用 embed()）
+        contents = [chunk.content.strip() for chunk in valid_chunks]
+        embedding_results = await self.embedding_provider.embed_batch(contents)
+        documents: list[VectorDocument] = [
+            VectorDocument(
+                id=f"{ref_prefix}:chunk_{chunk.chunk_index}",
+                text=content,
+                embedding=result.embedding,
+                metadata={
+                    "user_id": user_id,
+                    "doc_id": doc_id,
+                    "title": normalized_title,
+                    "doc_type": doc_type,
+                    "chunk_index": chunk.chunk_index,
+                },
             )
+            for chunk, content, result in zip(valid_chunks, contents, embedding_results)
+        ]
         await self.vector_db_provider.upsert(namespace=_knowledge_namespace(user_id), documents=documents)
         return documents[0].id if documents else None
 
