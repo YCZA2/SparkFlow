@@ -15,6 +15,7 @@ from domains.fragment_tags import repository as fragment_tag_repository
 from models import Fragment, FragmentFolder, FragmentTag, KnowledgeDoc, User
 from main import ensure_local_test_user
 from modules.auth.application import TEST_USER_ID
+from modules.fragments.derivative_pipeline import PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL
 from modules.shared.content.content_html import convert_markdown_to_basic_html
 from modules.shared.content.fragment_body_markdown import convert_editor_document_to_body_markdown
 from modules.shared.ports import ExternalMediaResolvedAudio
@@ -80,6 +81,19 @@ async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, att
             return payload
         await asyncio.sleep(0.05)
     raise AssertionError(f"pipeline {run_id} did not finish")
+
+
+async def _wait_transcription_enrichment(async_client, auth_headers_factory, fragment_id: str, *, attempts: int = 80) -> dict:
+    """轮询转写详情直到摘要标签补齐。"""
+    headers = await _auth_headers(async_client, auth_headers_factory)
+    for _ in range(attempts):
+        response = await async_client.get(f"/api/transcriptions/{fragment_id}", headers=headers)
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        if payload.get("summary") or payload.get("tags"):
+            return payload
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"fragment derivatives were not backfilled: {fragment_id}")
 
 
 def _seed_fragment_tags(db_session_factory, fragment_id: str, tags: list[str]) -> None:
@@ -276,6 +290,7 @@ async def test_import_external_audio_only_creates_pipeline_in_request_phase(asyn
         "pipeline_run_id": payload["pipeline_run_id"],
         "pipeline_type": "media_ingestion",
         "fragment_id": payload["fragment_id"],
+        "local_fragment_id": None,
         "source": "voice",
         "audio_source": "external_link",
     }
@@ -323,7 +338,14 @@ async def test_import_external_audio_assigns_fragment_to_requested_folder(
 
 
 @pytest.mark.asyncio
-async def test_import_external_audio_runs_full_async_pipeline(async_client, auth_headers_factory, external_media_provider, db_session_factory, tmp_path) -> None:
+async def test_import_external_audio_runs_full_async_pipeline(
+    async_client,
+    auth_headers_factory,
+    external_media_provider,
+    db_session_factory,
+    tmp_path,
+    vector_store,
+) -> None:
     """外部媒体导入成功后应由后台流水线完成解析、下载和转写。"""
     temp_audio = tmp_path / "incoming.m4a"
     temp_audio.write_bytes(b"fake-m4a-audio")
@@ -360,6 +382,8 @@ async def test_import_external_audio_runs_full_async_pipeline(async_client, auth
     assert pipeline["output"]["cover_url"] == "https://example.com/cover.jpg"
     assert pipeline["output"]["content_type"] == "video"
     assert pipeline["output"]["audio_file_url"]
+    assert pipeline["output"]["summary"] is None
+    assert pipeline["output"]["tags"] == []
 
     steps_response = await async_client.get(
         f"/api/pipelines/{payload['pipeline_run_id']}/steps",
@@ -372,12 +396,17 @@ async def test_import_external_audio_runs_full_async_pipeline(async_client, auth
     assert download_output["audio_file_url"]
     assert not temp_audio.exists()
 
+    enriched = await _wait_transcription_enrichment(async_client, auth_headers_factory, payload["fragment_id"])
+    assert enriched["summary"]
+    assert enriched["tags"]
+
     with db_session_factory() as db:
         fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
         assert fragment is not None
         assert fragment.source == "voice"
         assert fragment.audio_source == "external_link"
         assert fragment.transcript == "转写完成"
+    assert vector_store.fragment_docs[payload["fragment_id"]]["text"] == "转写完成"
 
 
 @pytest.mark.asyncio
@@ -670,6 +699,8 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
     assert "relative_path" not in payload
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
     assert pipeline["status"] == "succeeded"
+    assert pipeline["output"]["summary"] is None
+    assert pipeline["output"]["tags"] == []
 
     status_response = await async_client.get(
         f"/api/transcriptions/{payload['fragment_id']}",
@@ -677,6 +708,9 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
     )
     assert status_response.status_code == 200
     assert status_response.json()["data"]["audio_source"] == "upload"
+    enriched = await _wait_transcription_enrichment(async_client, auth_headers_factory, payload["fragment_id"])
+    assert enriched["summary"]
+    assert enriched["tags"]
 
     with db_session_factory() as db:
         fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
@@ -687,6 +721,41 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
         fragment_tags = db.query(FragmentTag).filter(FragmentTag.fragment_id == fragment.id).all()
         assert len(fragment_tags) >= 1
         assert payload["audio_file_url"]
+
+
+@pytest.mark.asyncio
+async def test_upload_audio_succeeds_when_derivative_enqueue_fails(async_client, auth_headers_factory, app, db_session_factory) -> None:
+    """异步衍生字段回填入队失败时，主转写链路仍应成功。"""
+    original_create_run = app.state.container.pipeline_runner.create_run
+
+    async def create_run_with_derivative_failure(**kwargs):
+        if kwargs.get("pipeline_type") == PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL:
+            raise RuntimeError("derivative enqueue boom")
+        return await original_create_run(**kwargs)
+
+    app.state.container.pipeline_runner.create_run = create_run_with_derivative_failure
+    try:
+        response = await async_client.post(
+            "/api/transcriptions",
+            headers=await _auth_headers(async_client, auth_headers_factory),
+            files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
+        )
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
+        assert pipeline["status"] == "succeeded"
+        assert pipeline["output"]["transcript"] == "转写完成"
+        assert pipeline["output"]["summary"] is None
+        assert pipeline["output"]["tags"] == []
+
+        with db_session_factory() as db:
+            fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
+            assert fragment is not None
+            assert fragment.transcript == "转写完成"
+            assert fragment.summary is None
+            assert fragment.tags == "[]"
+    finally:
+        app.state.container.pipeline_runner.create_run = original_create_run
 
 
 @pytest.mark.asyncio
@@ -754,14 +823,14 @@ async def test_upload_audio_retries_transcription_and_then_succeeds(async_client
 
 @pytest.mark.asyncio
 async def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(async_client, auth_headers_factory, app, db_session_factory) -> None:
-    """摘要超时时应使用本地 fallback 而不是整条链路失败。"""
+    """异步衍生字段超时时应走 fallback，且不影响主转写成功。"""
     async def slow_generate(**kwargs):
         await asyncio.sleep(0.05)
         return "不会被用到"
 
     app.state.container.llm_provider = SimpleNamespace(generate=slow_generate, health_check=AsyncMock(return_value=True))
 
-    with patch("modules.shared.media.media_ingestion_steps.DEFAULT_ENRICHMENT_TIMEOUT_SECONDS", 0.01):
+    with patch("modules.fragments.derivative_service.generate_summary_and_tags", side_effect=asyncio.TimeoutError()):
         response = await async_client.post(
             "/api/transcriptions",
             headers=await _auth_headers(async_client, auth_headers_factory),
@@ -770,6 +839,12 @@ async def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(async_
     payload = response.json()["data"]
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
     assert pipeline["status"] == "succeeded"
+    assert pipeline["output"]["summary"] is None
+    assert pipeline["output"]["tags"] == []
+
+    enriched = await _wait_transcription_enrichment(async_client, auth_headers_factory, payload["fragment_id"])
+    assert enriched["summary"]
+    assert enriched["tags"]
 
     with db_session_factory() as db:
         fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()

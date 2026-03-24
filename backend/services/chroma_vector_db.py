@@ -341,9 +341,16 @@ class ChromaVectorDBService(BaseVectorDBService):
         """
         try:
             collections = self.client.list_collections()
-            return namespace in [c.name for c in collections]
+            return namespace in [self._collection_name(item) for item in collections]
         except Exception:
             return False
+
+    @staticmethod
+    def _collection_name(collection: Any) -> str:
+        """兼容不同 Chroma 版本返回的集合对象或集合名字符串。"""
+        if isinstance(collection, str):
+            return collection
+        return str(getattr(collection, "name", ""))
 
     async def create_namespace(
         self,

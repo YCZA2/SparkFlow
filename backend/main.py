@@ -24,6 +24,10 @@ from modules.external_media.presentation import router as external_media_router
 from modules.exports.presentation import router as exports_router
 from modules.fragment_folders.presentation import router as fragment_folders_router
 from modules.fragments.presentation import router as fragments_router
+from modules.fragments.derivative_pipeline import (
+    PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
+    build_fragment_derivative_pipeline_service,
+)
 from modules.knowledge.presentation import router as knowledge_router
 from modules.media_assets.presentation import router as media_assets_router
 from modules.pipelines.presentation import router as pipelines_router
@@ -263,6 +267,12 @@ def _configure_pipeline_runtime(container: ServiceContainer) -> None:
         executor_registry=executor_registry,
         pipeline_type=PIPELINE_TYPE_MEDIA_INGESTION,
         definitions=build_media_ingestion_pipeline_service(container).build_pipeline_definitions(),
+    )
+    _register_pipeline(
+        definition_registry=definition_registry,
+        executor_registry=executor_registry,
+        pipeline_type=PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
+        definitions=build_fragment_derivative_pipeline_service(container).build_pipeline_definitions(),
     )
     _register_pipeline(
         definition_registry=definition_registry,

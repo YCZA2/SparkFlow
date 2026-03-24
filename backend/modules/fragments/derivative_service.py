@@ -56,12 +56,45 @@ class FragmentDerivativeService:
                 )
             return
 
-        # 读取碎片正文 HTML
-        from modules.fragments.content import read_fragment_body_html
-        body_html = read_fragment_body_html(fragment)
+        await self.backfill_fragment_derivatives(
+            db=db,
+            user_id=user_id,
+            fragment=fragment,
+            effective_text=current_effective_text,
+        )
 
+    async def backfill_fragment_derivatives(
+        self,
+        *,
+        db,
+        user_id: str,
+        fragment,
+        effective_text: str | None = None,
+    ) -> tuple[str | None, list[str]]:
+        """基于当前 fragment 内容补齐摘要、标签，并最佳努力同步向量。"""
+        from modules.fragments.content import read_fragment_body_html, read_fragment_plain_text
+
+        normalized_text = (effective_text or read_fragment_plain_text(fragment) or fragment.transcript or "").strip()
+        if not normalized_text:
+            fragment.summary = None
+            fragment.tags = None
+            fragment_tag_repository.replace_for_fragment(
+                db=db,
+                user_id=user_id,
+                fragment_id=fragment.id,
+                tags=[],
+            )
+            db.commit()
+            await self._sync_fragment_vector(
+                action="delete",
+                user_id=user_id,
+                fragment=fragment,
+            )
+            return (None, [])
+
+        body_html = read_fragment_body_html(fragment)
         summary, tags = await self.generate_fragment_enrichment(
-            current_effective_text,
+            normalized_text,
             body_html=body_html,
         )
         fragment.summary = summary
@@ -73,15 +106,15 @@ class FragmentDerivativeService:
             tags=tags,
         )
         db.commit()
-        if current_effective_text:
-            await self._sync_fragment_vector(
-                action="upsert",
-                user_id=user_id,
-                fragment=fragment,
-                text=current_effective_text,
-                summary=summary,
-                tags=tags,
-            )
+        await self._sync_fragment_vector(
+            action="upsert",
+            user_id=user_id,
+            fragment=fragment,
+            text=normalized_text,
+            summary=summary,
+            tags=tags,
+        )
+        return (summary, tags)
 
     async def _sync_fragment_vector(
         self,

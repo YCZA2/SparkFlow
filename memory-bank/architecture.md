@@ -1,13 +1,14 @@
 # SparkFlow Architecture
 
-> 最后更新：2026-03-17
+> 最后更新：2026-03-24
 
 本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为 Docker 管理的 PostgreSQL。
 
-## 0. 今日进展（2026-03-17）
+## 0. 今日进展（2026-03-24）
 
 - `fragments / folders` 的 phase 1 local-first 主链路已经落地：移动端本地 SQLite + `body.html` 为真值，远端只承担自动备份与显式恢复。
 - 后端已经补齐 `backups` 模块、`device session` 单设备在线约束，以及面向本地快照的转写 / 外链导入 / 脚本生成请求入口。
+- `media_ingestion` 已改成 transcript-first：上传录音和外链导入都会在 transcript 落库后立刻结束主 pipeline，摘要 / 标签 / 向量由单独的 fragment derivative pipeline 异步回填。
 - 移动端已经补齐 backup queue、显式恢复、本地媒体缓存重建、音频 `object_key` 持久化与恢复链路。
 - `scripts` 本轮也切入 local-first：脚本生成成功后会立即落本地 SQLite + `body.html` 文件，后续详情编辑、回收站、恢复冲突副本与拍摄状态都以本地为真值。
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
@@ -201,11 +202,12 @@ flowchart TD
 - `backend/modules/shared/infrastructure/providers.py`: 外部媒体、网页搜索与 workflow provider 的默认工厂。
 - `backend/modules/shared/media/audio_ingestion.py`: 兼容层，对外保留媒体导入统一入口。
 - `backend/modules/shared/media/audio_ingestion_use_case.py`: 媒体导入任务创建入口，负责 fragment 初始化、入队与前置校验。
-- `backend/modules/shared/media/media_ingestion_steps.py`: 媒体导入 pipeline 的步骤执行器。
+- `backend/modules/shared/media/media_ingestion_steps.py`: 媒体导入 pipeline 的步骤执行器，当前只负责解析/下载、STT、transcript 落库与主任务终态。
 - `backend/modules/shared/media/media_ingestion_persistence.py`: 媒体导入链路的音频元数据回写、转写落库与终态输出组装。
 - `backend/modules/shared/media/stored_file_payloads.py`: `StoredFile` 与 pipeline payload 的互转 helper。
 - `backend/modules/shared/pipeline/pipeline_runtime.py`: 持久化后台流水线运行时，负责步骤定义、worker 抢占、自动重试与恢复。
 - `backend/modules/shared/pipeline/pipeline_types.py`: pipeline 步骤类型定义。
+- `backend/modules/fragments/derivative_pipeline.py`: fragment 摘要、标签和向量异步回填流水线。
 - `backend/modules/shared/content/`: 正文处理子目录，包含 `content_html.py`、`content_markdown.py`、`content_schemas.py`、`editor_document.py`、`fragment_body_markdown.py`。
 - `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，而不是继续扩散到 legacy service 文件。
 
@@ -253,7 +255,7 @@ flowchart TD
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
 - `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；移动端 phase 1 已不再依赖其作为 fragments / folders 首屏真值读取来源，`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_html`，`plain_text_snapshot` 负责检索、摘要和生成输入。
 - `transcriptions`: 音频上传、后台转写、状态查询；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录。
-- `external_media`: 外部媒体音频导入，当前支持抖音分享链接；local-first 请求会直接绑定客户端 placeholder fragment，解析链接、下载转 m4a、转写与增强都在同一条后台管线里执行。
+- `external_media`: 外部媒体音频导入，当前支持抖音分享链接；local-first 请求会直接绑定客户端 placeholder fragment，解析链接、下载转 m4a、主转写在 `media_ingestion` 中执行，摘要/标签/向量由后续 derivative pipeline 异步补齐。
 - `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷。
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
@@ -333,6 +335,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant PIPE as Pipeline Worker
     participant STT as STT
+    participant DERIV as Derivative Pipeline
     participant LLM as Summary/Tags
     participant VDB as ChromaDB
 
@@ -342,16 +345,20 @@ sequenceDiagram
     API->>DB: create fragment(syncing) + pipeline_runs + pipeline_step_runs
     API-->>App: pipeline_run_id + fragment_id
     PIPE->>STT: transcribe(audio)
-    PIPE->>LLM: generate summary/tags
-    PIPE->>DB: mark synced / failed + sync fragment_tags
-    PIPE->>VDB: upsert fragment embedding
+    PIPE->>DB: persist transcript + speaker_segments
+    PIPE->>DB: mark media_ingestion succeeded
+    PIPE->>DB: enqueue fragment_derivative_backfill(best effort)
+    DERIV->>LLM: generate summary/tags
+    DERIV->>DB: sync fragment_tags + persist summary/tags
+    DERIV->>VDB: upsert fragment embedding
 ```
 
 关键点：
 
 - 上传接口立即返回，转写在后台继续执行。
-- 转写完成后会写回 `transcript`、`summary`、`tags`、`speaker_segments`，并同步刷新 `fragment_tags` 明细。
-- 向量写入失败不会回滚主转写结果。
+- `media_ingestion` 现在以 transcript 落库为唯一成功条件；主任务成功时 `summary` / `tags` 可以暂时为空。
+- transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` 流水线，异步补齐 `summary`、`tags`、`fragment_tags` 与向量。
+- derivative 或向量写入失败不会回滚主转写结果。
 
 ### 5.2 External Media Audio Import
 
@@ -375,12 +382,13 @@ sequenceDiagram
     FF-->>Provider: temp m4a path
     PIPE->>FS: save imported audio
     PIPE->>DB: update fragment audio metadata
-    PIPE->>DB: transcribe / enrich / vectorize / finalize
+    PIPE->>DB: transcribe / finalize transcript
+    PIPE->>DB: enqueue derivative backfill(best effort)
 ```
 
 关键点：
 
-- 当前接口只创建 fragment 和后台任务，外链解析、下载转码、转写与增强全部在 `media_ingestion` pipeline 中异步执行。
+- 当前接口只创建 fragment 和后台任务，外链解析、下载转码与 transcript 落库在 `media_ingestion` pipeline 中异步执行，摘要/标签/向量随后异步补齐。
 - `folder_id` 为可选字段；若从某个文件夹页发起导入，预创建 fragment 会直接归入该文件夹。
 - 对外接口按多平台抽象设计，但 v1 只有抖音 provider。
 - 导入文件统一保存到对象存储 `audio/imported/...` 命名空间，输出格式固定为 `m4a`。

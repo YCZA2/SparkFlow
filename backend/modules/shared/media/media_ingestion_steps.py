@@ -7,7 +7,6 @@ from typing import Any
 
 from core.exceptions import AppException, ValidationError
 from core.logging_config import get_logger
-from modules.shared.enrichment import build_fallback_summary_and_tags, generate_summary_and_tags
 from sqlalchemy.orm import Session
 
 from domains.fragment_folders import repository as fragment_folder_repository
@@ -17,9 +16,9 @@ from modules.shared.media.media_ingestion_persistence import MediaIngestionPersi
 from modules.shared.ports import ExternalMediaProvider
 from modules.shared.infrastructure.storage import build_imported_audio_object_key, sanitize_filename
 from modules.shared.media.stored_file_payloads import stored_file_from_payload, stored_file_to_payload
+from modules.fragments.derivative_pipeline import PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL
 
 logger = get_logger(__name__)
-DEFAULT_ENRICHMENT_TIMEOUT_SECONDS = 45.0
 
 
 class MediaIngestionStepExecutor:
@@ -35,8 +34,6 @@ class MediaIngestionStepExecutor:
             PipelineStepDefinition(step_name="resolve_external_media", executor=self.resolve_external_media, max_attempts=2),
             PipelineStepDefinition(step_name="download_media", executor=self.download_media, max_attempts=2),
             PipelineStepDefinition(step_name="transcribe_audio", executor=self.transcribe_audio, max_attempts=3),
-            PipelineStepDefinition(step_name="enrich_fragment", executor=self.enrich_fragment, max_attempts=2),
-            PipelineStepDefinition(step_name="upsert_fragment_vector", executor=self.upsert_fragment_vector, max_attempts=2),
             PipelineStepDefinition(step_name="finalize_fragment", executor=self.finalize_fragment, max_attempts=1),
         ]
 
@@ -51,14 +48,6 @@ class MediaIngestionStepExecutor:
     def _runtime_stt_provider(self, context: PipelineExecutionContext):
         """按当前容器状态读取 STT provider。"""
         return context.container.stt_provider
-
-    def _runtime_llm_provider(self, context: PipelineExecutionContext):
-        """按当前容器状态读取 LLM provider。"""
-        return context.container.llm_provider
-
-    def _runtime_vector_store(self, context: PipelineExecutionContext):
-        """按当前容器状态读取向量存储。"""
-        return context.container.vector_store
 
     async def resolve_external_media(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """解析外链媒体并拿到临时音频文件。"""
@@ -174,80 +163,70 @@ class MediaIngestionStepExecutor:
             "speaker_segments": normalized_segments,
         }
 
-    async def enrich_fragment(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """生成摘要和标签。"""
-        transcript = context.get_step_output("transcribe_audio").get("transcript") or ""
-        try:
-            summary, tags = await self.generate_enrichment(
-                transcript,
-                llm_provider=self._runtime_llm_provider(context),
-            )
-        except Exception as exc:
-            raise PipelineExecutionError(
-                f"摘要增强失败: {str(exc) or 'unknown error'}",
-                retryable=True,
-            ) from exc
-        return {"summary": summary, "tags": tags}
-
-    async def upsert_fragment_vector(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """将碎片文本写入向量库。"""
-        transcript_payload = context.get_step_output("transcribe_audio")
-        enrichment_payload = context.get_step_output("enrich_fragment")
-        target_fragment_id = (
-            context.input_payload.get("fragment_id")
-            or context.input_payload.get("local_fragment_id")
-        )
-        if not target_fragment_id:
-            raise PipelineExecutionError("缺少可向量化的 fragment 标识", retryable=False)
-        try:
-            await self._runtime_vector_store(context).upsert_fragment(
-                user_id=context.run.user_id,
-                fragment_id=target_fragment_id,
-                text=transcript_payload.get("transcript") or "",
-                source="voice",
-                summary=enrichment_payload.get("summary"),
-                tags=enrichment_payload.get("tags") or [],
-            )
-        except Exception as exc:
-            raise PipelineExecutionError(
-                f"碎片向量写入失败: {str(exc) or 'unknown error'}",
-                retryable=True,
-            ) from exc
-        return {"vectorized": True}
-
     async def finalize_fragment(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """落库最终转写内容并结束媒体流水线。"""
         transcript_payload = context.get_step_output("transcribe_audio")
-        enrichment_payload = context.get_step_output("enrich_fragment")
         audio_payload = context.get_step_output("download_media")
         self.persistence_service.save_transcription_result(
             db=context.db,
             fragment_id=context.input_payload["fragment_id"],
             user_id=context.run.user_id,
             transcript=transcript_payload.get("transcript") or "",
-            summary=enrichment_payload.get("summary"),
-            tags=enrichment_payload.get("tags") or [],
+            summary=None,
+            tags=[],
             speaker_segments=transcript_payload.get("speaker_segments") or [],
+        )
+        await self.enqueue_fragment_derivative_backfill(
+            context=context,
+            fragment_id=context.input_payload.get("fragment_id"),
+            effective_text=transcript_payload.get("transcript") or "",
         )
         return self.persistence_service.build_finalize_payload(
             file_storage=self._runtime_file_storage(context),
             input_payload=context.input_payload,
             audio_payload=audio_payload,
             transcript_payload=transcript_payload,
-            enrichment_payload=enrichment_payload,
+            enrichment_payload={},
         )
 
-    async def generate_enrichment(self, transcript: str, *, llm_provider) -> tuple[str, list[str]]:
-        """生成摘要与标签，并在超时时落回本地策略。"""
-        try:
-            return await generate_summary_and_tags(
-                transcript,
-                llm_provider=llm_provider,
-                timeout_seconds=DEFAULT_ENRICHMENT_TIMEOUT_SECONDS,
+    async def enqueue_fragment_derivative_backfill(
+        self,
+        *,
+        context: PipelineExecutionContext,
+        fragment_id: str | None,
+        effective_text: str,
+    ) -> None:
+        """在 transcript 落库后最佳努力创建异步衍生字段回填流水线。"""
+        normalized_fragment_id = str(fragment_id or "").strip()
+        if not normalized_fragment_id:
+            return
+        pipeline_runner = context.container.pipeline_runner
+        if pipeline_runner is None:
+            logger.warning(
+                "fragment_derivative_pipeline_runner_missing",
+                fragment_id=normalized_fragment_id,
+                user_id=context.run.user_id,
             )
-        except asyncio.TimeoutError:
-            logger.warning("enrichment_timeout", transcript_length=len(transcript or ""))
-            return build_fallback_summary_and_tags(transcript)
+            return
+        try:
+            await pipeline_runner.create_run(
+                run_id=None,
+                user_id=context.run.user_id,
+                pipeline_type=PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
+                input_payload={
+                    "fragment_id": normalized_fragment_id,
+                    "effective_text": effective_text,
+                },
+                resource_type="fragment",
+                resource_id=normalized_fragment_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "fragment_derivative_backfill_enqueue_failed",
+                fragment_id=normalized_fragment_id,
+                user_id=context.run.user_id,
+                error=str(exc),
+            )
 
     @staticmethod
     def normalize_speaker_segments(speaker_segments: list[Any]) -> list[dict[str, Any]]:

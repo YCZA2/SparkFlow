@@ -2,11 +2,12 @@
 
 SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Docker PostgreSQL + ChromaDB 联调；文件存储已统一走对象存储抽象，本地开发默认使用 `local` provider，线上可切阿里云 OSS。
 
-## 今日进展（2026-03-17）
+## 今日进展（2026-03-24）
 
 - 后端已经补齐 phase 1 local-first 所需的备份恢复能力：`/api/backups/batch`、`/api/backups/snapshot`、`/api/backups/restore`、`/api/backups/assets` 与 `/api/backups/assets/access`。
 - 认证链路已经加入 `device_id + session_version` 语义；登录、刷新 token、备份、恢复和 AI / 转写相关请求都受单设备在线约束。
 - `transcriptions`、`external_media`、`scripts/generation` 现已支持客户端本地快照 / 本地 placeholder 驱动，不再把“先创建远端 fragment 业务记录”作为默认入口。
+- `media_ingestion` 已调整为 transcript-first：主 pipeline 在转写落库后即可成功，`summary` / `tags` / vector 改为异步衍生回填，不再阻塞上传和抖音导入主链路。
 - `backups` 快照当前已扩展覆盖 `script` 实体，服务端会按和 fragment / folder / media 一致的 batch contract 接收与返回成稿快照。
 - scheduler 侧的 `daily push` 已降级为兼容壳；因为 fragments 真值已经回到客户端，后续若继续演进应优先走客户端触发而不是恢复服务器真值模式。
 - 仓库当前仍保留 `fragments / fragment_folders` 的历史业务表与少量兼容读取能力，但它们已不是移动端 fragments / folders 的主读取来源。
@@ -205,9 +206,10 @@ cd backend
    - 负责 LLM、STT、Embedding、VectorStore、FileStorage、WorkflowProvider 等端口与实现。
    - `modules/shared/container.py` 只负责 `ServiceContainer` 和默认依赖装配。
    - `modules/shared/infrastructure.py` 只保留兼容导出，真实实现拆到 `storage.py`、`vector_store.py`、`providers.py`。
-   - `modules/shared/audio_ingestion_use_case.py` 负责媒体导入入口编排，`media_ingestion_steps.py` 负责步骤执行，`media_ingestion_persistence.py` 负责落库与终态输出。
+   - `modules/shared/audio_ingestion_use_case.py` 负责媒体导入入口编排，`media_ingestion_steps.py` 负责 transcript-first 步骤执行，`media_ingestion_persistence.py` 负责落库与终态输出。
    - `modules/shared/audio_ingestion.py` 保留统一入口导出，供现有依赖平滑迁移。
    - `modules/shared/pipeline_runtime.py` 提供持久化后台流水线运行时、worker 抢占、重试与恢复。
+   - `modules/fragments/derivative_pipeline.py` 负责 fragment 摘要、标签与向量的异步回填流水线。
 7. `modules/pipelines`
    - 后台任务流水线层。
    - 负责 `pipeline_runs` / `pipeline_step_runs` 查询、步骤详情与手动重跑。
@@ -229,8 +231,8 @@ cd backend
 - `modules/auth/`: 测试令牌签发、当前用户信息、刷新令牌。
 - `modules/fragment_folders/`: 碎片文件夹 CRUD 和文件夹统计。
 - `modules/fragments/`: 碎片列表、详情、移动、标签、相似检索、可视化。
-- `modules/transcriptions/`: 音频上传、后台转写、转写状态查询。
-- `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接；请求入口只创建任务，解析链接、下载转 m4a、转写与增强全部走统一后台流水线。
+- `modules/transcriptions/`: 音频上传、后台转写、转写状态查询；主任务以 transcript 成功为准，摘要标签随后异步补齐。
+- `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接；请求入口只创建任务，解析链接、下载转 m4a、转写先在主流水线完成，摘要/标签/向量由后续衍生流水线回填。
 - `modules/scripts/`: 口播稿生成、脚本生成 pipeline 定义、上下文构建、结果回流、列表、详情、更新、删除、每日推盘。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除。
 - `modules/pipelines/`: 后台流水线详情、步骤和重跑 API。
@@ -346,6 +348,8 @@ bash scripts/postgres-local.sh stop
 - `POST /api/transcriptions` / `POST /api/external-media/audio-imports` / `POST /api/scripts/generation` / `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 现在都会先创建 `pipeline_runs`
 - `GET /api/pipelines/{run_id}` / `GET /api/pipelines/{run_id}/steps` / `POST /api/pipelines/{run_id}/retry` 提供统一后台任务观察与补偿入口
 - `POST /api/external-media/audio-imports` 不再同步解析或下载媒体；`resolve_external_media` / `download_media` 也属于 `media_ingestion` pipeline 步骤
+- `media_ingestion` 当前固定步骤为 `resolve_external_media`（按需）、`download_media`、`transcribe_audio`、`finalize_fragment`；`GET /api/pipelines/{run_id}` 成功时允许 `summary=null`、`tags=[]`
+- transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` pipeline，异步执行摘要、标签和向量回填；该回填失败不会回滚已成功的 ingest
 - SparkFlow 后端先收集 fragments、knowledge hits 和可选 web hits
 - SparkFlow 后端先把这些内容组装为结构化上下文，再交给通用 `workflow_provider`
 - 当前脚本生成 workflow 只接收 `mode`、`query_hint`、`fragments_text`、`knowledge_context`、`web_context` 五个字段
@@ -365,7 +369,7 @@ bash scripts/postgres-local.sh stop
 - `fragments` 列表 / 详情与 `GET /api/transcriptions/{fragment_id}` 不再返回 `sync_status`
 - `fragments.transcript` 表示机器转写原文，`body_html` 表示用户整理后的正式正文；正文消费统一按 `body_html -> transcript` 回退
 - 非语音碎片创建走 `POST /api/fragments/content`；当前允许先创建空 `body_html`，再由客户端后续补正文，`transcript` 仅保留给语音转写链路
-- 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`
+- 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id` 或 `script_id`；对 transcript 任务来说，首个成功仅保证 transcript 已可用，`summary` / `tags` 可能在下一次详情刷新时补齐
 - 如需排查 Dify 侧问题，优先查看 `GET /api/pipelines/{run_id}/steps` 中 `submit_workflow_run` / `poll_workflow_run` 的 `external_ref`，其中会暴露 `provider_run_id` / `provider_task_id`
 - 外链导入成功后的 `platform`、`share_url`、`media_id`、`title`、`author`、`cover_url`、`content_type`、`audio_file_url` 统一从 `GET /api/pipelines/{run_id}` 的 `output` 读取
 - 当前移动端已切脚本生成任务态；外链导入也已接入底部 `+` 抽屉、导入页和任务态轮询
