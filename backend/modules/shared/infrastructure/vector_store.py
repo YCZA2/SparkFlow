@@ -150,6 +150,7 @@ class AppVectorStore(VectorStore, KnowledgeIndexStore):
                 },
             )
             for chunk, content, result in zip(valid_chunks, contents, embedding_results)
+            if result is not None  # embed_batch 失败时返回 None，跳过以避免崩溃
         ]
         await self.vector_db_provider.upsert(namespace=_knowledge_namespace(user_id), documents=documents)
         return documents[0].id if documents else None

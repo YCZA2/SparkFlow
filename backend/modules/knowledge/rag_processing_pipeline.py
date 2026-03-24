@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import functools
 from pathlib import Path
 from typing import Any
 
@@ -29,8 +30,9 @@ PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING = "reference_script_processing"
 _STYLE_ANALYSIS_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "rag_style_analysis.txt"
 
 
+@functools.cache
 def _load_style_analysis_prompt() -> str:
-    """读取风格分析系统提示文本。"""
+    """读取风格分析系统提示文本（首次调用后常驻内存）。"""
     return load_prompt_text(_STYLE_ANALYSIS_PROMPT_PATH)
 
 

@@ -76,8 +76,7 @@ export function useScripts(options?: { sourceFragmentId?: string | null }) {
     () => (options?.sourceFragmentId ? `source:${options.sourceFragmentId}` : null),
     [options?.sourceFragmentId]
   );
-  const cachedScripts = useScriptList(cacheKey) ?? [];
-  const items = useMemo(() => cachedScripts, [cachedScripts]);
+  const items = useScriptList(cacheKey) ?? [];
 
   const loadScripts = useCallback(
     async (mode: 'load' | 'refresh' | 'silent' = 'load') => {
@@ -197,60 +196,39 @@ export function useTodayDailyPush() {
   };
 }
 
-export function useDailyPushTrigger() {
+function useDailyPushTriggerBase(
+  apiFn: () => Promise<{ pipeline_run_id: string }>,
+  errorMessage: string
+) {
+  /* 推盘触发钩子公共逻辑：管理 loading/error 状态，等待 pipeline 完成后返回脚本。*/
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  /**
-   触发一次今日推盘生成。
-   */
   const run = useCallback(async () => {
     try {
       setStatus('loading');
       setError(null);
-      const task = await triggerDailyPush();
-      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, '生成灵感卡片失败');
+      const task = await apiFn();
+      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, errorMessage);
       setStatus('success');
       return script;
     } catch (err) {
       setStatus('error');
-      setError(getErrorMessage(err, '生成灵感卡片失败'));
+      setError(getErrorMessage(err, errorMessage));
       throw err;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return {
-    status,
-    error,
-    run,
-  };
+  return { status, error, run };
+}
+
+export function useDailyPushTrigger() {
+  /* 触发一次今日推盘生成。*/
+  return useDailyPushTriggerBase(triggerDailyPush, '生成灵感卡片失败');
 }
 
 export function useForceDailyPushTrigger() {
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [error, setError] = useState<string | null>(null);
-
-  /**
-   强制触发今日推盘生成。
-   */
-  const run = useCallback(async () => {
-    try {
-      setStatus('loading');
-      setError(null);
-      const task = await forceTriggerDailyPush();
-      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, '强制生成灵感卡片失败');
-      setStatus('success');
-      return script;
-    } catch (err) {
-      setStatus('error');
-      setError(getErrorMessage(err, '强制生成灵感卡片失败'));
-      throw err;
-    }
-  }, []);
-
-  return {
-    status,
-    error,
-    run,
-  };
+  /* 强制触发今日推盘生成（跳过碎片数量校验）。*/
+  return useDailyPushTriggerBase(forceTriggerDailyPush, '强制生成灵感卡片失败');
 }
