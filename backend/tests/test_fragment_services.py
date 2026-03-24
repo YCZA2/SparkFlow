@@ -197,7 +197,7 @@ async def test_derivative_service_throttles_duplicate_vector_sync_warnings(monke
 
     monkeypatch.setattr("modules.fragments.derivative_service.logger", stub_logger)
     monkeypatch.setattr("modules.fragments.derivative_service.time.monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr("modules.fragments.derivative_service._vector_sync_warning_last_seen", {})
+    monkeypatch.setattr("modules.fragments.derivative_service._vector_sync_throttle._last_seen", {})
 
     await service.refresh_fragment_derivatives(
         db=StubDbSession(),

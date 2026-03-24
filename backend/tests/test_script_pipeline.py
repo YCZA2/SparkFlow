@@ -104,18 +104,15 @@ async def test_rag_script_generation_with_optional_fragments(
     fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于早起习惯的碎片背景")
     llm_provider = app.state.container.llm_provider
 
-    # 第一次调用（大纲）和第二次调用（脚本草稿）
-    call_index = 0
-    responses = [
-        '{"sop_type":"教育结构","sections":[{"name":"引入","key_points":["问题开场"]}]}',
-        "这是含碎片背景的口播稿正文",
-    ]
-
     async def multi_generate(**kwargs):
-        nonlocal call_index
-        text = responses[call_index] if call_index < len(responses) else "生成内容"
-        call_index += 1
-        return text
+        system_prompt = kwargs.get("system_prompt", "")
+        if "稳定内核画像" in system_prompt:
+            return "价值观：强调长期主义。\n核心母题：效率与自我管理。\n结构偏好：先讲误区再给方法。\n语言底色：直接、口语化。\n表达立场：提醒式而非说教式。"
+        if "方法论提炼助手" in system_prompt:
+            return '[{"title":"先破后立","content":"先指出错误做法，再给替代动作。"}]'
+        if "SOP" in system_prompt:
+            return '{"sop_type":"教育结构","sections":[{"name":"引入","key_points":["问题开场"]}]}'
+        return "这是含碎片背景的口播稿正文"
 
     original_generate = llm_provider.generate
     llm_provider.generate = multi_generate
@@ -186,11 +183,10 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
     auth_headers_factory,
     app,
 ) -> None:
-    """知识库命中应进入最终脚本生成提示词。"""
+    """三层上下文命中应进入最终脚本生成提示词。"""
     llm_provider = app.state.container.llm_provider
     original_generate = llm_provider.generate
     captured_user_messages: list[str] = []
-    call_index = 0
 
     with app.state.container.session_factory() as db:
         reference_doc = KnowledgeDoc(
@@ -230,6 +226,8 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
         db.refresh(high_like_doc)
         db.refresh(habit_doc)
 
+    fragment_id = await _create_fragment(async_client, auth_headers_factory, "我一贯喜欢先讲反常识，再拆解误区和动作。")
+
     await app.state.container.knowledge_index_store.index_document(
         user_id=TEST_USER_ID,
         doc_id=reference_doc.id,
@@ -253,21 +251,21 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
     )
 
     async def multi_generate(**kwargs):
-        nonlocal call_index
+        system_prompt = kwargs.get("system_prompt", "")
         captured_user_messages.append(kwargs.get("user_message", ""))
-        responses = [
-            '{"sop_type":"知识结构","sections":[{"name":"开场","key_points":["反常识"]}]}',
-            "这是融合知识库上下文后的口播稿正文",
-        ]
-        text = responses[call_index] if call_index < len(responses) else "补充生成内容"
-        call_index += 1
-        return text
+        if "稳定内核画像" in system_prompt:
+            return "价值观：强调表达要有立场。\n核心母题：复杂问题简单讲清。\n结构偏好：先抛反常识，再讲原因和动作。\n语言底色：快节奏、口语化。\n表达立场：结论先行。"
+        if "方法论提炼助手" in system_prompt:
+            return '[{"title":"先抛反常识","content":"开头先给反直觉判断，再展开解释。"}]'
+        if "SOP" in system_prompt:
+            return '{"sop_type":"知识结构","sections":[{"name":"开场","key_points":["反常识"]}]}'
+        return "这是融合三层上下文后的口播稿正文"
 
     llm_provider.generate = multi_generate
 
     create_response = await async_client.post(
         "/api/scripts/generation",
-        json={"topic": "如何讲清一个复杂概念"},
+        json={"topic": "如何讲清一个复杂概念", "fragment_ids": [fragment_id]},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert create_response.status_code == 201
@@ -276,8 +274,10 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
     assert pipeline["status"] == "succeeded"
 
     final_prompt = captured_user_messages[-1]
+    assert "[稳定内核]" in final_prompt
+    assert "[方法论与 SOP]" in final_prompt
+    assert "[相关素材]" in final_prompt
     assert "[风格描述]" in final_prompt
-    assert "[高赞结构与表达参考]" in final_prompt
-    assert "[语言习惯参考]" in final_prompt
+    assert "[参考示例]" in final_prompt
 
     llm_provider.generate = original_generate

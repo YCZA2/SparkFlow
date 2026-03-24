@@ -1,0 +1,384 @@
+"""脚本生成三层写作上下文构建器。"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from domains.fragments import repository as fragment_repository
+from domains.knowledge import repository as knowledge_repository
+from domains.scripts import repository as script_repository
+from domains.writing_context import repository as writing_context_repository
+from modules.shared.content.content_html import extract_plain_text_from_html
+from modules.shared.ports import KnowledgeIndexStore, TextGenerationProvider, VectorStore
+from utils.serialization import parse_json_object_list
+
+from .writing_context import MethodologyPayload, StableCorePayload, WritingContextBundle
+
+_STABLE_CORE_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "stable_core_profile.txt"
+_METHODOLOGY_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "methodology_distillation.txt"
+_TOKEN_SPLIT_RE = re.compile(r"[\s,，。！？!?:：;；、\n\r\t]+")
+_MAX_STABLE_CORE_SOURCES = 24
+_MAX_METHODOLOGY_FRAGMENT_SOURCES = 30
+_MAX_RELATED_FRAGMENT_HITS = 3
+_MAX_RELATED_KNOWLEDGE_HITS = 3
+_MAX_RELATED_SCRIPT_HITS = 2
+
+
+def _load_prompt(path: Path) -> str:
+    """读取脚本生成上下文相关提示词。"""
+    return path.read_text(encoding="utf-8").strip()
+
+
+def _extract_json_block(text: str) -> str:
+    """去掉可能存在的 Markdown 代码围栏。"""
+    normalized = str(text or "").strip()
+    if normalized.startswith("```"):
+        lines = normalized.splitlines()
+        inner_lines = lines[1:-1] if lines and lines[-1].strip() == "```" else lines[1:]
+        normalized = "\n".join(inner_lines).strip()
+    return normalized
+
+
+def _normalize_text(text: str, *, limit: int = 600) -> str:
+    """压缩文本长度，避免上下文过长。"""
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[:limit].rstrip() + "..."
+
+
+def _split_query_tokens(text: str) -> list[str]:
+    """把主题拆成简单词项，用于相关素材粗排。"""
+    tokens = [item.strip().lower() for item in _TOKEN_SPLIT_RE.split(text or "") if item.strip()]
+    expanded: list[str] = []
+    for token in tokens:
+        expanded.append(token)
+        if re.search(r"[\u4e00-\u9fff]", token) and len(token) > 4:
+            for size in (2, 3, 4):
+                for start in range(0, max(0, len(token) - size + 1)):
+                    expanded.append(token[start : start + size])
+    unique_tokens: list[str] = []
+    for token in expanded:
+        if len(token) <= 1:
+            continue
+        if token not in unique_tokens:
+            unique_tokens.append(token)
+    return unique_tokens[:12]
+
+
+def _score_text_against_tokens(text: str, tokens: list[str]) -> float:
+    """按词项重合度对候选文本做轻量打分。"""
+    haystack = str(text or "").lower()
+    if not haystack or not tokens:
+        return 0.0
+    score = 0.0
+    for token in tokens:
+        if token in haystack:
+            score += 1.0
+    return score
+
+
+def _build_source_signature(parts: list[str]) -> str:
+    """把来源特征规整成可比较签名。"""
+    digest = hashlib.sha256()
+    digest.update("||".join(parts).encode("utf-8"))
+    return digest.hexdigest()
+
+
+def _build_source_summary(*, fragment_count: int, knowledge_count: int) -> str:
+    """构造稳定内核来源摘要。"""
+    return f"来源碎片 {fragment_count} 条，长期资料 {knowledge_count} 份。"
+
+
+def _preset_methodology_entries() -> list[MethodologyPayload]:
+    """返回系统预置的方法论条目，当前默认留空以避免过度影响风格。"""
+    return []
+
+
+async def _refresh_stable_core_profile(
+    *,
+    db: Session,
+    user_id: str,
+    llm_provider: TextGenerationProvider,
+) -> StableCorePayload:
+    """在画像缺失或来源变化时重建稳定内核。"""
+    fragments = fragment_repository.list_vectorizable_by_user(db=db, user_id=user_id)
+    eligible_fragments = [fragment for fragment in fragments if (fragment.plain_text_snapshot or "").strip()]
+    knowledge_docs = [
+        doc
+        for doc in knowledge_repository.list_by_user(db=db, user_id=user_id, doc_type=None, limit=200, offset=0)
+        if doc.doc_type != "reference_script" and (doc.content or "").strip()
+    ]
+
+    signature_parts = [
+        *(f"fragment:{fragment.id}:{fragment.updated_at.isoformat()}:{len(fragment.plain_text_snapshot or '')}" for fragment in eligible_fragments),
+        *(f"knowledge:{doc.id}:{doc.updated_at.isoformat()}:{len(doc.content or '')}" for doc in knowledge_docs),
+    ]
+    source_signature = _build_source_signature(signature_parts) if signature_parts else ""
+    existing = writing_context_repository.get_stable_core_profile(db=db, user_id=user_id)
+    if existing and existing.source_signature == source_signature and existing.content.strip():
+        return StableCorePayload(content=existing.content, source_summary=existing.source_summary or "")
+
+    source_texts: list[str] = []
+    for fragment in eligible_fragments[-_MAX_STABLE_CORE_SOURCES:]:
+        source_texts.append(f"[碎片] {_normalize_text(fragment.plain_text_snapshot)}")
+    remaining_slots = max(0, _MAX_STABLE_CORE_SOURCES - len(source_texts))
+    for doc in knowledge_docs[:remaining_slots]:
+        source_texts.append(f"[长期资料:{doc.title}] {_normalize_text(doc.content)}")
+
+    if not source_texts:
+        return StableCorePayload(content="", source_summary="")
+
+    profile_text = await llm_provider.generate(
+        system_prompt=_load_prompt(_STABLE_CORE_PROMPT_PATH),
+        user_message="\n\n".join(source_texts),
+        temperature=0.2,
+        max_tokens=900,
+    )
+    normalized_profile = str(profile_text or "").strip()
+    if not normalized_profile:
+        return StableCorePayload(content="", source_summary="")
+
+    source_summary = _build_source_summary(
+        fragment_count=len(eligible_fragments),
+        knowledge_count=len(knowledge_docs),
+    )
+    writing_context_repository.upsert_stable_core_profile(
+        db=db,
+        user_id=user_id,
+        content=normalized_profile,
+        source_summary=source_summary,
+        source_signature=source_signature,
+    )
+    return StableCorePayload(content=normalized_profile, source_summary=source_summary)
+
+
+async def _refresh_fragment_methodology_entries(
+    *,
+    db: Session,
+    user_id: str,
+    llm_provider: TextGenerationProvider,
+) -> list[MethodologyPayload]:
+    """在碎片来源变化时重建自动提炼的方法论条目。"""
+    fragments = fragment_repository.list_vectorizable_by_user(db=db, user_id=user_id)
+    eligible_fragments = [fragment for fragment in fragments if (fragment.plain_text_snapshot or "").strip()]
+    source_signature = _build_source_signature(
+        [f"{fragment.id}:{fragment.updated_at.isoformat()}:{len(fragment.plain_text_snapshot or '')}" for fragment in eligible_fragments]
+    ) if eligible_fragments else ""
+
+    existing_entries = writing_context_repository.list_methodology_entries_by_source_type(
+        db=db,
+        user_id=user_id,
+        source_type="fragment_distilled",
+    )
+    if existing_entries and all(entry.source_signature == source_signature for entry in existing_entries if entry.source_signature is not None):
+        return [
+            MethodologyPayload(
+                title=entry.title or "",
+                content=entry.content,
+                source_type=entry.source_type,
+            )
+            for entry in existing_entries
+            if entry.enabled and entry.content.strip()
+        ]
+
+    if not eligible_fragments:
+        writing_context_repository.replace_methodology_entries_for_source(
+            db=db,
+            user_id=user_id,
+            source_type="fragment_distilled",
+            entries=[],
+        )
+        return []
+
+    source_text = "\n\n".join(
+        f"[碎片] {_normalize_text(fragment.plain_text_snapshot)}"
+        for fragment in eligible_fragments[-_MAX_METHODOLOGY_FRAGMENT_SOURCES:]
+    )
+    raw = await llm_provider.generate(
+        system_prompt=_load_prompt(_METHODOLOGY_PROMPT_PATH),
+        user_message=source_text,
+        temperature=0.2,
+        max_tokens=900,
+    )
+    parsed_entries = parse_json_object_list(_extract_json_block(raw))
+    entries_payload: list[dict[str, str | bool | None]] = []
+    for item in parsed_entries or []:
+        content = str(item.get("content") or "").strip()
+        if not content:
+            continue
+        entries_payload.append(
+            {
+                "title": str(item.get("title") or "").strip() or None,
+                "content": content,
+                "source_ref_ids": json.dumps([fragment.id for fragment in eligible_fragments[-_MAX_METHODOLOGY_FRAGMENT_SOURCES:]], ensure_ascii=False),
+                "source_signature": source_signature,
+                "enabled": True,
+            }
+        )
+
+    stored_entries = writing_context_repository.replace_methodology_entries_for_source(
+        db=db,
+        user_id=user_id,
+        source_type="fragment_distilled",
+        entries=entries_payload,
+    )
+    return [
+        MethodologyPayload(
+            title=entry.title or "",
+            content=entry.content,
+            source_type=entry.source_type,
+        )
+        for entry in stored_entries
+        if entry.enabled and entry.content.strip()
+    ]
+
+
+def _build_uploaded_methodology_entries(*, db: Session, user_id: str) -> list[MethodologyPayload]:
+    """把上传知识资料映射成方法论条目。"""
+    docs = knowledge_repository.list_by_user(db=db, user_id=user_id, doc_type=None, limit=200, offset=0)
+    items: list[MethodologyPayload] = []
+    for doc in docs:
+        if doc.doc_type == "reference_script":
+            continue
+        content = _normalize_text(doc.content, limit=320)
+        if not content:
+            continue
+        items.append(
+            MethodologyPayload(
+                title=doc.title,
+                content=content,
+                source_type="knowledge_upload",
+            )
+        )
+    return items
+
+
+def _build_related_scripts(*, db: Session, user_id: str, query_text: str) -> list[str]:
+    """按主题粗排历史脚本，作为相关素材层的一部分。"""
+    tokens = _split_query_tokens(query_text)
+    if not tokens:
+        return []
+    candidates = script_repository.list_recent_by_user(db=db, user_id=user_id, limit=40)
+    ranked: list[tuple[float, str]] = []
+    for script in candidates:
+        plain_text = extract_plain_text_from_html(script.body_html)
+        combined = "\n".join(part for part in [script.title or "", plain_text] if part).strip()
+        score = _score_text_against_tokens(combined, tokens)
+        if score <= 0:
+            continue
+        ranked.append((score, f"[历史脚本:{script.title or script.id}] {_normalize_text(plain_text, limit=360)}"))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [text for _, text in ranked[:_MAX_RELATED_SCRIPT_HITS]]
+
+
+async def _build_related_fragments(
+    *,
+    db: Session,
+    user_id: str,
+    query_text: str,
+    vector_store: VectorStore,
+    exclude_fragment_ids: list[str],
+) -> list[str]:
+    """按主题召回相关碎片，并读取正文内容。"""
+    hits = await vector_store.query_fragments(
+        user_id=user_id,
+        query_text=query_text,
+        top_k=_MAX_RELATED_FRAGMENT_HITS,
+        exclude_ids=exclude_fragment_ids,
+    )
+    fragment_ids = [str(item.get("fragment_id") or "") for item in hits if str(item.get("fragment_id") or "").strip()]
+    fragments = fragment_repository.get_by_ids(db=db, user_id=user_id, fragment_ids=fragment_ids)
+    fragment_map = {fragment.id: fragment for fragment in fragments}
+    items: list[str] = []
+    for fragment_id in fragment_ids:
+        fragment = fragment_map.get(fragment_id)
+        if not fragment:
+            continue
+        content = (fragment.plain_text_snapshot or fragment.transcript or "").strip()
+        if content:
+            items.append(f"[相关碎片] {_normalize_text(content, limit=280)}")
+    return items
+
+
+async def _build_related_knowledge(
+    *,
+    user_id: str,
+    query_text: str,
+    knowledge_index_store: KnowledgeIndexStore,
+) -> list[str]:
+    """按主题召回相关知识文档内容。"""
+    hits = await knowledge_index_store.search(
+        user_id=user_id,
+        query_text=query_text,
+        top_k=_MAX_RELATED_KNOWLEDGE_HITS,
+    )
+    items: list[str] = []
+    for hit in hits:
+        content = ((hit.matched_chunks or [""])[0] or "").strip()
+        if not content:
+            continue
+        items.append(f"[相关知识:{hit.title}] {_normalize_text(content, limit=320)}")
+    return items
+
+
+async def build_writing_context_bundle(
+    *,
+    db: Session,
+    user_id: str,
+    query_text: str,
+    llm_provider: TextGenerationProvider,
+    vector_store: VectorStore,
+    knowledge_index_store: KnowledgeIndexStore,
+    exclude_fragment_ids: list[str] | None = None,
+) -> WritingContextBundle:
+    """构建脚本生成所需的三层写作上下文。"""
+    stable_core = await _refresh_stable_core_profile(
+        db=db,
+        user_id=user_id,
+        llm_provider=llm_provider,
+    )
+    methodologies = await _refresh_fragment_methodology_entries(
+        db=db,
+        user_id=user_id,
+        llm_provider=llm_provider,
+    )
+    methodologies.extend(_build_uploaded_methodology_entries(db=db, user_id=user_id))
+    methodologies.extend(_preset_methodology_entries())
+
+    unique_methodologies: list[MethodologyPayload] = []
+    seen_payloads: set[tuple[str, str]] = set()
+    for item in methodologies:
+        key = (item.title.strip(), item.content.strip())
+        if not item.content.strip() or key in seen_payloads:
+            continue
+        seen_payloads.add(key)
+        unique_methodologies.append(item)
+
+    related_scripts = _build_related_scripts(db=db, user_id=user_id, query_text=query_text)
+    related_fragments = await _build_related_fragments(
+        db=db,
+        user_id=user_id,
+        query_text=query_text,
+        vector_store=vector_store,
+        exclude_fragment_ids=exclude_fragment_ids or [],
+    )
+    related_knowledge = await _build_related_knowledge(
+        user_id=user_id,
+        query_text=query_text,
+        knowledge_index_store=knowledge_index_store,
+    )
+
+    return WritingContextBundle(
+        stable_core=stable_core,
+        methodologies=unique_methodologies,
+        related_scripts=related_scripts,
+        related_fragments=related_fragments,
+        related_knowledge=related_knowledge,
+    )

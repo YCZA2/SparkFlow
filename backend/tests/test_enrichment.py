@@ -38,7 +38,7 @@ async def test_generate_summary_and_tags_falls_back_when_llm_fails(monkeypatch) 
 
     monkeypatch.setattr("modules.shared.enrichment.logger", stub_logger)
     monkeypatch.setattr("modules.shared.enrichment.time.monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr("modules.shared.enrichment._enrichment_warning_last_seen", {})
+    monkeypatch.setattr("modules.shared.enrichment._enrichment_throttle._last_seen", {})
 
     summary, tags = await generate_summary_and_tags(
         "这是一段关于产品增长的长文本，用来验证摘要标签失败时会走本地兜底逻辑。",
@@ -61,7 +61,7 @@ async def test_generate_summary_and_tags_throttles_duplicate_failures(monkeypatc
 
     monkeypatch.setattr("modules.shared.enrichment.logger", stub_logger)
     monkeypatch.setattr("modules.shared.enrichment.time.monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr("modules.shared.enrichment._enrichment_warning_last_seen", {})
+    monkeypatch.setattr("modules.shared.enrichment._enrichment_throttle._last_seen", {})
 
     transcript = "这是一段关于产品增长的长文本，用来验证摘要标签失败时会走本地兜底逻辑。"
     provider = ExplodingLLMProvider()

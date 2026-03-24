@@ -23,9 +23,10 @@ from modules.shared.pipeline.pipeline_runtime import (
     PipelineExecutionError,
     PipelineStepDefinition,
 )
-from .knowledge_context_builder import build_knowledge_generation_context
 from .persistence import ScriptGenerationPersistenceService
 from .rag_context_builder import build_generation_prompt, build_generation_system_prompt
+from .writing_context import MethodologyPayload, StableCorePayload
+from .writing_context_builder import build_writing_context_bundle
 
 PIPELINE_TYPE_RAG_SCRIPT_GENERATION = "rag_script_generation"
 
@@ -108,22 +109,66 @@ class RagScriptPipelineService:
         return {"outline_json": outline_json, "raw_outline": raw_outline}
 
     async def retrieve_examples(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """聚合 reference_script、高赞案例和语言习惯知识命中。"""
+        """聚合稳定内核、方法论和相关素材三层上下文。"""
         topic = context.input_payload.get("topic", "")
         user_id = context.run.user_id
-        knowledge_context = await build_knowledge_generation_context(
+        writing_context = await build_writing_context_bundle(
             db=context.db,
             user_id=user_id,
             query_text=topic,
+            llm_provider=context.container.llm_provider,
+            vector_store=context.container.vector_store,
             knowledge_index_store=context.container.knowledge_index_store,
+            exclude_fragment_ids=context.input_payload.get("fragment_ids") or [],
         )
-        if not knowledge_context.reference_examples and not knowledge_context.high_like_examples and not knowledge_context.language_habit_examples:
+        reference_hits = await context.container.knowledge_index_store.search_reference_examples(
+            user_id=user_id,
+            query_text=topic,
+            top_k=3,
+        )
+        style_description = ""
+        reference_examples: list[str] = []
+        if reference_hits:
+            from domains.knowledge import repository as knowledge_repository
+
+            top_doc = knowledge_repository.get_by_id(
+                db=context.db,
+                user_id=user_id,
+                doc_id=reference_hits[0].doc_id,
+            )
+            if top_doc and top_doc.style_description:
+                style_description = top_doc.style_description
+            for hit in reference_hits:
+                for chunk in hit.matched_chunks or []:
+                    if chunk and chunk not in reference_examples:
+                        reference_examples.append(chunk)
+        if (
+            not writing_context.stable_core.content
+            and not writing_context.methodologies
+            and not writing_context.related_scripts
+            and not writing_context.related_fragments
+            and not writing_context.related_knowledge
+            and not reference_examples
+        ):
             logger.info("retrieve_examples_empty", topic=topic, user_id=user_id)
         return {
-            "reference_examples": knowledge_context.reference_examples,
-            "high_like_examples": knowledge_context.high_like_examples,
-            "language_habit_examples": knowledge_context.language_habit_examples,
-            "style_description": knowledge_context.style_description,
+            "stable_core": {
+                "content": writing_context.stable_core.content,
+                "source_summary": writing_context.stable_core.source_summary,
+            },
+            "methodologies": [
+                {
+                    "title": item.title,
+                    "content": item.content,
+                    "source_type": item.source_type,
+                }
+                for item in writing_context.methodologies
+            ],
+            "related_scripts": writing_context.related_scripts,
+            "related_fragments": writing_context.related_fragments,
+            "related_knowledge": writing_context.related_knowledge,
+            "reference_examples": reference_examples,
+            "style_description": style_description,
         }
 
     async def generate_script_draft(self, context: PipelineExecutionContext) -> dict[str, Any]:
@@ -135,9 +180,24 @@ class RagScriptPipelineService:
         outline_json = outline_output.get("outline_json", "") or outline_output.get("raw_outline", "")
 
         examples_output = context.get_step_output("retrieve_examples")
+        stable_core_payload = examples_output.get("stable_core") or {}
+        stable_core = StableCorePayload(
+            content=str(stable_core_payload.get("content") or ""),
+            source_summary=str(stable_core_payload.get("source_summary") or ""),
+        )
+        methodologies = [
+            MethodologyPayload(
+                title=str(item.get("title") or ""),
+                content=str(item.get("content") or ""),
+                source_type=str(item.get("source_type") or ""),
+            )
+            for item in (examples_output.get("methodologies") or [])
+            if isinstance(item, dict)
+        ]
+        related_scripts = examples_output.get("related_scripts") or []
+        related_fragments = examples_output.get("related_fragments") or []
+        related_knowledge = examples_output.get("related_knowledge") or []
         reference_examples = examples_output.get("reference_examples") or []
-        high_like_examples = examples_output.get("high_like_examples") or []
-        language_habit_examples = examples_output.get("language_habit_examples") or []
         style_description = examples_output.get("style_description", "")
 
         # 如有可选碎片 ID，从数据库读取其纯文本内容作为补充背景
@@ -156,10 +216,13 @@ class RagScriptPipelineService:
         user_message = build_generation_prompt(
             topic=topic,
             outline_json=outline_json,
+            stable_core=stable_core,
+            methodologies=methodologies,
+            related_scripts=related_scripts,
+            related_fragments=related_fragments,
+            related_knowledge=related_knowledge,
             style_description=style_description,
             reference_examples=reference_examples,
-            high_like_examples=high_like_examples,
-            language_habit_examples=language_habit_examples,
             fragment_texts=fragment_texts,
         )
         system_prompt = build_generation_system_prompt()

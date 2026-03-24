@@ -58,6 +58,8 @@ class ChromaVectorDBService(BaseVectorDBService):
                 path=self.db_path,
                 settings=Settings(
                     anonymized_telemetry=False,
+                    chroma_product_telemetry_impl="services.chroma_telemetry.NoOpProductTelemetryClient",
+                    chroma_telemetry_impl="services.chroma_telemetry.NoOpProductTelemetryClient",
                     allow_reset=False,
                 )
             )
@@ -153,11 +155,15 @@ class ChromaVectorDBService(BaseVectorDBService):
                 return []
 
             collection = self.client.get_collection(name=namespace)
+            available_count = collection.count()
+            if available_count <= 0:
+                return []
+            effective_top_k = min(top_k, available_count)
 
             # 查询
             results = collection.query(
                 query_embeddings=[query_embedding],
-                n_results=top_k,
+                n_results=effective_top_k,
                 where=filter_metadata,
                 include=["documents", "metadatas", "distances"]
             )

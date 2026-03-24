@@ -259,7 +259,7 @@ flowchart TD
 - `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；移动端 phase 1 已不再依赖其作为 fragments / folders 首屏真值读取来源，`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_html`，`plain_text_snapshot` 负责检索、摘要和生成输入。
 - `transcriptions`: 音频上传、后台转写、状态查询；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录。
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接；local-first 请求会直接绑定客户端 placeholder fragment，解析链接、下载转 m4a、主转写在 `media_ingestion` 中执行，摘要/标签/向量由后续 derivative pipeline 异步补齐。
-- `scripts`: 合稿、脚本生成 pipeline 定义、上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。
+- `scripts`: 合稿、脚本生成 pipeline 定义、三层写作上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷；模块内部已拆成 `parsers.py`、`chunking.py`、`indexing.py`、`application.py`。
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
 - `exports`: 单条 Markdown 导出与批量 zip 导出。
@@ -285,7 +285,10 @@ flowchart TD
 - Vector DB: 默认 `ChromaDB`。
 - Workflow Provider: 当前保留通用 `workflow_provider` 端口与 `DifyWorkflowProvider` 实现，供未来外挂工作流或实验性链路复用；当前主脚本生成链路已经收口到后端 `RagScriptPipelineService`。
 - Knowledge Index Store: 当前知识库索引通过独立 `knowledge_index_store` 抽象接入；默认实现仍由 `AppVectorStore` 适配 Chroma，未来若切换 LightRAG，目标是只替换这一层。
-- 当前脚本生成输入收敛为 `topic` + `fragment_ids`：后端先用主题生成 SOP 大纲，再聚合 `reference_script / high_likes / language_habit` 三类知识命中，最后连同 fragments 背景一起拼装草稿并落库。
+- 当前脚本生成输入收敛为 `topic` + `fragment_ids`：后端先构建三层写作上下文，再生成 SOP 大纲并拼装草稿。其中：
+- `稳定内核层` 来源于历史碎片和上传/预置长期资料，不使用 AI 历史脚本反哺人格层。
+- `方法论层` 来源于碎片提炼、上传资料和预置方法模板。
+- `相关素材层` 负责召回与当前主题相关的历史脚本、碎片和知识文档。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 统一 `FileStorage` 端口；本地开发默认 `local` provider，线上默认私有阿里云 OSS，通过签名 URL 暴露文件访问。
 - Database: PostgreSQL（本地开发默认由 Docker 提供，默认库为 `sparkflow` / `sparkflow_test`）。
@@ -424,7 +427,7 @@ sequenceDiagram
 
 - 外挂工作流 provider 只负责远程执行步骤，不直接访问 PostgreSQL、ChromaDB 或业务表。
 - fragments、knowledge hits 和可选 web hits 都由 SparkFlow 后端先收集。
-- SparkFlow 后端向内部 pipeline 传递主题、SOP 大纲、few-shot 示例和可选碎片背景；客户端继续只消费 `pipeline_run_id` 和 `/api/pipelines/*`。
+- SparkFlow 后端向内部 pipeline 传递稳定内核、方法论、相关素材、SOP 大纲和可选碎片背景；客户端继续只消费 `pipeline_run_id` 和 `/api/pipelines/*`。
 - `pipeline_runs` / `pipeline_step_runs` 是后台状态唯一事实源；`agent_runs` 与 `/api/agent/*` 已移除。
 
 ### 5.4 Script Generation Notes
@@ -449,7 +452,7 @@ sequenceDiagram
 
 - `POST /api/scripts/generation` 只负责创建任务，不再同步返回 `Script`。
 - 客户端应统一经由 `/api/pipelines/{run_id}` 读取最终 `script_id`，再跳转脚本详情。
-- 当前生成链路使用 `topic` 作为大纲选择和 few-shot 检索的统一驱动输入。
+- 当前生成链路使用 `topic` 作为大纲生成和相关素材召回的统一驱动输入；稳定内核与方法论默认由后台自动沉淀和懒刷新。
 - pipeline 关键步骤为 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`。
 
 ### 5.5 Fragment Visualization

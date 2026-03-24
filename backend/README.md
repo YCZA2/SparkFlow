@@ -53,12 +53,12 @@ bash scripts/test-all.sh
 本地联调默认测试账号 `test-user-001` 会在应用启动和 `POST /api/auth/token` 时自动补齐到数据库，避免切库后出现外键错误。
 `POST /api/auth/token` 现在会接收 `device_id` 并创建 `device session`，用于单设备在线校验。
 
-当前脚本生成已经统一为“主题 + SOP 大纲 + few-shot/reference-script 检索”链路，不再使用 `mode_a / mode_b` 两套独立工作流配置。
+当前脚本生成已经升级为“三层写作上下文 + 主题 + SOP 大纲”链路，不再使用 `mode_a / mode_b` 两套独立工作流配置。
 
 当前生成链路依赖：
 
-- `LLM_PROVIDER` 对应的文本生成能力，用于大纲和草稿生成
-- `Embedding + VectorStore`，用于检索 `reference_script` few-shot 示例
+- `LLM_PROVIDER` 对应的文本生成能力，用于稳定内核、方法论、大纲和草稿生成
+- `Embedding + VectorStore`，用于检索相关知识与相关碎片
 - `POST /api/scripts/generation` 的输入收敛为 `topic` + `fragment_ids`
 
 如果你想验证“真实后端 + 当前脚本生成 pipeline”的整条链路，可以运行：
@@ -77,7 +77,25 @@ cd backend
 - 成功后读取 `GET /api/scripts/{script_id}` 并打印结果摘要
 - 传入 `--cleanup` 时自动删除本次联调创建的碎片和脚本
 
-客户端只需要继续轮询 SparkFlow 自己的 `/api/pipelines/{run_id}`，不需要感知大纲生成、few-shot 检索和草稿落库的后端内部步骤。
+如果你想验证“真实知识库上传 + 搜索 + 脚本生成”整条链路，可以运行：
+
+```bash
+cd backend
+.venv/bin/python scripts/test_knowledge_generation.py --cleanup
+```
+
+这个轻量联调脚本会：
+
+- 生成一组临时 `txt/docx/pdf/xlsx` 样本文件
+- 调用 `POST /api/knowledge/upload` 分别创建 `reference_script`、`high_likes`、`language_habit`
+- 轮询 `reference_script` 直到异步处理完成
+- 调用 `POST /api/knowledge/search` 验证 chunk 聚合检索结果
+- 创建 1-2 条手动碎片并触发 `POST /api/scripts/generation`
+- 轮询 `GET /api/pipelines/{run_id}` 直到终态
+- 成功后读取 `GET /api/scripts/{script_id}` 并输出搜索命中和脚本摘要
+- 传入 `--cleanup` 时自动删除本次联调创建的知识文档、碎片和脚本
+
+客户端只需要继续轮询 SparkFlow 自己的 `/api/pipelines/{run_id}`，不需要感知稳定内核/方法论刷新、大纲生成和草稿落库的后端内部步骤。
 
 ## Backend Architecture
 
@@ -144,7 +162,8 @@ cd backend
 - `application.py` 只保留查询、命令和每日推盘编排入口。
 - `rag_pipeline.py` 只负责 `rag_script_generation` 步骤定义与协调。
 - `daily_push_pipeline.py` 只负责 `daily_push_generation` 步骤定义与结果回流。
-- `rag_context_builder.py` 负责主题、SOP 和 few-shot 提示词拼装。
+- `writing_context_builder.py` 负责稳定内核、方法论和相关素材三层上下文构建。
+- `rag_context_builder.py` 负责把三层上下文、大纲和当前碎片背景拼成最终提示词。
 - `persistence.py` 负责脚本幂等落库。
 - `daily_push.py` 负责每日推盘的碎片拼接和相似度筛选规则。
 
@@ -252,7 +271,7 @@ bash scripts/postgres-local.sh stop
 - `POST /api/external-media/audio-imports` 不再同步解析或下载媒体；`resolve_external_media` / `download_media` 也属于 `media_ingestion` pipeline 步骤
 - `media_ingestion` 当前固定步骤为 `resolve_external_media`（按需）、`download_media`、`transcribe_audio`、`finalize_fragment`；`GET /api/pipelines/{run_id}` 成功时允许 `summary=null`、`tags=[]`
 - transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` pipeline，异步执行摘要、标签和向量回填；该回填失败不会回滚已成功的 ingest
-- SparkFlow 后端先收集主题、few-shot/reference-script 和可选碎片背景
+- SparkFlow 后端先收集稳定内核、方法论、相关素材和可选碎片背景，再生成大纲与草稿
 - `rag_script_generation` pipeline 依次执行 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`
 - `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源
 - `agent_runs` 与 `/api/agent/*` 已移除，脚本生成公开链路完全收口到 `scripts + pipelines`

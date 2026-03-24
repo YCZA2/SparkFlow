@@ -12,6 +12,7 @@ from models.fragment import Fragment, FragmentBlock, FragmentFolder, FragmentTag
 from models.script import Script
 from models.media import ContentMediaLink, KnowledgeDoc, MediaAsset
 from models.pipeline import PipelineRun, PipelineStepRun
+from models.writing_context import MethodologyEntry, StableCoreProfile
 
 __all__ = [
     # 数据库工具
@@ -39,6 +40,8 @@ __all__ = [
     "ContentMediaLink",
     "KnowledgeDoc",
     "MediaAsset",
+    "StableCoreProfile",
+    "MethodologyEntry",
     # 流水线
     "PipelineRun",
     "PipelineStepRun",

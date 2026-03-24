@@ -22,6 +22,22 @@ def list_by_user(db: Session, user_id: str, limit: int, offset: int) -> list[Scr
     )
 
 
+def list_recent_by_user(
+    db: Session,
+    *,
+    user_id: str,
+    limit: int = 50,
+) -> list[Script]:
+    """读取用户最近生成的稿件，供相关素材召回。"""
+    return (
+        db.query(Script)
+        .filter(Script.user_id == user_id)
+        .order_by(Script.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def count_by_user(db: Session, user_id: str) -> int:
     return db.query(func.count(Script.id)).filter(Script.user_id == user_id).scalar() or 0
 
