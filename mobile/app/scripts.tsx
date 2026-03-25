@@ -4,7 +4,6 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-rou
 
 import { ScriptCard } from '@/components/ScriptCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { BackButton } from '@/components/layout/BackButton';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
@@ -21,9 +20,8 @@ export default function ScriptsScreen() {
   });
   const isRelatedScriptsMode = Boolean(sourceFragmentId);
   const title = isRelatedScriptsMode ? '关联成稿' : '成稿';
-  const subtitle = isRelatedScriptsMode
-    ? '查看这条碎片已经衍生出的成稿，继续修改或进入拍摄。'
-    : '查看已经生成的稿件，继续修改、拍摄或回看。';
+  // 顶部副标题统一改成数量信息，和文件夹详情保持一致的双行居中结构。
+  const subtitle = isRelatedScriptsMode ? `${items.length} 篇关联成稿` : `${items.length} 篇成稿`;
   const emptyTitle = isRelatedScriptsMode ? '还没有关联成稿' : '还没有口播稿';
   const emptyMessage = isRelatedScriptsMode
     ? '这条碎片暂时还没有生成过成稿。'
@@ -72,16 +70,17 @@ export default function ScriptsScreen() {
         )}
         ListHeaderComponent={
           <View style={styles.header}>
-            <ScreenHeader
-              title={title}
-              subtitle={subtitle}
-              leading={<BackButton color={theme.colors.primary} />}
-            />
-            {items.length > 0 ? (
-              <Text style={[styles.headerText, { color: theme.colors.textSubtle }]}>
-                共 {items.length} 篇成稿
-              </Text>
-            ) : null}
+            <View style={styles.headerBar}>
+              <View style={styles.headerBack}>
+                <BackButton color={theme.colors.primary} />
+              </View>
+              <View style={styles.headerCenter}>
+                <Text style={[styles.headerTitle, { color: theme.colors.text }]}>{title}</Text>
+                <Text style={[styles.headerSubtitle, { color: theme.colors.textSubtle }]}>
+                  {subtitle}
+                </Text>
+              </View>
+            </View>
           </View>
         }
         ListEmptyComponent={
@@ -114,10 +113,38 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 8,
   },
-  headerText: {
-    marginTop: -8,
+  headerBar: {
+    position: 'relative',
+    minHeight: 52,
+    justifyContent: 'center',
+  },
+  headerBack: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  headerCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 88,
+  },
+  headerTitle: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  headerSubtitle: {
+    marginTop: 2,
     fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });

@@ -83,7 +83,9 @@ export default function FolderDetailScreen() {
       {/* 悬浮顶部导航栏 - 移到最前面确保点击事件优先 */}
       <View style={[styles.floatingHeader, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerContent}>
-          <BackButton onPress={handleBack} />
+          <View style={styles.headerLeading}>
+            <BackButton onPress={handleBack} />
+          </View>
           <View style={styles.headerTitleContainer}>
             <Text style={[styles.headerTitle, { color: theme.colors.text }]} numberOfLines={1}>
               {name || '文件夹'}
@@ -92,11 +94,13 @@ export default function FolderDetailScreen() {
               {screen.totalLabel}
             </Text>
           </View>
-          <SelectButton
-            isSelectionMode={screen.selection.isSelectionMode}
-            onPress={screen.selection.toggleSelectionMode}
-            color={theme.colors.primary}
-          />
+          <View style={styles.headerTrailing}>
+            <SelectButton
+              isSelectionMode={screen.selection.isSelectionMode}
+              onPress={screen.selection.toggleSelectionMode}
+              color={theme.colors.primary}
+            />
+          </View>
         </View>
       </View>
 
@@ -204,25 +208,43 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    position: 'relative',
+    minHeight: 52,
     paddingBottom: 12,
+    paddingHorizontal: 16,
+  },
+  headerLeading: {
+    position: 'absolute',
+    left: 16,
+    top: 0,
+    bottom: 12,
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  headerTrailing: {
+    position: 'absolute',
+    right: 16,
+    top: 0,
+    bottom: 12,
+    justifyContent: 'center',
+    zIndex: 1,
   },
   headerTitleContainer: {
-    flex: 1,
+    minHeight: 40,
     alignItems: 'center',
-    marginHorizontal: 8,
+    justifyContent: 'center',
+    paddingHorizontal: 88,
   },
   subtitle: {
     fontSize: 13,
     fontWeight: '500',
     marginTop: 2,
+    textAlign: 'center',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
+    textAlign: 'center',
   },
   // 选择按钮样式
   selectButton: {
