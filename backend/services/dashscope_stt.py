@@ -18,15 +18,8 @@ from services.base import (
     TranscriptionResult,
 )
 from services.dashscope.bootstrap import CERTIFI_CA_FILE
-from services.dashscope.audio_stream import DashScopeRealtimeRecognizer
 from services.dashscope.file_transcription import DashScopeFileTranscriber
 from services.dashscope.payload_parser import DashScopePayloadParser
-from services.dashscope.strategies import (
-    DashScopeAutoRecognitionStrategy,
-    DashScopeFileRecognitionStrategy,
-    DashScopeRealtimeRecognitionStrategy,
-    DashScopeTranscriptionStrategy,
-)
 
 logger = get_logger(__name__)
 
@@ -34,8 +27,7 @@ logger = get_logger(__name__)
 class DashScopeSTTService(BaseSTTService):
     """阿里云百炼/灵积平台语音识别服务。"""
 
-    DEFAULT_MODEL = "paraformer-realtime-v2"
-    FILE_TRANSCRIPTION_MODEL = "paraformer-v2"
+    DEFAULT_MODEL = "paraformer-v2"
 
     def __init__(
         self,
@@ -51,8 +43,6 @@ class DashScopeSTTService(BaseSTTService):
         self.diarization_enabled = settings.STT_DIARIZATION_ENABLED
         self.speaker_count = max(0, int(settings.STT_DIARIZATION_SPEAKER_COUNT))
         self.file_url_mode = (settings.STT_FILE_URL_MODE or "temp").lower()
-        self.strategy_name = (settings.STT_DASHSCOPE_STRATEGY or "realtime").lower()
-        self.realtime_timeout_seconds = max(1, int(settings.STT_REALTIME_TIMEOUT_SECONDS))
         self.file_transcription_timeout_seconds = max(1, int(settings.STT_FILE_TRANSCRIPTION_TIMEOUT_SECONDS))
 
         if not self.api_key:
@@ -66,38 +56,24 @@ class DashScopeSTTService(BaseSTTService):
         dashscope.api_key = self.api_key
 
         self._payload_parser = DashScopePayloadParser()
-        self._realtime_recognizer = DashScopeRealtimeRecognizer(model=self.model)
         self._file_transcriber = DashScopeFileTranscriber(
             api_key=self.api_key,
-            file_transcription_model=self.FILE_TRANSCRIPTION_MODEL,
+            file_transcription_model=self.model,
             diarization_enabled=self.diarization_enabled,
             speaker_count=self.speaker_count,
             file_url_mode=self.file_url_mode,
             certifi_ca_file=CERTIFI_CA_FILE,
             parser=self._payload_parser,
         )
-        self._strategies: dict[str, DashScopeTranscriptionStrategy] = {
-            "realtime": DashScopeRealtimeRecognitionStrategy(),
-            "file": DashScopeFileRecognitionStrategy(),
-            "auto": DashScopeAutoRecognitionStrategy(),
-        }
 
         logger.info(
             "dashscope_stt_initialized",
             provider="dashscope",
-            strategy=self.strategy_name,
+            model=self.model,
             diarization=self.diarization_enabled,
             speaker_count=self.speaker_count,
             file_url_mode=self.file_url_mode,
         )
-
-    def _get_strategy(self) -> DashScopeTranscriptionStrategy:
-        """获取当前配置对应的识别策略。"""
-        strategy = self._strategies.get(self.strategy_name)
-        if strategy is None:
-            supported = ", ".join(sorted(self._strategies))
-            raise STTRecognitionError(f"不支持的 DashScope STT 策略: {self.strategy_name}，支持: {supported}")
-        return strategy
 
     async def transcribe(
         self,
@@ -132,19 +108,17 @@ class DashScopeSTTService(BaseSTTService):
         language = language_map.get(language_hint, "zh")
 
         try:
-            strategy = self._get_strategy()
-            result = await strategy.transcribe(
-                self,
-                audio_path=audio_path,
-                format_str=format_str,
-                language=language,
+            loop = asyncio.get_running_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, self._transcribe_recorded_file, audio_path, language),
+                timeout=self.file_transcription_timeout_seconds,
             )
-            logger.info("dashscope_stt_succeeded", provider="dashscope", strategy=strategy.name)
+            logger.info("dashscope_stt_succeeded", provider="dashscope", model=self.model)
             return result
         except STTError:
             raise
         except asyncio.TimeoutError as exc:
-            raise STTRecognitionError(f"语音识别超时: strategy={self.strategy_name}") from exc
+            raise STTRecognitionError(f"录音文件识别超时: model={self.model}") from exc
         except Exception as exc:
             raise STTRecognitionError(f"语音识别失败: {str(exc)}") from exc
 
@@ -180,11 +154,6 @@ class DashScopeSTTService(BaseSTTService):
             except Exception:
                 pass
 
-    # Compatibility methods retained for existing strategy tests.
-    def _recognize_file(self, audio_path: str, format_str: str, language: str) -> TranscriptionResult:
-        """兼容旧策略测试的实时识别入口。"""
-        return self._realtime_recognizer.recognize_file(audio_path=audio_path, format_str=format_str, language=language)
-
     def _transcribe_recorded_file(self, audio_path: str, language: str) -> TranscriptionResult:
         """兼容旧策略测试的录音文件识别入口。"""
         return self._file_transcriber.transcribe_recorded_file(audio_path=audio_path, language=language)
@@ -199,8 +168,5 @@ class DashScopeSTTService(BaseSTTService):
 
 
 __all__ = [
-    "DashScopeAutoRecognitionStrategy",
-    "DashScopeFileRecognitionStrategy",
-    "DashScopeRealtimeRecognitionStrategy",
     "DashScopeSTTService",
 ]

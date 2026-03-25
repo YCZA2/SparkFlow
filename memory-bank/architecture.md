@@ -33,7 +33,7 @@ flowchart LR
     FS[("File Storage<br/>local uploads / Aliyun OSS")]
     CHROMA[("ChromaDB<br/>fragments_* / knowledge_*")]
     WFP["Workflow Provider<br/>实验性外挂工作流<br/>当前不承载主脚本生成"]
-    STT["STT Provider<br/>DashScope / Aliyun"]
+    STT["STT Provider<br/>DashScope Recording File Recognition"]
     LLM["LLM Provider<br/>Qwen<br/>轻量摘要/标签增强"]
     EMB["Embedding Provider<br/>Qwen"]
     SCH["APScheduler<br/>daily push + writing context cron"]
@@ -329,7 +329,7 @@ flowchart TD
 ### 4.6 External Dependencies
 
 - LLM: 默认 `Qwen`，通过 `services/factory.py` 创建，当前仅承担碎片摘要/标签等轻量增强能力。
-- STT: 默认 `DashScope`，保留 Aliyun 兼容实现。
+- STT: 默认 `DashScope` 录音文件识别，支持说话人分离。
 - Embedding: 默认 `Qwen text-embedding-v2`。
 - Vector DB: 默认 `ChromaDB`。
 - Workflow Provider: 当前保留通用 `workflow_provider` 端口与 `DifyWorkflowProvider` 实现，供未来外挂工作流或实验性链路复用；当前主脚本生成链路已经收口到后端 `RagScriptPipelineService`。

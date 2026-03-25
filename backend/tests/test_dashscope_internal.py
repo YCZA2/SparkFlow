@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import patch
 
 import pytest
@@ -19,6 +20,10 @@ class _FakeHttpClient:
 
     def __exit__(self, exc_type, exc, tb):
         return False
+
+    def get(self, *args, **kwargs):
+        """提供可被 patch 的下载入口，默认不应直接命中。"""
+        raise AssertionError("unexpected get call")
 
 
 @pytest.fixture
@@ -88,7 +93,50 @@ def test_file_transcriber_raises_timeout_when_task_never_finishes(parser: DashSc
 
     with patch("services.dashscope.file_transcription.httpx.Client", return_value=_FakeHttpClient()):
         with patch.object(transcriber, "_request_dashscope_json", side_effect=lambda *args, **kwargs: responses.pop(0)):
-            with patch("services.dashscope.file_transcription.time.monotonic", side_effect=[0, 181]):
+            with patch("services.dashscope.file_transcription.time.monotonic", side_effect=[0, 0, 0, 0, 181, 181]):
                 with patch("services.dashscope.file_transcription.time.sleep", return_value=None):
                     with pytest.raises(STTRecognitionError):
                         transcriber.run_file_transcription(file_url="oss://demo/audio.wav", language="zh")
+
+
+def test_file_transcriber_logs_stage_timings(parser: DashScopePayloadParser, caplog: pytest.LogCaptureFixture) -> None:
+    """成功链路应输出提交、轮询、下载和总耗时日志。"""
+    transcriber = DashScopeFileTranscriber(
+        api_key="test-key",
+        file_transcription_model="paraformer-v2",
+        diarization_enabled=True,
+        speaker_count=2,
+        file_url_mode="temp",
+        certifi_ca_file="/tmp/ca.pem",
+        parser=parser,
+    )
+    responses = [
+        {"output": {"task_id": "task-1", "task_status": "RUNNING"}},
+        {
+            "output": {
+                "task_status": "SUCCEEDED",
+                "results": [{"transcription_url": "https://example.com/result.json"}],
+            }
+        },
+    ]
+
+    class _ResultResponse:
+        """模拟下载最终结果的响应对象。"""
+
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {"transcript": "你好世界"}
+
+    with caplog.at_level(logging.INFO):
+        with patch("services.dashscope.file_transcription.httpx.Client", return_value=_FakeHttpClient()):
+            with patch.object(transcriber, "_request_dashscope_json", side_effect=lambda *args, **kwargs: responses.pop(0)):
+                with patch.object(_FakeHttpClient, "get", return_value=_ResultResponse()):
+                    with patch("services.dashscope.file_transcription.time.sleep", return_value=None):
+                        transcriber.run_file_transcription(file_url="oss://demo/audio.wav", language="zh")
+
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert "submit_elapsed_ms=" in messages
+    assert "poll_elapsed_ms=" in messages
+    assert "total_elapsed_ms=" in messages
+    assert "transcription result downloaded: elapsed_ms=" in messages

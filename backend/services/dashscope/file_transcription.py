@@ -38,7 +38,14 @@ class DashScopeFileTranscriber:
         self.certifi_ca_file = certifi_ca_file
         self.parser = parser
 
+    @staticmethod
+    def _elapsed_ms(started_at: float) -> int:
+        """把 monotonic 起点转换成毫秒耗时，便于统一打印阶段日志。"""
+        return int((time.monotonic() - started_at) * 1000)
+
     def upload_temp_file_url(self, audio_path: str) -> str:
+        """上传临时音频并记录上传耗时，便于判断是否慢在文件传输。"""
+        upload_started_at = time.monotonic()
         logger.info("[DashScope STT] upload temp file url, mode=%s", self.file_url_mode)
 
         if self.file_url_mode != "temp":
@@ -59,7 +66,11 @@ class DashScopeFileTranscriber:
             raise STTRecognitionError(f"upload temp URL failed: {exc}") from exc
 
         if isinstance(file_url, str) and (file_url.startswith("oss://") or file_url.startswith("http")):
-            logger.info("[DashScope STT] temp URL upload succeeded: %s", file_url)
+            logger.info(
+                "[DashScope STT] temp URL upload succeeded: %s (elapsed_ms=%s)",
+                file_url,
+                self._elapsed_ms(upload_started_at),
+            )
             return file_url
 
         raise STTRecognitionError(f"upload temp URL invalid response: {file_url!r}")
@@ -135,6 +146,8 @@ class DashScopeFileTranscriber:
         raise STTRecognitionError(f"file transcription failed: missing transcription_url, payload={payload}")
 
     def _download_transcription_result(self, client: httpx.Client, result_url: str) -> dict[str, Any]:
+        """下载最终转写结果并记录下载耗时，便于区分慢在回包还是任务排队。"""
+        download_started_at = time.monotonic()
         response = client.get(result_url, headers={"Authorization": f"Bearer {self.api_key}"})
         if response.status_code != HTTPStatus.OK:
             message = self._parse_rest_error(response)
@@ -147,18 +160,25 @@ class DashScopeFileTranscriber:
 
         if not isinstance(payload, dict):
             raise STTRecognitionError(f"transcription result payload invalid: {payload!r}")
+        logger.info(
+            "[DashScope STT] transcription result downloaded: elapsed_ms=%s",
+            self._elapsed_ms(download_started_at),
+        )
         return payload
 
     def run_file_transcription(self, file_url: str, language: str) -> dict[str, Any]:
+        """提交录音文件任务并拆分记录提交、轮询和下载三个阶段的耗时。"""
         request_body = {
             "model": self.file_transcription_model,
             "input": {"file_urls": [file_url]},
             "parameters": self._build_file_transcription_parameters(language),
         }
 
+        run_started_at = time.monotonic()
         logger.info("[DashScope STT] submit file transcription, file_url=%s", file_url)
         timeout = httpx.Timeout(connect=10.0, read=60.0, write=60.0, pool=60.0)
         with httpx.Client(timeout=timeout, verify=self.certifi_ca_file, follow_redirects=True) as client:
+            submit_started_at = time.monotonic()
             submit_payload = self._request_dashscope_json(
                 client,
                 "POST",
@@ -172,13 +192,21 @@ class DashScopeFileTranscriber:
             if not task_id:
                 raise STTRecognitionError(f"file transcription missing task_id: {submit_payload}")
 
-            logger.info("[DashScope STT] task submitted: task_id=%s status=%s", task_id, task_status)
+            logger.info(
+                "[DashScope STT] task submitted: task_id=%s status=%s submit_elapsed_ms=%s",
+                task_id,
+                task_status,
+                self._elapsed_ms(submit_started_at),
+            )
             deadline = time.monotonic() + 180
+            poll_started_at = time.monotonic()
+            poll_count = 0
             poll_headers = {"Authorization": f"Bearer {self.api_key}"}
             if isinstance(file_url, str) and file_url.startswith("oss://"):
                 poll_headers["X-DashScope-OssResourceResolve"] = "enable"
 
             while True:
+                poll_count += 1
                 task_payload = self._request_dashscope_json(
                     client,
                     "GET",
@@ -189,7 +217,13 @@ class DashScopeFileTranscriber:
                 task_status = str(output.get("task_status") or "UNKNOWN").upper()
                 if task_status == "SUCCEEDED":
                     result_url = self._extract_transcription_result_url(task_payload)
-                    logger.info("[DashScope STT] task succeeded: task_id=%s", task_id)
+                    logger.info(
+                        "[DashScope STT] task succeeded: task_id=%s poll_count=%s poll_elapsed_ms=%s total_elapsed_ms=%s",
+                        task_id,
+                        poll_count,
+                        self._elapsed_ms(poll_started_at),
+                        self._elapsed_ms(run_started_at),
+                    )
                     return self._download_transcription_result(client, result_url)
                 if task_status in {"FAILED", "CANCELED", "UNKNOWN"}:
                     message = task_payload.get("message") or output.get("message") or task_status
@@ -203,10 +237,18 @@ class DashScopeFileTranscriber:
                 time.sleep(1)
 
     def transcribe_recorded_file(self, audio_path: str, language: str) -> TranscriptionResult:
+        """执行完整录音文件识别，并输出端到端总耗时日志。"""
+        transcribe_started_at = time.monotonic()
         file_url = self.upload_temp_file_url(audio_path)
         payload = self.run_file_transcription(file_url=file_url, language=language)
         segments = self.parser.normalize_and_merge_segments(self.parser.extract_segments(payload))
         transcript = self.parser.extract_text(payload) or "".join(segment.text for segment in segments)
+        logger.info(
+            "[DashScope STT] file transcription completed: elapsed_ms=%s transcript_chars=%s speaker_segments=%s",
+            self._elapsed_ms(transcribe_started_at),
+            len(transcript),
+            len(segments),
+        )
 
         return TranscriptionResult(
             text=transcript,

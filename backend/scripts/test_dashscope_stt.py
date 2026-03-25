@@ -53,9 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int, default=0, help="与 --all 配合，限制测试文件数量")
     parser.add_argument("--list-files", action="store_true", help="只列出可测试音频文件，不发起识别")
     parser.add_argument("--language", default="zh-CN", help="语言提示，默认 zh-CN")
-    parser.add_argument("--no-diarization", action="store_true", help="禁用说话人分离，便于对比回退链路")
+    parser.add_argument("--no-diarization", action="store_true", help="禁用说话人分离，便于对比识别结果")
     parser.add_argument("--speaker-count", type=int, help="覆盖说话人数配置")
-    parser.add_argument("--strategy", choices=["realtime", "file", "auto"], help="覆盖 DashScope 转写策略")
     parser.add_argument("--api-key", help="覆盖环境变量中的 DASHSCOPE_API_KEY")
     return parser
 
@@ -110,11 +109,9 @@ async def main_async(args: argparse.Namespace) -> int:
     service.diarization_enabled = not args.no_diarization
     if args.speaker_count is not None:
         service.speaker_count = max(0, args.speaker_count)
-    if args.strategy:
-        service.strategy_name = args.strategy
 
     print(f"Uploads dir: {Path(args.uploads_dir).resolve()}")
-    print(f"Strategy: {service.strategy_name}")
+    print(f"Model: {service.model}")
     print(f"Diarization: {service.diarization_enabled}")
     print(f"Speaker count: {service.speaker_count}")
     print(f"Language hint: {args.language}")

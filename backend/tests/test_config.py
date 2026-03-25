@@ -12,11 +12,11 @@ def test_debug_accepts_legacy_release_value(monkeypatch) -> None:
     assert settings.DEBUG is False
 
 
-def test_dashscope_strategy_defaults_to_realtime(monkeypatch) -> None:
-    """在未显式配置时仍保持实时转写默认值。"""
-    monkeypatch.delenv("STT_DASHSCOPE_STRATEGY", raising=False)
+def test_stt_provider_defaults_to_dashscope(monkeypatch) -> None:
+    """在未显式配置时仍保持 DashScope 录音文件识别默认值。"""
+    monkeypatch.delenv("STT_PROVIDER", raising=False)
     settings = Settings()
-    assert settings.STT_DASHSCOPE_STRATEGY == "realtime"
+    assert settings.STT_PROVIDER == "dashscope"
 
 
 def test_upload_dir_is_resolved_from_backend_dir(monkeypatch) -> None:

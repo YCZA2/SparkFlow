@@ -78,10 +78,9 @@ def create_stt_service(
     基于提供商创建 STT 服务实例。
 
     参数:
-        provider: STT 提供商 ('dashscope', 'aliyun', 'xunfei', 'baidu')
+        provider: STT 提供商，当前仅支持 'dashscope'
                  默认使用 STT_PROVIDER 环境变量或 'dashscope'
-                 'dashscope': 阿里云百炼/灵积平台 (推荐，仅需一个 API Key)
-                 'aliyun': 阿里云 NLS (传统方式，需三个密钥)
+                 'dashscope': 阿里云百炼/灵积平台录音文件识别
         **kwargs: 额外的提供商特定选项
 
     返回:
@@ -93,32 +92,14 @@ def create_stt_service(
     provider = (provider or settings.STT_PROVIDER or "dashscope").lower()
 
     if provider == "dashscope":
-        # 阿里云百炼/灵积平台语音识别 (推荐)
-        # 从 settings 读取 DASHSCOPE_API_KEY
+        # 阿里云百炼/灵积平台录音文件识别
         from .dashscope_stt import DashScopeSTTService
         api_key = kwargs.pop("api_key", None) or settings.DASHSCOPE_API_KEY
         return DashScopeSTTService(api_key=api_key, **kwargs)
-    elif provider == "aliyun":
-        # 阿里云 NLS 传统方式 (需要 AccessKey ID/Secret + AppKey)
-        from .aliyun_stt import AliyunSTTService
-        return AliyunSTTService(**kwargs)
-    elif provider == "xunfei":
-        # 未来: 实现讯飞 STT
-        raise ValueError(
-            f"提供商 '{provider}' 尚未实现。"
-            "请使用 'dashscope' 或 'aliyun'。"
-        )
-    elif provider in ["baidu", "wenxin"]:
-        # 未来: 实现百度 STT
-        raise ValueError(
-            f"提供商 '{provider}' 尚未实现。"
-            "请使用 'dashscope' 或 'aliyun'。"
-        )
-    else:
-        raise ValueError(
-            f"未知的 STT 提供商: '{provider}'。"
-            "支持的提供商: dashscope, aliyun, xunfei, baidu"
-        )
+    raise ValueError(
+        f"未知的 STT 提供商: '{provider}'。"
+        "当前仅支持: dashscope"
+    )
 
 
 def create_embedding_service(

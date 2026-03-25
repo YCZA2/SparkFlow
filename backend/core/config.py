@@ -119,14 +119,12 @@ class Settings(BaseSettings):
     # STT 配置
     STT_PROVIDER: str = Field(
         default="dashscope",
-        description="STT 提供商: dashscope, aliyun, xunfei, baidu"
+        description="STT 提供商，当前仅支持 dashscope"
     )
-    # 阿里云百炼/灵积平台 (推荐，仅需一个 API Key)
-    # DASHSCOPE_API_KEY 已在上面的 LLM 配置中定义，可复用
-    # 如需单独配置 STT 的 API Key，可添加: DASHSCOPE_STT_API_KEY
+    # 阿里云百炼/灵积平台录音文件识别（仅需一个 API Key）
     STT_DIARIZATION_ENABLED: bool = Field(
         default=True,
-        description="是否启用说话人分离（仅对支持模型生效）"
+        description="是否启用说话人分离"
     )
     STT_DIARIZATION_SPEAKER_COUNT: int = Field(
         default=0,
@@ -136,31 +134,9 @@ class Settings(BaseSettings):
         default="temp",
         description="录音文件识别的文件 URL 模式: temp | oss"
     )
-    STT_DASHSCOPE_STRATEGY: str = Field(
-        default="realtime",
-        description="DashScope 转写策略: realtime | file | auto"
-    )
-    STT_REALTIME_TIMEOUT_SECONDS: int = Field(
-        default=300,
-        description="DashScope 实时识别超时时间（秒）"
-    )
     STT_FILE_TRANSCRIPTION_TIMEOUT_SECONDS: int = Field(
         default=300,
         description="DashScope 录音文件识别超时时间（秒）"
-    )
-
-    # 阿里云 NLS (传统方式，需要三个密钥)
-    ALIBABA_CLOUD_ACCESS_KEY_ID: Optional[str] = Field(
-        default=None,
-        description="阿里云 Access Key ID (NLS 传统方式)"
-    )
-    ALIBABA_CLOUD_ACCESS_KEY_SECRET: Optional[str] = Field(
-        default=None,
-        description="阿里云 Access Key Secret (NLS 传统方式)"
-    )
-    ALIBABA_CLOUD_APP_KEY: Optional[str] = Field(
-        default=None,
-        description="阿里云 NLS App Key (传统方式)"
     )
 
     # Embedding 配置
