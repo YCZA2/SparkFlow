@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from core import ResponseModel, success_response
 from core.auth import get_current_user
 from modules.shared.infrastructure.container import get_container, get_db_session, ServiceContainer
 
-from .application import FragmentCommandService, FragmentQueryService
+from .application import FragmentQueryService
 from .schemas import (
-    FragmentItem,
-    FragmentListResponse,
     FragmentTagListResponse,
     FragmentVisualizationResponse,
     SimilarityQueryRequest,
@@ -19,43 +17,9 @@ from .schemas import (
 
 router = APIRouter(prefix="/api/fragments", tags=["fragments"], responses={401: {"description": "未认证"}})
 
-def get_fragment_command_service(container: ServiceContainer = Depends(get_container)) -> FragmentCommandService:
-    return FragmentCommandService(
-        file_storage=container.file_storage,
-        vector_store=container.vector_store,
-        llm_provider=container.llm_provider,
-    )
-
 
 def get_fragment_query_service(container: ServiceContainer = Depends(get_container)) -> FragmentQueryService:
     return FragmentQueryService(vector_store=container.vector_store, file_storage=container.file_storage)
-
-
-@router.get(
-    "",
-    response_model=ResponseModel[FragmentListResponse],
-    summary="获取碎片列表",
-    description="兼容读取后端 fragment projection 列表，可按文件夹和标签过滤。",
-)
-async def list_fragments(
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    folder_id: str | None = Query(None),
-    tag: str | None = Query(None),
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db_session),
-    service: FragmentQueryService = Depends(get_fragment_query_service),
-):
-    return success_response(
-        data=service.list_fragments(
-            db=db,
-            user_id=current_user["user_id"],
-            limit=limit,
-            offset=offset,
-            folder_id=folder_id,
-            tag=tag,
-        )
-    )
 
 
 @router.post(
@@ -117,18 +81,4 @@ async def list_fragment_tags(
         )
     )
 
-
-@router.get(
-    "/{fragment_id}",
-    response_model=ResponseModel[FragmentItem],
-    summary="获取碎片详情",
-    description="兼容读取后端 fragment projection 详情。",
-)
-async def get_fragment(
-    fragment_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db_session),
-    service: FragmentCommandService = Depends(get_fragment_command_service),
-):
-    return success_response(data=service.get_fragment_payload(db=db, user_id=current_user["user_id"], fragment_id=fragment_id))
 

@@ -33,11 +33,9 @@ def test_public_api_routes_are_stable() -> None:
         ("/api/fragment-folders", frozenset({"POST"})),
         ("/api/fragment-folders/{folder_id}", frozenset({"PATCH"})),
         ("/api/fragment-folders/{folder_id}", frozenset({"DELETE"})),
-        ("/api/fragments", frozenset({"GET"})),
         ("/api/fragments/similar", frozenset({"POST"})),
         ("/api/fragments/tags", frozenset({"GET"})),
         ("/api/fragments/visualization", frozenset({"GET"})),
-        ("/api/fragments/{fragment_id}", frozenset({"GET"})),
         ("/api/media-assets", frozenset({"GET"})),
         ("/api/media-assets", frozenset({"POST"})),
         ("/api/media-assets/{asset_id}", frozenset({"DELETE"})),
@@ -60,7 +58,6 @@ def test_public_api_routes_are_stable() -> None:
         ("/api/pipelines/{run_id}/steps", frozenset({"GET"})),
         ("/api/pipelines/{run_id}/retry", frozenset({"POST"})),
         ("/api/transcriptions", frozenset({"POST"})),
-        ("/api/transcriptions/{fragment_id}", frozenset({"GET"})),
     }
 
     normalized_routes = {

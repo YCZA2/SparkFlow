@@ -42,8 +42,6 @@ export const API_ENDPOINTS = {
     ASSET_ACCESS: '/api/backups/assets/access',
   },
   FRAGMENTS: {
-    LIST: '/api/fragments',
-    DETAIL: (id: string) => `/api/fragments/${id}`,
     AI_EDIT: (id: string) => `/api/fragments/${id}/ai-edit`,
     VISUALIZATION: '/api/fragments/visualization',
     SIMILAR: '/api/fragments/similar',

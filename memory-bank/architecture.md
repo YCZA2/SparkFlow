@@ -303,8 +303,8 @@ flowchart TD
 - 本地联调会确保默认测试用户 `test-user-001` 在数据库中存在，避免恢复旧 token 时触发用户外键错误。
 - `backups`: 远端备份批量写入、快照拉取、restore session 审计与备份素材上传；不承担 fragments / folders 的日常主读取职责，但脚本生成、相似检索、可视化和 daily push 都会通过内部 snapshot reader 消费其中的 fragment snapshot。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
-- `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；移动端 phase 1 已不再依赖其作为 fragments / folders 首屏真值读取来源，`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_html`，`plain_text_snapshot` 负责检索、摘要和生成输入。
-- `transcriptions`: 音频上传、后台转写、状态查询；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录；`GET /api/transcriptions/{fragment_id}` 已下调为 projection / 兼容查询，主状态入口统一收敛到 `pipelines`。
+- `fragments`: 当前对外只保留标签、相似检索和可视化接口；移动端 phase 1 已不再依赖其作为 fragments / folders 首屏真值读取来源，`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_html`，`plain_text_snapshot` 负责检索、摘要和生成输入。
+- `transcriptions`: 音频上传入口；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录，主状态入口统一收敛到 `pipelines`。
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接；local-first 请求会直接绑定客户端 placeholder fragment，解析链接、下载转 m4a、主转写在 `media_ingestion` 中执行，摘要/标签/向量由后续 derivative pipeline 异步补齐。
 - `scripts`: 合稿、脚本生成 pipeline 定义、三层写作上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。脚本生成主链路里的 fragment 背景、方法论维护和相关碎片召回都已经切到共享 fragment snapshot reader。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷；模块内部已拆成 `parsers.py`、`chunking.py`、`indexing.py`、`application.py`。
@@ -561,9 +561,7 @@ sequenceDiagram
 - `POST /api/auth/token`
 - `GET /api/auth/me`
 - `POST /api/auth/refresh`
-- `GET /api/fragments`
 - `GET /api/fragments/tags`
-- `GET /api/fragments/{fragment_id}`
 - `POST /api/fragments/similar`
 - `GET /api/fragments/visualization`
 - `GET /api/fragment-folders`
@@ -571,7 +569,6 @@ sequenceDiagram
 - `PATCH /api/fragment-folders/{folder_id}`
 - `DELETE /api/fragment-folders/{folder_id}`
 - `POST /api/transcriptions`
-- `GET /api/transcriptions/{fragment_id}`
 - `POST /api/scripts/generation`
 - `GET /api/scripts`
 - `GET /api/scripts/daily-push`
@@ -615,8 +612,8 @@ sequenceDiagram
 ## 8. Current Architectural Notes
 
 - 代码已经从早期的 `routers + service` 形态迁移到 `modules/*` 主入口，但仓库里仍保留一部分 provider 与兼容性 service 文件，不应再把它们当成新的业务层规范。
-- 碎片管理现在分为“真实文件夹 + 全部系统视图”两层：文件夹模块负责容器管理；fragment 主写链路已切到客户端 local-first，后端 `fragments` 模块主要保留 projection 查询、标签聚合和基于 snapshot 的检索/可视化能力。
-- `GET /api/fragments` 当前已支持按 `folder_id` 和单个 `tag` 精确过滤；`GET /api/fragments/tags` 提供热门 Tag 与模糊建议能力。
+- 碎片管理现在分为“真实文件夹 + 全部系统视图”两层：文件夹模块负责容器管理；fragment 主写链路已切到客户端 local-first，后端 `fragments` 模块当前主要保留标签聚合和基于 snapshot 的检索/可视化能力。
+- `GET /api/fragments/tags` 提供热门 Tag 与模糊建议能力；碎片列表筛选主路径已回到移动端本地 SQLite，不再依赖后端 `GET /api/fragments`。
 - Tag 对外仍通过 `fragments.tags` 返回，后端使用 `fragment_tags` 作为 Tag 聚合、建议与过滤的查询主表。
 - 移动端当前是“文件夹入口优先”的首页结构，不是 PRD 里最初设想的 tab 首页；碎片列表主视图仍是核心工作区，但入口已经下沉到文件夹页。
 - 知识库后端已可用，移动端入口仍是占位页。

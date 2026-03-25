@@ -9,7 +9,7 @@ from modules.shared.media.audio_ingestion import build_media_ingestion_pipeline_
 from modules.shared.infrastructure.container import ServiceContainer, get_container, get_db_session
 
 from .application import TranscriptionUseCase
-from .schemas import AudioUploadResponse, TranscriptionStatusResponse
+from .schemas import AudioUploadResponse
 
 router = APIRouter(prefix="/api/transcriptions", tags=["transcriptions"], responses={401: {"description": "未认证"}})
 
@@ -44,21 +44,3 @@ async def upload_audio(
         local_fragment_id=local_fragment_id,
     )
     return success_response(data=payload, message="音频上传成功，已创建后台流水线")
-
-
-@router.get(
-    "/{fragment_id}",
-    response_model=ResponseModel[TranscriptionStatusResponse],
-    summary="获取转写状态",
-    description="兼容路径：根据 projection 碎片 ID 查询当前转写状态；local-first 主路径请优先使用 /api/pipelines/{run_id}。",
-)
-async def get_transcription_status(
-    fragment_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db_session),
-    use_case: TranscriptionUseCase = Depends(get_transcription_use_case),
-):
-    return success_response(
-        data=use_case.get_status(db=db, user_id=current_user["user_id"], fragment_id=fragment_id),
-        message="转写状态获取成功",
-    )

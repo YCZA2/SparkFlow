@@ -3,7 +3,7 @@ import {
   buildMultipartFilePart,
   prepareManagedAudioFile,
 } from '@/features/core/files/runtime';
-import { fetchApi, sendForm } from '@/features/core/api/client';
+import { sendForm } from '@/features/core/api/client';
 
 export interface UploadAudioResponse {
   pipeline_run_id: string;
@@ -15,17 +15,6 @@ export interface UploadAudioResponse {
   audio_file_expires_at: string | null;
   file_size: number;
   duration: number | null;
-}
-
-export interface TranscribeStatusResponse {
-  fragment_id: string;
-  transcript: string | null;
-  summary: string | null;
-  tags: string[] | null;
-  audio_object_key?: string | null;
-  audio_file_url: string | null;
-  audio_file_expires_at: string | null;
-  created_at: string;
 }
 
 export async function uploadAudio(
@@ -47,8 +36,4 @@ export async function uploadAudio(
   }
 
   return sendForm<UploadAudioResponse>(API_ENDPOINTS.TRANSCRIPTIONS, 'POST', formData);
-}
-
-export async function getTranscribeStatus(fragmentId: string): Promise<TranscribeStatusResponse> {
-  return fetchApi<TranscribeStatusResponse>(`${API_ENDPOINTS.TRANSCRIPTIONS}/${fragmentId}`);
 }

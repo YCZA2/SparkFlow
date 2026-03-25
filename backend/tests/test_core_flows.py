@@ -142,15 +142,13 @@ async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, att
     raise AssertionError(f"pipeline {run_id} did not finish")
 
 
-async def _wait_transcription_enrichment(async_client, auth_headers_factory, fragment_id: str, *, attempts: int = 80) -> dict:
-    """轮询转写详情直到摘要标签补齐。"""
-    headers = await _auth_headers(async_client, auth_headers_factory)
+async def _wait_fragment_derivatives(db_session_factory, fragment_id: str, *, attempts: int = 80) -> Fragment:
+    """轮询数据库直到摘要标签衍生字段补齐。"""
     for _ in range(attempts):
-        response = await async_client.get(f"/api/transcriptions/{fragment_id}", headers=headers)
-        assert response.status_code == 200
-        payload = response.json()["data"]
-        if payload.get("summary") or payload.get("tags"):
-            return payload
+        with db_session_factory() as db:
+            fragment = db.query(Fragment).filter(Fragment.id == fragment_id).first()
+            if fragment is not None and (fragment.summary or fragment.tags not in (None, "[]")):
+                return fragment
         await asyncio.sleep(0.05)
     raise AssertionError(f"fragment derivatives were not backfilled: {fragment_id}")
 
@@ -198,7 +196,6 @@ def _seed_fragment_vector(app, fragment_id: str, text: str, *, source: str = "ma
     [
         ("get", "/api/auth/me", None),
         ("post", "/api/auth/refresh", {}),
-        ("get", "/api/fragments", None),
         ("post", "/api/scripts/daily-push/trigger", None),
         ("get", "/api/knowledge", None),
         ("post", "/api/external-media/audio-imports", {"share_url": "https://v.douyin.com/test", "platform": "auto"}),
@@ -268,8 +265,8 @@ def test_startup_hook_recreates_missing_test_user(db_session_factory, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_fragments_collection_detail_similarity_and_visualization(async_client, auth_headers_factory, app, db_session_factory) -> None:
-    """碎片列表、详情、相似检索和可视化入口应返回一致数据。"""
+async def test_fragments_similarity_and_visualization(async_client, auth_headers_factory, app, db_session_factory) -> None:
+    """碎片相似检索和可视化入口应返回一致数据。"""
     first_fragment = await _create_fragment(
         db_session_factory,
         {"editor_document": _editor_document("定位方法论的第一条碎片"), "source": "manual"},
@@ -284,15 +281,6 @@ async def test_fragments_collection_detail_similarity_and_visualization(async_cl
     second_id = second_fragment["id"]
     _seed_fragment_vector(app, first_id, "定位方法论的第一条碎片")
     _seed_fragment_vector(app, second_id, "定位方法论的第二条碎片")
-
-    list_response = await async_client.get("/api/fragments", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert list_response.status_code == 200
-    listed_ids = {item["id"] for item in list_response.json()["data"]["items"]}
-    assert {first_id, second_id}.issubset(listed_ids)
-
-    detail_response = await async_client.get(f"/api/fragments/{first_id}", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert detail_response.status_code == 200
-    assert detail_response.json()["data"]["id"] == first_id
 
     similar_response = await async_client.post(
         "/api/fragments/similar",
@@ -450,9 +438,9 @@ async def test_import_external_audio_runs_full_async_pipeline(
     assert download_output["audio_file_url"]
     assert not temp_audio.exists()
 
-    enriched = await _wait_transcription_enrichment(async_client, auth_headers_factory, payload["fragment_id"])
-    assert enriched["summary"]
-    assert enriched["tags"]
+    enriched = await _wait_fragment_derivatives(db_session_factory, payload["fragment_id"])
+    assert enriched.summary
+    assert enriched.tags not in (None, "[]")
 
     with db_session_factory() as db:
         fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
@@ -531,7 +519,7 @@ async def test_import_external_audio_retries_when_provider_temporarily_fails(asy
 
 @pytest.mark.asyncio
 async def test_fragment_folders_crud_filtering_and_moves(async_client, auth_headers_factory, db_session_factory) -> None:
-    """文件夹 CRUD、过滤与批量移动应保持一致行为。"""
+    """文件夹 CRUD、计数更新与批量移动应保持一致行为。"""
     folder_a_id = await _create_folder(async_client, auth_headers_factory, "选题箱")
     folder_b_id = await _create_folder(async_client, auth_headers_factory, "待整理")
 
@@ -544,13 +532,12 @@ async def test_fragment_folders_crud_filtering_and_moves(async_client, auth_head
     first_unfiled = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("未归类碎片 1"), "source": "manual"}))["id"]
     second_unfiled = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("未归类碎片 2"), "source": "manual"}))["id"]
 
-    filtered_response = await async_client.get(f"/api/fragments?folder_id={folder_a_id}", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert {item["id"] for item in filtered_response.json()["data"]["items"]} == {in_folder["id"]}
-
     with db_session_factory() as db:
+        in_folder_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=in_folder["id"])
         first_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=first_unfiled)
         second_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=second_unfiled)
-        assert first_fragment is not None and second_fragment is not None
+        assert in_folder_fragment is not None and first_fragment is not None and second_fragment is not None
+        assert in_folder_fragment.folder_id == folder_a_id
         fragment_repository.move_by_ids(db=db, fragments=[first_fragment, second_fragment], folder_id=folder_b_id)
         fragment_repository.update_folder(db=db, fragment=first_fragment, folder_id=None)
 
@@ -612,7 +599,7 @@ async def test_fragment_folder_validation_and_conflicts(async_client, auth_heade
 
 @pytest.mark.asyncio
 async def test_fragment_tags_listing_filtering_and_delete_consistency(async_client, auth_headers_factory, db_session_factory) -> None:
-    """标签列表、筛选和删除后的聚合结果应保持一致。"""
+    """标签列表和删除后的聚合结果应保持一致。"""
     folder_id = await _create_folder(async_client, auth_headers_factory, "Tag 过滤")
     alpha_in_folder = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("alpha in folder"), "source": "manual", "folder_id": folder_id}))["id"]
     alpha_free = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("alpha free"), "source": "manual"}))["id"]
@@ -632,12 +619,13 @@ async def test_fragment_tags_listing_filtering_and_delete_consistency(async_clie
     query_response = await async_client.get("/api/fragments/tags?query=ab", headers=await _auth_headers(async_client, auth_headers_factory))
     assert [item["tag"] for item in query_response.json()["data"]["items"]] == ["abc", "abd", "zabc"]
 
-    tag_filter_response = await async_client.get("/api/fragments?tag=apple", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert {item["id"] for item in tag_filter_response.json()["data"]["items"]} == {alpha_in_folder, alpha_free}
-
     with db_session_factory() as db:
+        alpha_folder_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=alpha_in_folder)
+        alpha_free_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=alpha_free)
         fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=zabc_fragment)
-        assert fragment is not None
+        assert alpha_folder_fragment is not None and alpha_free_fragment is not None and fragment is not None
+        assert json.loads(alpha_folder_fragment.tags) == ["apple", "abc"]
+        assert json.loads(alpha_free_fragment.tags) == ["apple", "abd"]
         fragment_repository.delete(db=db, fragment=fragment)
     after_delete_response = await async_client.get("/api/fragments/tags?query=ab", headers=await _auth_headers(async_client, auth_headers_factory))
     assert [item["tag"] for item in after_delete_response.json()["data"]["items"]] == ["abc", "abd"]
@@ -727,15 +715,10 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
     assert pipeline["output"]["summary"] is None
     assert pipeline["output"]["tags"] == []
 
-    status_response = await async_client.get(
-        f"/api/transcriptions/{payload['fragment_id']}",
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert status_response.status_code == 200
-    assert status_response.json()["data"]["audio_source"] == "upload"
-    enriched = await _wait_transcription_enrichment(async_client, auth_headers_factory, payload["fragment_id"])
-    assert enriched["summary"]
-    assert enriched["tags"]
+    enriched = await _wait_fragment_derivatives(db_session_factory, payload["fragment_id"])
+    assert enriched.audio_source == "upload"
+    assert enriched.summary
+    assert enriched.tags not in (None, "[]")
 
     with db_session_factory() as db:
         fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
@@ -778,12 +761,6 @@ async def test_upload_audio_with_local_fragment_id_succeeds_without_projection(a
         fragment = db.query(Fragment).filter(Fragment.id == "local-fragment-001").first()
         assert fragment is None
 
-    status_response = await async_client.get(
-        "/api/transcriptions/local-fragment-001",
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert status_response.status_code == 404
-
 
 @pytest.mark.asyncio
 async def test_upload_audio_succeeds_when_derivative_enqueue_fails(async_client, auth_headers_factory, app, db_session_factory) -> None:
@@ -818,14 +795,6 @@ async def test_upload_audio_succeeds_when_derivative_enqueue_fails(async_client,
             assert fragment.tags == "[]"
     finally:
         app.state.container.pipeline_runner.create_run = original_create_run
-
-
-@pytest.mark.asyncio
-async def test_get_transcription_status_returns_not_found_for_missing_fragment(async_client, auth_headers_factory) -> None:
-    """不存在的碎片不应返回转写状态。"""
-    response = await async_client.get("/api/transcriptions/missing-fragment", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert response.status_code == 404
-    assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
 @pytest.mark.asyncio
@@ -904,9 +873,9 @@ async def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(async_
     assert pipeline["output"]["summary"] is None
     assert pipeline["output"]["tags"] == []
 
-    enriched = await _wait_transcription_enrichment(async_client, auth_headers_factory, payload["fragment_id"])
-    assert enriched["summary"]
-    assert enriched["tags"]
+    enriched = await _wait_fragment_derivatives(db_session_factory, payload["fragment_id"])
+    assert enriched.summary
+    assert enriched.tags not in (None, "[]")
 
     with db_session_factory() as db:
         fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()

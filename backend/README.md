@@ -150,7 +150,7 @@ cd backend
 - `modules/auth/`: 测试令牌签发、当前用户信息、刷新令牌。
 - `modules/fragment_folders/`: 碎片文件夹 CRUD 和文件夹统计。
 - `modules/fragments/`: 碎片列表、详情、移动、标签、相似检索、可视化。
-- `modules/transcriptions/`: 音频上传、后台转写、转写状态查询；主任务以 transcript 成功为准，摘要标签随后异步补齐。
+- `modules/transcriptions/`: 音频上传与后台转写入口；主任务以 transcript 成功为准，摘要标签随后异步补齐。
 - `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接；请求入口只创建任务，解析链接、下载转 m4a、转写先在主流水线完成，摘要/标签/向量由后续衍生流水线回填。
 - `modules/scripts/`: 口播稿生成、脚本生成 pipeline 定义、上下文构建、结果回流、列表、详情、更新、删除、每日推盘；其中 daily push 现在通过备份快照 reader 聚合 fragment 真值。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除；当前已按 `parsers / chunking / indexing / application` 拆层，文本型上传支持 `txt/docx/pdf/xlsx`。
@@ -289,11 +289,10 @@ bash scripts/postgres-local.sh stop
 - `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 返回 `pipeline_run_id`、`pipeline_type`、`status`
 - `GET /api/scripts` / `GET /api/scripts/{script_id}` 在没有来源碎片时会稳定返回 `source_fragment_ids=[]` 与 `source_fragment_count=0`，不使用 `null`
 - 文件类响应不再暴露 `audio_path` / `storage_path`，统一返回签名 `*_file_url` 与过期时间
-- `fragments` 列表 / 详情与 `GET /api/transcriptions/{fragment_id}` 不再返回 `sync_status`
 - `fragments.transcript` 表示机器转写原文，`body_html` 表示用户整理后的正式正文；正文消费统一按 `body_html -> transcript` 回退
 - 手动文本碎片主链路已不再依赖 `POST /api/fragments*` 远端建单；客户端应先写本地真值，再通过 `/api/backups/*` 同步快照，`transcript` 仅保留给语音转写链路
 - 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id`、`local_fragment_id` 或 `script_id`；对 transcript 任务来说，首个成功仅保证 transcript 已可用，`summary` / `tags` 可能由后续 derivative pipeline 异步补齐
-- local-first 主路径下，`GET /api/transcriptions/{fragment_id}` 只保留给 projection / 兼容场景；新的状态查询应统一走 `pipeline_run_id -> /api/pipelines/{run_id}`
+- 当前后端已移除 `GET /api/transcriptions/{fragment_id}`、`GET /api/fragments` 与 `GET /api/fragments/{fragment_id}` 这三条兼容读取接口；状态查询统一走 `pipeline_run_id -> /api/pipelines/{run_id}`，fragment 主读取统一走移动端本地真值
 - 手动脚本生成在客户端发起 `POST /api/scripts/generation` 之前，需要先完成一次成功的 backup flush；后端只消费已同步成功的 fragment snapshot，不读取设备上尚未上传的正文
 - 外链导入成功后的 `platform`、`share_url`、`media_id`、`title`、`author`、`cover_url`、`content_type`、`audio_file_url` 统一从 `GET /api/pipelines/{run_id}` 的 `output` 读取
 - 当前移动端已切脚本生成任务态；外链导入也已接入底部 `+` 抽屉、导入页和任务态轮询

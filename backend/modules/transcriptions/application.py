@@ -6,12 +6,11 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from domains.fragments import repository as fragment_repository
-from modules.fragments.mapper import map_fragment
 from modules.shared.media.audio_ingestion import AudioIngestionRequest
 from modules.shared.media.audio_ingestion_use_case import AudioIngestionUseCase
 from modules.shared.infrastructure.storage import build_audio_object_key, sanitize_filename, validate_audio_upload
 from modules.shared.ports import FileStorage
-from .schemas import AudioUploadResponse, TranscriptionStatusResponse
+from .schemas import AudioUploadResponse
 
 
 class TranscriptionUseCase:
@@ -109,13 +108,3 @@ class TranscriptionUseCase:
             file_size=saved.file_size,
             duration=None,
         )
-
-    def get_status(self, *, db: Session, user_id: str, fragment_id: str) -> TranscriptionStatusResponse:
-        """读取当前碎片的任务态详情。"""
-        fragment = fragment_repository.get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
-        if not fragment:
-            from core.exceptions import NotFoundError
-            raise NotFoundError(message="碎片笔记不存在或无权访问", resource_type="fragment", resource_id=fragment_id)
-        payload = map_fragment(fragment, file_storage=self.file_storage).model_dump()
-        payload["fragment_id"] = payload["id"]
-        return TranscriptionStatusResponse.model_validate(payload)
