@@ -399,10 +399,13 @@ export function useEditorSession<TDocument>(
     return null;
   })();
 
+  /*给原生富文本桥接一个稳定的初始值，只在 hydrate / 保存落盘后再更新，避免输入中反复回灌正文导致光标跳尾。 */
+  const initialBodyHtml = state.baseline?.snapshot.body_html ?? state.snapshot.body_html;
+
   return {
     editorRef,
     editorKey: state.editorKey,
-    initialBodyHtml: state.snapshot.body_html,
+    initialBodyHtml,
     shouldAutoFocus,
     mediaAssets: state.mediaAssets,
     formattingState: state.formattingState,

@@ -57,6 +57,33 @@ test('shared session keeps local draft snapshot stable across remote refresh', (
   assert.equal(state.editorKey, initialEditorKey);
 });
 
+test('shared session keeps hydrated baseline stable while typing locally', () => {
+  let state = createInitialEditorSessionState('document-1', 'local-first');
+  state = reduceEditorSession(state, {
+    type: 'SOURCE_DOCUMENT_LOADED',
+    document: buildDocument({ body_html: '<p>远端正文</p>' }),
+  });
+  state = reduceEditorSession(state, {
+    type: 'CACHED_BASELINE_LOADED',
+    html: '<p>远端正文</p>',
+  });
+  state = reduceEditorSession(state, {
+    type: 'LOCAL_DRAFT_HTML_LOADED',
+    html: null,
+  });
+  state = reduceEditorSession(state, {
+    type: 'SNAPSHOT_CHANGED',
+    snapshot: {
+      body_html: '<p>远端正文中间新增一句</p>',
+      plain_text: '远端正文中间新增一句',
+      asset_ids: [],
+    },
+  });
+
+  assert.equal(state.snapshot.body_html, '<p>远端正文中间新增一句</p>');
+  assert.equal(state.baseline?.snapshot.body_html, '<p>远端正文</p>');
+});
+
 test('local-first save success keeps session in unsynced state until remote reconciliation', () => {
   let state = createInitialEditorSessionState('local-doc-1', 'local-first');
   state = reduceEditorSession(state, {
