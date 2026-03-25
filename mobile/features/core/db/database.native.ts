@@ -3,17 +3,13 @@ import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 
 import { runLocalDatabaseMigrations } from '@/features/core/db/migrations';
 import { localSchema } from '@/features/core/db/schema';
+import { sanitizeWorkspaceId } from '@/features/core/workspaceId';
 
 const DATABASE_PREFIX = 'sparkflow-local';
 
 let databasePromise: Promise<SQLiteDatabase> | null = null;
 let drizzlePromise: Promise<ExpoSQLiteDatabase<typeof localSchema> & { $client: SQLiteDatabase }> | null = null;
 let currentWorkspaceUserId: string | null = null;
-
-function sanitizeWorkspaceId(userId: string): string {
-  /*把 user_id 规整为安全的 SQLite 文件名片段，避免工作区路径包含特殊字符。 */
-  return userId.replace(/[^a-zA-Z0-9_-]+/g, '-');
-}
 
 function resolveDatabaseName(): string {
   /*当前本地数据库按 user workspace 分区，未挂载工作区时禁止打开业务库。 */
@@ -26,7 +22,10 @@ function resolveDatabaseName(): string {
 async function disposeCurrentClient(): Promise<void> {
   /*切换工作区前尽力关闭旧连接，避免继续读写上一个账号的本地库。 */
   if (databasePromise) {
-    const client = await databasePromise.catch(() => null);
+    const client = await databasePromise.catch((err) => {
+      console.warn('[DB] 关闭旧连接时获取客户端失败:', err);
+      return null;
+    });
     await (client as { closeAsync?: () => Promise<void> } | null)?.closeAsync?.();
   }
 }

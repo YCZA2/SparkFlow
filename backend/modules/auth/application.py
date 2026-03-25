@@ -176,6 +176,7 @@ class AuthUseCase:
             if latest.expires_at > now and latest.send_count >= settings.PHONE_VERIFICATION_CODE_MAX_SENDS:
                 raise ValidationError("验证码发送次数已达上限，请稍后再试", {"send_count": "limit_reached"})
             latest.is_latest = False
+            db.flush()
 
         raw_code = "123456" if settings.DEBUG else "".join(secrets.choice("0123456789") for _ in range(6))
         expires_at = now + timedelta(seconds=settings.PHONE_VERIFICATION_CODE_TTL_SECONDS)
@@ -344,13 +345,9 @@ class AuthUseCase:
         user = db.query(User).filter(User.id == current_user["user_id"]).first()
         if user is None:
             raise AuthenticationError("当前用户不存在，请重新登录")
-        return CurrentUserResponse(
-            user_id=user.id,
-            role=user.role,
-            nickname=user.nickname,
-            phone_country_code=user.phone_country_code or DEFAULT_PHONE_COUNTRY_CODE,
-            phone_number=user.phone_number,
-            status=user.status,
+        payload = self._build_user_payload(
+            user,
             device_id=current_user.get("device_id"),
             session_version=current_user.get("session_version"),
         )
+        return CurrentUserResponse(**payload.model_dump())

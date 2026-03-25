@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Alert, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -18,11 +18,8 @@ export default function LoginScreen() {
   const [isSending, setIsSending] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const canSend = useMemo(() => /^1\d{10}$/.test(phoneNumber), [phoneNumber]);
-  const canSubmit = useMemo(
-    () => canSend && verificationCode.trim().length >= 4 && !isSubmitting,
-    [canSend, isSubmitting, verificationCode]
-  );
+  const canSend = /^1\d{10}$/.test(phoneNumber);
+  const canSubmit = canSend && verificationCode.trim().length >= 4 && !isSubmitting;
 
   const handleSendCode = async () => {
     try {

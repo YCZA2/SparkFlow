@@ -1,5 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { sanitizeWorkspaceId } from '@/features/core/workspaceId';
+
 export type ManagedAppFileKind = 'audio' | 'image' | 'text';
 export type ManagedAppFileSource = 'backup-cache' | 'draft' | 'staging' | 'picker' | 'recording';
 
@@ -50,11 +52,6 @@ function toDirectoryHandle(directory: Directory): NativeDirectoryHandle {
 
 function toFileHandle(file: File): NativeFileHandle {
   return file as unknown as NativeFileHandle;
-}
-
-function sanitizeWorkspaceId(userId: string): string {
-  /*把 user_id 规整为安全目录名，避免本地工作区路径出现特殊字符。 */
-  return userId.replace(/[^a-zA-Z0-9_-]+/g, '-');
 }
 
 function requireWorkspaceUserId(): string {

@@ -122,13 +122,6 @@ function RootLayoutNav() {
           }}
         >
           <Stack.Screen
-            name="login"
-            options={{
-              headerShown: false,
-              title: '登录',
-            }}
-          />
-          <Stack.Screen
             name="index"
             options={{
               headerShown: false,

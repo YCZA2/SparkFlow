@@ -25,15 +25,8 @@ class AuthenticatedUserPayload(BaseModel):
     session_version: int | None = None
 
 
-class CurrentUserResponse(BaseModel):
-    user_id: str
-    role: str
-    nickname: str | None = None
-    phone_country_code: str = "+86"
-    phone_number: str | None = None
-    status: str = "active"
-    device_id: str | None = None
-    session_version: int | None = None
+class CurrentUserResponse(AuthenticatedUserPayload):
+    pass
 
 
 class VerificationCodeRequest(BaseModel):
