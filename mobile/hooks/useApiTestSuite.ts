@@ -263,7 +263,7 @@ export function useApiTestSuite() {
       { label: '8. 音频上传', run: testUploadAudioCase },
       { label: '9. 检查转写', run: testCheckUploadedTranscribeCase },
     ],
-    [lastCreatedFragmentId]
+    [lastUploadedFragmentId]
   );
 
   return {
