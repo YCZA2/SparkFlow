@@ -250,6 +250,7 @@ class Settings(BaseSettings):
         env_file=BACKEND_ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",
     )
 
     @field_validator("DEBUG", mode="before")
