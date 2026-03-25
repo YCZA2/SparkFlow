@@ -11,6 +11,7 @@ import {
   extractAssetIdsFromHtml,
   extractPlainTextFromHtml,
   normalizeBodyHtml,
+  stripEdgeEmptyParagraphs,
 } from '@/features/editor/html';
 import type {
   EditorCommand,
@@ -99,7 +100,7 @@ export function ContentRichEditor({
   /*用原生富文本输入承接共享编辑器底座，并维持统一桥接接口。 */
   const nativeRef = React.useRef<EnrichedTextInputInstance | null>(null);
   const [seededEditorHtml, setSeededEditorHtml] = React.useState(() =>
-    replaceAssetIdsWithDisplayUrls(initialBodyHtml, mediaAssets)
+    replaceAssetIdsWithDisplayUrls(stripEdgeEmptyParagraphs(initialBodyHtml), mediaAssets)
   );
   const latestSnapshotRef = React.useRef<EditorDocumentSnapshot>({
     body_html: normalizeBodyHtml(initialBodyHtml),

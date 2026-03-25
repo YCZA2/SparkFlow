@@ -5,10 +5,10 @@ import {
   downloadRemoteFileToFragment,
   getFragmentBodyFile,
   getScriptBodyFile,
-  writeFragmentBodyFile,
 } from '@/features/core/files/runtime';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { useFragmentStore } from '@/features/fragments/store/fragmentStore';
+import { persistBodyHtml } from '@/features/fragments/store/shared';
 import { ensureFragmentStoreReady } from '@/features/fragments/store/runtime';
 import { markScriptsStale } from '@/features/scripts/refreshSignal';
 import { useScriptStore } from '@/features/scripts/store/scriptStore';
@@ -260,11 +260,12 @@ export async function restoreFromBackup(reason?: string): Promise<BackupRestoreR
   });
 
   // 事务提交后再写正文文件：SQLite 行已存在，文件写失败只影响正文展示，不会导致数据行丢失。
+  // 经 persistBodyHtml 写入以统一截断首尾空段落，与编辑器保存路径保持一致。
   for (const fragment of plan.fragments) {
     if (fragment.deletedAt || !fragment.bodyHtml.trim()) {
       continue;
     }
-    await writeFragmentBodyFile(fragment.id, fragment.bodyHtml);
+    await persistBodyHtml(fragment.id, fragment.bodyHtml);
   }
 
   // 正文文件写完后再清理不再需要的 fragment 目录，确保清理前本地数据已经完整落盘。

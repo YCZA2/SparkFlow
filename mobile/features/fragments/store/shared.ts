@@ -12,6 +12,7 @@ import {
   extractAssetIdsFromHtml,
   extractPlainTextFromHtml,
   normalizeBodyHtml,
+  stripEdgeEmptyParagraphs,
 } from '@/features/editor/html';
 import { normalizeFragmentTags } from '@/features/fragments/utils';
 import type {
@@ -202,13 +203,6 @@ export async function readFragmentRows(
     .from(fragmentsTable)
     .where(buildFragmentListCondition(folderId))
     .orderBy(desc(fragmentsTable.updatedAt));
-}
-
-/*去除正文首尾的空段落，避免编辑器初始化时添加的空 <p> 节点污染持久化内容。 */
-function stripEdgeEmptyParagraphs(html: string): string {
-  return html
-    .replace(/^(<p[^>]*>\s*<\/p>\s*)+/, '')
-    .replace(/(\s*<p[^>]*>\s*<\/p>)+$/, '');
 }
 
 /*直接写入某个 fragment 的正文文件，并同步补齐纯文本快照。 */

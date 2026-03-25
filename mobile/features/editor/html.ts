@@ -10,6 +10,13 @@ export function normalizeBodyHtml(html: string | null | undefined): string {
   return String(html ?? '').replace(/\r\n/g, '\n').trim();
 }
 
+export function stripEdgeEmptyParagraphs(html: string): string {
+  /*去除正文首尾的空段落，避免编辑器初始化时插入的空 <p> 节点污染持久化内容或初始展示。 */
+  return html
+    .replace(/^(<p[^>]*>\s*<\/p>\s*)+/, '')
+    .replace(/(\s*<p[^>]*>\s*<\/p>)+$/, '');
+}
+
 export function extractPlainTextFromHtml(html: string | null | undefined): string {
   /*从 HTML 中提取纯文本快照，供列表预览和分享复用。 */
   const normalized = normalizeBodyHtml(html);
