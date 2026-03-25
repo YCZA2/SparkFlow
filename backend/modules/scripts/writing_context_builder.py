@@ -11,12 +11,12 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from core.config import settings
-from domains.fragments import repository as fragment_repository
 from domains.knowledge import repository as knowledge_repository
 from domains.scripts import repository as script_repository
 from domains.writing_context import repository as writing_context_repository
 from models import User
 from modules.shared.content.content_html import extract_plain_text_from_html
+from modules.shared.fragment_snapshots import FragmentSnapshotReader, read_fragment_snapshot_text
 from modules.shared.ports import KnowledgeIndexStore, TextGenerationProvider, VectorStore
 from modules.shared.prompt_loader import load_prompt_text
 from utils.serialization import parse_json_object_list
@@ -30,6 +30,7 @@ _MAX_METHODOLOGY_FRAGMENT_SOURCES = 30
 _MAX_RELATED_FRAGMENT_HITS = 3
 _MAX_RELATED_KNOWLEDGE_HITS = 3
 _MAX_RELATED_SCRIPT_HITS = 2
+_FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 
 
 def _extract_json_block(text: str) -> str:
@@ -141,8 +142,7 @@ async def _refresh_fragment_methodology_entries(
     llm_provider: TextGenerationProvider,
 ) -> list[MethodologyPayload]:
     """在离线维护任务中按阈值重建自动提炼的方法论条目。"""
-    fragments = fragment_repository.list_vectorizable_by_user(db=db, user_id=user_id)
-    eligible_fragments = [fragment for fragment in fragments if (fragment.plain_text_snapshot or "").strip()]
+    eligible_fragments = _FRAGMENT_SNAPSHOT_READER.list_vectorizable_by_user(db=db, user_id=user_id)
 
     existing_entries = writing_context_repository.list_methodology_entries_by_source_type(
         db=db,
@@ -164,7 +164,7 @@ async def _refresh_fragment_methodology_entries(
         return _list_cached_fragment_methodology_entries(db=db, user_id=user_id)
 
     source_signature = _build_source_signature(
-        [f"{fragment.id}:{fragment.updated_at.isoformat()}:{len(fragment.plain_text_snapshot or '')}" for fragment in eligible_fragments]
+        [f"{fragment.id}:{fragment.updated_at.isoformat()}:{len(read_fragment_snapshot_text(fragment))}" for fragment in eligible_fragments]
     )
     if existing_entries and all(entry.source_signature == source_signature for entry in existing_entries if entry.source_signature is not None):
         return _list_cached_fragment_methodology_entries(db=db, user_id=user_id)
@@ -175,7 +175,7 @@ async def _refresh_fragment_methodology_entries(
             return _list_cached_fragment_methodology_entries(db=db, user_id=user_id)
 
     source_text = "\n\n".join(
-        f"[碎片] {_normalize_text(fragment.plain_text_snapshot)}"
+        f"[碎片] {_normalize_text(read_fragment_snapshot_text(fragment))}"
         for fragment in eligible_fragments[-_MAX_METHODOLOGY_FRAGMENT_SOURCES:]
     )
     raw = await llm_provider.generate(
@@ -319,14 +319,14 @@ async def _build_related_fragments(
         exclude_ids=exclude_fragment_ids,
     )
     fragment_ids = [str(item.get("fragment_id") or "") for item in hits if str(item.get("fragment_id") or "").strip()]
-    fragments = fragment_repository.get_by_ids(db=db, user_id=user_id, fragment_ids=fragment_ids)
+    fragments = _FRAGMENT_SNAPSHOT_READER.get_by_ids(db=db, user_id=user_id, fragment_ids=fragment_ids)
     fragment_map = {fragment.id: fragment for fragment in fragments}
     items: list[str] = []
     for fragment_id in fragment_ids:
         fragment = fragment_map.get(fragment_id)
         if not fragment:
             continue
-        content = (fragment.plain_text_snapshot or fragment.transcript or "").strip()
+        content = read_fragment_snapshot_text(fragment)
         if content:
             items.append(f"[相关碎片] {_normalize_text(content, limit=280)}")
     return items

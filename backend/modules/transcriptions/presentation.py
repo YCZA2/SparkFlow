@@ -26,7 +26,7 @@ def get_transcription_use_case(container: ServiceContainer = Depends(get_contain
     status_code=status.HTTP_200_OK,
     response_model=ResponseModel[AudioUploadResponse],
     summary="上传音频并启动转写",
-    description="上传音频文件后立即创建碎片记录，并在后台异步执行转写与摘要增强。",
+    description="上传音频文件后创建后台流水线；local-first 主路径可只绑定本地 placeholder，不要求先创建远端 fragment projection。",
 )
 async def upload_audio(
     audio: UploadFile = File(..., description="音频文件"),
@@ -50,7 +50,7 @@ async def upload_audio(
     "/{fragment_id}",
     response_model=ResponseModel[TranscriptionStatusResponse],
     summary="获取转写状态",
-    description="根据碎片 ID 查询当前转写状态，以及已生成的摘要、标签和分段信息。",
+    description="兼容路径：根据 projection 碎片 ID 查询当前转写状态；local-first 主路径请优先使用 /api/pipelines/{run_id}。",
 )
 async def get_transcription_status(
     fragment_id: str,

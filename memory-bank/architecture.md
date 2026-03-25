@@ -142,7 +142,7 @@ flowchart TD
 - **设备本地 SQLite + 文件系统是当前阶段的真值来源**
 - 远端只负责自动备份与显式恢复，不再承担 fragments / folders / scripts 的主读取路径
 - 编辑与删除先更新本地实体，再由 backup queue 批量推送快照和 tombstone
-- AI 生成、转写、外链导入继续走后端，但输入来自客户端上传的本地快照或媒体文件；script 生成成功后会立刻回写本地 script 真值
+- AI 生成、转写、外链导入继续走后端，但输入来自客户端上传的本地快照或媒体文件；手动脚本生成发起前会先显式执行一次 `flushBackupQueue()`，确保后端读取到最新已同步 fragment snapshot；script 生成成功后会立刻回写本地 script 真值
 - 单设备在线由 `device session` 约束；旧设备失效后仍可离线读写本地，但不能继续备份或调用远端 AI
 - 显式恢复入口当前挂在 `profile.tsx`，执行时会拉取 `/api/backups/snapshot` 并重建本地 SQLite 与 fragment / script `body.html`，同时最佳努力回填音频/图片本地缓存
 - 对于带 `backup_object_key` 的媒体资源，恢复前会额外调用 `/api/backups/assets/access` 刷新最新访问地址，再尝试下载到本地缓存
@@ -174,6 +174,7 @@ flowchart TD
 - AppState 切到 `active` 或 `background` 时会再触发一次，避免正文和媒体长期只停留在本地
 - 前台运行期间每 5 分钟会定时重试一次，补充前后台切换未覆盖到的场景
 - 当前编辑成功后默认只是把实体留在 `pending`，不会在每次输入后立刻发起网络请求；上传仍以队列批量冲刷为主
+- 唯一的主路径例外是手动脚本生成：客户端会在调用 `POST /api/scripts/generation` 前先主动执行一次 `flushBackupQueue()`，用来建立“生成基于最新已同步正文”的 freshness barrier
 
 文件存储当前分两层：
 
@@ -300,12 +301,12 @@ flowchart TD
 
 - `auth`: 测试 token 签发、当前用户信息、refresh。
 - 本地联调会确保默认测试用户 `test-user-001` 在数据库中存在，避免恢复旧 token 时触发用户外键错误。
-- `backups`: 远端备份批量写入、快照拉取、restore session 审计与备份素材上传；不承担 fragments / folders 的日常主读取职责，但 daily push 会通过内部 reader 消费其中的 fragment snapshot。
+- `backups`: 远端备份批量写入、快照拉取、restore session 审计与备份素材上传；不承担 fragments / folders 的日常主读取职责，但脚本生成、相似检索、可视化和 daily push 都会通过内部 snapshot reader 消费其中的 fragment snapshot。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
 - `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；移动端 phase 1 已不再依赖其作为 fragments / folders 首屏真值读取来源，`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_html`，`plain_text_snapshot` 负责检索、摘要和生成输入。
-- `transcriptions`: 音频上传、后台转写、状态查询；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录。
+- `transcriptions`: 音频上传、后台转写、状态查询；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录；`GET /api/transcriptions/{fragment_id}` 已下调为 projection / 兼容查询，主状态入口统一收敛到 `pipelines`。
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接；local-first 请求会直接绑定客户端 placeholder fragment，解析链接、下载转 m4a、主转写在 `media_ingestion` 中执行，摘要/标签/向量由后续 derivative pipeline 异步补齐。
-- `scripts`: 合稿、脚本生成 pipeline 定义、三层写作上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。`daily_push_snapshots.py` 会先把备份快照规整成推盘 DTO，再交给 `daily_push.py` 做聚类与上下文拼接。
+- `scripts`: 合稿、脚本生成 pipeline 定义、三层写作上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。脚本生成主链路里的 fragment 背景、方法论维护和相关碎片召回都已经切到共享 fragment snapshot reader。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷；模块内部已拆成 `parsers.py`、`chunking.py`、`indexing.py`、`application.py`。
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
 - `exports`: 单条 Markdown 导出与批量 zip 导出。

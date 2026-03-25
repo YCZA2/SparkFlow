@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
+from domains.backups import repository as backup_repository
 from models import KnowledgeDoc
 from modules.auth.application import TEST_USER_ID
 from modules.shared.ports import KnowledgeChunk
@@ -13,6 +16,38 @@ from modules.scripts.writing_context_builder import (
 )
 
 pytestmark = pytest.mark.integration
+
+
+def _upsert_fragment_snapshot(db, fragment) -> None:
+    """把测试碎片同步成 backup snapshot，模拟 local-first 已完成 flush。"""
+    backup_repository.upsert_record(
+        db=db,
+        user_id=TEST_USER_ID,
+        entity_type="fragment",
+        entity_id=fragment.id,
+        entity_version=1,
+        operation="upsert",
+        payload_json=json.dumps(
+            {
+                "id": fragment.id,
+                "folder_id": fragment.folder_id,
+                "source": fragment.source,
+                "audio_source": fragment.audio_source,
+                "created_at": fragment.created_at.isoformat(),
+                "updated_at": fragment.updated_at.isoformat(),
+                "summary": fragment.summary,
+                "tags": [],
+                "transcript": fragment.transcript,
+                "body_html": fragment.body_html or "",
+                "plain_text_snapshot": fragment.plain_text_snapshot or "",
+                "deleted_at": None,
+            },
+            ensure_ascii=False,
+        ),
+        modified_at=fragment.updated_at,
+        last_modified_device_id="device-test",
+        now=fragment.updated_at,
+    )
 
 
 @pytest.mark.asyncio
@@ -88,6 +123,8 @@ async def test_writing_context_bundle_uses_preset_stable_core_and_cached_methodo
         knowledge_doc_title = knowledge_doc.title
         knowledge_doc_type = knowledge_doc.doc_type
         knowledge_doc_content = knowledge_doc.content
+        _upsert_fragment_snapshot(db, fragment)
+        db.commit()
 
     await vector_store.upsert_fragment(
         user_id=TEST_USER_ID,
@@ -136,7 +173,7 @@ async def test_daily_writing_context_maintenance_refreshes_only_after_threshold(
 
     with app.state.container.session_factory() as db:
         for index in range(7):
-            fragment_repository.create(
+            fragment = fragment_repository.create(
                 db=db,
                 user_id=TEST_USER_ID,
                 transcript=None,
@@ -154,6 +191,7 @@ async def test_daily_writing_context_maintenance_refreshes_only_after_threshold(
                 plain_text_snapshot=f"首轮阈值碎片 {index}",
                 tags=[],
             )
+            _upsert_fragment_snapshot(db, fragment)
 
         first_result = await refresh_fragment_methodology_entries_for_all_users(
             db=db,
@@ -165,7 +203,7 @@ async def test_daily_writing_context_maintenance_refreshes_only_after_threshold(
             source_type="fragment_distilled",
         )
 
-        fragment_repository.create(
+        fragment = fragment_repository.create(
             db=db,
             user_id=TEST_USER_ID,
             transcript=None,
@@ -183,6 +221,7 @@ async def test_daily_writing_context_maintenance_refreshes_only_after_threshold(
             plain_text_snapshot="第八条碎片，达到阈值",
             tags=[],
         )
+        _upsert_fragment_snapshot(db, fragment)
         llm_provider.queue_text('[{"title":"首轮方法论","content":"先抛问题，再给动作。"}]')
         second_result = await refresh_fragment_methodology_entries_for_all_users(
             db=db,
@@ -196,7 +235,7 @@ async def test_daily_writing_context_maintenance_refreshes_only_after_threshold(
         second_signature = second_entries[0].source_signature
 
         for index in range(2):
-            fragment_repository.create(
+            fragment = fragment_repository.create(
                 db=db,
                 user_id=TEST_USER_ID,
                 transcript=None,
@@ -214,6 +253,7 @@ async def test_daily_writing_context_maintenance_refreshes_only_after_threshold(
                 plain_text_snapshot=f"增量未达标 {index}",
                 tags=[],
             )
+            _upsert_fragment_snapshot(db, fragment)
         third_result = await refresh_fragment_methodology_entries_for_all_users(
             db=db,
             llm_provider=llm_provider,

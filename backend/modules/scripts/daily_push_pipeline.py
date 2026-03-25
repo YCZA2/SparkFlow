@@ -16,6 +16,7 @@ from models import PipelineRun
 from modules.shared.pipeline.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
 from modules.shared.ports import VectorStore
 from modules.shared.content.content_html import convert_markdown_to_basic_html
+from modules.shared.fragment_snapshots import hydrate_fragment_snapshot
 from modules.shared.prompt_loader import load_prompt_text, render_prompt_template
 from utils.time import ensure_aware_utc, get_app_timezone, get_local_day_bounds
 
@@ -52,34 +53,9 @@ def _build_fragment_summary(fragment: DailyPushFragmentSnapshot) -> str:
     return "\n".join(parts)
 
 
-def _parse_snapshot_time(value: Any, *, fallback: datetime) -> datetime:
-    """把 pipeline 输入里的快照时间恢复为 UTC aware datetime。"""
-    if isinstance(value, str) and value.strip():
-        try:
-            return ensure_aware_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
-        except ValueError:
-            return fallback
-    return fallback
-
-
 def _hydrate_fragment_snapshot(item: dict[str, Any], *, user_id: str) -> DailyPushFragmentSnapshot | None:
     """把 pipeline 输入中的字典恢复为快照 DTO。"""
-    snapshot_id = str(item.get("id") or "").strip()
-    if not snapshot_id:
-        return None
-    fallback_time = ensure_aware_utc()
-    return DailyPushFragmentSnapshot(
-        id=snapshot_id,
-        user_id=str(item.get("user_id") or user_id),
-        source=str(item.get("source") or "manual"),
-        created_at=_parse_snapshot_time(item.get("created_at"), fallback=fallback_time),
-        updated_at=_parse_snapshot_time(item.get("updated_at"), fallback=fallback_time),
-        plain_text=str(item.get("plain_text") or "").strip(),
-        summary=str(item.get("summary")).strip() if item.get("summary") is not None else None,
-        tags=[tag for tag in item.get("tags") or [] if isinstance(tag, str)],
-        entity_version=int(item.get("entity_version") or 1),
-        backup_updated_at=_parse_snapshot_time(item.get("backup_updated_at"), fallback=fallback_time),
-    )
+    return hydrate_fragment_snapshot(item, user_id=user_id)
 
 
 class DailyPushPersistenceService:

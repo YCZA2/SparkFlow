@@ -179,7 +179,10 @@ class MediaIngestionStepExecutor:
         await self.enqueue_fragment_derivative_backfill(
             context=context,
             fragment_id=context.input_payload.get("fragment_id"),
+            local_fragment_id=context.input_payload.get("local_fragment_id"),
             effective_text=transcript_payload.get("transcript") or "",
+            source=str(context.input_payload.get("source") or "voice"),
+            audio_source=context.input_payload.get("source_kind"),
         )
         return self.persistence_service.build_finalize_payload(
             file_storage=self._runtime_file_storage(context),
@@ -194,17 +197,21 @@ class MediaIngestionStepExecutor:
         *,
         context: PipelineExecutionContext,
         fragment_id: str | None,
+        local_fragment_id: str | None,
         effective_text: str,
+        source: str,
+        audio_source: str | None,
     ) -> None:
         """在 transcript 落库后最佳努力创建异步衍生字段回填流水线。"""
         normalized_fragment_id = str(fragment_id or "").strip()
-        if not normalized_fragment_id:
+        normalized_local_fragment_id = str(local_fragment_id or "").strip()
+        if not normalized_fragment_id and not normalized_local_fragment_id:
             return
         pipeline_runner = context.container.pipeline_runner
         if pipeline_runner is None:
             logger.warning(
                 "fragment_derivative_pipeline_runner_missing",
-                fragment_id=normalized_fragment_id,
+                fragment_id=normalized_local_fragment_id or normalized_fragment_id,
                 user_id=context.run.user_id,
             )
             return
@@ -214,16 +221,19 @@ class MediaIngestionStepExecutor:
                 user_id=context.run.user_id,
                 pipeline_type=PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
                 input_payload={
-                    "fragment_id": normalized_fragment_id,
+                    "fragment_id": normalized_fragment_id or None,
+                    "local_fragment_id": normalized_local_fragment_id or None,
                     "effective_text": effective_text,
+                    "source": source,
+                    "audio_source": audio_source,
                 },
-                resource_type="fragment",
-                resource_id=normalized_fragment_id,
+                resource_type="local_fragment" if normalized_local_fragment_id else "fragment",
+                resource_id=normalized_local_fragment_id or normalized_fragment_id,
             )
         except Exception as exc:
             logger.warning(
                 "fragment_derivative_backfill_enqueue_failed",
-                fragment_id=normalized_fragment_id,
+                fragment_id=normalized_local_fragment_id or normalized_fragment_id,
                 user_id=context.run.user_id,
                 error=str(exc),
             )

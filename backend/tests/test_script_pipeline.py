@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from datetime import datetime
 
 import pytest
 
+from domains.backups import repository as backup_repository
 from models import KnowledgeDoc
 from modules.auth.application import TEST_USER_ID
 from modules.shared.ports import KnowledgeChunk
@@ -27,6 +30,49 @@ async def _create_fragment(async_client, auth_headers_factory, transcript: str) 
     )
     assert response.status_code == 201
     return response.json()["data"]["id"]
+
+
+async def _create_fragment_payload(async_client, auth_headers_factory, transcript: str) -> dict:
+    """创建手动碎片并返回完整响应，便于同步 snapshot。"""
+    response = await async_client.post(
+        "/api/fragments/content",
+        json={"body_html": f"<p>{transcript}</p>", "source": "manual"},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert response.status_code == 201
+    return response.json()["data"]
+
+
+def _upsert_fragment_snapshot(db, payload: dict) -> None:
+    """把测试碎片同步成远端 snapshot，模拟 local-first flush 完成。"""
+    backup_repository.upsert_record(
+        db=db,
+        user_id=TEST_USER_ID,
+        entity_type="fragment",
+        entity_id=payload["id"],
+        entity_version=1,
+        operation="upsert",
+        payload_json=json.dumps(
+            {
+                "id": payload["id"],
+                "folder_id": payload.get("folder_id"),
+                "source": payload.get("source") or "manual",
+                "audio_source": payload.get("audio_source"),
+                "created_at": payload["created_at"],
+                "updated_at": payload["updated_at"],
+                "summary": payload.get("summary"),
+                "tags": payload.get("tags") or [],
+                "transcript": payload.get("transcript"),
+                "body_html": payload.get("body_html") or "",
+                "plain_text_snapshot": payload.get("plain_text_snapshot") or "",
+                "deleted_at": payload.get("deleted_at"),
+            },
+            ensure_ascii=False,
+        ),
+        modified_at=None,
+        last_modified_device_id="device-test",
+        now=datetime.fromisoformat(payload["updated_at"].replace("Z", "+00:00")),
+    )
 
 
 async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, attempts: int = 40) -> dict:
@@ -99,9 +145,13 @@ async def test_rag_script_generation_with_optional_fragments(
     async_client,
     auth_headers_factory,
     app,
+    db_session_factory,
 ) -> None:
     """带可选碎片的 RAG 生成应正常完成并写入 script 记录。"""
-    fragment_id = await _create_fragment(async_client, auth_headers_factory, "关于早起习惯的碎片背景")
+    fragment = await _create_fragment_payload(async_client, auth_headers_factory, "关于早起习惯的碎片背景")
+    with db_session_factory() as db:
+        _upsert_fragment_snapshot(db, fragment)
+        db.commit()
     llm_provider = app.state.container.llm_provider
 
     async def multi_generate(**kwargs):
@@ -115,7 +165,7 @@ async def test_rag_script_generation_with_optional_fragments(
 
     create_response = await async_client.post(
         "/api/scripts/generation",
-        json={"topic": "早起的好处", "fragment_ids": [fragment_id]},
+        json={"topic": "早起的好处", "fragment_ids": [fragment["id"]]},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert create_response.status_code == 201
@@ -178,6 +228,7 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
     async_client,
     auth_headers_factory,
     app,
+    db_session_factory,
 ) -> None:
     """三层上下文命中应进入最终脚本生成提示词。"""
     llm_provider = app.state.container.llm_provider
@@ -238,7 +289,10 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
         db.refresh(high_like_doc)
         db.refresh(habit_doc)
 
-    fragment_id = await _create_fragment(async_client, auth_headers_factory, "我一贯喜欢先讲反常识，再拆解误区和动作。")
+    fragment = await _create_fragment_payload(async_client, auth_headers_factory, "我一贯喜欢先讲反常识，再拆解误区和动作。")
+    with db_session_factory() as db:
+        _upsert_fragment_snapshot(db, fragment)
+        db.commit()
 
     await app.state.container.knowledge_index_store.index_document(
         user_id=TEST_USER_ID,
@@ -273,7 +327,7 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
 
     create_response = await async_client.post(
         "/api/scripts/generation",
-        json={"topic": "如何讲清一个复杂概念", "fragment_ids": [fragment_id]},
+        json={"topic": "如何讲清一个复杂概念", "fragment_ids": [fragment["id"]]},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert create_response.status_code == 201
@@ -289,3 +343,70 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
     assert "[参考示例]" in final_prompt
 
     llm_provider.generate = original_generate
+
+
+@pytest.mark.asyncio
+async def test_rag_script_generation_rejects_fragment_without_snapshot(
+    async_client,
+    auth_headers_factory,
+) -> None:
+    """显式传入缺少 snapshot 的 fragment 时应直接拒绝创建任务。"""
+    fragment_id = await _create_fragment(async_client, auth_headers_factory, "这条碎片还没完成同步")
+
+    create_response = await async_client.post(
+        "/api/scripts/generation",
+        json={"topic": "同步前生成", "fragment_ids": [fragment_id]},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+
+    assert create_response.status_code == 422
+    assert create_response.json()["error"]["message"] == "所选碎片尚未同步完成"
+
+
+@pytest.mark.asyncio
+async def test_rag_script_generation_succeeds_with_snapshot_only_fragment(
+    async_client,
+    auth_headers_factory,
+    app,
+    db_session_factory,
+) -> None:
+    """只有 backup snapshot、没有 fragments 表记录时仍应能生成脚本。"""
+    fragment_payload = {
+        "id": "snapshot-only-fragment",
+        "created_at": "2026-03-25T09:00:00+00:00",
+        "updated_at": "2026-03-25T09:05:00+00:00",
+        "source": "manual",
+        "audio_source": None,
+        "summary": None,
+        "tags": [],
+        "transcript": None,
+        "body_html": "<p>只存在于 backup snapshot 的碎片正文</p>",
+        "plain_text_snapshot": "只存在于 backup snapshot 的碎片正文",
+        "folder_id": None,
+        "deleted_at": None,
+    }
+    with db_session_factory() as db:
+        _upsert_fragment_snapshot(db, fragment_payload)
+        db.commit()
+
+    llm_provider = app.state.container.llm_provider
+    original_generate = llm_provider.generate
+
+    async def multi_generate(**kwargs):
+        system_prompt = kwargs.get("system_prompt", "")
+        if "SOP" in system_prompt:
+            return '{"sop_type":"教育结构","sections":[{"name":"引入","key_points":["问题开场"]}]}'
+        return "这是基于 snapshot-only 碎片生成的口播稿正文"
+
+    llm_provider.generate = multi_generate
+    try:
+        create_response = await async_client.post(
+            "/api/scripts/generation",
+            json={"topic": "只有快照也能生成", "fragment_ids": [fragment_payload["id"]]},
+            headers=await _auth_headers(async_client, auth_headers_factory),
+        )
+        assert create_response.status_code == 201
+        pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
+        assert pipeline["status"] == "succeeded"
+    finally:
+        llm_provider.generate = original_generate

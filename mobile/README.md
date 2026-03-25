@@ -282,6 +282,8 @@ http://192.168.31.157:8000
 - 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
 - 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`
 - 录音上传和外链导入都会先创建本地 placeholder fragment，再在 pipeline 成功后把 `transcript / summary / tags` patch 回写到本地实体
+- 手动脚本生成前会先显式执行一次 `flushBackupQueue()`；如果本地正文还没成功同步，客户端会阻断生成，避免后端基于旧 snapshot 出稿
+- local-first 语音上传成功后的主状态查询统一走 `pipeline_run_id -> GET /api/pipelines/{run_id}`；`GET /api/transcriptions/{fragment_id}` 只保留给 projection / 兼容场景
 
 ### 1. 一打开 App 就红屏，出现 `8000/index.bundle`
 

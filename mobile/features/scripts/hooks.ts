@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
+import { flushBackupQueue } from '@/features/backups/queue';
 import { waitForPipelineTerminal } from '@/features/pipelines/api';
 import {
   fetchDailyPush,
@@ -47,6 +48,9 @@ export function useGenerateScript() {
     try {
       setStatus('loading');
       setError(null);
+      await flushBackupQueue().catch((error) => {
+        throw new Error(getErrorMessage(error, '本地内容尚未同步，无法保证生成基于最新正文'));
+      });
       const task = await generateScript({
         topic,
         fragment_ids: fragmentIds,

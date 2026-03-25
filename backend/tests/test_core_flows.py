@@ -137,6 +137,16 @@ async def _wait_transcription_enrichment(async_client, auth_headers_factory, fra
     raise AssertionError(f"fragment derivatives were not backfilled: {fragment_id}")
 
 
+async def _wait_vector_doc(app, fragment_id: str, *, attempts: int = 80) -> dict:
+    """轮询直到内存向量库写入指定 fragment 文档。"""
+    for _ in range(attempts):
+        payload = app.state.container.vector_store.fragment_docs.get(fragment_id)
+        if payload is not None:
+            return payload
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"vector doc was not backfilled: {fragment_id}")
+
+
 def _seed_fragment_tags(db_session_factory, fragment_id: str, tags: list[str]) -> None:
     """直接写库补齐标签聚合测试所需数据。"""
     with db_session_factory() as db:
@@ -242,8 +252,20 @@ def test_startup_hook_recreates_missing_test_user(db_session_factory, monkeypatc
 @pytest.mark.asyncio
 async def test_fragments_collection_detail_similarity_and_visualization(async_client, auth_headers_factory, app) -> None:
     """碎片列表、详情、相似检索和可视化入口应返回一致数据。"""
-    first_id = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("定位方法论的第一条碎片"), "source": "manual"}))["id"]
-    second_id = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("定位方法论的第二条碎片"), "source": "manual"}))["id"]
+    first_fragment = await _create_fragment(
+        async_client,
+        auth_headers_factory,
+        {"editor_document": _editor_document("定位方法论的第一条碎片"), "source": "manual"},
+    )
+    second_fragment = await _create_fragment(
+        async_client,
+        auth_headers_factory,
+        {"editor_document": _editor_document("定位方法论的第二条碎片"), "source": "manual"},
+    )
+    await _backup_fragment(async_client, auth_headers_factory, first_fragment)
+    await _backup_fragment(async_client, auth_headers_factory, second_fragment)
+    first_id = first_fragment["id"]
+    second_id = second_fragment["id"]
     _seed_fragment_vector(app, first_id, "定位方法论的第一条碎片")
     _seed_fragment_vector(app, second_id, "定位方法论的第二条碎片")
 
@@ -762,6 +784,43 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
         fragment_tags = db.query(FragmentTag).filter(FragmentTag.fragment_id == fragment.id).all()
         assert len(fragment_tags) >= 1
         assert payload["audio_file_url"]
+
+
+@pytest.mark.asyncio
+async def test_upload_audio_with_local_fragment_id_succeeds_without_projection(async_client, auth_headers_factory, app, db_session_factory) -> None:
+    """local-first 主路径应仅依赖 pipeline 与逻辑 ID，不要求先建远端 projection。"""
+    response = await async_client.post(
+        "/api/transcriptions",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+        files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
+        data={"local_fragment_id": "local-fragment-001"},
+    )
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["fragment_id"] is None
+    assert payload["local_fragment_id"] == "local-fragment-001"
+
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
+    assert pipeline["status"] == "succeeded"
+    assert pipeline["resource"]["resource_type"] == "local_fragment"
+    assert pipeline["resource"]["resource_id"] == "local-fragment-001"
+    assert pipeline["output"]["local_fragment_id"] == "local-fragment-001"
+    assert pipeline["output"]["fragment_id"] is None
+    assert pipeline["output"]["transcript"] == "转写完成"
+
+    vector_doc = await _wait_vector_doc(app, "local-fragment-001")
+    assert vector_doc["text"] == "转写完成"
+    assert vector_doc["source"] == "voice"
+
+    with db_session_factory() as db:
+        fragment = db.query(Fragment).filter(Fragment.id == "local-fragment-001").first()
+        assert fragment is None
+
+    status_response = await async_client.get(
+        "/api/transcriptions/local-fragment-001",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert status_response.status_code == 404
 
 
 @pytest.mark.asyncio

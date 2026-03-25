@@ -6,7 +6,6 @@ import re
 from collections import Counter, defaultdict
 from typing import Any, Optional
 
-from models import Fragment
 from modules.fragments.content import read_fragment_plain_text
 from utils.serialization import format_iso_datetime, parse_json_list
 
@@ -89,10 +88,18 @@ def _summary_terms(summary: Optional[str]) -> list[str]:
     return [term for term in terms if term not in STOPWORDS]
 
 
-def _cluster_keywords(fragments: list[Fragment]) -> list[str]:
+def _read_tags(fragment: Any) -> list[str]:
+    """统一读取标签，兼容 ORM 字符串字段和 snapshot 字符串数组。"""
+    raw_tags = getattr(fragment, "tags", None)
+    if isinstance(raw_tags, list):
+        return [tag.strip() for tag in raw_tags if isinstance(tag, str) and tag.strip()]
+    return parse_json_list(raw_tags, allow_csv_fallback=True) or []
+
+
+def _cluster_keywords(fragments: list[Any]) -> list[str]:
     tags_counter: Counter[str] = Counter()
     for fragment in fragments:
-        for tag in parse_json_list(fragment.tags, allow_csv_fallback=True) or []:
+        for tag in _read_tags(fragment):
             normalized = tag.strip()
             if normalized:
                 tags_counter[normalized] += 1
@@ -112,21 +119,21 @@ def _cluster_keywords(fragments: list[Fragment]) -> list[str]:
     return []
 
 
-def _cluster_label(cluster_id: int, fragments: list[Fragment]) -> tuple[str, list[str]]:
+def _cluster_label(cluster_id: int, fragments: list[Any]) -> tuple[str, list[str]]:
     keywords = _cluster_keywords(fragments)
     if keywords:
         return keywords[0], keywords
     return f"灵感簇 {cluster_id}", []
 
 
-def _sort_key(fragment: Fragment) -> tuple[str, str]:
+def _sort_key(fragment: Any) -> tuple[str, str]:
     created_at = format_iso_datetime(fragment.created_at) or ""
     return (created_at, fragment.id)
 
 
-def build_text_feature_embedding(fragment: Fragment, dimensions: int = 24) -> list[float]:
+def build_text_feature_embedding(fragment: Any, dimensions: int = 24) -> list[float]:
     weighted_terms: list[tuple[str, float]] = []
-    for tag in parse_json_list(fragment.tags, allow_csv_fallback=True) or []:
+    for tag in _read_tags(fragment):
         normalized = tag.strip()
         if normalized:
             weighted_terms.append((normalized, 3.0))
@@ -151,7 +158,7 @@ def build_text_feature_embedding(fragment: Fragment, dimensions: int = 24) -> li
     return normalized or vector
 
 
-def build_visualization_payload(items: list[tuple[Fragment, list[float]]], used_vector_source: str) -> dict[str, Any]:
+def build_visualization_payload(items: list[tuple[Any, list[float]]], used_vector_source: str) -> dict[str, Any]:
     payload = _empty_response()
     if not items:
         payload["meta"]["used_vector_source"] = used_vector_source
@@ -195,7 +202,7 @@ def build_visualization_payload(items: list[tuple[Fragment, list[float]]], used_
                 "z": _round_coordinate(z),
                 "transcript": read_fragment_plain_text(fragment) or fragment.transcript,
                 "summary": fragment.summary,
-                "tags": parse_json_list(fragment.tags, allow_csv_fallback=True),
+                "tags": _read_tags(fragment),
                 "source": fragment.source,
                 "created_at": format_iso_datetime(fragment.created_at),
                 "cluster_id": cluster_id,

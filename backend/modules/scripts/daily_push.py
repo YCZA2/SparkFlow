@@ -5,6 +5,7 @@ from typing import Any
 
 from core.config import settings
 from core.exceptions import ValidationError
+from modules.shared.fragment_snapshots import read_fragment_snapshot_text
 from modules.shared.ports import VectorStore
 
 from .daily_push_snapshots import DailyPushFragmentSnapshot
@@ -88,8 +89,7 @@ def read_fragment_content(fragment: Any) -> str:
     plain_text = str(getattr(fragment, "plain_text", "") or "").strip()
     if plain_text:
         return plain_text
-    snapshot = str(getattr(fragment, "plain_text_snapshot", "") or "").strip()
-    if snapshot:
-        return snapshot
+    if hasattr(fragment, "plain_text_snapshot"):
+        return read_fragment_snapshot_text(fragment)
     transcript = str(getattr(fragment, "transcript", "") or "").strip()
     return transcript

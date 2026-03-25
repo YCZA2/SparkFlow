@@ -15,12 +15,13 @@ from modules.shared.content.content_html import (
     extract_plain_text_from_html,
     normalize_body_html,
 )
+from modules.shared.fragment_snapshots import FragmentSnapshotReader
 from modules.shared.ports import FileStorage, StoredFile, TextGenerationProvider, VectorStore
 
 from .asset_binding_service import FragmentAssetBindingService
 from .content_service import FragmentContentService
 from .derivative_service import FragmentDerivativeService
-from .mapper import build_fragment_audio_file, map_fragment
+from .mapper import build_fragment_audio_file, map_fragment, map_fragment_snapshot
 from .schemas import (
     FragmentBatchMoveResponse,
     FragmentItem,
@@ -35,6 +36,7 @@ from .visualization import build_fragment_visualization
 
 VALID_FRAGMENT_SOURCES = {"voice", "manual", "video_parse"}
 VALID_AUDIO_SOURCES = {"upload", "external_link"}
+_FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 
 
 class FragmentCommandService:
@@ -347,7 +349,7 @@ class FragmentQueryService:
             top_k=top_k,
             exclude_ids=exclude_ids,
         )
-        fragments = fragment_repository.get_by_ids(
+        fragments = _FRAGMENT_SNAPSHOT_READER.get_by_ids(
             db=db,
             user_id=user_id,
             fragment_ids=[item["fragment_id"] for item in matches],
@@ -358,7 +360,7 @@ class FragmentQueryService:
             fragment = fragment_map.get(match["fragment_id"])
             if not fragment:
                 continue
-            mapped = map_fragment(fragment, file_storage=self.file_storage)
+            mapped = map_fragment_snapshot(fragment)
             items.append(
                 SimilarFragmentItem(
                     **mapped.model_dump(),

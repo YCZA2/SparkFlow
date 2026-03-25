@@ -146,3 +146,32 @@ async def test_fragment_derivative_pipeline_logs_vector_failure_without_failing_
             assert fragment.tags
     finally:
         app.state.container.vector_store.upsert_fragment = original_upsert
+
+
+@pytest.mark.asyncio
+async def test_fragment_derivative_pipeline_succeeds_without_fragment_projection(
+    async_client,
+    auth_headers_factory,
+    app,
+    vector_store,
+) -> None:
+    """缺少 Fragment ORM 行时，异步回填仍应基于逻辑 ID 完成向量同步。"""
+    run = await app.state.container.pipeline_runner.create_run(
+        run_id=None,
+        user_id="test-user-001",
+        pipeline_type=PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
+        input_payload={
+            "fragment_id": None,
+            "local_fragment_id": "local-fragment-001",
+            "effective_text": "只存在于本地 placeholder 的转写正文",
+            "source": "voice",
+        },
+        resource_type="local_fragment",
+        resource_id="local-fragment-001",
+    )
+    pipeline = await _wait_pipeline(async_client, auth_headers_factory, run.id)
+    assert pipeline["status"] == "succeeded"
+    assert pipeline["resource"]["resource_type"] == "local_fragment"
+    assert pipeline["resource"]["resource_id"] == "local-fragment-001"
+    assert pipeline["output"]["local_fragment_id"] == "local-fragment-001"
+    assert vector_store.fragment_docs["local-fragment-001"]["text"] == "只存在于本地 placeholder 的转写正文"

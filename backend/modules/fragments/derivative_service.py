@@ -36,20 +36,22 @@ class FragmentDerivativeService:
     ) -> None:
         """在正文更新后同步刷新摘要标签与向量。"""
         if not current_effective_text:
-            await self._sync_fragment_vector(
+            await self._sync_fragment_vector_by_fields(
                 action="delete",
                 user_id=user_id,
-                fragment=fragment,
+                fragment_id=fragment.id,
+                source=fragment.source,
             )
         if not self.should_refresh_enrichment(
             previous_effective_text=previous_effective_text,
             current_effective_text=current_effective_text,
         ):
             if current_effective_text:
-                await self._sync_fragment_vector(
+                await self._sync_fragment_vector_by_fields(
                     action="upsert",
                     user_id=user_id,
-                    fragment=fragment,
+                    fragment_id=fragment.id,
+                    source=fragment.source,
                     text=current_effective_text,
                     summary=fragment.summary,
                     tags=parse_json_list(fragment.tags, allow_csv_fallback=True),
@@ -85,10 +87,11 @@ class FragmentDerivativeService:
                 tags=[],
             )
             db.commit()
-            await self._sync_fragment_vector(
+            await self._sync_fragment_vector_by_fields(
                 action="delete",
                 user_id=user_id,
-                fragment=fragment,
+                fragment_id=fragment.id,
+                source=fragment.source,
             )
             return (None, [])
 
@@ -106,22 +109,61 @@ class FragmentDerivativeService:
             tags=tags,
         )
         db.commit()
-        await self._sync_fragment_vector(
+        await self._sync_fragment_vector_by_fields(
             action="upsert",
             user_id=user_id,
-            fragment=fragment,
+            fragment_id=fragment.id,
+            source=fragment.source,
             text=normalized_text,
             summary=summary,
             tags=tags,
         )
         return (summary, tags)
 
-    async def _sync_fragment_vector(
+    async def backfill_snapshot_derivatives(
+        self,
+        *,
+        user_id: str,
+        fragment_id: str,
+        source: str,
+        effective_text: str | None = None,
+        body_html: str | None = None,
+    ) -> tuple[str | None, list[str]]:
+        """在无 projection 行时，基于 snapshot 或 pipeline 文本补齐摘要标签并同步向量。"""
+        from modules.shared.content.content_html import extract_plain_text_from_html
+
+        normalized_text = (effective_text or extract_plain_text_from_html(body_html or "")).strip()
+        if not normalized_text:
+            await self._sync_fragment_vector_by_fields(
+                action="delete",
+                user_id=user_id,
+                fragment_id=fragment_id,
+                source=source,
+            )
+            return (None, [])
+
+        summary, tags = await self.generate_fragment_enrichment(
+            normalized_text,
+            body_html=body_html,
+        )
+        await self._sync_fragment_vector_by_fields(
+            action="upsert",
+            user_id=user_id,
+            fragment_id=fragment_id,
+            source=source,
+            text=normalized_text,
+            summary=summary,
+            tags=tags,
+        )
+        return (summary, tags)
+
+    async def _sync_fragment_vector_by_fields(
         self,
         *,
         action: str,
         user_id: str,
-        fragment,
+        fragment_id: str,
+        source: str,
         text: str | None = None,
         summary: str | None = None,
         tags: list[str] | None = None,
@@ -129,13 +171,13 @@ class FragmentDerivativeService:
         """执行向量同步，并在外部 embedding/向量库故障时降级为仅记录日志。"""
         try:
             if action == "delete":
-                await self.vector_store.delete_fragment(user_id=user_id, fragment_id=fragment.id)
+                await self.vector_store.delete_fragment(user_id=user_id, fragment_id=fragment_id)
                 return
             await self.vector_store.upsert_fragment(
                 user_id=user_id,
-                fragment_id=fragment.id,
+                fragment_id=fragment_id,
                 text=text or "",
-                source=fragment.source,
+                source=source,
                 summary=summary,
                 tags=tags,
             )
@@ -143,11 +185,11 @@ class FragmentDerivativeService:
             error_type = type(exc).__name__
             error_message = str(exc)
             current = time.monotonic()
-            key = (fragment.id, action, error_type, error_message)
+            key = (fragment_id, action, error_type, error_message)
             if _vector_sync_throttle.should_emit(key, now=current):
                 logger.warning(
                     "fragment_vector_sync_failed",
-                    fragment_id=fragment.id,
+                    fragment_id=fragment_id,
                     user_id=user_id,
                     action=action,
                     error_type=error_type,
@@ -156,7 +198,7 @@ class FragmentDerivativeService:
                 return
             logger.debug(
                 "fragment_vector_sync_failed_suppressed",
-                fragment_id=fragment.id,
+                fragment_id=fragment_id,
                 user_id=user_id,
                 action=action,
                 error_type=error_type,

@@ -16,8 +16,8 @@ from typing import Any
 
 from core.exceptions import ValidationError
 from core.logging_config import get_logger
-from domains.fragments import repository as fragment_repository
 from models import PipelineRun
+from modules.shared.fragment_snapshots import FragmentSnapshotReader, read_fragment_snapshot_text
 from modules.shared.pipeline.pipeline_runtime import (
     PipelineExecutionContext,
     PipelineExecutionError,
@@ -51,14 +51,17 @@ class RagScriptPipelineService:
         *,
         persistence_service: ScriptGenerationPersistenceService,
         pipeline_runner: Any,
+        snapshot_reader: FragmentSnapshotReader,
     ) -> None:
         """装配 RAG 脚本流水线依赖。"""
         self.persistence_service = persistence_service
         self.pipeline_runner = pipeline_runner
+        self.snapshot_reader = snapshot_reader
 
     async def create_run(
         self,
         *,
+        db,
         user_id: str,
         topic: str,
         fragment_ids: list[str],
@@ -66,6 +69,19 @@ class RagScriptPipelineService:
         """创建 RAG 脚本生成任务态流水线。"""
         if not topic.strip():
             raise ValidationError(message="主题不能为空", field_errors={"topic": "请输入脚本主题"})
+        if fragment_ids:
+            snapshots = self.snapshot_reader.get_by_ids(
+                db=db,
+                user_id=user_id,
+                fragment_ids=fragment_ids,
+            )
+            found_ids = {snapshot.id for snapshot in snapshots}
+            missing_ids = [fragment_id for fragment_id in fragment_ids if fragment_id not in found_ids]
+            if missing_ids:
+                raise ValidationError(
+                    message="所选碎片尚未同步完成",
+                    field_errors={"fragment_ids": f"以下碎片缺少可用快照: {', '.join(missing_ids)}"},
+                )
         return await self.pipeline_runner.create_run(
             run_id=None,
             user_id=user_id,
@@ -205,13 +221,20 @@ class RagScriptPipelineService:
         # 如有可选碎片 ID，从数据库读取其纯文本内容作为补充背景
         fragment_texts: list[str] = []
         if fragment_ids:
-            fragments = fragment_repository.get_by_ids(
+            fragments = self.snapshot_reader.get_by_ids(
                 db=context.db,
                 user_id=context.run.user_id,
                 fragment_ids=fragment_ids,
             )
-            for frag in fragments:
-                text = (frag.plain_text_snapshot or frag.transcript or "").strip()
+            found_ids = {fragment.id for fragment in fragments}
+            missing_ids = [fragment_id for fragment_id in fragment_ids if fragment_id not in found_ids]
+            if missing_ids:
+                raise PipelineExecutionError(
+                    f"所选碎片尚未同步完成: {', '.join(missing_ids)}",
+                    retryable=False,
+                )
+            for fragment in fragments:
+                text = read_fragment_snapshot_text(fragment)
                 if text:
                     fragment_texts.append(text)
 
@@ -289,4 +312,5 @@ def build_rag_script_pipeline_service(container: Any) -> RagScriptPipelineServic
     return RagScriptPipelineService(
         persistence_service=ScriptGenerationPersistenceService(),
         pipeline_runner=container.pipeline_runner,
+        snapshot_reader=FragmentSnapshotReader(),
     )

@@ -45,12 +45,14 @@ class RagScriptGenerationUseCase:
     async def generate_async(
         self,
         *,
+        db: Session,
         user_id: str,
         topic: str,
         fragment_ids: list[str],
     ) -> ScriptGenerationResponse:
         """创建基于主题和参考脚本 RAG 的异步脚本生成流水线。"""
         run = await self.pipeline_service.create_run(
+            db=db,
             user_id=user_id,
             topic=topic,
             fragment_ids=fragment_ids,

@@ -39,9 +39,11 @@ def get_daily_push_use_case(container: ServiceContainer = Depends(get_container)
 async def generate_script(
     data: ScriptGenerationRequest,
     current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
     use_case: RagScriptGenerationUseCase = Depends(get_rag_script_generation_use_case),
 ):
     payload = await use_case.generate_async(
+        db=db,
         user_id=current_user["user_id"],
         topic=data.topic,
         fragment_ids=data.fragment_ids,

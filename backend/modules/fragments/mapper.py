@@ -5,6 +5,7 @@ from typing import Optional
 
 from models import Fragment, MediaAsset
 from modules.shared.content.content_schemas import MediaAssetItem
+from modules.shared.fragment_snapshots import FragmentSnapshot
 from modules.shared.ports import FileStorage, StoredFile
 from utils.serialization import format_iso_datetime, parse_json_list, parse_json_object_list
 
@@ -123,4 +124,28 @@ def map_fragment(fragment: Fragment, *, media_assets: list[MediaAsset] | None = 
         plain_text_snapshot=read_fragment_plain_text(fragment) or None,
         content_state=resolve_fragment_content_state(fragment),
         media_assets=mapped_media_assets,
+    )
+
+
+def map_fragment_snapshot(snapshot: FragmentSnapshot) -> FragmentItem:
+    """将 fragment snapshot 映射为只读响应结构，供检索和可视化回退复用。"""
+    return FragmentItem(
+        id=snapshot.id,
+        transcript=snapshot.transcript,
+        speaker_segments=None,
+        summary=snapshot.summary,
+        tags=snapshot.tags,
+        source=snapshot.source,
+        audio_source=None,
+        created_at=format_iso_datetime(snapshot.created_at),
+        updated_at=format_iso_datetime(snapshot.updated_at),
+        audio_object_key=None,
+        audio_file_url=None,
+        audio_file_expires_at=None,
+        folder_id=snapshot.folder_id,
+        folder=None,
+        body_html=read_fragment_body_html(snapshot),
+        plain_text_snapshot=read_fragment_plain_text(snapshot) or None,
+        content_state=resolve_fragment_content_state(snapshot),
+        media_assets=[],
     )
