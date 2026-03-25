@@ -44,7 +44,21 @@ function getSourceLabel(source: string): string {
   return labels[source] || source;
 }
 
+function isFragmentProcessing(fragment: Fragment): boolean {
+  /*语音/导入型 placeholder 在正文和转写都还没回写前，列表应明确提示处理中。 */
+  const body = getCleanText(fragment.plain_text_snapshot);
+  const transcript = getCleanText(fragment.transcript);
+  if (body || transcript) {
+    return false;
+  }
+  return fragment.source === 'voice' || fragment.source === 'video_parse';
+}
+
 function getTitle(fragment: Fragment): string {
+  if (isFragmentProcessing(fragment)) {
+    return '转录中...';
+  }
+
   const summary = getCleanText(fragment.summary);
   if (summary) return truncate(summary, 30);
 
@@ -58,6 +72,10 @@ function getTitle(fragment: Fragment): string {
 }
 
 function getPreview(fragment: Fragment): string {
+  if (isFragmentProcessing(fragment)) {
+    return '正在提取正文';
+  }
+
   const body = getCleanText(fragment.plain_text_snapshot);
   const transcript = getCleanText(fragment.transcript);
   const summary = getCleanText(fragment.summary);
@@ -83,6 +101,7 @@ export function FragmentCard({
   isLastInSection = false,
 }: FragmentCardProps) {
   const theme = useAppTheme();
+  const isProcessing = isFragmentProcessing(fragment);
 
   return (
     <TouchableOpacity
@@ -126,7 +145,7 @@ export function FragmentCard({
 
         <View style={styles.footerRow}>
           <Text style={[styles.source, { color: theme.colors.textSubtle }]} numberOfLines={1}>
-            {getSourceLabel(fragment.source)}
+            {isProcessing ? `${getSourceLabel(fragment.source)} · 转录中` : getSourceLabel(fragment.source)}
           </Text>
         </View>
       </View>

@@ -91,6 +91,17 @@ function updateMapState<K, V>(
   return next;
 }
 
+/*列表比较除了看 ID，也要感知内容版本变化，避免标题/正文更新后列表不重渲染。 */
+function isSameFragmentList(a: Fragment[], b: Fragment[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (fragment, index) =>
+        fragment.id === b[index]?.id && fragment.updated_at === b[index]?.updated_at
+    )
+  );
+}
+
 export const useFragmentStore = create<FragmentStore>()(
   devtools(
     (set, get) => ({
@@ -135,8 +146,7 @@ export const useFragmentStore = create<FragmentStore>()(
               state.listCache,
               key,
               fragments,
-              /*列表相等性检查：相同长度且相同 ID 序列*/
-              (a, b) => a.length === b.length && a.every((f, i) => f.id === b[i].id)
+              isSameFragmentList
             );
             return next ? { listCache: next } : state;
           },
