@@ -189,16 +189,46 @@ class FragmentSnapshotReader:
         return snapshots
 
     def list_user_ids(self, *, db: Session) -> list[str]:
-        """枚举存在有效 fragment snapshot 的用户集合。"""
-        user_ids: list[str] = []
-        for user_id in backup_repository.list_user_ids_by_entity_type(
+        """枚举存在 fragment backup 记录的用户集合。"""
+        return list(
+            backup_repository.list_user_ids_by_entity_type(
+                db=db,
+                entity_type="fragment",
+                operation="upsert",
+            )
+        )
+
+    def list_snapshots_and_deleted_ids(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+    ) -> tuple[list[FragmentSnapshot], list[str]]:
+        """单次扫描同时返回可向量化快照与已删除 ID，避免双重 DB 查询。"""
+        records = backup_repository.list_records_by_entity_type(
             db=db,
+            user_id=user_id,
             entity_type="fragment",
-            operation="upsert",
-        ):
-            if self.list_vectorizable_by_user(db=db, user_id=user_id):
-                user_ids.append(user_id)
-        return user_ids
+        )
+        snapshots: list[FragmentSnapshot] = []
+        deleted_ids: list[str] = []
+        for record in records:
+            if record.operation == "delete":
+                deleted_ids.append(record.entity_id)
+                continue
+            snapshot = self._build_fragment_snapshot(record=record)
+            if snapshot is not None:
+                snapshots.append(snapshot)
+            else:
+                # 区分 deleted_at 标记删除（需加入已删 ID）与正文为空（直接跳过）
+                try:
+                    payload = json.loads(record.payload_json or "")
+                    if isinstance(payload, dict) and _read_string(payload.get("deleted_at")):
+                        deleted_ids.append(record.entity_id)
+                except json.JSONDecodeError:
+                    pass
+        snapshots.sort(key=lambda item: (item.created_at, item.id))
+        return snapshots, deleted_ids
 
     def list_deleted_ids(
         self,
