@@ -3,7 +3,6 @@ import { StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/Themed';
 import { SpeakerTimelineList } from '@/features/fragments/components/SpeakerTimelineList';
-import { useAppTheme } from '@/theme/useAppTheme';
 import type { SpeakerSegment } from '@/types/fragment';
 
 interface TranscriptSectionProps {
@@ -26,21 +25,11 @@ export function TranscriptSection({
   onSegmentPress,
 }: TranscriptSectionProps) {
   /*在抽屉或详情页内渲染原文区，支持紧凑样式复用。 */
-  const theme = useAppTheme();
   const hasSpeakerSegments = Boolean(speakerSegments && speakerSegments.length > 0);
 
   return (
-    <View
-      style={[
-        styles.card,
-        theme.shadow.card,
-        dense && styles.cardDense,
-        { backgroundColor: theme.colors.surface },
-      ]}
-    >
-      <Text style={[styles.cardTitle, dense && styles.cardTitleDense, { color: theme.colors.text }]}>
-        语音原文
-      </Text>
+    <View style={[styles.section, dense && styles.sectionDense]}>
+      <Text style={[styles.title, dense && styles.titleDense]}>语音原文</Text>
       {hasSpeakerSegments ? (
         <SpeakerTimelineList
           segments={speakerSegments ?? []}
@@ -51,7 +40,7 @@ export function TranscriptSection({
           onSegmentPress={onSegmentPress}
         />
       ) : (
-        <Text style={[styles.transcriptText, { color: theme.colors.text }]}>
+        <Text style={styles.transcriptText}>
           {transcript || '暂无转写内容'}
         </Text>
       )}
@@ -60,23 +49,20 @@ export function TranscriptSection({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 12,
-    padding: 16,
+  section: {
+    gap: 12,
   },
-  cardDense: {
-    padding: 14,
+  sectionDense: {
+    gap: 10,
   },
-  cardTitle: {
+  title: {
     fontSize: 22,
     lineHeight: 30,
     fontWeight: '700',
-    marginBottom: 16,
   },
-  cardTitleDense: {
+  titleDense: {
     fontSize: 18,
     lineHeight: 24,
-    marginBottom: 12,
   },
   transcriptText: {
     fontSize: 15,

@@ -69,6 +69,7 @@ class DashScopePayloadParser:
 
     @staticmethod
     def normalize_and_merge_segments(segments: list[SpeakerSegment]) -> list[SpeakerSegment]:
+        """保留句级说话人切片，只合并真正重复或重叠的片段。"""
         if not segments:
             return []
 
@@ -80,7 +81,11 @@ class DashScopePayloadParser:
                 continue
 
             last = merged[-1]
-            if segment.speaker_id == last.speaker_id and segment.start_ms <= last.end_ms + 1:
+            if (
+                segment.speaker_id == last.speaker_id
+                and segment.start_ms < last.end_ms
+                and segment.text == last.text
+            ):
                 merged[-1] = SpeakerSegment(
                     speaker_id=last.speaker_id,
                     start_ms=last.start_ms,

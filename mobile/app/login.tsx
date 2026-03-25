@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Alert, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Keyboard, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { Text } from '@/components/Themed';
@@ -12,6 +12,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const theme = useAppTheme();
   const { error, sessionStatus, requestVerificationCode, loginWithPhoneCode } = useAuth();
+  const verificationCodeInputRef = useRef<TextInput | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [debugCode, setDebugCode] = useState<string | null>(null);
@@ -21,6 +22,7 @@ export default function LoginScreen() {
   const canSend = /^1\d{10}$/.test(phoneNumber);
   const canSubmit = canSend && verificationCode.trim().length >= 4 && !isSubmitting;
 
+  // 发送短信验证码，并在开发环境展示调试验证码。
   const handleSendCode = async () => {
     try {
       setIsSending(true);
@@ -34,8 +36,10 @@ export default function LoginScreen() {
     }
   };
 
+  // 提交手机号和验证码登录，成功后进入工作区首页。
   const handleLogin = async () => {
     try {
+      Keyboard.dismiss();
       setIsSubmitting(true);
       await loginWithPhoneCode(phoneNumber.trim(), verificationCode.trim());
       router.replace('/');
@@ -47,7 +51,11 @@ export default function LoginScreen() {
   };
 
   return (
-    <ScreenContainer>
+    <ScreenContainer
+      scrollable
+      keyboardAvoiding
+      contentContainerStyle={styles.screenContent}
+    >
       <View style={styles.container}>
         <View style={styles.hero}>
           <Text style={[styles.title, { color: theme.colors.text }]}>登录 SparkFlow</Text>
@@ -71,11 +79,14 @@ export default function LoginScreen() {
             placeholderTextColor={theme.colors.textMuted}
             value={phoneNumber}
             onChangeText={setPhoneNumber}
+            returnKeyType="next"
+            onSubmitEditing={() => verificationCodeInputRef.current?.focus()}
           />
 
           <Text style={[styles.label, { color: theme.colors.textSubtle }]}>验证码</Text>
           <View style={styles.codeRow}>
             <TextInput
+              ref={verificationCodeInputRef}
               style={[
                 styles.input,
                 styles.codeInput,
@@ -87,6 +98,14 @@ export default function LoginScreen() {
               placeholderTextColor={theme.colors.textMuted}
               value={verificationCode}
               onChangeText={setVerificationCode}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                if (canSubmit) {
+                  void handleLogin();
+                } else {
+                  Keyboard.dismiss();
+                }
+              }}
             />
             <TouchableOpacity
               style={[
@@ -125,6 +144,10 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  screenContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
   container: {
     flex: 1,
     justifyContent: 'center',

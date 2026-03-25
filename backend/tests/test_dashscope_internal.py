@@ -32,8 +32,8 @@ def parser() -> DashScopePayloadParser:
     return DashScopePayloadParser()
 
 
-def test_payload_parser_extracts_and_merges_speaker_segments(parser: DashScopePayloadParser) -> None:
-    """分段解析应合并相邻同说话人片段。"""
+def test_payload_parser_extracts_sentence_level_speaker_segments(parser: DashScopePayloadParser) -> None:
+    """分段解析应保留句级切片，不把同说话人的相邻句子折叠成一大段。"""
     payload = {
         "output": {
             "results": [
@@ -51,10 +51,39 @@ def test_payload_parser_extracts_and_merges_speaker_segments(parser: DashScopePa
     segments = parser.extract_segments(payload)
     merged = parser.normalize_and_merge_segments(segments)
 
-    assert len(merged) == 2
+    assert len(merged) == 3
     assert merged[0].speaker_id == "s1"
-    assert merged[0].text == "你好世界"
-    assert merged[1].speaker_id == "s2"
+    assert merged[0].text == "你好"
+    assert merged[1].speaker_id == "s1"
+    assert merged[1].text == "世界"
+    assert merged[2].speaker_id == "s2"
+
+
+def test_payload_parser_merges_overlapping_duplicate_segments(parser: DashScopePayloadParser) -> None:
+    """重复回包导致的重叠片段应被规整为一条，避免时间线重复。"""
+    merged = parser.normalize_and_merge_segments(
+        [
+            parser.extract_segments(
+                {
+                    "segments": [
+                        {"speaker_id": "s1", "text": "你好", "start_ms": "0", "end_ms": "100"},
+                        {"speaker_id": "s1", "text": "你好", "start_ms": "50", "end_ms": "120"},
+                    ]
+                }
+            )[0],
+            parser.extract_segments(
+                {
+                    "segments": [
+                        {"speaker_id": "s1", "text": "你好", "start_ms": "50", "end_ms": "120"},
+                    ]
+                }
+            )[0],
+        ]
+    )
+
+    assert len(merged) == 1
+    assert merged[0].start_ms == 0
+    assert merged[0].end_ms == 120
 
 
 def test_payload_parser_extracts_text_from_nested_payload(parser: DashScopePayloadParser) -> None:

@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Themed';
 import { FragmentAudioPlayerControls } from '@/features/fragments/components/FragmentAudioPlayerControls';
+import { TranscriptSection } from '@/features/fragments/components/TranscriptSection';
 import { normalizeFragmentTags } from '@/features/fragments/utils';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
@@ -157,12 +158,13 @@ function InfoCard({ children }: { children: React.ReactNode }) {
 
 function AudioTranscriptSection({
   content,
+  activeSegmentIndex,
   player,
 }: Pick<
   FragmentDetailSheetProps,
-  'content' | 'player'
+  'content' | 'activeSegmentIndex' | 'player'
 > & { content: FragmentDetailSheetProps['content'] & { bodyHtml?: string | null } }) {
-  /*单独渲染音频区块；转写现在已直接进入正文编辑区，不再在抽屉中重复展示。 */
+  /*单独渲染音频与原文区块，确保说话人分段能在抽屉里被看见和点击播放。 */
   const theme = useAppTheme();
   const hasAudio = Boolean(content.audioFileUrl);
 
@@ -193,6 +195,16 @@ function AudioTranscriptSection({
           </Text>
         </InfoCard>
       ) : null}
+      <TranscriptSection
+        transcript={content.transcript}
+        speakerSegments={content.speakerSegments}
+        audioPath={content.audioFileUrl}
+        activeIndex={activeSegmentIndex}
+        dense={true}
+        onSegmentPress={({ segment }) => {
+          void player.playSegment(segment);
+        }}
+      />
     </Section>
   );
 }
@@ -368,6 +380,7 @@ export function FragmentDetailSheet({
           >
             <AudioTranscriptSection
               content={content}
+              activeSegmentIndex={activeSegmentIndex}
               player={player}
             />
             <ToolsSection tools={tools} />

@@ -88,6 +88,7 @@ export function SpeakerTimelineList({
       >
         {presentedSegments.map((item) => {
           const segment = segments[item.originalIndex];
+          const isLast = item.originalIndex === presentedSegments.length - 1;
           return (
             <Pressable
               key={item.key}
@@ -109,25 +110,31 @@ export function SpeakerTimelineList({
                 compact && styles.segmentCompact,
                 {
                   backgroundColor: item.isActive
-                    ? `${item.accentColor}16`
+                    ? `${item.accentColor}08`
                     : pressed
                       ? theme.colors.surface
                       : 'transparent',
-                  borderColor: item.isActive ? `${item.accentColor}30` : 'transparent',
                 },
               ]}
             >
-              <Text style={[styles.timeText, compact && styles.timeTextCompact, { color: item.accentColor }]}>
-                {item.timeLabel}
-              </Text>
-              <View style={[styles.speakerBadge, compact && styles.speakerBadgeCompact, { backgroundColor: `${item.accentColor}14` }]}>
-                <Text style={[styles.speakerBadgeText, compact && styles.speakerBadgeTextCompact, { color: item.accentColor }]}>
-                  {item.speakerLabel}
-                </Text>
+              <View style={styles.segmentMetaRow}>
+                <View style={[styles.speakerBadge, compact && styles.speakerBadgeCompact, { backgroundColor: `${item.accentColor}14` }]}>
+                  <Text style={[styles.speakerBadgeText, compact && styles.speakerBadgeTextCompact, { color: item.accentColor }]}>
+                    {item.speakerLabel}
+                  </Text>
+                </View>
+                <View style={[styles.timePill, compact && styles.timePillCompact, { backgroundColor: theme.colors.surfaceMuted }]}>
+                  <Text style={[styles.timeText, compact && styles.timeTextCompact, { color: item.accentColor }]}>
+                    {item.timeLabel}
+                  </Text>
+                </View>
               </View>
               <Text style={[styles.segmentText, compact && styles.segmentTextCompact, { color: theme.colors.text }]}>
                 {item.text}
               </Text>
+              {!isLast ? (
+                <View style={[styles.segmentDivider, { backgroundColor: theme.colors.border }]} />
+              ) : null}
             </Pressable>
           );
         })}
@@ -137,7 +144,9 @@ export function SpeakerTimelineList({
 }
 
 const styles = StyleSheet.create({
-  container: {},
+  container: {
+    overflow: 'hidden',
+  },
   window: {
     borderWidth: 1,
     borderRadius: 18,
@@ -146,52 +155,61 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   windowContent: {
-    paddingHorizontal: 14,
-    paddingVertical: 18,
-    gap: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 0,
   },
   segment: {
-    borderRadius: 14,
-    borderWidth: 1,
     paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 2,
   },
   segmentCompact: {
-    borderRadius: 12,
     paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingHorizontal: 2,
   },
-  timeText: {
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: '700',
+  segmentMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
     marginBottom: 10,
   },
+  timeText: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
   timeTextCompact: {
-    fontSize: 14,
-    lineHeight: 18,
-    marginBottom: 8,
+    fontSize: 12,
+    lineHeight: 14,
+  },
+  timePill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  timePillCompact: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
   speakerBadge: {
     alignSelf: 'flex-start',
-    borderRadius: 10,
+    borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    marginBottom: 16,
   },
   speakerBadgeCompact: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    marginBottom: 12,
   },
   speakerBadgeText: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '800',
   },
   speakerBadgeTextCompact: {
     fontSize: 12,
-    lineHeight: 16,
+    lineHeight: 14,
   },
   segmentText: {
     fontSize: 18,
@@ -200,6 +218,10 @@ const styles = StyleSheet.create({
   },
   segmentTextCompact: {
     fontSize: 15,
-    lineHeight: 26,
+    lineHeight: 24,
+  },
+  segmentDivider: {
+    height: 1,
+    marginTop: 12,
   },
 });
