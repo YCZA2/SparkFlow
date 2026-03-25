@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from models import Fragment
 
 pytestmark = pytest.mark.integration
 
@@ -15,15 +15,53 @@ async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
     return await auth_headers_factory(async_client)
 
 
-async def _create_fragment(async_client, auth_headers_factory, transcript: str) -> str:
-    """创建手动碎片并返回其 ID。"""
+async def _push_fragment_backups(
+    async_client,
+    auth_headers_factory,
+    items: Sequence[dict[str, object]],
+) -> list[str]:
+    """通过备份接口写入 fragment 快照，模拟 local-first 客户端已同步数据。"""
     response = await async_client.post(
-        "/api/fragments/content",
-        json={"body_html": f"<p>{transcript}</p>", "source": "manual"},
+        "/api/backups/batch",
+        json={"items": list(items)},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
-    assert response.status_code == 201
-    return response.json()["data"]["id"]
+    assert response.status_code == 200
+    assert response.json()["data"]["accepted_count"] == len(items)
+    return [str(item["entity_id"]) for item in items]
+
+
+def _build_fragment_backup_item(fragment_id: str, transcript: str, created_at: datetime) -> dict[str, object]:
+    """构造符合移动端备份协议的 fragment 快照。"""
+    updated_at = created_at + timedelta(minutes=1)
+    return {
+        "entity_type": "fragment",
+        "entity_id": fragment_id,
+        "entity_version": 1,
+        "operation": "upsert",
+        "modified_at": updated_at.isoformat(),
+        "payload": {
+            "id": fragment_id,
+            "folder_id": None,
+            "source": "manual",
+            "audio_source": None,
+            "created_at": created_at.isoformat(),
+            "updated_at": updated_at.isoformat(),
+            "summary": None,
+            "tags": [],
+            "transcript": transcript,
+            "speaker_segments": None,
+            "audio_object_key": None,
+            "audio_file_url": None,
+            "audio_file_expires_at": None,
+            "body_html": f"<p>{transcript}</p>",
+            "plain_text_snapshot": transcript,
+            "content_state": "body_present",
+            "is_filmed": False,
+            "filmed_at": None,
+            "deleted_at": None,
+        },
+    }
 
 
 async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, attempts: int = 40) -> dict:
@@ -46,10 +84,15 @@ async def test_daily_push_pipeline_creates_script_and_reuses_same_run(
     app,
 ) -> None:
     """每日推盘应直接调用 LLM 生成脚本，并在同一天复用同一条结果。"""
-    fragment_ids = [
-        await _create_fragment(async_client, auth_headers_factory, f"同主题每日推盘碎片 {index}")
-        for index in range(3)
-    ]
+    now = datetime.now(timezone.utc)
+    fragment_ids = await _push_fragment_backups(
+        async_client,
+        auth_headers_factory,
+        [
+            _build_fragment_backup_item(f"fragment-{index}", f"同主题每日推盘碎片 {index}", now + timedelta(minutes=index))
+            for index in range(3)
+        ],
+    )
     for fragment_id in fragment_ids:
         app.state.container.vector_store.fragment_docs[fragment_id] = {
             "user_id": "test-user-001",
@@ -82,10 +125,15 @@ async def test_daily_push_pipeline_creates_script_and_reuses_same_run(
 @pytest.mark.asyncio
 async def test_daily_push_pipeline_force_trigger_reuses_existing_result(async_client, auth_headers_factory, app) -> None:
     """强制触发在当日已有结果时应复用同一条流水线结果。"""
-    fragment_ids = [
-        await _create_fragment(async_client, auth_headers_factory, f"强制推盘碎片 {index}")
-        for index in range(3)
-    ]
+    now = datetime.now(timezone.utc)
+    fragment_ids = await _push_fragment_backups(
+        async_client,
+        auth_headers_factory,
+        [
+            _build_fragment_backup_item(f"force-fragment-{index}", f"强制推盘碎片 {index}", now + timedelta(minutes=index))
+            for index in range(3)
+        ],
+    )
     for fragment_id in fragment_ids:
         app.state.container.vector_store.fragment_docs[fragment_id] = {
             "user_id": "test-user-001",
@@ -112,10 +160,15 @@ async def test_daily_push_pipeline_marks_failed_when_llm_fails(
     app,
 ) -> None:
     """LLM 生成失败时应把 pipeline 标记为失败。"""
-    fragment_ids = [
-        await _create_fragment(async_client, auth_headers_factory, f"失败测试碎片 {index}")
-        for index in range(3)
-    ]
+    now = datetime.now(timezone.utc)
+    fragment_ids = await _push_fragment_backups(
+        async_client,
+        auth_headers_factory,
+        [
+            _build_fragment_backup_item(f"failed-fragment-{index}", f"失败测试碎片 {index}", now + timedelta(minutes=index))
+            for index in range(3)
+        ],
+    )
     for fragment_id in fragment_ids:
         app.state.container.vector_store.fragment_docs[fragment_id] = {
             "user_id": "test-user-001",
@@ -134,18 +187,17 @@ async def test_daily_push_pipeline_marks_failed_when_llm_fails(
 
 
 @pytest.mark.asyncio
-async def test_scheduler_daily_push_job_enqueues_pipeline(async_client, auth_headers_factory, app, db_session_factory) -> None:
+async def test_scheduler_daily_push_job_enqueues_pipeline(async_client, auth_headers_factory, app) -> None:
     """scheduler 应复用同一条异步每日推盘流水线。"""
-    fragment_ids = [
-        await _create_fragment(async_client, auth_headers_factory, f"调度推盘碎片 {index}")
-        for index in range(3)
-    ]
-    with db_session_factory() as db:
-        yesterday = datetime.now(timezone.utc) - timedelta(days=1)
-        fragments = db.query(Fragment).filter(Fragment.id.in_(fragment_ids)).all()
-        for fragment in fragments:
-            fragment.created_at = yesterday
-        db.commit()
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    fragment_ids = await _push_fragment_backups(
+        async_client,
+        auth_headers_factory,
+        [
+            _build_fragment_backup_item(f"scheduled-fragment-{index}", f"调度推盘碎片 {index}", yesterday + timedelta(minutes=index))
+            for index in range(3)
+        ],
+    )
     for fragment_id in fragment_ids:
         app.state.container.vector_store.fragment_docs[fragment_id] = {
             "user_id": "test-user-001",
@@ -161,3 +213,20 @@ async def test_scheduler_daily_push_job_enqueues_pipeline(async_client, auth_hea
 
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, result["run_ids"][0])
     assert pipeline["status"] == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_scheduler_daily_push_ignores_fragment_rows_without_backups(
+    async_client,
+    auth_headers_factory,
+    app,
+) -> None:
+    """仅存在旧 fragments 表数据时，scheduler 不应误生成每日推盘。"""
+    response = await async_client.post(
+        "/api/fragments/content",
+        json={"body_html": "<p>只有旧表，没有备份</p>", "source": "manual"},
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert response.status_code == 201
+    result = await app.state.scheduler_service.run_job()
+    assert result["queued_runs"] == 0

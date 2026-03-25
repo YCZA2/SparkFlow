@@ -70,6 +70,47 @@ async def _create_folder(async_client, auth_headers_factory, name: str) -> str:
     return response.json()["data"]["id"]
 
 
+async def _backup_fragment(async_client, auth_headers_factory, fragment: dict) -> None:
+    """把 fragment 通过备份接口写入远端快照，模拟 local-first 同步完成。"""
+    response = await async_client.post(
+        "/api/backups/batch",
+        json={
+            "items": [
+                {
+                    "entity_type": "fragment",
+                    "entity_id": fragment["id"],
+                    "entity_version": 1,
+                    "operation": "upsert",
+                    "modified_at": fragment["updated_at"],
+                    "payload": {
+                        "id": fragment["id"],
+                        "folder_id": fragment.get("folder_id"),
+                        "source": fragment.get("source") or "manual",
+                        "audio_source": fragment.get("audio_source"),
+                        "created_at": fragment["created_at"],
+                        "updated_at": fragment["updated_at"],
+                        "summary": fragment.get("summary"),
+                        "tags": fragment.get("tags") or [],
+                        "transcript": fragment.get("transcript"),
+                        "speaker_segments": fragment.get("speaker_segments"),
+                        "audio_object_key": fragment.get("audio_object_key"),
+                        "audio_file_url": fragment.get("audio_file_url"),
+                        "audio_file_expires_at": fragment.get("audio_file_expires_at"),
+                        "body_html": fragment.get("body_html") or "",
+                        "plain_text_snapshot": fragment.get("plain_text_snapshot") or "",
+                        "content_state": fragment.get("content_state"),
+                        "is_filmed": fragment.get("is_filmed") or False,
+                        "filmed_at": fragment.get("filmed_at"),
+                        "deleted_at": fragment.get("deleted_at"),
+                    },
+                }
+            ]
+        },
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert response.status_code == 200
+
+
 async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, attempts: int = 40) -> dict:
     """轮询后台流水线直到进入终态。"""
     headers = await _auth_headers(async_client, auth_headers_factory)
@@ -918,11 +959,13 @@ async def test_scripts_daily_push_trigger_get_force_trigger_and_idempotency(asyn
                 auth_headers_factory,
                 {"editor_document": _editor_document(f"同主题内容 {index}"), "source": "manual"},
             )
-        )["id"]
+        )
         for index in range(3)
     ]
+    for fragment in fragment_ids:
+        await _backup_fragment(async_client, auth_headers_factory, fragment)
     with db_session_factory() as db:
-        fragments = db.query(Fragment).filter(Fragment.id.in_(fragment_ids)).all()
+        fragments = db.query(Fragment).filter(Fragment.id.in_([fragment["id"] for fragment in fragment_ids])).all()
         for fragment in fragments:
             _seed_fragment_vector(app, fragment.id, "同主题内容", source=fragment.source)
         db.commit()

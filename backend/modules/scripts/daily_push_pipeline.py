@@ -10,18 +10,17 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.exceptions import ValidationError
 from core.logging_config import get_logger
-from domains.fragments import repository as fragment_repository
 from domains.pipelines import repository as pipeline_repository
 from domains.scripts import repository as script_repository
-from models import Fragment, PipelineRun, User
+from models import PipelineRun
 from modules.shared.pipeline.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
 from modules.shared.ports import VectorStore
 from modules.shared.content.content_html import convert_markdown_to_basic_html
 from modules.shared.prompt_loader import load_prompt_text, render_prompt_template
-from utils.serialization import format_iso_datetime, parse_json_list
-from utils.time import get_app_timezone, get_local_day_bounds
+from utils.time import ensure_aware_utc, get_app_timezone, get_local_day_bounds
 
 from .daily_push import DailyPushFragmentSelector, read_fragment_content
+from .daily_push_snapshots import DailyPushFragmentSnapshot, DailyPushSnapshotReader
 
 logger = get_logger(__name__)
 
@@ -37,12 +36,12 @@ def _load_daily_push_prompt() -> str:
     return load_prompt_text(_DAILY_PUSH_PROMPT_PATH)
 
 
-def _fragment_content(fragment: Fragment) -> str:
+def _fragment_content(fragment: DailyPushFragmentSnapshot) -> str:
     """统一读取每日推盘的碎片正文。"""
     return read_fragment_content(fragment)
 
 
-def _build_fragment_summary(fragment: Fragment) -> str:
+def _build_fragment_summary(fragment: DailyPushFragmentSnapshot) -> str:
     """构造碎片摘要文本，优先使用 summary，补充 tags。"""
     parts = []
     content = _fragment_content(fragment)
@@ -51,6 +50,36 @@ def _build_fragment_summary(fragment: Fragment) -> str:
     if fragment.summary:
         parts.append(f"（摘要：{fragment.summary}）")
     return "\n".join(parts)
+
+
+def _parse_snapshot_time(value: Any, *, fallback: datetime) -> datetime:
+    """把 pipeline 输入里的快照时间恢复为 UTC aware datetime。"""
+    if isinstance(value, str) and value.strip():
+        try:
+            return ensure_aware_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
+        except ValueError:
+            return fallback
+    return fallback
+
+
+def _hydrate_fragment_snapshot(item: dict[str, Any], *, user_id: str) -> DailyPushFragmentSnapshot | None:
+    """把 pipeline 输入中的字典恢复为快照 DTO。"""
+    snapshot_id = str(item.get("id") or "").strip()
+    if not snapshot_id:
+        return None
+    fallback_time = ensure_aware_utc()
+    return DailyPushFragmentSnapshot(
+        id=snapshot_id,
+        user_id=str(item.get("user_id") or user_id),
+        source=str(item.get("source") or "manual"),
+        created_at=_parse_snapshot_time(item.get("created_at"), fallback=fallback_time),
+        updated_at=_parse_snapshot_time(item.get("updated_at"), fallback=fallback_time),
+        plain_text=str(item.get("plain_text") or "").strip(),
+        summary=str(item.get("summary")).strip() if item.get("summary") is not None else None,
+        tags=[tag for tag in item.get("tags") or [] if isinstance(tag, str)],
+        entity_version=int(item.get("entity_version") or 1),
+        backup_updated_at=_parse_snapshot_time(item.get("backup_updated_at"), fallback=fallback_time),
+    )
 
 
 class DailyPushPersistenceService:
@@ -123,12 +152,14 @@ class DailyPushPipelineService:
         vector_store: VectorStore,
         persistence_service: DailyPushPersistenceService,
         pipeline_runner,
+        snapshot_reader: DailyPushSnapshotReader,
         fragment_selector: DailyPushFragmentSelector | None = None,
     ) -> None:
         """装配每日推盘流水线依赖。"""
         self.fragment_selector = fragment_selector or DailyPushFragmentSelector(vector_store=vector_store)
         self.persistence_service = persistence_service
         self.pipeline_runner = pipeline_runner
+        self.snapshot_reader = snapshot_reader
 
     async def create_run(
         self,
@@ -172,33 +203,23 @@ class DailyPushPipelineService:
             return existing_active_run
 
         source_start, source_end = get_local_day_bounds(target_time, day_offset=source_day_offset)
-        recent_fragments = fragment_repository.list_content_ready_in_range(
+        recent_fragments = self.snapshot_reader.list_fragment_snapshots(
             db=db,
             user_id=user_id,
             start_at=source_start,
             end_at=source_end,
         )
         if len(recent_fragments) < settings.DAILY_PUSH_MIN_FRAGMENTS:
-            fallback_fragments = fragment_repository.list_created_in_range(
-                db=db,
-                user_id=user_id,
-                start_at=source_start,
-                end_at=source_end,
-            )
-            recent_fragments = [fragment for fragment in fallback_fragments if read_fragment_content(fragment)]
-        if len(recent_fragments) < settings.DAILY_PUSH_MIN_FRAGMENTS:
             if trigger_kind.startswith("manual"):
-                manual_fallback = fragment_repository.list_by_user(
+                manual_fallback = self.snapshot_reader.list_recent_fragment_snapshots(
                     db=db,
                     user_id=user_id,
                     limit=max(settings.DAILY_PUSH_MIN_FRAGMENTS * 4, 12),
-                    offset=0,
                 )
                 recent_fragments = [fragment for fragment in manual_fallback if read_fragment_content(fragment)]
-                recent_fragments.sort(key=lambda fragment: fragment.created_at)
         if len(recent_fragments) < settings.DAILY_PUSH_MIN_FRAGMENTS:
             raise ValidationError(
-                message=f"今天至少需要 {settings.DAILY_PUSH_MIN_FRAGMENTS} 条已转写碎片，才能生成灵感卡片",
+                message=f"今天至少需要 {settings.DAILY_PUSH_MIN_FRAGMENTS} 条已备份碎片，才能生成灵感卡片",
                 field_errors={"fragments": "碎片数量不足"},
             )
         selected = recent_fragments if force else await self.fragment_selector.select_related_fragments(user_id=user_id, fragments=recent_fragments)
@@ -222,6 +243,7 @@ class DailyPushPipelineService:
             pipeline_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
             input_payload={
                 "fragment_ids": [fragment.id for fragment in selected],
+                "fragment_snapshots": self.snapshot_reader.serialize_snapshots(selected),
                 "target_date": local_date,
                 "force": force,
                 "trigger_kind": trigger_kind,
@@ -240,9 +262,8 @@ class DailyPushPipelineService:
         target_time = reference_time or datetime.now(timezone.utc)
         created_run_ids: list[str] = []
         skipped_users = 0
-        user_ids = {row[0] for row in db.query(User.id).all()}
-        user_ids.update(row[0] for row in db.query(Fragment.user_id).filter(Fragment.user_id.isnot(None)).distinct().all())
-        for user_id in sorted(user_ids):
+        user_ids = self.snapshot_reader.list_user_ids(db=db)
+        for user_id in sorted(set(user_ids)):
             try:
                 run = await self.create_run(
                     db=db,
@@ -276,16 +297,22 @@ class DailyPushPipelineService:
     async def collect_daily_push_context(self, context: PipelineExecutionContext) -> dict[str, Any]:
         """根据已选碎片组装每日推盘上下文文本。"""
         payload = context.input_payload
-        fragments = fragment_repository.get_by_ids(
-            db=context.db,
-            user_id=context.run.user_id,
-            fragment_ids=payload["fragment_ids"],
-        )
-        fragment_map = {fragment.id: fragment for fragment in fragments}
-        ordered_fragments = [fragment_map[fid] for fid in payload["fragment_ids"] if fid in fragment_map]
+        serialized_snapshots = payload.get("fragment_snapshots") or []
+        snapshot_map: dict[str, DailyPushFragmentSnapshot] = {}
+        for item in serialized_snapshots:
+            if not isinstance(item, dict):
+                continue
+            snapshot = _hydrate_fragment_snapshot(item, user_id=context.run.user_id)
+            if snapshot is not None:
+                snapshot_map[snapshot.id] = snapshot
+        ordered_fragments = [snapshot_map[fid] for fid in payload["fragment_ids"] if fid in snapshot_map]
         if len(ordered_fragments) != len(payload["fragment_ids"]):
             raise ValidationError(message="每日推盘引用的碎片不存在或无权访问", field_errors={"fragment_ids": "碎片缺失"})
-        content_parts = [c for f in ordered_fragments if (c := _fragment_content(f))]
+        content_parts = []
+        for fragment in ordered_fragments:
+            summary_text = _build_fragment_summary(fragment)
+            if summary_text:
+                content_parts.append(summary_text)
         if not content_parts:
             raise ValidationError(message="选中的碎片均无可用文本，无法生成每日推盘", field_errors={"fragment_ids": "碎片内容为空"})
         return {"fragments_text": "\n\n---\n\n".join(content_parts)}
@@ -342,4 +369,5 @@ def build_daily_push_pipeline_service(container) -> DailyPushPipelineService:
         vector_store=container.vector_store,
         persistence_service=DailyPushPersistenceService(),
         pipeline_runner=container.pipeline_runner,
+        snapshot_reader=DailyPushSnapshotReader(),
     )

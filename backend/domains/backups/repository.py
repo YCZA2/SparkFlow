@@ -39,6 +39,38 @@ def list_records(
     return query.order_by(BackupRecord.updated_at.asc(), BackupRecord.entity_type.asc()).all()
 
 
+def list_records_by_entity_type(
+    db: Session,
+    *,
+    user_id: str,
+    entity_type: str,
+) -> list[BackupRecord]:
+    """按实体类型读取用户备份快照，供内部聚合逻辑复用。"""
+    return (
+        db.query(BackupRecord)
+        .filter(
+            BackupRecord.user_id == user_id,
+            BackupRecord.entity_type == entity_type,
+        )
+        .order_by(BackupRecord.updated_at.asc(), BackupRecord.entity_id.asc())
+        .all()
+    )
+
+
+def list_user_ids_by_entity_type(
+    db: Session,
+    *,
+    entity_type: str,
+    operation: str | None = None,
+) -> list[str]:
+    """按实体类型枚举出现过备份记录的用户，用于定时任务扫描。"""
+    query = db.query(BackupRecord.user_id).filter(BackupRecord.entity_type == entity_type)
+    if operation is not None:
+        query = query.filter(BackupRecord.operation == operation)
+    rows = query.distinct().all()
+    return [row[0] for row in rows if row and row[0]]
+
+
 def upsert_record(
     db: Session,
     *,

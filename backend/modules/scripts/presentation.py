@@ -80,8 +80,8 @@ async def get_daily_push(
 @router.post(
     "/daily-push/trigger",
     response_model=ResponseModel[ScriptGenerationResponse],
-    summary="立即触发今日推盘",
-    description="根据今天已转写的碎片创建一条异步每日推盘流水线。",
+    summary="立即补跑今日推盘",
+    description="调试或运维场景下，基于当前已备份到服务端的 fragment 快照创建一条异步每日推盘流水线。",
 )
 async def trigger_daily_push(
     current_user: dict = Depends(get_current_user),
@@ -95,8 +95,8 @@ async def trigger_daily_push(
 @router.post(
     "/daily-push/force-trigger",
     response_model=ResponseModel[ScriptGenerationResponse],
-    summary="强制触发今日推盘",
-    description="忽略语义聚合约束，基于今天的碎片创建一条异步每日推盘流水线。",
+    summary="强制补跑今日推盘",
+    description="调试或运维场景下忽略语义聚合约束，基于当前已备份到服务端的 fragment 快照创建一条异步每日推盘流水线。",
 )
 async def force_trigger_daily_push(
     current_user: dict = Depends(get_current_user),

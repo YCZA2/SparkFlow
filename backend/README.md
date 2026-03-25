@@ -10,7 +10,7 @@ SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Doc
 - `media_ingestion` 已调整为 transcript-first：主 pipeline 在转写落库后即可成功，`summary` / `tags` / vector 改为异步衍生回填，不再阻塞上传和抖音导入主链路。
 - Chroma 查询适配层已兼容当前 `list_collections()` 返回字符串列表的行为，`/api/fragments/similar`、向量文档列表和 namespace 统计不会再因版本差异误判为空。
 - `backups` 快照当前已扩展覆盖 `script` 实体，服务端会按和 fragment / folder / media 一致的 batch contract 接收与返回成稿快照。
-- scheduler 侧的 `daily push` 已降级为兼容壳；因为 fragments 真值已经回到客户端，后续若继续演进应优先走客户端触发而不是恢复服务器真值模式。
+- scheduler 侧的 `daily push` 已切到“后端定时读取备份快照”模式：fragment 真值仍在客户端本地，但每日推盘输入只消费服务端已收到的 fragment backup snapshot，不再读取历史 `fragments` 业务表。
 - 脚本生成链路的 `稳定内核` 当前改为系统预置文案，不再在生成时按用户碎片和知识库动态生成。
 - `碎片方法论` 已从脚本生成主链路移出：生成时只读取已缓存条目；后台通过每日定时维护按“总量达标 / 增量达标”阈值静默刷新。
 - 仓库当前仍保留 `fragments / fragment_folders` 的历史业务表与少量兼容读取能力，但它们已不是移动端 fragments / folders 的主读取来源。
@@ -151,7 +151,7 @@ cd backend
 - `modules/fragments/`: 碎片列表、详情、移动、标签、相似检索、可视化。
 - `modules/transcriptions/`: 音频上传、后台转写、转写状态查询；主任务以 transcript 成功为准，摘要标签随后异步补齐。
 - `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接；请求入口只创建任务，解析链接、下载转 m4a、转写先在主流水线完成，摘要/标签/向量由后续衍生流水线回填。
-- `modules/scripts/`: 口播稿生成、脚本生成 pipeline 定义、上下文构建、结果回流、列表、详情、更新、删除、每日推盘。
+- `modules/scripts/`: 口播稿生成、脚本生成 pipeline 定义、上下文构建、结果回流、列表、详情、更新、删除、每日推盘；其中 daily push 现在通过备份快照 reader 聚合 fragment 真值。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除；当前已按 `parsers / chunking / indexing / application` 拆层，文本型上传支持 `txt/docx/pdf/xlsx`。
 - `modules/pipelines/`: 后台流水线详情、步骤和重跑 API。
 - `modules/debug_logs/`: 接收移动端调试日志，并通过结构化日志链路写入本地文件。
@@ -169,6 +169,7 @@ cd backend
 - `rag_context_builder.py` 负责把三层上下文、大纲和当前碎片背景拼成最终提示词。
 - `persistence.py` 负责脚本幂等落库。
 - `daily_push.py` 负责每日推盘的碎片拼接和相似度筛选规则。
+- `daily_push_snapshots.py` 负责从 `backup_records` 读取 fragment 快照，并规整为每日推盘专用 DTO。
 
 当前 `modules/fragments/` 内部约定：
 

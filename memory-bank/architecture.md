@@ -12,6 +12,7 @@
 - 向量检索链路已补齐对当前 Chroma 版本的兼容：`list_collections()` 返回字符串集合名时，namespace 检查、相似检索和文档枚举都按同一适配层处理。
 - 移动端已经补齐 backup queue、显式恢复、本地媒体缓存重建、音频 `object_key` 持久化与恢复链路。
 - `scripts` 本轮也切入 local-first：脚本生成成功后会立即落本地 SQLite + `body.html` 文件，后续详情编辑、回收站、恢复冲突副本与拍摄状态都以本地为真值。
+- `daily_push` 已切到“后端定时 + 备份快照输入”模式：调度器与手动补跑都从 `backup_records` 中读取 fragment snapshot，再交给 daily-push pipeline 生成脚本，不再把历史 `fragments` 表当作推盘输入真值。
 - `knowledge` 后端本轮补齐了文本型知识 ingestion：`txt/docx/pdf/xlsx` 统一走 `parsers -> chunking -> indexing -> application` 四层，默认仍写入 Chroma，但对上已通过独立知识索引接口解耦，后续可替换为 LightRAG 等底层引擎。
 - 脚本生成三层上下文本轮调整为“预置稳定内核 + 缓存方法论 + 实时相关素材召回”：稳定内核当前不再按用户素材动态生成，碎片方法论改由每日后台维护任务在阈值达标后静默刷新。
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
@@ -151,6 +152,49 @@ flowchart TD
 - `script.source_fragment_ids` 只表示首次生成来源，script 不会重新进入 fragment 检索、聚类、每日推盘选材或下一轮脚本生成输入
 - 移动端在收到“设备会话已失效”后会停止自动补 token，转入本地只读态，并要求用户在 `profile.tsx` 显式重新连接当前设备
 
+### 3.5 Backup Snapshot And File Sync
+
+当前 local-first 内容层的备份/同步语义需要明确区分“本地真值”“远端快照”和“后端投影表”：
+
+- `fragment / folder / media_asset / script` 的真值仍然在移动端本地 SQLite + 文件系统
+- 服务端 `backup_records` 保存的是**按实体粒度**的最新 snapshot，而不是“某个时刻包含所有实体的大快照文件”
+- 一次 `flushBackupQueue()` 可以批量上传很多实体，但每个 item 仍只对应一条实体 snapshot；服务端按 `user_id + entity_type + entity_id` 覆盖为该实体当前最新版本
+- 这意味着 snapshot 的职责是“让服务端理解截至当前已同步成功的前端真值”，而不是替代本地真值本身
+
+当前 snapshot 生成与上传流程如下：
+
+- 本地创建或更新 fragment / folder / media_asset / script 时，会先更新 SQLite 行与正文/素材文件，并把该实体标记为 `backup_status=pending`
+- 只有在真实业务字段变化时才推进 `updated_at` 和 `entity_version`；纯展示态或无效 patch 不会制造新版本
+- backup queue 只扫描 `backup_status=pending|failed` 的实体，并在上传时现读本地 SQLite 字段、`body.html` 文件与媒体句柄，临时组装为 `BackupMutationItem`
+- 因此“snapshot”更准确地说是“实体当前本地版本在上传瞬间的结构化序列化结果”，不是本地额外长期维护的一份全量镜像文件
+
+当前上传触发机制位于 `AppSessionProvider` 与 backup queue：
+
+- 应用启动完成后会主动执行一次 `flushBackupQueue()`
+- AppState 切到 `active` 或 `background` 时会再触发一次，避免正文和媒体长期只停留在本地
+- 前台运行期间每 5 分钟会定时重试一次，补充前后台切换未覆盖到的场景
+- 当前编辑成功后默认只是把实体留在 `pending`，不会在每次输入后立刻发起网络请求；上传仍以队列批量冲刷为主
+
+文件存储当前分两层：
+
+- 小型结构化元数据和内容索引进入 SQLite / `backup_records`
+- fragment / script 正文 HTML 以及图片、音频 staging 文件保存在本地文件系统；大对象上传时走 `/api/backups/assets`
+- 服务端文件存储统一通过对象存储抽象接入，本地开发使用 `FILE_STORAGE_PROVIDER=local` 写入 `backend/uploads/`，线上按私有 OSS + 签名 URL 设计
+- 恢复时，移动端先拉 `/api/backups/snapshot` 重建本地实体，再用 `/api/backups/assets/access` 刷新 `object_key` 的最新访问地址，最后尽力把媒体重新下载回 app sandbox
+
+后端消费 snapshot 的规则也需要单独强调：
+
+- 后端如果要理解前端真值，读取到的永远是“**截止当前时刻，已经成功上传到服务端**”的 snapshot
+- 还停留在设备本地、尚未 flush 成功、或上传失败的改动，对后端都是不可见的
+- 因此 snapshot-driven 后端能力的语义是“基于最近已同步真值运行”，不是“基于设备瞬时最新状态运行”
+- 每日推盘已经按这套方式落地：调度器和手动补跑都从 `backup_records` 提取 fragment snapshot，再交给 daily-push pipeline 生成脚本，不再把历史 `fragments` 表当作输入真值
+
+当前推荐的后端分层口径是：
+
+- 本地 SQLite + 文件系统：前端真值
+- `backup_records` snapshot：服务端读取前端真值的标准入口
+- `fragments` / `scripts` 等后端业务表：面向检索、派生任务、历史接口和执行流程的 projection / 派生视图，不应再默认承担移动端实体真值语义
+
 ## 4. Backend Architecture
 
 ### 4.1 Layers
@@ -256,12 +300,12 @@ flowchart TD
 
 - `auth`: 测试 token 签发、当前用户信息、refresh。
 - 本地联调会确保默认测试用户 `test-user-001` 在数据库中存在，避免恢复旧 token 时触发用户外键错误。
-- `backups`: 远端备份批量写入、快照拉取、restore session 审计与备份素材上传；不承担 fragments / folders 的主读取职责。
+- `backups`: 远端备份批量写入、快照拉取、restore session 审计与备份素材上传；不承担 fragments / folders 的日常主读取职责，但 daily push 会通过内部 reader 消费其中的 fragment snapshot。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
 - `fragments`: 列表、创建、详情、更新归类、批量移动、删除、相似检索、可视化；移动端 phase 1 已不再依赖其作为 fragments / folders 首屏真值读取来源，`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_html`，`plain_text_snapshot` 负责检索、摘要和生成输入。
 - `transcriptions`: 音频上传、后台转写、状态查询；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录。
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接；local-first 请求会直接绑定客户端 placeholder fragment，解析链接、下载转 m4a、主转写在 `media_ingestion` 中执行，摘要/标签/向量由后续 derivative pipeline 异步补齐。
-- `scripts`: 合稿、脚本生成 pipeline 定义、三层写作上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。
+- `scripts`: 合稿、脚本生成 pipeline 定义、三层写作上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。`daily_push_snapshots.py` 会先把备份快照规整成推盘 DTO，再交给 `daily_push.py` 做聚类与上下文拼接。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷；模块内部已拆成 `parsers.py`、`chunking.py`、`indexing.py`、`application.py`。
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
 - `exports`: 单条 Markdown 导出与批量 zip 导出。
@@ -579,7 +623,7 @@ sequenceDiagram
 - Tag 对外仍通过 `fragments.tags` 返回，后端使用 `fragment_tags` 作为 Tag 聚合、建议与过滤的查询主表。
 - 移动端当前是“文件夹入口优先”的首页结构，不是 PRD 里最初设想的 tab 首页；碎片列表主视图仍是核心工作区，但入口已经下沉到文件夹页。
 - 知识库后端已可用，移动端入口仍是占位页。
-- 每日推盘后端已可运行并带有定时任务，但前端主入口尚未完整消费这条能力。
+- 每日推盘后端已可运行并带有定时任务；当前输入源是服务端已收到的 fragment 备份快照，前端主入口仍需继续收口其消费体验。
 - 当前最稳定的本地开发方式是根目录执行 `bash scripts/dev-mobile.sh`，脚本会自动确保 Docker PostgreSQL、后端和 Expo 依次就绪。
 
 ## 9. Frontend / Backend Collaboration

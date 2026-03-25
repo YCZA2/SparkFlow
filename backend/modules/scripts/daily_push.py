@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from math import ceil
+from typing import Any
 
 from core.config import settings
 from core.exceptions import ValidationError
-from models import Fragment
-from modules.fragments.content import read_fragment_plain_text
 from modules.shared.ports import VectorStore
 
+from .daily_push_snapshots import DailyPushFragmentSnapshot
 
-def build_fragments_text(fragments: list[Fragment]) -> str:
+
+def build_fragments_text(fragments: list[Any]) -> str:
     """拼接脚本生成所需的碎片文本。"""
     parts = [read_fragment_content(fragment) for fragment in fragments if read_fragment_content(fragment)]
     if not parts:
@@ -24,7 +25,12 @@ class DailyPushFragmentSelector:
         """装配碎片相似度检索依赖。"""
         self.vector_store = vector_store
 
-    async def select_related_fragments(self, *, user_id: str, fragments: list[Fragment]) -> list[Fragment]:
+    async def select_related_fragments(
+        self,
+        *,
+        user_id: str,
+        fragments: list[DailyPushFragmentSnapshot],
+    ) -> list[DailyPushFragmentSnapshot]:
         """基于向量相似度选出同主题碎片。"""
         candidate_ids = {fragment.id for fragment in fragments if read_fragment_content(fragment)}
         if len(candidate_ids) < settings.DAILY_PUSH_MIN_FRAGMENTS:
@@ -77,6 +83,13 @@ def _largest_connected_component(*, adjacency: dict[str, set[str]], fragment_ids
     return best_component
 
 
-def read_fragment_content(fragment: Fragment) -> str:
+def read_fragment_content(fragment: Any) -> str:
     """统一读取每日推盘使用的碎片正文。"""
-    return read_fragment_plain_text(fragment)
+    plain_text = str(getattr(fragment, "plain_text", "") or "").strip()
+    if plain_text:
+        return plain_text
+    snapshot = str(getattr(fragment, "plain_text_snapshot", "") or "").strip()
+    if snapshot:
+        return snapshot
+    transcript = str(getattr(fragment, "transcript", "") or "").strip()
+    return transcript
