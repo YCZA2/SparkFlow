@@ -42,7 +42,13 @@ class DouyinProvider:
             logger.warning("douyin_content_type_not_video", share_url=share_url, content_type=info.get("content_type"))
             raise ValidationError(message="当前链接不是可导入音频的视频", field_errors={"share_url": "仅支持抖音视频链接"})
 
-        audio_source_url = self._pick_audio_source_url(info)
+        media_id = str(info.get("aweme_id") or "").strip()
+        if not media_id:
+            logger.warning("douyin_media_id_missing", share_url=share_url)
+            raise ValidationError(message="抖音内容缺少媒体 ID", field_errors={"share_url": "当前链接缺少可识别的视频标识"})
+
+        request_headers = self._build_media_request_headers(media_id=media_id)
+        audio_source_url = self._pick_audio_source_url(info, request_headers=request_headers)
         if not audio_source_url:
             logger.warning("douyin_audio_stream_missing", share_url=share_url, media_id=info.get("aweme_id"))
             raise AppException(
@@ -50,13 +56,6 @@ class DouyinProvider:
                 code="EXTERNAL_MEDIA_IMPORT_FAILED",
                 status_code=502,
             )
-
-        media_id = str(info.get("aweme_id") or "").strip()
-        if not media_id:
-            logger.warning("douyin_media_id_missing", share_url=share_url)
-            raise ValidationError(message="抖音内容缺少媒体 ID", field_errors={"share_url": "当前链接缺少可识别的视频标识"})
-
-        request_headers = self._build_media_request_headers(media_id=media_id)
         local_audio_path = self.extractor.extract_from_url(
             media_url=audio_source_url,
             output_stem=media_id,
@@ -74,9 +73,13 @@ class DouyinProvider:
             local_audio_path=str(Path(local_audio_path).resolve()),
         )
 
-    @staticmethod
-    def _pick_audio_source_url(info: dict) -> str | None:
-        """中文注释：当前只为转写取音频，优先选择最低码率视频流以减少下载体积。"""
+    def _pick_audio_source_url(
+        self,
+        info: dict,
+        *,
+        request_headers: dict[str, str] | None = None,
+    ) -> str | None:
+        """中文注释：当前只为转写取音频，优先低码率且必须带音频轨。"""
         qualities = info.get("qualities") or []
         candidates = [item for item in qualities if isinstance(item, dict) and item.get("url")]
         if not candidates:
@@ -88,15 +91,38 @@ class DouyinProvider:
             ratio_order = {"360p": 1, "480p": 2, "540p": 3, "720p": 4, "1080p": 5}
             return (bit_rate, ratio_order.get(ratio, 99), str(item.get("url") or ""))
 
-        selected = min(candidates, key=sort_key)
-        logger.info(
-            "douyin_audio_source_selected",
+        for candidate in sorted(candidates, key=sort_key):
+            stream_types = self.extractor.probe_stream_types(
+                media_url=str(candidate.get("url")),
+                request_headers=request_headers,
+            )
+            if "audio" in stream_types:
+                logger.info(
+                    "douyin_audio_source_selected",
+                    aweme_id=info.get("aweme_id"),
+                    bit_rate=candidate.get("bit_rate"),
+                    ratio=candidate.get("ratio"),
+                    quality_label=candidate.get("quality_label"),
+                    stream_types=stream_types,
+                )
+                return str(candidate.get("url"))
+            logger.info(
+                "douyin_audio_source_skipped_no_audio",
+                aweme_id=info.get("aweme_id"),
+                bit_rate=candidate.get("bit_rate"),
+                ratio=candidate.get("ratio"),
+                quality_label=candidate.get("quality_label"),
+                stream_types=stream_types,
+            )
+
+        fallback = min(candidates, key=sort_key)
+        logger.warning(
+            "douyin_audio_source_probe_exhausted",
             aweme_id=info.get("aweme_id"),
-            bit_rate=selected.get("bit_rate"),
-            ratio=selected.get("ratio"),
-            quality_label=selected.get("quality_label"),
+            fallback_bit_rate=fallback.get("bit_rate"),
+            fallback_ratio=fallback.get("ratio"),
         )
-        return str(selected.get("url"))
+        return str(fallback.get("url"))
 
     def _build_media_request_headers(self, *, media_id: str) -> dict[str, str]:
         """中文注释：抖音视频流请求需要携带页面来源和浏览器头，避免 CDN 返回 403。"""

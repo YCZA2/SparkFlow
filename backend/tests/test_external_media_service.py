@@ -51,7 +51,10 @@ async def test_resolve_audio_maps_metadata_and_extracts_audio() -> None:
             ],
         }
     )
-    extractor = SimpleNamespace(extract_from_url=lambda **kwargs: captured_kwargs.update(kwargs) or "/tmp/test.m4a")
+    extractor = SimpleNamespace(
+        probe_stream_types=lambda **kwargs: ["video"] if kwargs["media_url"].endswith("high.mp4") else ["audio", "video"],
+        extract_from_url=lambda **kwargs: captured_kwargs.update(kwargs) or "/tmp/test.m4a",
+    )
     provider = DouyinProvider(parser=parser, extractor=extractor)
 
     result = await provider.resolve_audio(share_url="https://v.douyin.com/test")
@@ -68,9 +71,19 @@ async def test_resolve_audio_maps_metadata_and_extracts_audio() -> None:
     }
 
 
-def test_pick_audio_source_url_prefers_lowest_bitrate_quality() -> None:
-    """音频导入只关心声音，视频流应优先选择最低码率档位。"""
-    selected = DouyinProvider._pick_audio_source_url(
+def test_pick_audio_source_url_prefers_lowest_bitrate_quality_with_audio() -> None:
+    """音频导入应优先挑选低码率且实际带音频轨的候选流。"""
+    provider = DouyinProvider(
+        parser=SimpleNamespace(),
+        extractor=SimpleNamespace(
+            probe_stream_types=lambda **kwargs: {
+                "https://example.com/high.mp4": ["audio", "video"],
+                "https://example.com/medium.mp4": ["audio", "video"],
+                "https://example.com/low.mp4": ["video"],
+            }[kwargs["media_url"]]
+        ),
+    )
+    selected = provider._pick_audio_source_url(
         {
             "aweme_id": "123456",
             "nwm_url": "https://example.com/fallback.mp4",
@@ -79,7 +92,28 @@ def test_pick_audio_source_url_prefers_lowest_bitrate_quality() -> None:
                 {"url": "https://example.com/medium.mp4", "bit_rate": 600, "ratio": "540p"},
                 {"url": "https://example.com/low.mp4", "bit_rate": 280, "ratio": "480p"},
             ],
-        }
+        },
+        request_headers={"Referer": "https://www.douyin.com/video/123456"},
+    )
+    assert selected == "https://example.com/medium.mp4"
+
+
+def test_pick_audio_source_url_falls_back_when_probe_returns_empty() -> None:
+    """探测失败时仍应回退到最低码率候选，避免链路直接中断。"""
+    provider = DouyinProvider(
+        parser=SimpleNamespace(),
+        extractor=SimpleNamespace(probe_stream_types=lambda **kwargs: []),
+    )
+    selected = provider._pick_audio_source_url(
+        {
+            "aweme_id": "123456",
+            "nwm_url": "https://example.com/fallback.mp4",
+            "qualities": [
+                {"url": "https://example.com/high.mp4", "bit_rate": 1200, "ratio": "720p"},
+                {"url": "https://example.com/low.mp4", "bit_rate": 280, "ratio": "480p"},
+            ],
+        },
+        request_headers={"Referer": "https://www.douyin.com/video/123456"},
     )
     assert selected == "https://example.com/low.mp4"
 
@@ -206,6 +240,21 @@ def test_extract_from_url_does_not_forward_cookie_to_ffmpeg(tmp_path: Path) -> N
     headers_blob = commands[0][commands[0].index("-headers") + 1]
     assert "Referer: https://www.douyin.com/video/demo" in headers_blob
     assert "Cookie:" not in headers_blob
+
+
+def test_probe_stream_types_returns_audio_and_video(tmp_path: Path) -> None:
+    """ffprobe 成功时应返回规范化后的流类型列表。"""
+    extractor = FfmpegAudioExtractor(executable="ffmpeg")
+    with patch("services.external_media.ffmpeg_audio.shutil.which", return_value="/opt/homebrew/bin/ffprobe"):
+        with patch(
+            "services.external_media.ffmpeg_audio.subprocess.run",
+            return_value=SimpleNamespace(returncode=0, stdout="audio\nvideo\n", stderr=""),
+        ):
+            stream_types = extractor.probe_stream_types(
+                media_url="https://example.com/video.mp4",
+                request_headers={"Referer": "https://www.douyin.com/video/demo", "Cookie": "session=value"},
+            )
+    assert stream_types == ["audio", "video"]
 
 
 def test_request_json_logs_empty_body_diagnostics(capsys) -> None:

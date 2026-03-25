@@ -115,6 +115,50 @@ class FfmpegAudioExtractor:
         )
         return subprocess.run(command, capture_output=True, text=True)
 
+    def probe_stream_types(
+        self,
+        *,
+        media_url: str,
+        request_headers: Mapping[str, str] | None = None,
+    ) -> list[str]:
+        """中文注释：在真正抽音频前探测远端流类型，用来跳过只有视频轨的链接。"""
+        ffprobe_executable = shutil.which("ffprobe")
+        if ffprobe_executable is None:
+            logger.warning("external_media_ffprobe_missing")
+            return []
+
+        ffprobe_headers = self._ffmpeg_safe_headers(self._normalize_headers(request_headers))
+        command = [
+            ffprobe_executable,
+            "-v",
+            "error",
+        ]
+        if ffprobe_headers:
+            header_blob = "".join(f"{key}: {value}\r\n" for key, value in ffprobe_headers.items() if value)
+            if header_blob:
+                command.extend(["-headers", header_blob])
+        command.extend(
+            [
+                "-show_entries",
+                "stream=codec_type",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                media_url,
+            ]
+        )
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.warning(
+                "external_media_ffprobe_failed",
+                returncode=result.returncode,
+                stderr=(result.stderr or result.stdout or "").strip()[:300],
+            )
+            return []
+
+        stream_types = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+        logger.info("external_media_ffprobe_succeeded", stream_types=stream_types)
+        return stream_types
+
     def _download_media_to_temp(
         self,
         *,
