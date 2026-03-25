@@ -44,6 +44,25 @@ export function createImageHtml(assetId: string, alt = ''): string {
   return `<img src="asset://${assetId}" alt="${safeAlt}" />`;
 }
 
+export function convertPlainTextToHtml(text: string | null | undefined): string {
+  /*把纯文本稳定转换成基础 HTML，供转写内容首次落为可编辑正文。 */
+  const normalized = String(text ?? '').replace(/\r\n/g, '\n').trim();
+  if (!normalized) return '';
+
+  const escapeHtml = (value: string): string =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  return normalized
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${paragraph.split('\n').map(escapeHtml).join('<br />')}</p>`)
+    .join('\n');
+}
+
 export function applyHtmlPatchToBody(
   currentHtml: string,
   patch: HtmlPatch,

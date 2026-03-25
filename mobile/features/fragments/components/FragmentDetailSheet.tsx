@@ -13,7 +13,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Themed';
 import { FragmentAudioPlayerControls } from '@/features/fragments/components/FragmentAudioPlayerControls';
-import { TranscriptSection } from '@/features/fragments/components/TranscriptSection';
 import { normalizeFragmentTags } from '@/features/fragments/utils';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
@@ -158,18 +157,14 @@ function InfoCard({ children }: { children: React.ReactNode }) {
 
 function AudioTranscriptSection({
   content,
-  activeSegmentIndex,
   player,
 }: Pick<
   FragmentDetailSheetProps,
-  'content' | 'activeSegmentIndex' | 'player'
+  'content' | 'player'
 > & { content: FragmentDetailSheetProps['content'] & { bodyHtml?: string | null } }) {
-  /*单独渲染原文与音频区块，保持播放器和转写的展示边界。 */
+  /*单独渲染音频区块；转写现在已直接进入正文编辑区，不再在抽屉中重复展示。 */
   const theme = useAppTheme();
   const hasAudio = Boolean(content.audioFileUrl);
-  const hasTranscript = Boolean(content.transcript?.trim() || content.speakerSegments?.length);
-  // 如果 bodyHtml 有内容，说明已在编辑区显示，不需要在抽屉中重复显示语音原文
-  const shouldShowTranscript = !content.bodyHtml?.trim() && hasTranscript;
 
   return (
     <Section title="原文与音频">
@@ -191,24 +186,10 @@ function AudioTranscriptSection({
           />
         </View>
       ) : null}
-
-      {shouldShowTranscript ? (
-        <TranscriptSection
-          transcript={content.transcript}
-          speakerSegments={content.speakerSegments}
-          audioPath={content.audioFileUrl}
-          activeIndex={activeSegmentIndex}
-          activeSegmentId={null}
-          dense={true}
-          onSegmentPress={({ segment }) => {
-            void player.playSegment(segment);
-          }}
-        />
-      ) : null}
-      {!hasAudio && !shouldShowTranscript ? (
+      {!hasAudio ? (
         <InfoCard>
           <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>
-            这条碎片没有可查看的语音原文。
+            这条碎片没有可播放的音频。
           </Text>
         </InfoCard>
       ) : null}
@@ -387,7 +368,6 @@ export function FragmentDetailSheet({
           >
             <AudioTranscriptSection
               content={content}
-              activeSegmentIndex={activeSegmentIndex}
               player={player}
             />
             <ToolsSection tools={tools} />

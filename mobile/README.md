@@ -223,7 +223,8 @@ bash scripts/dev-mobile.sh build
 bash scripts/dev-mobile.sh simulator
 ```
 
-3. 若脚本提示 dev client 未安装，先重新执行一次 build 模式。
+3. 如果你手动删掉了 simulator 里的 app，`simulator` 模式现在会先检测 `com.sparkflow.mobile` 是否存在；缺失时会自动调用 `expo run:ios --simulator "<当前已启动模拟器>"` 补装后再继续打开。
+4. 若自动补装失败，再重新执行一次 build 模式。
 
 ### 3. 应用内网络设置填什么
 
@@ -277,14 +278,15 @@ http://192.168.31.157:8000
 当前返回和展示约定：
 
 - 碎片详情正文读取 `body_html`，列表摘要和生成页预览读取 `plain_text_snapshot`
-- `transcript` 表示机器转写原文，不参与正文编辑
+- `transcript` 表示机器转写原文；语音碎片在转写成功后，客户端会把它作为初始正文种子写入 `body_html`，后续编辑只围绕正文进行
 - 碎片详情默认只把正文编辑器作为主界面；原文时间线、音频播放、摘要、标签、来源和删除操作都从右上角“更多”抽屉进入
+- 当语音碎片的转写已经种入正文后，抽屉不再重复显示 transcript 文本，只保留音频播放器
 - 碎片正文详情采用**local-first + backup/recovery**：优先读取本地 SQLite / `body.html`，编辑中不再自动远端刷新当前会话；本地保存和图片上传失败时会保留待备份状态，重新进入详情仍可继续编辑
 - AI 编辑接口本期停用，不再参与正文链路
 - 脚本详情直接编辑 `body_html`，并保留“一键去拍摄”入口消费当前最新正文
 - 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
 - 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`
-- 录音上传和外链导入都会先创建本地 placeholder fragment，再在 pipeline 成功后把 `transcript / summary / tags` patch 回写到本地实体
+- 录音上传和外链导入都会先创建本地 placeholder fragment，再在 pipeline 成功后把 `transcript` 种成可编辑正文，并将 `summary / tags / 音频元数据` 一并 patch 回写到本地实体
 - 手动脚本生成前会先显式执行一次 `flushBackupQueue()`；如果本地正文还没成功同步，客户端会阻断生成，避免后端基于旧 snapshot 出稿
 - local-first 语音上传成功后的主状态查询统一走 `pipeline_run_id -> GET /api/pipelines/{run_id}`；旧的 `GET /api/transcriptions/{fragment_id}` 兼容查询接口已移除
 

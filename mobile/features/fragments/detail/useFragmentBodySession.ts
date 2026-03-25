@@ -4,7 +4,7 @@
  * 使用 useEditorSession 实现本地优先的碎片编辑功能。
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 
 import { useEditorSession } from '@/features/editor/useEditorSession';
 import type {

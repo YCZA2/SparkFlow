@@ -1,3 +1,5 @@
+import { convertPlainTextToHtml } from '@/features/editor/html';
+import type { Fragment } from '@/types/fragment';
 import type { SpeakerSegment } from '@/types/fragment';
 import type { PipelineRun } from '@/types/pipeline';
 
@@ -67,4 +69,32 @@ export function resolveMediaIngestionFragmentId(
   }
 
   return fallbackFragmentId || null;
+}
+
+export function resolveMediaIngestionFragmentPatch(input: {
+  current: {
+    body_html?: string | null;
+    plain_text_snapshot?: string | null;
+    content_state?: string | null;
+  } | null;
+  output: MediaIngestionOutput;
+}): Partial<Fragment> {
+  /*把媒体导入终态统一规整为 fragment patch：仅在正文为空时把 transcript 种成可编辑正文。 */
+  const transcript = input.output.transcript?.trim() ?? '';
+  const shouldSeedBody = Boolean(transcript) && !Boolean(input.current?.body_html?.trim());
+  const shouldSeedPlainText =
+    Boolean(transcript) && !Boolean(input.current?.plain_text_snapshot?.trim());
+
+  return {
+    transcript: input.output.transcript ?? undefined,
+    summary: input.output.summary ?? undefined,
+    tags: input.output.tags ?? undefined,
+    speaker_segments: input.output.speaker_segments ?? undefined,
+    audio_object_key: input.output.audio_object_key ?? undefined,
+    audio_file_url: input.output.audio_file_url ?? undefined,
+    audio_file_expires_at: input.output.audio_file_expires_at ?? undefined,
+    body_html: shouldSeedBody ? convertPlainTextToHtml(transcript) : undefined,
+    plain_text_snapshot: shouldSeedPlainText ? transcript : undefined,
+    content_state: shouldSeedBody ? 'body_present' : undefined,
+  };
 }

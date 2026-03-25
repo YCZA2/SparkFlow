@@ -168,15 +168,46 @@ ensure_booted_simulator() {
   return 1
 }
 
+get_booted_simulator_name() {
+  # 读取当前已启动模拟器名称，供自动安装 dev client 复用。
+  xcrun simctl list devices booted | awk -F '[()]' '/Booted/{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1); print $1; exit}'
+}
+
+install_dev_client_to_booted_simulator() {
+  # 若用户手动删除了模拟器内 app，则自动重装到当前已启动设备。
+  local simulator_name="$1"
+
+  if [[ -z "${simulator_name}" ]]; then
+    echo "[dev-mobile] failed to resolve booted simulator name."
+    return 1
+  fi
+
+  echo "[dev-mobile] installing iOS dev client to simulator: ${simulator_name}"
+  (
+    cd "${MOBILE_DIR}"
+    npx expo run:ios --device "${simulator_name}" --no-bundler
+  )
+}
+
 open_expo_in_simulator() {
   # 手动打开 dev client，并对 deep link 做重试，规避 Expo CLI 偶发超时。
   local bundle_id="com.sparkflow.mobile"
   local deep_link="exp+sparkflow-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A${EXPO_PORT}"
+  local simulator_name=""
 
   if ! xcrun simctl listapps booted | grep -q "\"${bundle_id}\""; then
-    echo "[dev-mobile] iOS dev client is not installed on the booted simulator."
-    echo "[dev-mobile] run 'bash scripts/dev-mobile.sh build' first."
-    return 1
+    echo "[dev-mobile] iOS dev client is missing from the booted simulator."
+    simulator_name="$(get_booted_simulator_name)"
+    if ! install_dev_client_to_booted_simulator "${simulator_name}"; then
+      echo "[dev-mobile] auto-install failed. run 'bash scripts/dev-mobile.sh build' and retry."
+      return 1
+    fi
+
+    if ! xcrun simctl listapps booted | grep -q "\"${bundle_id}\""; then
+      echo "[dev-mobile] dev client install finished but app is still not detected."
+      echo "[dev-mobile] run 'bash scripts/dev-mobile.sh build' and retry."
+      return 1
+    fi
   fi
 
   xcrun simctl launch booted "${bundle_id}" >/dev/null 2>&1 || true

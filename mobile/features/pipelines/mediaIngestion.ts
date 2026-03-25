@@ -5,10 +5,12 @@ import type { PipelineRun } from '@/types/pipeline';
 
 export {
   extractMediaIngestionOutput,
+  resolveMediaIngestionFragmentPatch,
   resolveMediaIngestionFragmentId,
 } from './mediaIngestionState';
 import {
   extractMediaIngestionOutput,
+  resolveMediaIngestionFragmentPatch,
   resolveMediaIngestionFragmentId,
 } from './mediaIngestionState';
 
@@ -28,24 +30,10 @@ export async function applyMediaIngestionPipelineResult(
 
   const current = await readLocalFragmentEntity(fragmentId);
   const output = extractMediaIngestionOutput(pipeline);
-  const shouldSeedPlainText =
-    Boolean(output.transcript?.trim()) && !Boolean(current?.plain_text_snapshot?.trim());
-  const shouldPromoteTranscriptState =
-    Boolean(output.transcript?.trim()) &&
-    !Boolean(current?.body_html?.trim()) &&
-    current?.content_state !== 'body_present';
-
-  const nextFragment = await updateLocalFragmentEntity(fragmentId, {
-    transcript: output.transcript ?? undefined,
-    summary: output.summary ?? undefined,
-    tags: output.tags ?? undefined,
-    speaker_segments: output.speaker_segments ?? undefined,
-    audio_object_key: output.audio_object_key ?? undefined,
-    audio_file_url: output.audio_file_url ?? undefined,
-    audio_file_expires_at: output.audio_file_expires_at ?? undefined,
-    plain_text_snapshot: shouldSeedPlainText ? output.transcript ?? undefined : undefined,
-    content_state: shouldPromoteTranscriptState ? 'transcript_only' : undefined,
-  });
+  const nextFragment = await updateLocalFragmentEntity(
+    fragmentId,
+    resolveMediaIngestionFragmentPatch({ current, output })
+  );
 
   markFragmentsStale();
   return nextFragment;

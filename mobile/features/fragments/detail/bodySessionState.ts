@@ -1,7 +1,6 @@
 import {
   appendRuntimeMediaAsset,
   applyHtmlPatchFallbackToSnapshot,
-  buildEditorDocumentSnapshot,
   mergeVisibleMediaAssets,
   shouldCommitOptimisticDocument,
   shouldProtectSuspiciousEmptySnapshot,
