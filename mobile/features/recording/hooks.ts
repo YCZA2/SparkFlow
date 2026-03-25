@@ -20,7 +20,7 @@ import {
 } from '@/features/fragments/store';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { waitForPipelineTerminal } from '@/features/pipelines/api';
-import { applyMediaIngestionPipelineResult } from '@/features/pipelines/mediaIngestion';
+import { syncMediaIngestionPipelineState } from '@/features/pipelines/mediaIngestionRecovery';
 import { uploadAudio } from '@/features/recording/api';
 import { updateScriptStatus } from '@/features/scripts/api';
 import { markScriptsStale } from '@/features/scripts/refreshSignal';
@@ -240,6 +240,9 @@ export function useAudioUpload() {
         audio_object_key: response.audio_object_key ?? undefined,
         audio_file_url: response.audio_file_url,
         audio_file_expires_at: response.audio_file_expires_at,
+        media_pipeline_run_id: response.pipeline_run_id,
+        media_pipeline_status: 'queued',
+        media_pipeline_error_message: null,
       });
       const nextResult = {
         pipeline_run_id: response.pipeline_run_id,
@@ -252,8 +255,8 @@ export function useAudioUpload() {
       setStatus('success');
       void waitForPipelineTerminal(response.pipeline_run_id, { timeoutMs: 180_000 })
         .then(async (pipeline) => {
-          const restoredFragment = await applyMediaIngestionPipelineResult(localFragment.id, pipeline);
-          if (!restoredFragment || !isMountedRef.current) {
+          const restoredFragment = await syncMediaIngestionPipelineState(localFragment.id, pipeline);
+          if (!restoredFragment || !isMountedRef.current || pipeline.status !== 'succeeded') {
             return;
           }
           setResult((current) =>

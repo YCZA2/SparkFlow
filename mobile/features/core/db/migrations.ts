@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const LATEST_SCHEMA_VERSION = 8;
+const LATEST_SCHEMA_VERSION = 9;
 
 /*创建本地镜像所需的 SQLite 表与索引。 */
 export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Promise<void> {
@@ -319,6 +319,15 @@ export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Prom
 
       CREATE INDEX IF NOT EXISTS media_assets_fragment_id_idx ON media_assets(fragment_id);
       CREATE INDEX IF NOT EXISTS media_assets_remote_asset_id_idx ON media_assets(remote_asset_id);
+    `);
+  }
+
+  // Version 9: 为媒体导入型 fragment 补充本地 pipeline 运行态，供失败提示与刷新重试复用
+  if (currentVersion < 9) {
+    await database.execAsync(`
+      ALTER TABLE fragments ADD COLUMN media_pipeline_run_id TEXT;
+      ALTER TABLE fragments ADD COLUMN media_pipeline_status TEXT;
+      ALTER TABLE fragments ADD COLUMN media_pipeline_error_message TEXT;
     `);
   }
 

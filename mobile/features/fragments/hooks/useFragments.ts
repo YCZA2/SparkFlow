@@ -11,6 +11,10 @@ import {
 } from '@/features/fragments/store';
 import { useFragmentStore, useFragmentList } from '@/features/fragments/store/fragmentStore';
 import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
+import {
+  isFailedMediaIngestionFragment,
+  retryFailedMediaIngestionFragment,
+} from '@/features/pipelines/mediaIngestionRecovery';
 import type {
   Fragment,
   FragmentVisualizationResponse,
@@ -44,8 +48,21 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
       }
 
       try {
-        const nextItems = await listLocalFragmentEntities(resolvedFolderId);
+        let nextItems = await listLocalFragmentEntities(resolvedFolderId);
         useFragmentStore.getState().setList(resolvedFolderId ?? null, nextItems);
+
+        if (mode === 'refresh') {
+          const failedItems = nextItems.filter(isFailedMediaIngestionFragment);
+          if (failedItems.length > 0) {
+            await Promise.allSettled(
+              failedItems.map(async (fragment) => {
+                await retryFailedMediaIngestionFragment(fragment);
+              })
+            );
+            nextItems = await listLocalFragmentEntities(resolvedFolderId);
+            useFragmentStore.getState().setList(resolvedFolderId ?? null, nextItems);
+          }
+        }
         setError(null);
       } catch (err) {
         const nextError = getErrorMessage(err, '加载失败');

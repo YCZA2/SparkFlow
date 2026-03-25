@@ -1,6 +1,10 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import {
+  isFailedMediaIngestionFragment,
+  isProcessingMediaIngestionFragment,
+} from '@/features/pipelines/mediaIngestionRecoveryState';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
 
@@ -44,18 +48,12 @@ function getSourceLabel(source: string): string {
   return labels[source] || source;
 }
 
-function isFragmentProcessing(fragment: Fragment): boolean {
-  /*语音/导入型 placeholder 在正文和转写都还没回写前，列表应明确提示处理中。 */
-  const body = getCleanText(fragment.plain_text_snapshot);
-  const transcript = getCleanText(fragment.transcript);
-  if (body || transcript) {
-    return false;
-  }
-  return fragment.source === 'voice' || fragment.source === 'video_parse';
-}
-
 function getTitle(fragment: Fragment): string {
-  if (isFragmentProcessing(fragment)) {
+  if (isFailedMediaIngestionFragment(fragment)) {
+    return '转录失败';
+  }
+
+  if (isProcessingMediaIngestionFragment(fragment)) {
     return '转录中...';
   }
 
@@ -72,7 +70,11 @@ function getTitle(fragment: Fragment): string {
 }
 
 function getPreview(fragment: Fragment): string {
-  if (isFragmentProcessing(fragment)) {
+  if (isFailedMediaIngestionFragment(fragment)) {
+    return truncate(getCleanText(fragment.media_pipeline_error_message) || '下拉刷新后会自动重试', 42);
+  }
+
+  if (isProcessingMediaIngestionFragment(fragment)) {
     return '正在提取正文';
   }
 
@@ -101,7 +103,8 @@ export function FragmentCard({
   isLastInSection = false,
 }: FragmentCardProps) {
   const theme = useAppTheme();
-  const isProcessing = isFragmentProcessing(fragment);
+  const isProcessing = isProcessingMediaIngestionFragment(fragment);
+  const isFailed = isFailedMediaIngestionFragment(fragment);
 
   return (
     <TouchableOpacity
@@ -145,7 +148,11 @@ export function FragmentCard({
 
         <View style={styles.footerRow}>
           <Text style={[styles.source, { color: theme.colors.textSubtle }]} numberOfLines={1}>
-            {isProcessing ? `${getSourceLabel(fragment.source)} · 转录中` : getSourceLabel(fragment.source)}
+            {isFailed
+              ? `${getSourceLabel(fragment.source)} · 转录失败`
+              : isProcessing
+                ? `${getSourceLabel(fragment.source)} · 转录中`
+                : getSourceLabel(fragment.source)}
           </Text>
         </View>
       </View>

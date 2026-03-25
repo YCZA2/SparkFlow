@@ -97,7 +97,10 @@ function isSameFragmentList(a: Fragment[], b: Fragment[]): boolean {
     a.length === b.length &&
     a.every(
       (fragment, index) =>
-        fragment.id === b[index]?.id && fragment.updated_at === b[index]?.updated_at
+        fragment.id === b[index]?.id &&
+        fragment.updated_at === b[index]?.updated_at &&
+        fragment.media_pipeline_status === b[index]?.media_pipeline_status &&
+        fragment.media_pipeline_error_message === b[index]?.media_pipeline_error_message
     )
   );
 }

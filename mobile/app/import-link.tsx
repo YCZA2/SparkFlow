@@ -15,11 +15,11 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/Themed';
 import { getOrCreateDeviceId } from '@/features/auth/device';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
-import { createLocalFragmentEntity } from '@/features/fragments/store';
+import { createLocalFragmentEntity, updateLocalFragmentEntity } from '@/features/fragments/store';
 import { importExternalAudio } from '@/features/imports/api';
 import { isImportLinkReady, resolveImportedFragmentId } from '@/features/imports/importState';
 import { waitForPipelineTerminal } from '@/features/pipelines/api';
-import { applyMediaIngestionPipelineResult } from '@/features/pipelines/mediaIngestion';
+import { syncMediaIngestionPipelineState } from '@/features/pipelines/mediaIngestionRecovery';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { getErrorMessage } from '@/utils/error';
 
@@ -53,16 +53,21 @@ export default function ImportLinkScreen() {
         deviceId,
       });
       const task = await importExternalAudio(trimmedShareUrl, params.folderId, localFragment.id);
+      await updateLocalFragmentEntity(localFragment.id, {
+        media_pipeline_run_id: task.pipeline_run_id,
+        media_pipeline_status: 'queued',
+        media_pipeline_error_message: null,
+      });
       const pipeline = await waitForPipelineTerminal(task.pipeline_run_id, {
         timeoutMs: 180_000,
       });
       const fragmentId = resolveImportedFragmentId(task.local_fragment_id ?? task.fragment_id, pipeline);
 
+      await syncMediaIngestionPipelineState(localFragment.id, pipeline);
+
       if (pipeline.status !== 'succeeded' || !fragmentId) {
         throw new Error(pipeline.error_message || '导入失败，请稍后重试');
       }
-
-      await applyMediaIngestionPipelineResult(localFragment.id, pipeline);
 
       markFragmentsStale();
       router.replace(`/fragment/${fragmentId}`);

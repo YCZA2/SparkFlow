@@ -3,6 +3,7 @@
  */
 
 import type { FragmentFolder } from './folder';
+import type { PipelineStatus } from './pipeline';
 
 export type FragmentSource = 'voice' | 'manual' | 'video_parse';
 export type FragmentAudioSource = 'upload' | 'external_link';
@@ -68,6 +69,9 @@ export interface Fragment {
   content_state?: 'empty' | 'transcript_only' | 'body_present';
   media_assets?: MediaAsset[];
   audio_object_key?: string | null;
+  media_pipeline_run_id?: string | null;
+  media_pipeline_status?: PipelineStatus | null;
+  media_pipeline_error_message?: string | null;
   backup_status?: 'pending' | 'synced' | 'failed';
   entity_version?: number;
   last_backup_at?: string | null;
