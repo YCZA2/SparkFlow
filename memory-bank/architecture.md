@@ -117,7 +117,7 @@ flowchart TD
 
 ### 3.3 Mobile Responsibilities
 
-- `AppSessionProvider` 在应用启动时完成后端地址初始化、token 恢复、测试用户自动登录。
+- `AppSessionProvider` 在应用启动时完成后端地址初始化、token 恢复与正式登录态校验；未登录时只进入认证页，不再自动补测试用户。
 - `AudioCaptureProvider` 承载录音状态、上传状态与录音文件回放能力。
 - `ImportActionSheetProvider` 承载底部 `+` 导入抽屉开关与当前文件夹上下文。
 - `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
@@ -300,7 +300,9 @@ flowchart TD
 ### 4.4 Backend Modules
 
 - `auth`: 测试 token 签发、当前用户信息、refresh。
-- 本地联调会确保默认测试用户 `test-user-001` 在数据库中存在，避免恢复旧 token 时触发用户外键错误。
+- 正式认证当前采用手机号验证码登录，JWT 仍携带 `device_id + session_version`，继续保持单设备在线。
+- 移动端本地 SQLite、fragment/script 正文文件、音频缓存与 staging 目录都已按 `user_id` 工作区隔离；切换账号时会切换整套本地工作区，而不是共用一份本地真值。
+- 本地联调仍可通过 `POST /api/auth/token` 走测试用户 `test-user-001`，但该入口只作为开发调试后门，不能再当作产品主登录流。
 - `backups`: 远端备份批量写入、快照拉取、restore session 审计与备份素材上传；不承担 fragments / folders 的日常主读取职责，但脚本生成、相似检索、可视化和 daily push 都会通过内部 snapshot reader 消费其中的 fragment snapshot。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
 - `fragments`: 当前对外只保留标签、相似检索和可视化接口；移动端 phase 1 已不再依赖其作为 fragments / folders 首屏真值读取来源，`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_html`，`plain_text_snapshot` 负责检索、摘要和生成输入。

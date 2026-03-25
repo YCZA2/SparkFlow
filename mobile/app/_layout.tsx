@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { PaperProvider } from 'react-native-paper';
 
-import { LoadingState, ScreenState } from '@/components/ScreenState';
+import { LoadingState } from '@/components/ScreenState';
 import { useColorScheme } from '@/components/useColorScheme';
 import { ImportActionSheet } from '@/components/ImportActionSheet';
 import { BackButton } from '@/components/layout/BackButton';
@@ -89,15 +89,26 @@ function RootLayoutNav() {
     return <LoadingState message="正在准备应用..." />;
   }
 
-  if (session.error) {
+  if (!session.isAuthenticated) {
     return (
-      <ScreenState
-        icon="⚠️"
-        title="应用初始化失败"
-        message={session.error}
-        actionLabel="重新登录"
-        onAction={session.loginWithTestUser}
-      />
+      <PaperProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack
+            screenOptions={{
+              headerBackTitle: '返回',
+              headerLeft: () => <BackButton />,
+            }}
+          >
+            <Stack.Screen
+              name="login"
+              options={{
+                headerShown: false,
+                title: '登录',
+              }}
+            />
+          </Stack>
+        </ThemeProvider>
+      </PaperProvider>
     );
   }
 
@@ -110,6 +121,13 @@ function RootLayoutNav() {
             headerLeft: () => <BackButton />,
           }}
         >
+          <Stack.Screen
+            name="login"
+            options={{
+              headerShown: false,
+              title: '登录',
+            }}
+          />
           <Stack.Screen
             name="index"
             options={{

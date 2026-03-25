@@ -15,11 +15,17 @@ def test_public_api_routes_are_stable() -> None:
     }
     expected = {
         ("/openapi.json", frozenset({"GET"})),
+        ("/docs", frozenset({"GET"})),
+        ("/docs/oauth2-redirect", frozenset({"GET"})),
+        ("/redoc", frozenset({"GET"})),
         ("/", frozenset({"GET"})),
         ("/health", frozenset({"GET"})),
         ("/api/auth/token", frozenset({"POST"})),
+        ("/api/auth/verification-codes", frozenset({"POST"})),
+        ("/api/auth/login", frozenset({"POST"})),
         ("/api/auth/me", frozenset({"GET"})),
         ("/api/auth/refresh", frozenset({"POST"})),
+        ("/api/auth/logout", frozenset({"POST"})),
         ("/api/backups/batch", frozenset({"POST"})),
         ("/api/backups/snapshot", frozenset({"GET"})),
         ("/api/backups/restore", frozenset({"POST"})),

@@ -2,7 +2,7 @@
 用户与设备会话模型
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from models.database import Base
@@ -20,8 +20,12 @@ class User(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     role = Column(String, default="user", nullable=False)  # 'user' | 'creator'
     nickname = Column(String, nullable=True)
+    phone_country_code = Column(String, nullable=False, default="+86")
+    phone_number = Column(String, nullable=True, unique=True)
+    status = Column(String, nullable=False, default="active")
     storage_quota = Column(Integer, default=1073741824)  # 预留：存储配额(字节)，默认1GB
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
 
     # 关联关系
     fragments = relationship("Fragment", back_populates="user", cascade="all, delete-orphan")
@@ -35,6 +39,7 @@ class User(Base):
     device_sessions = relationship("DeviceSession", back_populates="user", cascade="all, delete-orphan")
     backup_records = relationship("BackupRecord", back_populates="user", cascade="all, delete-orphan")
     restore_sessions = relationship("BackupRestoreSession", back_populates="user", cascade="all, delete-orphan")
+    verification_codes = relationship("PhoneVerificationCode", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, role={self.role}, nickname={self.nickname})>"
@@ -66,3 +71,31 @@ class DeviceSession(Base):
             f"<DeviceSession(id={self.id}, user_id={self.user_id}, "
             f"device_id={self.device_id}, status={self.status})>"
         )
+
+
+class PhoneVerificationCode(Base):
+    """记录手机号验证码发送与核销状态。"""
+
+    __tablename__ = "phone_verification_codes"
+    __table_args__ = (
+        Index("ix_phone_verification_codes_phone_number_created_at", "phone_number", "created_at"),
+        Index("ix_phone_verification_codes_user_id_created_at", "user_id", "created_at"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    phone_country_code = Column(String, nullable=False, default="+86")
+    phone_number = Column(String, nullable=False)
+    code_hash = Column(String, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    last_sent_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    send_count = Column(Integer, nullable=False, default=1)
+    is_latest = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="verification_codes")
+
+    def __repr__(self) -> str:
+        return f"<PhoneVerificationCode(id={self.id}, phone={self.phone_country_code}{self.phone_number})>"

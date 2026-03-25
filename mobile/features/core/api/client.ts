@@ -1,12 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { STORAGE_KEYS, getBackendUrl } from '@/constants/config';
-import { getOrCreateDeviceId } from '@/features/auth/device';
-import {
-  clearDeviceSessionInvalid,
-  getDeviceSessionInvalidReason,
-  markDeviceSessionInvalid,
-} from '@/features/auth/deviceSession';
+import { API_ENDPOINTS, STORAGE_KEYS, getBackendUrl } from '@/constants/config';
+import { clearDeviceSessionInvalid } from '@/features/auth/deviceSession';
+import { emitAuthSessionLost } from '@/features/auth/sessionEvents';
+import { clearPersistedAuthState } from '@/features/auth/sessionPersistence';
 import { createDebugLogEntry, emitDebugLog, serializeForLog } from '@/features/debug-log/store';
 
 export interface ApiResponse<T = unknown> {
@@ -55,51 +52,30 @@ export async function clearToken(): Promise<void> {
   await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
 }
 
-export async function fetchTestToken(): Promise<string> {
-  try {
-    const baseUrl = await getCurrentBaseUrl();
-    const deviceId = await getOrCreateDeviceId();
-    const response = await fetch(`${baseUrl}/api/auth/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ device_id: deviceId }),
-    });
-
-    const data: ApiResponse<{ access_token: string; token_type: string }> = await response.json();
-    if (!data.success || !data.data?.access_token) {
-      throw new ApiError('AUTH_FAILED', '获取测试用户 Token 失败');
-    }
-
-    const token = data.data.access_token;
-    await clearDeviceSessionInvalid();
-    await setToken(token);
-    return token;
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Network'))) {
-      throw new ApiError(
-        'NETWORK_ERROR',
-        '无法连接到后端服务。\n\n请检查：\n1. 后端服务是否已启动（uvicorn main:app --reload）\n2. 手机和电脑是否在同一 WiFi 网络\n3. 后端地址配置是否正确\n\n当前地址: ' + (await getCurrentBaseUrl())
-      );
-    }
-    throw new ApiError('AUTH_ERROR', '认证请求失败: ' + (error as Error).message);
-  }
-}
-
 async function ensureToken(): Promise<string> {
-  let token = await getToken();
+  const token = await getToken();
   if (!token) {
-    const invalidReason = await getDeviceSessionInvalidReason();
-    if (invalidReason) {
-      throw new ApiError('DEVICE_SESSION_INVALID', invalidReason);
-    }
-    token = await fetchTestToken();
+    throw new ApiError('AUTH_REQUIRED', '需要登录后才能继续使用');
   }
   return token;
+}
+
+export async function refreshAccessToken(currentToken: string): Promise<string> {
+  /*正式登录态下只尝试 refresh，不再自动补测试账号 token。 */
+  const baseUrl = await getCurrentBaseUrl();
+  const response = await fetch(`${baseUrl}${API_ENDPOINTS.AUTH.REFRESH}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${currentToken}`,
+    },
+  });
+  const data: ApiResponse<{ access_token: string }> = await response.json();
+  if (!response.ok || !data.success || !data.data?.access_token) {
+    throw new ApiError(data.error?.code || 'AUTH_REFRESH_FAILED', data.error?.message || '登录已失效，请重新登录');
+  }
+  await setToken(data.data.access_token);
+  await clearDeviceSessionInvalid();
+  return data.data.access_token;
 }
 
 async function readApiErrorPayload(response: Response): Promise<ApiResponse<unknown>['error'] | null> {
@@ -200,16 +176,27 @@ async function executeRequest<T>(
     if (response.status === 401) {
       const apiError = await readApiErrorPayload(response);
       if (isDeviceSessionInvalidError(apiError)) {
-        await clearToken();
-        await markDeviceSessionInvalid(apiError?.message);
+        await clearPersistedAuthState({
+          invalidReason: apiError?.message || '当前设备会话已失效，请重新登录',
+        });
+        emitAuthSessionLost(apiError?.message || '当前设备会话已失效，请重新登录');
         throw new ApiError('DEVICE_SESSION_INVALID', apiError?.message || '当前设备会话已失效，请重新登录');
       }
-      console.log('[API] 收到 401，尝试重新获取 Token');
-      await clearToken();
-      const newToken = await fetchTestToken();
-      const retryConfig = await buildRequest(newToken);
-      const retryResponse = await fetch(url, retryConfig);
-      return await parseApiResponse<T>(retryResponse, requestConfig as RequestConfig);
+      const currentToken = await getToken();
+      if (!currentToken) {
+        throw new ApiError('AUTH_REQUIRED', apiError?.message || '需要登录后才能继续使用');
+      }
+      try {
+        const refreshedToken = await refreshAccessToken(currentToken);
+        const retryConfig = await buildRequest(refreshedToken);
+        const retryResponse = await fetch(url, retryConfig);
+        return await parseApiResponse<T>(retryResponse, retryConfig as RequestConfig);
+      } catch (refreshError) {
+        const reason = refreshError instanceof ApiError ? refreshError.message : '登录已失效，请重新登录';
+        await clearPersistedAuthState({ invalidReason: reason });
+        emitAuthSessionLost(reason);
+        throw refreshError;
+      }
     }
 
     return await parseApiResponse<T>(response, requestConfig as RequestConfig);

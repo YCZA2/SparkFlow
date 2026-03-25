@@ -61,6 +61,8 @@ logger = get_logger(__name__)
 
 def ensure_local_test_user() -> None:
     """在本地启动阶段补齐默认测试用户，避免联调请求触发外键错误。"""
+    if not settings.ENABLE_TEST_AUTH:
+        return
     with SessionLocal() as db:
         if not inspect(db.bind).has_table("users"):
             return

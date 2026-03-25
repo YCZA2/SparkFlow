@@ -1,7 +1,7 @@
 import { and, eq, isNull, or } from 'drizzle-orm';
 
 import { getOrCreateDeviceId } from '@/features/auth/device';
-import { getLocalDatabase } from '@/features/core/db/database';
+import { getDatabaseWorkspaceUserId, getLocalDatabase } from '@/features/core/db/database';
 import { fragmentFoldersTable, fragmentsTable, mediaAssetsTable, scriptsTable } from '@/features/core/db/schema';
 import { readFragmentBodyFile, readScriptBodyFile } from '@/features/core/files/runtime';
 import { deserializeSpeakerSegments, deserializeTags } from '@/features/fragments/store/shared';
@@ -249,6 +249,9 @@ async function markBackupsFailed(): Promise<void> {
 }
 
 export async function flushBackupQueue(): Promise<void> {
+  if (!getDatabaseWorkspaceUserId()) {
+    return;
+  }
   if (!flushPromise) {
     flushPromise = (async () => {
       const deviceId = await getOrCreateDeviceId();

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getUserInfo, loginWithTestUser } from '@/features/auth/api';
+import { getUserInfo } from '@/features/auth/api';
 import {
   getCurrentBackendUrl,
   getToken,
@@ -57,8 +57,7 @@ export function useApiTestSuite() {
     try {
       let token = await getToken();
       if (!token) {
-        await loginWithTestUser();
-        token = await getToken();
+        throw new Error('当前未登录，请先在登录页完成手机号验证码登录');
       }
       const user = await getUserInfo();
       updateTest(1, 'success', `Token: ${token?.substring(0, 20)}...`, { user });

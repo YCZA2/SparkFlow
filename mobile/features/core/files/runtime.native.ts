@@ -36,19 +36,7 @@ interface NativeFileHandle extends ManagedNativeFile {
   size: number | null;
 }
 
-const ROOT_DIRECTORY = new Directory(Paths.document, 'sparkflow');
-const FRAGMENTS_DIRECTORY = new Directory(ROOT_DIRECTORY, 'fragments');
-const SCRIPTS_DIRECTORY = new Directory(ROOT_DIRECTORY, 'scripts');
-const STAGING_DIRECTORY = new Directory(Paths.cache, 'sparkflow', 'staging');
-const STAGING_IMAGE_DIRECTORY = new Directory(STAGING_DIRECTORY, 'images');
-const STAGING_AUDIO_DIRECTORY = new Directory(STAGING_DIRECTORY, 'audio');
-
-const ROOT_DIRECTORY_URI = `${toDirectoryHandle(ROOT_DIRECTORY).uri}`;
-const FRAGMENTS_DIRECTORY_URI = `${toDirectoryHandle(FRAGMENTS_DIRECTORY).uri}`;
-const SCRIPTS_DIRECTORY_URI = `${toDirectoryHandle(SCRIPTS_DIRECTORY).uri}`;
-const STAGING_DIRECTORY_URI = `${toDirectoryHandle(STAGING_DIRECTORY).uri}`;
-const STAGING_IMAGE_DIRECTORY_URI = `${STAGING_DIRECTORY_URI}images/`;
-const STAGING_AUDIO_DIRECTORY_URI = `${STAGING_DIRECTORY_URI}audio/`;
+let currentWorkspaceUserId: string | null = null;
 
 /*确保目录 URI 以 `/` 结尾，避免字符串拼接时出现歧义。 */
 function ensureTrailingSlash(uri: string): string {
@@ -62,6 +50,56 @@ function toDirectoryHandle(directory: Directory): NativeDirectoryHandle {
 
 function toFileHandle(file: File): NativeFileHandle {
   return file as unknown as NativeFileHandle;
+}
+
+function sanitizeWorkspaceId(userId: string): string {
+  /*把 user_id 规整为安全目录名，避免本地工作区路径出现特殊字符。 */
+  return userId.replace(/[^a-zA-Z0-9_-]+/g, '-');
+}
+
+function requireWorkspaceUserId(): string {
+  /*当前文件 runtime 只服务登录后的账号工作区。 */
+  if (!currentWorkspaceUserId) {
+    throw new Error('当前未挂载登录工作区，无法访问本地文件');
+  }
+  return currentWorkspaceUserId;
+}
+
+function getRootDirectoryUri(): string {
+  return ensureTrailingSlash(
+    `${toDirectoryHandle(new Directory(Paths.document, 'sparkflow', 'workspaces', sanitizeWorkspaceId(requireWorkspaceUserId()))).uri}`
+  );
+}
+
+function getFragmentsDirectoryUri(): string {
+  return `${getRootDirectoryUri()}fragments/`;
+}
+
+function getScriptsDirectoryUri(): string {
+  return `${getRootDirectoryUri()}scripts/`;
+}
+
+function getStagingDirectoryUri(): string {
+  return ensureTrailingSlash(
+    `${toDirectoryHandle(new Directory(Paths.cache, 'sparkflow', 'workspaces', sanitizeWorkspaceId(requireWorkspaceUserId()), 'staging')).uri}`
+  );
+}
+
+function getStagingImageDirectoryUri(): string {
+  return `${getStagingDirectoryUri()}images/`;
+}
+
+function getStagingAudioDirectoryUri(): string {
+  return `${getStagingDirectoryUri()}audio/`;
+}
+
+export function getFileWorkspaceUserId(): string | null {
+  return currentWorkspaceUserId;
+}
+
+export function setFileRuntimeWorkspace(userId: string | null): void {
+  /*切换当前文件工作区，让正文和媒体都落到对应账号目录下。 */
+  currentWorkspaceUserId = userId;
 }
 
 function ensureDirectoryAsync(directoryUri: string): Promise<string> {
@@ -82,12 +120,12 @@ function sanitizeFileName(name: string, fallback: string): string {
 
 /*按片段 id 生成持久化目录，统一承接正文与元信息文件。 */
 function getFragmentDirectoryUri(fragmentId: string): string {
-  return `${FRAGMENTS_DIRECTORY_URI}${fragmentId}/`;
+  return `${getFragmentsDirectoryUri()}${fragmentId}/`;
 }
 
 /*按 script id 生成持久化目录，统一承接成稿正文文件。 */
 function getScriptDirectoryUri(scriptId: string): string {
-  return `${SCRIPTS_DIRECTORY_URI}${scriptId}/`;
+  return `${getScriptsDirectoryUri()}${scriptId}/`;
 }
 
 /*为单条片段创建 meta 子目录，用于放置草稿和辅助文件。 */
@@ -196,8 +234,9 @@ export async function clearFragmentDraftBodyFile(fragmentId: string): Promise<vo
 
 /*枚举当前本地存在正文草稿的片段 id，用于启动时恢复同步。 */
 export async function listFragmentDraftBodyIds(): Promise<string[]> {
-  await ensureDirectoryAsync(FRAGMENTS_DIRECTORY_URI);
-  const entries = toDirectoryHandle(FRAGMENTS_DIRECTORY).list();
+  const fragmentsDirectoryUri = getFragmentsDirectoryUri();
+  await ensureDirectoryAsync(fragmentsDirectoryUri);
+  const entries = toDirectoryHandle(new Directory(fragmentsDirectoryUri)).list();
   return entries
     .filter((entry): entry is Directory => entry instanceof Directory)
     .map((directory) => directory.name)
@@ -222,8 +261,9 @@ function deleteDirectoryRecursively(directory: Directory): void {
 
 /*递归清空 fragments 目录，供显式恢复时重建本地正文文件使用。 */
 export async function resetFragmentFiles(): Promise<void> {
-  await ensureDirectoryAsync(FRAGMENTS_DIRECTORY_URI);
-  for (const entry of toDirectoryHandle(FRAGMENTS_DIRECTORY).list()) {
+  const fragmentsDirectoryUri = getFragmentsDirectoryUri();
+  await ensureDirectoryAsync(fragmentsDirectoryUri);
+  for (const entry of toDirectoryHandle(new Directory(fragmentsDirectoryUri)).list()) {
     if (entry instanceof Directory) {
       deleteDirectoryRecursively(entry);
     } else {
@@ -235,8 +275,9 @@ export async function resetFragmentFiles(): Promise<void> {
 /*删除不在 keepIds 集合中的 fragment 目录，供恢复后清理已删除/过期碎片的文件。
  * 避免在恢复事务前就清空全部目录，防止 SQLite 写入失败时本地正文数据丢失。 */
 export async function cleanupStaleFragmentDirectories(keepIds: Set<string>): Promise<void> {
-  await ensureDirectoryAsync(FRAGMENTS_DIRECTORY_URI);
-  for (const entry of toDirectoryHandle(FRAGMENTS_DIRECTORY).list()) {
+  const fragmentsDirectoryUri = getFragmentsDirectoryUri();
+  await ensureDirectoryAsync(fragmentsDirectoryUri);
+  for (const entry of toDirectoryHandle(new Directory(fragmentsDirectoryUri)).list()) {
     if (entry instanceof Directory && !keepIds.has(entry.name)) {
       deleteDirectoryRecursively(entry);
     }
@@ -245,8 +286,9 @@ export async function cleanupStaleFragmentDirectories(keepIds: Set<string>): Pro
 
 /*递归清空 scripts 目录，供显式恢复或重建成稿本地镜像使用。 */
 export async function resetScriptFiles(): Promise<void> {
-  await ensureDirectoryAsync(SCRIPTS_DIRECTORY_URI);
-  for (const entry of toDirectoryHandle(SCRIPTS_DIRECTORY).list()) {
+  const scriptsDirectoryUri = getScriptsDirectoryUri();
+  await ensureDirectoryAsync(scriptsDirectoryUri);
+  for (const entry of toDirectoryHandle(new Directory(scriptsDirectoryUri)).list()) {
     if (entry instanceof Directory) {
       deleteDirectoryRecursively(entry);
     } else {
@@ -291,8 +333,8 @@ export async function stageExternalFile(input: {
   source: ManagedAppFileSource;
 }): Promise<ManagedAppFile> {
   const targetDirectoryUri = input.kind === 'audio'
-    ? await ensureDirectoryAsync(STAGING_AUDIO_DIRECTORY_URI)
-    : await ensureDirectoryAsync(STAGING_IMAGE_DIRECTORY_URI);
+    ? await ensureDirectoryAsync(getStagingAudioDirectoryUri())
+    : await ensureDirectoryAsync(getStagingImageDirectoryUri());
   const uniqueName = `${Date.now()}-${sanitizeFileName(
     input.fileName,
     input.kind === 'audio' ? 'audio.bin' : 'image.bin'
@@ -361,12 +403,15 @@ export async function prepareManagedImageFile(
 
 /*确保根目录与 staging 目录在启动阶段就绪，减少首写时的抖动。 */
 export async function ensureFileRuntimeReady(): Promise<void> {
+  if (!currentWorkspaceUserId) {
+    return;
+  }
   await Promise.all([
-    ensureDirectoryAsync(ROOT_DIRECTORY_URI),
-    ensureDirectoryAsync(FRAGMENTS_DIRECTORY_URI),
-    ensureDirectoryAsync(SCRIPTS_DIRECTORY_URI),
-    ensureDirectoryAsync(STAGING_DIRECTORY_URI),
-    ensureDirectoryAsync(STAGING_IMAGE_DIRECTORY_URI),
-    ensureDirectoryAsync(STAGING_AUDIO_DIRECTORY_URI),
+    ensureDirectoryAsync(getRootDirectoryUri()),
+    ensureDirectoryAsync(getFragmentsDirectoryUri()),
+    ensureDirectoryAsync(getScriptsDirectoryUri()),
+    ensureDirectoryAsync(getStagingDirectoryUri()),
+    ensureDirectoryAsync(getStagingImageDirectoryUri()),
+    ensureDirectoryAsync(getStagingAudioDirectoryUri()),
   ]);
 }

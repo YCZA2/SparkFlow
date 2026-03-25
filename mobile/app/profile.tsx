@@ -56,10 +56,10 @@ function MenuItem({
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, isAuthenticated, error, loginWithTestUser } = useAuth();
+  const { user, isAuthenticated, error, logout } = useAuth();
   const theme = useAppTheme();
   const [isRestoring, setIsRestoring] = useState(false);
-  const [isRelogging, setIsRelogging] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleRestore = useCallback(() => {
     /*通过显式确认触发恢复，避免静默覆盖本地 SQLite 真值。 */
@@ -92,20 +92,19 @@ export default function ProfileScreen() {
     );
   }, []);
 
-  const handleRelogin = useCallback(() => {
-    /*显式重新登录当前设备，恢复 backup 与 AI 的远端访问能力。 */
+  const handleLogout = useCallback(() => {
+    /*账号中心里显式退出登录，切回手机号验证码页。 */
     void (async () => {
       try {
-        setIsRelogging(true);
-        await loginWithTestUser();
-        Alert.alert('已重新连接', '当前设备已经重新拿到在线会话，可以继续备份和调用 AI。');
-      } catch (loginError) {
-        Alert.alert('重新连接失败', getErrorMessage(loginError, '重新登录失败，请稍后重试'));
+        setIsLoggingOut(true);
+        await logout();
+      } catch (logoutError) {
+        Alert.alert('退出失败', getErrorMessage(logoutError, '退出登录失败，请稍后重试'));
       } finally {
-        setIsRelogging(false);
+        setIsLoggingOut(false);
       }
     })();
-  }, [loginWithTestUser]);
+  }, [logout]);
 
   return (
     <ScreenContainer>
@@ -131,10 +130,12 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.userInfo}>
               <Text style={[styles.userName, { color: theme.colors.text }]}>
-                {isAuthenticated ? user?.nickname || '测试博主' : '未登录'}
+                {isAuthenticated ? user?.nickname || `用户${user?.phone_number?.slice(-4) ?? ''}` : '未登录'}
               </Text>
               <Text style={[styles.userId, { color: theme.colors.textSubtle }]}>
-                {isAuthenticated ? `ID: ${user?.user_id}` : error || '当前处于本地只读模式'}
+                {isAuthenticated
+                  ? `${user?.phone_country_code || '+86'} ${user?.phone_number || user?.user_id}`
+                  : error || '请先登录后使用'}
               </Text>
             </View>
           </View>
@@ -178,15 +179,15 @@ export default function ProfileScreen() {
               tone={theme}
             />
             <MenuItem
-              icon="🔐"
-              title="重新连接当前设备"
+              icon="🚪"
+              title="退出登录"
               subtitle={
-                isRelogging
-                  ? '正在重新申请当前 device session'
-                  : '当设备会话失效时，用它恢复备份和 AI 能力'
+                isLoggingOut
+                  ? '正在退出当前账号工作区'
+                  : '退出后将返回手机号验证码登录页'
               }
-              onPress={handleRelogin}
-              disabled={isRelogging || isRestoring}
+              onPress={handleLogout}
+              disabled={isLoggingOut || isRestoring}
               tone={theme}
             />
             <MenuItem
@@ -198,7 +199,7 @@ export default function ProfileScreen() {
                   : '显式用远端备份覆盖当前本地 fragments / folders'
               }
               onPress={handleRestore}
-              disabled={isRestoring || isRelogging}
+              disabled={isRestoring || isLoggingOut}
               tone={theme}
             />
             <MenuItem
@@ -206,7 +207,7 @@ export default function ProfileScreen() {
               title="API 测试"
               subtitle="测试后端连接"
               onPress={() => router.push('/test-api')}
-              disabled={isRestoring || isRelogging}
+              disabled={isRestoring || isLoggingOut}
               tone={theme}
             />
             <MenuItem
@@ -215,7 +216,7 @@ export default function ProfileScreen() {
               subtitle="查看前端运行时错误和接口异常"
               onPress={() => router.push('/debug-logs')}
               hideBorder
-              disabled={isRestoring || isRelogging}
+              disabled={isRestoring || isLoggingOut}
               tone={theme}
             />
           </View>

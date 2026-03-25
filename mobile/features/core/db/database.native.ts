@@ -4,16 +4,53 @@ import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 import { runLocalDatabaseMigrations } from '@/features/core/db/migrations';
 import { localSchema } from '@/features/core/db/schema';
 
-const DATABASE_NAME = 'sparkflow-local.db';
+const DATABASE_PREFIX = 'sparkflow-local';
 
 let databasePromise: Promise<SQLiteDatabase> | null = null;
 let drizzlePromise: Promise<ExpoSQLiteDatabase<typeof localSchema> & { $client: SQLiteDatabase }> | null = null;
+let currentWorkspaceUserId: string | null = null;
+
+function sanitizeWorkspaceId(userId: string): string {
+  /*把 user_id 规整为安全的 SQLite 文件名片段，避免工作区路径包含特殊字符。 */
+  return userId.replace(/[^a-zA-Z0-9_-]+/g, '-');
+}
+
+function resolveDatabaseName(): string {
+  /*当前本地数据库按 user workspace 分区，未挂载工作区时禁止打开业务库。 */
+  if (!currentWorkspaceUserId) {
+    throw new Error('当前未挂载登录工作区，无法访问本地数据库');
+  }
+  return `${DATABASE_PREFIX}-${sanitizeWorkspaceId(currentWorkspaceUserId)}.db`;
+}
+
+async function disposeCurrentClient(): Promise<void> {
+  /*切换工作区前尽力关闭旧连接，避免继续读写上一个账号的本地库。 */
+  if (databasePromise) {
+    const client = await databasePromise.catch(() => null);
+    await (client as { closeAsync?: () => Promise<void> } | null)?.closeAsync?.();
+  }
+}
+
+export async function setDatabaseWorkspace(userId: string | null): Promise<void> {
+  /*切换当前数据库工作区，并让后续调用重新打开对应用户的 SQLite。 */
+  if (currentWorkspaceUserId === userId) {
+    return;
+  }
+  await disposeCurrentClient();
+  currentWorkspaceUserId = userId;
+  databasePromise = null;
+  drizzlePromise = null;
+}
+
+export function getDatabaseWorkspaceUserId(): string | null {
+  return currentWorkspaceUserId;
+}
 
 /*惰性打开 SQLite 连接，并保证迁移只执行一次。 */
 export async function getSQLiteClient(): Promise<SQLiteDatabase> {
   if (!databasePromise) {
     databasePromise = (async () => {
-      const database = await openDatabaseAsync(DATABASE_NAME);
+      const database = await openDatabaseAsync(resolveDatabaseName());
       await runLocalDatabaseMigrations(database);
       return database;
     })();

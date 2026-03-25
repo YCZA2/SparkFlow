@@ -13,7 +13,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from .config import settings
 from .exceptions import AuthenticationError
-from models import SessionLocal
+from models import SessionLocal, User
 from domains.device_sessions import repository as device_session_repository
 
 # JWT 配置
@@ -134,6 +134,9 @@ async def get_current_user(
                 or int(session.session_version) != int(session_version)
             ):
                 raise AuthenticationError(message="当前设备会话已失效，请重新登录")
+            user = db.query(User).filter(User.id == user_id).first()
+            if user is None or user.status != "active":
+                raise AuthenticationError(message="当前账号不可用，请重新登录")
             device_session_repository.touch_session(
                 db=db,
                 session=session,

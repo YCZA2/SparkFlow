@@ -18,7 +18,6 @@ export const DEFAULT_API_BASE_URL = Platform.OS === 'ios'
 export const STORAGE_KEYS = {
   TOKEN: 'auth_token',
   USER: 'user_info',
-  REFRESH_TOKEN: 'refresh_token',
   BACKEND_URL: '@backend_url',
   DEBUG_LOGS: '@debug_logs',
   DEVICE_ID: '@device_id',
@@ -31,8 +30,11 @@ export const STORAGE_KEYS = {
 export const API_ENDPOINTS = {
   AUTH: {
     TOKEN: '/api/auth/token',
+    VERIFICATION_CODES: '/api/auth/verification-codes',
+    LOGIN: '/api/auth/login',
     ME: '/api/auth/me',
     REFRESH: '/api/auth/refresh',
+    LOGOUT: '/api/auth/logout',
   },
   BACKUPS: {
     BATCH: '/api/backups/batch',

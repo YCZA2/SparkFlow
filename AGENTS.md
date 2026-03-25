@@ -184,6 +184,8 @@ http://<your-lan-ip>:8000
 - 文件存储默认通过统一对象存储抽象接入；本地开发可使用 `FILE_STORAGE_PROVIDER=local`，线上默认按私有 OSS + 签名 URL 设计，不要再把磁盘路径或 `storage_path` / `audio_path` 暴露为对外 contract
 - 当前首页与文件夹页底部 `+` 的产品语义是“打开导入抽屉”；新增外部导入能力时优先扩展该抽屉，而不是把 `+` 改回直接跳页
 - `mobile/features` 下的状态 helper 以 TypeScript 源码为单一事实源，不要再提交 `.js` / `.d.ts` 编译产物；纯状态测试统一放在 `mobile/tests/*.test.ts`，通过 `mobile/scripts/run-state-tests.mjs` 运行
+- 当前正式产品形态已切到**登录后工作区**：未登录不能进入业务页面；移动端本地 SQLite、正文文件、音频缓存、图片 staging 与 backup queue 都必须按 `user_id` 工作区隔离，禁止再把不同账号的数据落到同一份本地库/目录中
+- `POST /api/auth/token` 只允许作为本地开发联调入口；正式登录默认走手机号验证码，涉及认证流程时不要再恢复“自动使用测试用户进入主流程”的实现
 
 ## When Updating Docs
 

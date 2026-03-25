@@ -233,6 +233,55 @@ async def test_auth_token_me_and_refresh(async_client, auth_headers_factory) -> 
 
 
 @pytest.mark.asyncio
+async def test_phone_verification_login_me_refresh_and_logout(async_client) -> None:
+    """手机号验证码登录应支持 me、refresh 和 logout 的完整链路。"""
+    verification_response = await async_client.post(
+        "/api/auth/verification-codes",
+        json={"phone_number": "13800138000", "phone_country_code": "+86"},
+    )
+    assert verification_response.status_code == 200
+    debug_code = verification_response.json()["data"]["debug_code"]
+    assert debug_code == "123456"
+
+    login_response = await async_client.post(
+        "/api/auth/login",
+        json={
+            "phone_number": "13800138000",
+            "phone_country_code": "+86",
+            "verification_code": debug_code,
+            "device_id": "device-a",
+        },
+    )
+    assert login_response.status_code == 200
+    payload = login_response.json()["data"]
+    assert payload["user"]["phone_number"] == "13800138000"
+    assert payload["token_type"] == "bearer"
+
+    headers = {"Authorization": f"Bearer {payload['access_token']}"}
+    me_response = await async_client.get("/api/auth/me", headers=headers)
+    assert me_response.status_code == 200
+    assert me_response.json()["data"]["phone_number"] == "13800138000"
+
+    refresh_response = await async_client.post("/api/auth/refresh", headers=headers)
+    assert refresh_response.status_code == 200
+    refreshed_token = refresh_response.json()["data"]["access_token"]
+    assert refreshed_token
+
+    logout_response = await async_client.post(
+        "/api/auth/logout",
+        headers={"Authorization": f"Bearer {refreshed_token}"},
+    )
+    assert logout_response.status_code == 200
+
+    invalid_me_response = await async_client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {refreshed_token}"},
+    )
+    assert invalid_me_response.status_code == 401
+    assert "设备会话已失效" in invalid_me_response.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_auth_token_recreates_missing_test_user(async_client, db_session_factory) -> None:
     """签发测试令牌时应自动补齐缺失的测试用户。"""
     with db_session_factory() as db:

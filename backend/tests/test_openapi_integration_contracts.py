@@ -34,12 +34,32 @@ def prepare_database():
 @pytest.fixture
 def api_schema():
     """加载包含真实启动副作用的 OpenAPI schema。"""
-    return schemathesis.openapi.from_asgi("/openapi.json", create_app())
+    return schemathesis.openapi.from_asgi("/openapi.json", create_app(enable_runtime_side_effects=False))
 
 
 def test_auth_token_openapi_contract_smoke(api_schema) -> None:
     """认证入口应满足 OpenAPI 中声明的最小契约。"""
     operation = api_schema["/api/auth/token"]["POST"]
     case = operation.make_case()
+    response = case.call()
+    case.validate_response(response)
+
+
+def test_auth_login_openapi_contract_smoke(api_schema) -> None:
+    """手机号验证码登录入口应满足 OpenAPI 中声明的最小契约。"""
+    verification_operation = api_schema["/api/auth/verification-codes"]["POST"]
+    verification_case = verification_operation.make_case(body={"phone_number": "13800138000", "phone_country_code": "+86"})
+    verification_response = verification_case.call()
+    verification_case.validate_response(verification_response)
+
+    operation = api_schema["/api/auth/login"]["POST"]
+    case = operation.make_case(
+        body={
+            "phone_number": "13800138000",
+            "phone_country_code": "+86",
+            "verification_code": "123456",
+            "device_id": "test-device",
+        }
+    )
     response = case.call()
     case.validate_response(response)

@@ -12,9 +12,10 @@ from sqlalchemy.orm import sessionmaker
 
 DEFAULT_TEST_DATABASE_URL = "postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow_test"
 
-os.environ.setdefault("DEBUG", "false")
+os.environ.setdefault("DEBUG", "true")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("DASHSCOPE_API_KEY", "test-dashscope-key")
+os.environ.setdefault("ENABLE_TEST_AUTH", "true")
 os.environ.setdefault("DATABASE_URL", os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL))
 
 from main import create_app

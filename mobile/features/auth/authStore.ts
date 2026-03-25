@@ -6,13 +6,17 @@
 import { create } from 'zustand';
 
 import {
+  fetchCurrentUser,
   getUserInfo,
-  loginWithTestUser as loginWithTestUserApi,
+  hydrateAuthenticatedWorkspace,
+  loginWithPhoneCode as loginWithPhoneCodeApi,
+  requestVerificationCode as requestVerificationCodeApi,
   logout as logoutApi,
   parseUserFromToken,
   type UserInfo,
 } from '@/features/auth/api';
 import { getDeviceSessionInvalidReason } from '@/features/auth/deviceSession';
+import { activateUserWorkspace } from '@/features/auth/workspace';
 import { getToken } from '@/features/core/api/client';
 import { getErrorMessage } from '@/utils/error';
 
@@ -21,13 +25,20 @@ export interface AuthState {
   isReady: boolean;
   isAuthenticated: boolean;
   error: string | null;
+  sessionStatus: 'anonymous' | 'authenticated' | 'expired';
 }
 
 export interface AuthActions {
   setUser: (user: UserInfo | null) => void;
   setReady: (ready: boolean) => void;
   setError: (error: string | null) => void;
-  loginWithTestUser: () => Promise<UserInfo>;
+  requestVerificationCode: (phoneNumber: string) => Promise<{
+    sent: boolean;
+    resend_after_seconds: number;
+    expires_in_seconds: number;
+    debug_code?: string | null;
+  }>;
+  loginWithPhoneCode: (phoneNumber: string, verificationCode: string) => Promise<UserInfo>;
   logout: () => Promise<void>;
   refreshUserInfo: () => Promise<void>;
   bootstrap: () => Promise<void>;
@@ -41,10 +52,16 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   isReady: false,
   isAuthenticated: false,
   error: null,
+  sessionStatus: 'anonymous',
 
   /*操作*/
   setUser: (user) => {
-    set({ user, isAuthenticated: !!user, error: null });
+    set({
+      user,
+      isAuthenticated: !!user,
+      error: null,
+      sessionStatus: user ? 'authenticated' : 'anonymous',
+    });
   },
 
   setReady: (ready) => {
@@ -55,32 +72,45 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     set({ error });
   },
 
-  loginWithTestUser: async () => {
+  requestVerificationCode: async (phoneNumber) => {
     try {
-      const user = await loginWithTestUserApi();
-      set({ user, isAuthenticated: true, error: null });
+      const result = await requestVerificationCodeApi(phoneNumber);
+      set({ error: null });
+      return result;
+    } catch (err) {
+      const error = getErrorMessage(err, '验证码发送失败');
+      set({ error });
+      throw err;
+    }
+  },
+
+  loginWithPhoneCode: async (phoneNumber, verificationCode) => {
+    try {
+      const user = await loginWithPhoneCodeApi(phoneNumber, verificationCode);
+      set({ user, isAuthenticated: true, error: null, sessionStatus: 'authenticated' });
       return user;
     } catch (err) {
       const error = getErrorMessage(err, '登录失败');
-      set({ error });
+      set({ error, sessionStatus: 'anonymous' });
       throw err;
     }
   },
 
   logout: async () => {
     await logoutApi();
-    set({ user: null, isAuthenticated: false, error: null });
+    set({ user: null, isAuthenticated: false, error: null, sessionStatus: 'anonymous' });
   },
 
   refreshUserInfo: async () => {
     const token = await getToken();
     if (!token) {
-      set({ user: null, isAuthenticated: false });
+      set({ user: null, isAuthenticated: false, sessionStatus: 'anonymous' });
       return;
     }
 
-    const user = parseUserFromToken(token);
-    set({ user, isAuthenticated: true });
+    const remoteUser = await fetchCurrentUser();
+    const user = { ...parseUserFromToken(token), ...remoteUser };
+    set({ user, isAuthenticated: true, sessionStatus: 'authenticated' });
   },
 
   bootstrap: async () => {
@@ -89,28 +119,40 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       const token = await getToken();
 
       if (token) {
-        /*优先从 AsyncStorage 恢复用户信息，避免重复解析 token*/
+        /*优先校验并恢复正式登录态，再挂载当前账号工作区。 */
         const storedUser = await getUserInfo();
-        if (storedUser) {
-          set({ user: storedUser, isAuthenticated: true, isReady: true });
-        } else {
-          const user = parseUserFromToken(token);
-          set({ user, isAuthenticated: true, isReady: true });
+        let user = storedUser;
+        try {
+          user = (await hydrateAuthenticatedWorkspace()) ?? storedUser;
+        } catch (err) {
+          if (!storedUser) {
+            throw err;
+          }
+          await activateUserWorkspace(storedUser.user_id);
         }
+        if (!user) {
+          set({ user: null, isAuthenticated: false, isReady: true, sessionStatus: 'anonymous' });
+          return;
+        }
+        set({ user, isAuthenticated: true, isReady: true, sessionStatus: 'authenticated' });
       } else {
         const invalidReason = await getDeviceSessionInvalidReason();
         if (invalidReason) {
-          /*设备会话失效后保持本地只读，不自动抢回远端在线资格。 */
-          set({ user: null, isAuthenticated: false, error: invalidReason, isReady: true });
+          /*设备会话失效后直接回到登录态，并提示用户重新登录。 */
+          set({
+            user: null,
+            isAuthenticated: false,
+            error: invalidReason,
+            isReady: true,
+            sessionStatus: 'expired',
+          });
           return;
         }
-        /*无 token，自动使用测试用户登录*/
-        const user = await get().loginWithTestUser();
-        set({ user, isAuthenticated: true, isReady: true });
+        set({ user: null, isAuthenticated: false, isReady: true, sessionStatus: 'anonymous' });
       }
     } catch (err) {
       const error = getErrorMessage(err, '初始化失败');
-      set({ user: null, isAuthenticated: false, error, isReady: true });
+      set({ user: null, isAuthenticated: false, error, isReady: true, sessionStatus: 'expired' });
     }
   },
 }));

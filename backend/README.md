@@ -5,7 +5,7 @@ SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Doc
 ## 今日进展（2026-03-25）
 
 - 后端已经补齐 phase 1 local-first 所需的备份恢复能力：`/api/backups/batch`、`/api/backups/snapshot`、`/api/backups/restore`、`/api/backups/assets` 与 `/api/backups/assets/access`。
-- 认证链路已经加入 `device_id + session_version` 语义；登录、刷新 token、备份、恢复和 AI / 转写相关请求都受单设备在线约束。
+- 正式认证链路已经升级为 `+86` 手机号验证码登录，JWT 继续携带 `device_id + session_version`；登录、刷新 token、备份、恢复和 AI / 转写相关请求都受单设备在线约束。
 - `transcriptions`、`external_media`、`scripts/generation` 现已支持客户端本地快照 / 本地 placeholder 驱动，不再把“先创建远端 fragment 业务记录”作为默认入口。
 - 后端已补齐通用 `fragment snapshot reader`：脚本生成上下文、相似检索、灵感云图和每日推盘都统一从 `backup_records` 读取已同步成功的 fragment snapshot，不再把 `fragments` 表当输入真值。
 - `media_ingestion` 已调整为 transcript-first：主 pipeline 在转写落库后即可成功，`summary` / `tags` / vector 改为异步衍生回填，不再阻塞上传和抖音导入主链路。
@@ -53,8 +53,19 @@ bash scripts/dev-mobile.sh
 bash scripts/test-all.sh
 ```
 
-本地联调默认测试账号 `test-user-001` 会在应用启动和 `POST /api/auth/token` 时自动补齐到数据库，避免切库后出现外键错误。
-`POST /api/auth/token` 现在会接收 `device_id` 并创建 `device session`，用于单设备在线校验。
+正式产品登录当前走：
+
+- `POST /api/auth/verification-codes`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+
+本地联调仍保留测试入口：
+
+- `POST /api/auth/token`
+
+默认测试账号 `test-user-001` 会在启用 `ENABLE_TEST_AUTH=true` 时按需补齐到数据库，避免联调脚本和旧用例触发外键错误。
 
 当前脚本生成已经升级为“三层写作上下文 + 主题 + SOP 大纲”链路，不再使用 `mode_a / mode_b` 两套独立工作流配置。
 
@@ -73,7 +84,7 @@ cd backend
 
 这个联调脚本会：
 
-- 调用 `POST /api/auth/token` 获取测试用户 token
+- 调用 `POST /api/auth/token` 获取开发用测试 token
 - 创建 1-2 条手动文本碎片
 - 调用 `POST /api/scripts/generation`
 - 轮询 `GET /api/pipelines/{run_id}` 直到终态
