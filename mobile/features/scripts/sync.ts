@@ -28,11 +28,13 @@ export async function syncRemoteScriptsToLocal(): Promise<void> {
 
 /*把单条远端 script 详情落成本地真值，供详情页缺本地缓存时回补。 */
 export async function syncRemoteScriptDetailToLocal(scriptId: string) {
+  // 先读本地，有真值直接返回，避免再查一次 DB
+  const localScript = await readLocalScriptEntity(scriptId);
+  if (localScript) {
+    return localScript;
+  }
+  // 本地无行时再检查 body 文件，防止旧投影覆盖本地已编辑正文
   if (!(await shouldHydrateRemoteScriptEntity(scriptId))) {
-    const localScript = await readLocalScriptEntity(scriptId);
-    if (localScript) {
-      return localScript;
-    }
     throw new Error('本地成稿已存在且禁止被远端旧稿覆盖');
   }
   const detail = await fetchScriptDetail(scriptId);

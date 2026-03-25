@@ -84,13 +84,11 @@ export async function readLocalScriptEntity(scriptId: string): Promise<Script | 
 /*在远端回补前检查本地是否已有真值，避免旧投影覆盖已编辑正文。 */
 export async function shouldHydrateRemoteScriptEntity(scriptId: string): Promise<boolean> {
   const database = await getLocalDatabase();
-  const rows = await database
-    .select()
-    .from(scriptsTable)
-    .where(eq(scriptsTable.id, scriptId))
-    .limit(1);
+  const [rows, bodyHtml] = await Promise.all([
+    database.select().from(scriptsTable).where(eq(scriptsTable.id, scriptId)).limit(1),
+    readScriptBodyFile(scriptId),
+  ]);
   const row = rows[0];
-  const bodyHtml = await readScriptBodyFile(scriptId);
   return !shouldSkipRemoteScriptHydration({
     hasLocalRow: Boolean(row),
     backupStatus: row?.backupStatus ?? null,
