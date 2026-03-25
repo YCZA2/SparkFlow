@@ -30,10 +30,9 @@ export async function applyMediaIngestionPipelineResult(
 
   const current = await readLocalFragmentEntity(fragmentId);
   const output = extractMediaIngestionOutput(pipeline);
-  const nextFragment = await updateLocalFragmentEntity(
-    fragmentId,
-    resolveMediaIngestionFragmentPatch({ current, output })
-  );
+  const patch = resolveMediaIngestionFragmentPatch({ current, output });
+
+  const nextFragment = await updateLocalFragmentEntity(fragmentId, patch);
 
   markFragmentsStale();
   return nextFragment;

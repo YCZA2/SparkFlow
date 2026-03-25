@@ -84,6 +84,7 @@ export function resolveMediaIngestionFragmentPatch(input: {
   const shouldSeedBody = Boolean(transcript) && !Boolean(input.current?.body_html?.trim());
   const shouldSeedPlainText =
     Boolean(transcript) && !Boolean(input.current?.plain_text_snapshot?.trim());
+  const seededBodyHtml = shouldSeedBody ? convertPlainTextToHtml(transcript) : undefined;
 
   return {
     transcript: input.output.transcript ?? undefined,
@@ -93,7 +94,7 @@ export function resolveMediaIngestionFragmentPatch(input: {
     audio_object_key: input.output.audio_object_key ?? undefined,
     audio_file_url: input.output.audio_file_url ?? undefined,
     audio_file_expires_at: input.output.audio_file_expires_at ?? undefined,
-    body_html: shouldSeedBody ? convertPlainTextToHtml(transcript) : undefined,
+    body_html: seededBodyHtml,
     plain_text_snapshot: shouldSeedPlainText ? transcript : undefined,
     content_state: shouldSeedBody ? 'body_present' : undefined,
   };

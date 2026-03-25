@@ -207,7 +207,8 @@ export async function readFragmentRows(
 
 /*直接写入某个 fragment 的正文文件，并同步补齐纯文本快照。 */
 export async function persistBodyHtml(fragmentId: string, html: string): Promise<string> {
-  const normalizedHtml = stripEdgeEmptyParagraphs(normalizeBodyHtml(html));
+  const normalizedInput = normalizeBodyHtml(html);
+  const normalizedHtml = stripEdgeEmptyParagraphs(normalizedInput);
   await writeFragmentBodyFile(fragmentId, normalizedHtml);
   return normalizedHtml;
 }

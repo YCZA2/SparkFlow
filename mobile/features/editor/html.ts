@@ -17,6 +17,25 @@ export function stripEdgeEmptyParagraphs(html: string): string {
     .replace(/(\s*<p[^>]*>\s*<\/p>)+$/, '');
 }
 
+export function wrapHtmlForNativeEditor(html: string | null | undefined): string {
+  /*把项目正文包装成原生编辑器内部协议，确保 Android 会按 HTML 解析 defaultValue。 */
+  const normalized = normalizeBodyHtml(html);
+  if (!normalized) {
+    return '<html>\n<p></p>\n</html>';
+  }
+  return `<html>\n${normalized}\n</html>`;
+}
+
+export function unwrapHtmlFromNativeEditor(html: string | null | undefined): string {
+  /*把原生编辑器返回的内部 HTML 还原为项目正文格式，并剥掉首尾空段落。 */
+  const normalized = normalizeBodyHtml(html);
+  if (!normalized) return '';
+  const unwrapped = normalized
+    .replace(/^<html>\s*/i, '')
+    .replace(/\s*<\/html>$/i, '');
+  return stripEdgeEmptyParagraphs(normalizeBodyHtml(unwrapped));
+}
+
 export function extractPlainTextFromHtml(html: string | null | undefined): string {
   /*从 HTML 中提取纯文本快照，供列表预览和分享复用。 */
   const normalized = normalizeBodyHtml(html);

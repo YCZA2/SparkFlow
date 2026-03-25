@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  unwrapHtmlFromNativeEditor,
+  wrapHtmlForNativeEditor,
+} from '../features/editor/html';
+import {
   extractMediaIngestionOutput,
   resolveMediaIngestionFragmentPatch,
   resolveMediaIngestionFragmentId,
@@ -135,4 +139,15 @@ test('resolveMediaIngestionFragmentPatch does not overwrite existing body html',
   assert.equal(patch.plain_text_snapshot, undefined);
   assert.equal(patch.content_state, undefined);
   assert.equal(patch.transcript, '新的转写原文');
+});
+
+test('wrapHtmlForNativeEditor wraps project html for native protocol', () => {
+  assert.equal(wrapHtmlForNativeEditor('<p>你好</p>'), '<html>\n<p>你好</p>\n</html>');
+});
+
+test('unwrapHtmlFromNativeEditor removes native wrapper and edge empty paragraphs', () => {
+  assert.equal(
+    unwrapHtmlFromNativeEditor('<html>\n<p></p>\n<p>你好</p>\n<p></p>\n</html>'),
+    '<p>你好</p>'
+  );
 });

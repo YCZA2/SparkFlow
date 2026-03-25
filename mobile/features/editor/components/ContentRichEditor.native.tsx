@@ -12,6 +12,8 @@ import {
   extractPlainTextFromHtml,
   normalizeBodyHtml,
   stripEdgeEmptyParagraphs,
+  unwrapHtmlFromNativeEditor,
+  wrapHtmlForNativeEditor,
 } from '@/features/editor/html';
 import type {
   EditorCommand,
@@ -58,7 +60,10 @@ function replaceDisplayUrlsWithAssetIds(html: string, mediaAssets: EditorMediaAs
 
 function buildSnapshotFromHtml(html: string, mediaAssets: EditorMediaAsset[]): EditorDocumentSnapshot {
   /*把编辑器输出规整成 HTML-first 快照，供会话层和同步链路消费。 */
-  const persistedHtml = replaceDisplayUrlsWithAssetIds(html, mediaAssets);
+  const persistedHtml = replaceDisplayUrlsWithAssetIds(
+    unwrapHtmlFromNativeEditor(html),
+    mediaAssets
+  );
   return {
     body_html: persistedHtml,
     plain_text: extractPlainTextFromHtml(persistedHtml),
@@ -100,7 +105,9 @@ export function ContentRichEditor({
   /*用原生富文本输入承接共享编辑器底座，并维持统一桥接接口。 */
   const nativeRef = React.useRef<EnrichedTextInputInstance | null>(null);
   const [seededEditorHtml, setSeededEditorHtml] = React.useState(() =>
-    replaceAssetIdsWithDisplayUrls(stripEdgeEmptyParagraphs(initialBodyHtml), mediaAssets)
+    wrapHtmlForNativeEditor(
+      replaceAssetIdsWithDisplayUrls(stripEdgeEmptyParagraphs(initialBodyHtml), mediaAssets)
+    )
   );
   const latestSnapshotRef = React.useRef<EditorDocumentSnapshot>({
     body_html: normalizeBodyHtml(initialBodyHtml),
@@ -179,10 +186,13 @@ export function ContentRichEditor({
 
   React.useEffect(() => {
     /*只在真正切换编辑会话时重置初始正文，避免输入中被新 defaultValue 回灌。 */
-    const nextSeededHtml = replaceAssetIdsWithDisplayUrls(initialBodyHtml, mediaAssets);
+    const strippedInitialHtml = stripEdgeEmptyParagraphs(initialBodyHtml);
+    const nextSeededHtml = wrapHtmlForNativeEditor(
+      replaceAssetIdsWithDisplayUrls(strippedInitialHtml, mediaAssets)
+    );
     setSeededEditorHtml(nextSeededHtml);
     latestSnapshotRef.current = buildSnapshotFromHtml(nextSeededHtml, mediaAssets);
-  }, [editorKey]);
+  }, [editorKey, initialBodyHtml, mediaAssets]);
 
   React.useEffect(() => {
     /*桥接挂载后立即通知会话层进入可交互态。 */
