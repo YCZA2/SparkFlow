@@ -22,6 +22,7 @@ from core.exceptions import AppException
 from services.base import STTError
 from services.dashscope_stt import DashScopeSTTService
 from services.external_media.douyin.abogus import ABogus
+from services.external_media.douyin.provider import DouyinProvider
 from services.external_media.douyin.parser import DouyinVideoParser, XBogus
 from services.external_media.ffmpeg_audio import FfmpegAudioExtractor
 
@@ -232,10 +233,12 @@ def main() -> int:
 
     print("\n=== ffmpeg Extract ===")
     extractor = FfmpegAudioExtractor()
+    provider = DouyinProvider(parser=parser, extractor=extractor)
     try:
         output_path = extractor.extract_from_url(
             media_url=audio_source_url,
             output_stem=str(parsed.get("aweme_id") or video_id),
+            request_headers=provider._build_media_request_headers(media_id=str(parsed.get("aweme_id") or video_id)),
         )
     except AppException as exc:
         print(f"ffmpeg extract failed: {exc.message}")

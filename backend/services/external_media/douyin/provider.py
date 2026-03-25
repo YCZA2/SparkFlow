@@ -42,8 +42,7 @@ class DouyinProvider:
             logger.warning("douyin_content_type_not_video", share_url=share_url, content_type=info.get("content_type"))
             raise ValidationError(message="当前链接不是可导入音频的视频", field_errors={"share_url": "仅支持抖音视频链接"})
 
-        qualities = info.get("qualities") or []
-        audio_source_url = qualities[0]["url"] if qualities else info.get("nwm_url")
+        audio_source_url = self._pick_audio_source_url(info)
         if not audio_source_url:
             logger.warning("douyin_audio_stream_missing", share_url=share_url, media_id=info.get("aweme_id"))
             raise AppException(
@@ -57,7 +56,12 @@ class DouyinProvider:
             logger.warning("douyin_media_id_missing", share_url=share_url)
             raise ValidationError(message="抖音内容缺少媒体 ID", field_errors={"share_url": "当前链接缺少可识别的视频标识"})
 
-        local_audio_path = self.extractor.extract_from_url(media_url=audio_source_url, output_stem=media_id)
+        request_headers = self._build_media_request_headers(media_id=media_id)
+        local_audio_path = self.extractor.extract_from_url(
+            media_url=audio_source_url,
+            output_stem=media_id,
+            request_headers=request_headers,
+        )
         logger.info("douyin_resolve_audio_succeeded", share_url=share_url, media_id=media_id, content_type=info.get("content_type"))
         return ExternalMediaResolvedAudio(
             platform="douyin",
@@ -69,3 +73,44 @@ class DouyinProvider:
             content_type=str(info.get("content_type") or "video"),
             local_audio_path=str(Path(local_audio_path).resolve()),
         )
+
+    @staticmethod
+    def _pick_audio_source_url(info: dict) -> str | None:
+        """中文注释：当前只为转写取音频，优先选择最低码率视频流以减少下载体积。"""
+        qualities = info.get("qualities") or []
+        candidates = [item for item in qualities if isinstance(item, dict) and item.get("url")]
+        if not candidates:
+            return info.get("nwm_url")
+
+        def sort_key(item: dict) -> tuple[int, int, str]:
+            bit_rate = int(item.get("bit_rate") or 0)
+            ratio = str(item.get("ratio") or "")
+            ratio_order = {"360p": 1, "480p": 2, "540p": 3, "720p": 4, "1080p": 5}
+            return (bit_rate, ratio_order.get(ratio, 99), str(item.get("url") or ""))
+
+        selected = min(candidates, key=sort_key)
+        logger.info(
+            "douyin_audio_source_selected",
+            aweme_id=info.get("aweme_id"),
+            bit_rate=selected.get("bit_rate"),
+            ratio=selected.get("ratio"),
+            quality_label=selected.get("quality_label"),
+        )
+        return str(selected.get("url"))
+
+    def _build_media_request_headers(self, *, media_id: str) -> dict[str, str]:
+        """中文注释：抖音视频流请求需要携带页面来源和浏览器头，避免 CDN 返回 403。"""
+        headers = {
+            "User-Agent": getattr(self.parser, "user_agent", "") or (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/90.0.4430.212 Safari/537.36"
+            ),
+            "Referer": f"https://www.douyin.com/video/{media_id}",
+            "Origin": "https://www.douyin.com",
+            "Accept": "*/*",
+        }
+        cookie = getattr(self.parser, "cookie", "") or ""
+        if cookie:
+            headers["Cookie"] = cookie
+        return headers
