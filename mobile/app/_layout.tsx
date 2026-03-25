@@ -1,6 +1,6 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
@@ -84,6 +84,15 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const session = useAppSession();
   const { isOpen, close } = useDrawer();
+  const router = useRouter();
+
+  /*session 就绪后，未登录则强制跳转到登录页（冷启动和会话失效均覆盖）。*/
+  useEffect(() => {
+    if (!session.isReady) return;
+    if (!session.isAuthenticated) {
+      router.replace('/login');
+    }
+  }, [session.isReady, session.isAuthenticated, router]);
 
   if (!session.isReady) {
     return <LoadingState message="正在准备应用..." />;
