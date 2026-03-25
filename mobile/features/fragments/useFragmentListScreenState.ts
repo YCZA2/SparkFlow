@@ -5,6 +5,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { buildFragmentSections, type FragmentSection } from '@/features/fragments/fragmentListState';
 import { useFragmentSelection } from '@/features/fragments/hooks';
 import { useFragments } from '@/features/fragments/hooks/useFragments';
+import { useSingleFlightRouterPush } from '@/hooks/useSingleFlightRouterPush';
 import type { Fragment } from '@/types/fragment';
 
 interface UseFragmentListScreenStateOptions {
@@ -35,6 +36,7 @@ export function useFragmentListScreenState({
 }: UseFragmentListScreenStateOptions = {}): FragmentListScreenState {
   /*统一首页与文件夹页的碎片列表 view-model，避免页面各写一套选择与跳转逻辑。 */
   const router = useRouter();
+  const pushOnce = useSingleFlightRouterPush();
   const params = useLocalSearchParams<{ refresh?: string }>();
   const { fragments, isLoading, isRefreshing, error, refreshFragments, fetchFragments } =
     useFragments({ folderId });
@@ -61,13 +63,16 @@ export function useFragmentListScreenState({
         return;
       }
 
-      // 跳转到详情页时，传递来源文件夹 ID 和名称（如果有）。
-      router.push({
-        pathname: '/fragment/[id]' as const,
-        params: { id: fragment.id, ...(folderId ? { folderId, folderName: folderName || '' } : {}) },
-      });
+      /*非选择态下通过导航去重保护详情跳转，避免快速连点重复打开同一正文页。 */
+      pushOnce(
+        {
+          pathname: '/fragment/[id]' as const,
+          params: { id: fragment.id, ...(folderId ? { folderId, folderName: folderName || '' } : {}) },
+        },
+        `fragment:${fragment.id}`
+      );
     },
-    [router, selection, folderId, folderName]
+    [pushOnce, selection, folderId, folderName]
   );
 
   const onGenerate = useCallback(async () => {

@@ -6,12 +6,15 @@ import { ScriptCard } from '@/components/ScriptCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { BackButton } from '@/components/layout/BackButton';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
+import { useSingleFlightRouterPush } from '@/hooks/useSingleFlightRouterPush';
 import { Text } from '@/components/Themed';
 import { useScripts } from '@/features/scripts/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
+import type { Script } from '@/types/script';
 
 export default function ScriptsScreen() {
   const router = useRouter();
+  const pushOnce = useSingleFlightRouterPush();
   const theme = useAppTheme();
   const { source_fragment_id } = useLocalSearchParams<{ source_fragment_id?: string }>();
   const sourceFragmentId = typeof source_fragment_id === 'string' ? source_fragment_id : null;
@@ -31,6 +34,14 @@ export default function ScriptsScreen() {
     useCallback(() => {
       reload();
     }, [reload])
+  );
+
+  const handleScriptPress = useCallback(
+    (script: Script) => {
+      /*成稿详情入口统一走单航班导航，避免用户快速连点时重复压栈。 */
+      pushOnce(`/script/${script.id}`, `script:${script.id}`);
+    },
+    [pushOnce]
   );
 
   if (isLoading && items.length === 0) {
@@ -66,7 +77,7 @@ export default function ScriptsScreen() {
         data={items}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <ScriptCard script={item} onPress={(script) => router.push(`/script/${script.id}`)} />
+          <ScriptCard script={item} onPress={handleScriptPress} />
         )}
         ListHeaderComponent={
           <View style={styles.header}>
