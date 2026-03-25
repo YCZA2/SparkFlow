@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 
@@ -22,25 +23,28 @@ async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
 
 
 async def _create_fragment(async_client, auth_headers_factory, transcript: str) -> str:
-    """创建手动碎片并返回其 ID。"""
-    response = await async_client.post(
-        "/api/fragments/content",
-        json={"body_html": f"<p>{transcript}</p>", "source": "manual"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert response.status_code == 201
-    return response.json()["data"]["id"]
+    """构造一条仅存在于 snapshot 的测试碎片 ID。"""
+    return str(uuid4())
 
 
 async def _create_fragment_payload(async_client, auth_headers_factory, transcript: str) -> dict:
-    """创建手动碎片并返回完整响应，便于同步 snapshot。"""
-    response = await async_client.post(
-        "/api/fragments/content",
-        json={"body_html": f"<p>{transcript}</p>", "source": "manual"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert response.status_code == 201
-    return response.json()["data"]
+    """构造可直接同步到 snapshot 的手动碎片载荷。"""
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    fragment_id = str(uuid4())
+    return {
+        "id": fragment_id,
+        "folder_id": None,
+        "source": "manual",
+        "audio_source": None,
+        "created_at": now,
+        "updated_at": now,
+        "summary": None,
+        "tags": [],
+        "transcript": None,
+        "body_html": f"<p>{transcript}</p>",
+        "plain_text_snapshot": transcript,
+        "deleted_at": None,
+    }
 
 
 def _upsert_fragment_snapshot(db, payload: dict) -> None:

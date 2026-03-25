@@ -11,11 +11,13 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from core.exceptions import AppException, ValidationError
+from domains.fragments import repository as fragment_repository
 from domains.fragment_tags import repository as fragment_tag_repository
 from models import Fragment, FragmentFolder, FragmentTag, KnowledgeDoc, User
 from main import ensure_local_test_user
 from modules.auth.application import TEST_USER_ID
 from modules.fragments.derivative_pipeline import PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL
+from modules.fragments.mapper import map_fragment
 from modules.shared.content.content_html import convert_markdown_to_basic_html
 from modules.shared.content.fragment_body_markdown import convert_editor_document_to_body_markdown
 from modules.shared.ports import ExternalMediaResolvedAudio
@@ -45,18 +47,34 @@ async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
     return await auth_headers_factory(async_client)
 
 
-async def _create_fragment(async_client, auth_headers_factory, payload: dict) -> dict:
-    """通过 API 创建碎片并返回响应数据。"""
+async def _create_fragment(db_session_factory, payload: dict) -> dict:
+    """直接写入 fragment projection，并返回与旧接口兼容的映射载荷。"""
     request_payload = dict(payload)
     if "editor_document" in request_payload:
         request_payload["body_html"] = convert_markdown_to_basic_html(
             convert_editor_document_to_body_markdown(request_payload.pop("editor_document"))
         )
-    body_html = request_payload.get("body_html")
-    endpoint = "/api/fragments/content" if body_html is not None else "/api/fragments"
-    response = await async_client.post(endpoint, json=request_payload, headers=await _auth_headers(async_client, auth_headers_factory))
-    assert response.status_code == 201
-    return response.json()["data"]
+    with db_session_factory() as db:
+        fragment = fragment_repository.create(
+            db=db,
+            user_id=TEST_USER_ID,
+            transcript=request_payload.get("transcript"),
+            source=request_payload.get("source") or "voice",
+            audio_source=request_payload.get("audio_source"),
+            audio_storage_provider=None,
+            audio_bucket=None,
+            audio_object_key=None,
+            audio_access_level=None,
+            audio_original_filename=None,
+            audio_mime_type=None,
+            audio_file_size=None,
+            audio_checksum=None,
+            body_html=request_payload.get("body_html"),
+            plain_text_snapshot=request_payload.get("plain_text_snapshot") or "",
+            folder_id=request_payload.get("folder_id"),
+            tags=[],
+        )
+        return map_fragment(fragment).model_dump()
 
 
 async def _create_folder(async_client, auth_headers_factory, name: str) -> str:
@@ -250,16 +268,14 @@ def test_startup_hook_recreates_missing_test_user(db_session_factory, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_fragments_collection_detail_similarity_and_visualization(async_client, auth_headers_factory, app) -> None:
+async def test_fragments_collection_detail_similarity_and_visualization(async_client, auth_headers_factory, app, db_session_factory) -> None:
     """碎片列表、详情、相似检索和可视化入口应返回一致数据。"""
     first_fragment = await _create_fragment(
-        async_client,
-        auth_headers_factory,
+        db_session_factory,
         {"editor_document": _editor_document("定位方法论的第一条碎片"), "source": "manual"},
     )
     second_fragment = await _create_fragment(
-        async_client,
-        auth_headers_factory,
+        db_session_factory,
         {"editor_document": _editor_document("定位方法论的第二条碎片"), "source": "manual"},
     )
     await _backup_fragment(async_client, auth_headers_factory, first_fragment)
@@ -310,31 +326,6 @@ async def test_fragments_collection_detail_similarity_and_visualization(async_cl
         visualization_response = await async_client.get("/api/fragments/visualization", headers=await _auth_headers(async_client, auth_headers_factory))
     assert visualization_response.status_code == 200
     assert visualization_response.json()["data"]["points"][0]["id"] == first_id
-
-
-@pytest.mark.asyncio
-async def test_create_fragment_rejects_invalid_source(async_client, auth_headers_factory) -> None:
-    """非法 source 应走统一校验错误。"""
-    response = await async_client.post(
-        "/api/fragments",
-        json={"transcript": "无效来源", "source": "unknown"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "VALIDATION"
-
-
-@pytest.mark.asyncio
-async def test_create_fragment_rejects_invalid_audio_source(async_client, auth_headers_factory) -> None:
-    """非法 audio_source 应走统一校验错误。"""
-    response = await async_client.post(
-        "/api/fragments",
-        json={"transcript": "无效音频来源", "source": "voice", "audio_source": "crawler"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "VALIDATION"
-
 
 @pytest.mark.asyncio
 async def test_import_external_audio_only_creates_pipeline_in_request_phase(async_client, auth_headers_factory, app, external_media_provider, db_session_factory) -> None:
@@ -539,7 +530,7 @@ async def test_import_external_audio_retries_when_provider_temporarily_fails(asy
 
 
 @pytest.mark.asyncio
-async def test_fragment_folders_crud_filtering_and_moves(async_client, auth_headers_factory) -> None:
+async def test_fragment_folders_crud_filtering_and_moves(async_client, auth_headers_factory, db_session_factory) -> None:
     """文件夹 CRUD、过滤与批量移动应保持一致行为。"""
     folder_a_id = await _create_folder(async_client, auth_headers_factory, "选题箱")
     folder_b_id = await _create_folder(async_client, auth_headers_factory, "待整理")
@@ -549,26 +540,19 @@ async def test_fragment_folders_crud_filtering_and_moves(async_client, auth_head
     assert folder_counts[folder_a_id] == 0
     assert folder_counts[folder_b_id] == 0
 
-    in_folder = await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("放进文件夹的碎片"), "source": "manual", "folder_id": folder_a_id})
-    first_unfiled = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("未归类碎片 1"), "source": "manual"}))["id"]
-    second_unfiled = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("未归类碎片 2"), "source": "manual"}))["id"]
+    in_folder = await _create_fragment(db_session_factory, {"editor_document": _editor_document("放进文件夹的碎片"), "source": "manual", "folder_id": folder_a_id})
+    first_unfiled = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("未归类碎片 1"), "source": "manual"}))["id"]
+    second_unfiled = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("未归类碎片 2"), "source": "manual"}))["id"]
 
     filtered_response = await async_client.get(f"/api/fragments?folder_id={folder_a_id}", headers=await _auth_headers(async_client, auth_headers_factory))
     assert {item["id"] for item in filtered_response.json()["data"]["items"]} == {in_folder["id"]}
 
-    move_response = await async_client.post(
-        "/api/fragments/move",
-        json={"fragment_ids": [first_unfiled, second_unfiled], "folder_id": folder_b_id},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert move_response.json()["data"]["moved_count"] == 2
-
-    patch_response = await async_client.patch(
-        f"/api/fragments/{first_unfiled}",
-        json={"folder_id": None},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert patch_response.json()["data"]["folder_id"] is None
+    with db_session_factory() as db:
+        first_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=first_unfiled)
+        second_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=second_unfiled)
+        assert first_fragment is not None and second_fragment is not None
+        fragment_repository.move_by_ids(db=db, fragments=[first_fragment, second_fragment], folder_id=folder_b_id)
+        fragment_repository.update_folder(db=db, fragment=first_fragment, folder_id=None)
 
     rename_response = await async_client.patch(
         f"/api/fragment-folders/{folder_b_id}",
@@ -580,11 +564,10 @@ async def test_fragment_folders_crud_filtering_and_moves(async_client, auth_head
     non_empty_delete = await async_client.delete(f"/api/fragment-folders/{folder_a_id}", headers=await _auth_headers(async_client, auth_headers_factory))
     assert non_empty_delete.status_code == 409
 
-    await async_client.patch(
-        f"/api/fragments/{in_folder['id']}",
-        json={"folder_id": None},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
+    with db_session_factory() as db:
+        in_folder_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=in_folder["id"])
+        assert in_folder_fragment is not None
+        fragment_repository.update_folder(db=db, fragment=in_folder_fragment, folder_id=None)
     empty_delete = await async_client.delete(f"/api/fragment-folders/{folder_a_id}", headers=await _auth_headers(async_client, auth_headers_factory))
     assert empty_delete.status_code == 200
     assert empty_delete.json()["data"] is None
@@ -623,42 +606,19 @@ async def test_fragment_folder_validation_and_conflicts(async_client, auth_heade
     )
     assert rename_response.status_code == 409
 
-    invalid_folder_fragment_response = await async_client.post(
-        "/api/fragments",
-        json={"body_html": "<p>错误文件夹</p>", "source": "manual", "folder_id": "missing-folder"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert invalid_folder_fragment_response.status_code == 404
-
     with db_session_factory() as db:
         assert db.query(FragmentFolder).filter(FragmentFolder.id == folder_id).first() is not None
-
-
-@pytest.mark.asyncio
-async def test_manual_fragment_can_start_with_empty_body(async_client, auth_headers_factory) -> None:
-    """手动碎片应允许空正文建单，供移动端直接进入正文编辑器。"""
-    response = await async_client.post(
-        "/api/fragments/content",
-        json={"body_html": "", "source": "manual"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert response.status_code == 201
-    payload = response.json()["data"]
-    assert payload["source"] == "manual"
-    assert payload["body_html"] == ""
-    assert payload["plain_text_snapshot"] is None
-    assert payload["content_state"] == "empty"
 
 
 @pytest.mark.asyncio
 async def test_fragment_tags_listing_filtering_and_delete_consistency(async_client, auth_headers_factory, db_session_factory) -> None:
     """标签列表、筛选和删除后的聚合结果应保持一致。"""
     folder_id = await _create_folder(async_client, auth_headers_factory, "Tag 过滤")
-    alpha_in_folder = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("alpha in folder"), "source": "manual", "folder_id": folder_id}))["id"]
-    alpha_free = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("alpha free"), "source": "manual"}))["id"]
-    beta_free = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("beta free"), "source": "manual"}))["id"]
-    zabc_fragment = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("zabc free"), "source": "manual"}))["id"]
-    cherry_fragment = (await _create_fragment(async_client, auth_headers_factory, {"editor_document": _editor_document("cherry free"), "source": "manual"}))["id"]
+    alpha_in_folder = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("alpha in folder"), "source": "manual", "folder_id": folder_id}))["id"]
+    alpha_free = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("alpha free"), "source": "manual"}))["id"]
+    beta_free = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("beta free"), "source": "manual"}))["id"]
+    zabc_fragment = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("zabc free"), "source": "manual"}))["id"]
+    cherry_fragment = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("cherry free"), "source": "manual"}))["id"]
 
     _seed_fragment_tags(db_session_factory, alpha_in_folder, ["apple", "abc"])
     _seed_fragment_tags(db_session_factory, alpha_free, ["apple", "abd"])
@@ -675,8 +635,10 @@ async def test_fragment_tags_listing_filtering_and_delete_consistency(async_clie
     tag_filter_response = await async_client.get("/api/fragments?tag=apple", headers=await _auth_headers(async_client, auth_headers_factory))
     assert {item["id"] for item in tag_filter_response.json()["data"]["items"]} == {alpha_in_folder, alpha_free}
 
-    delete_response = await async_client.delete(f"/api/fragments/{zabc_fragment}", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert delete_response.status_code == 200
+    with db_session_factory() as db:
+        fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=zabc_fragment)
+        assert fragment is not None
+        fragment_repository.delete(db=db, fragment=fragment)
     after_delete_response = await async_client.get("/api/fragments/tags?query=ab", headers=await _auth_headers(async_client, auth_headers_factory))
     assert [item["tag"] for item in after_delete_response.json()["data"]["items"]] == ["abc", "abd"]
 
@@ -974,50 +936,12 @@ async def test_upload_audio_marks_failed_when_transcription_is_cancelled(async_c
         assert fragment is not None
         assert fragment.transcript is None
 
-
-@pytest.mark.asyncio
-async def test_delete_fragment_removes_audio_file(async_client, auth_headers_factory, app, db_session_factory, tmp_path) -> None:
-    """删除带音频对象的碎片时应一并删除本地文件。"""
-    upload_root = tmp_path.resolve()
-    audio_file = upload_root / "audio" / "original" / TEST_USER_ID / "fragment-delete" / "delete-me.m4a"
-    audio_file.parent.mkdir(parents=True, exist_ok=True)
-    audio_file.write_bytes(b"fake-audio")
-
-    with db_session_factory() as db:
-        fragment = Fragment(
-            user_id=TEST_USER_ID,
-            transcript="待删除的碎片",
-            source="voice",
-            audio_source="upload",
-            audio_storage_provider="local",
-            audio_bucket="local",
-            audio_object_key="audio/original/test-user-001/fragment-delete/delete-me.m4a",
-            audio_access_level="private",
-            audio_original_filename="delete-me.m4a",
-            audio_mime_type="audio/m4a",
-            audio_file_size=len(b"fake-audio"),
-            audio_checksum=None,
-        )
-        db.add(fragment)
-        db.commit()
-        db.refresh(fragment)
-        fragment_id = fragment.id
-
-    response = await async_client.delete(f"/api/fragments/{fragment_id}", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert response.status_code == 200
-    assert not audio_file.exists()
-
-
 @pytest.mark.asyncio
 async def test_scripts_daily_push_trigger_get_force_trigger_and_idempotency(async_client, auth_headers_factory, app, db_session_factory) -> None:
     """每日推盘触发后应返回异步任务，并在完成后保持幂等。"""
     fragment_ids = [
         (
-            await _create_fragment(
-                async_client,
-                auth_headers_factory,
-                {"editor_document": _editor_document(f"同主题内容 {index}"), "source": "manual"},
-            )
+            await _create_fragment(db_session_factory, {"editor_document": _editor_document(f"同主题内容 {index}"), "source": "manual"})
         )
         for index in range(3)
     ]

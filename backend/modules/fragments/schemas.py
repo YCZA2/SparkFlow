@@ -19,26 +19,6 @@ class SpeakerSegmentItem(BaseModel):
     text: str
 
 
-class FragmentCreateRequest(BaseModel):
-    transcript: str | None = Field(None, description="转写文本")
-    body_html: str | None = Field(None, description="HTML 正文")
-    source: str = Field("voice", description="来源：voice, manual, video_parse")
-    audio_source: str | None = Field(None, description="音频来源：upload, external_link")
-    folder_id: str | None = Field(None, description="文件夹 ID")
-    media_asset_ids: list[str] = Field(default_factory=list, description="关联素材 ID 列表")
-
-
-class FragmentUpdateRequest(BaseModel):
-    folder_id: str | None = Field(None, description="文件夹 ID，传 null 表示移出文件夹")
-    body_html: str | None = Field(None, description="完整 HTML 正文")
-    media_asset_ids: list[str] | None = Field(None, description="要绑定到碎片的素材 ID 列表")
-
-
-class FragmentBatchMoveRequest(BaseModel):
-    fragment_ids: list[str] = Field(..., min_length=1, max_length=100)
-    folder_id: str | None = Field(..., description="目标文件夹 ID，传 null 表示移出文件夹")
-
-
 class SimilarityQueryRequest(BaseModel):
     query_text: str = Field(..., description="查询文本")
     top_k: int = Field(5, ge=1, le=20, description="返回结果数量")
@@ -82,11 +62,6 @@ class SimilarFragmentListResponse(BaseModel):
     items: list[SimilarFragmentItem]
     total: int
     query_text: str
-
-
-class FragmentBatchMoveResponse(BaseModel):
-    items: list[FragmentItem]
-    moved_count: int
 
 
 class FragmentTagItem(BaseModel):

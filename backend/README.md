@@ -291,7 +291,7 @@ bash scripts/postgres-local.sh stop
 - 文件类响应不再暴露 `audio_path` / `storage_path`，统一返回签名 `*_file_url` 与过期时间
 - `fragments` 列表 / 详情与 `GET /api/transcriptions/{fragment_id}` 不再返回 `sync_status`
 - `fragments.transcript` 表示机器转写原文，`body_html` 表示用户整理后的正式正文；正文消费统一按 `body_html -> transcript` 回退
-- 非语音碎片创建走 `POST /api/fragments/content`；当前允许先创建空 `body_html`，再由客户端后续补正文，`transcript` 仅保留给语音转写链路
+- 手动文本碎片主链路已不再依赖 `POST /api/fragments*` 远端建单；客户端应先写本地真值，再通过 `/api/backups/*` 同步快照，`transcript` 仅保留给语音转写链路
 - 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id`、`local_fragment_id` 或 `script_id`；对 transcript 任务来说，首个成功仅保证 transcript 已可用，`summary` / `tags` 可能由后续 derivative pipeline 异步补齐
 - local-first 主路径下，`GET /api/transcriptions/{fragment_id}` 只保留给 projection / 兼容场景；新的状态查询应统一走 `pipeline_run_id -> /api/pipelines/{run_id}`
 - 手动脚本生成在客户端发起 `POST /api/scripts/generation` 之前，需要先完成一次成功的 backup flush；后端只消费已同步成功的 fragment snapshot，不读取设备上尚未上传的正文

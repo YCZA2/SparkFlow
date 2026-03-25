@@ -8,6 +8,7 @@ import json
 import time
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
 import httpx
 
@@ -92,18 +93,43 @@ def create_fragment(
     headers: dict[str, str],
     body_html: str,
 ) -> str:
-    """创建一条手动测试碎片，供真实脚本生成使用。"""
+    """通过备份接口写入一条手动测试碎片快照，供真实脚本生成使用。"""
+    fragment_id = str(uuid4())
+    now = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
     payload = request_json(
         client,
         "POST",
-        f"{backend_base_url}/api/fragments/content",
+        f"{backend_base_url}/api/backups/batch",
         headers=headers,
-        json_body={"body_html": body_html, "source": "manual"},
+        json_body={
+            "items": [
+                {
+                    "entity_type": "fragment",
+                    "entity_id": fragment_id,
+                    "entity_version": 1,
+                    "operation": "upsert",
+                    "modified_at": now,
+                    "payload": {
+                        "id": fragment_id,
+                        "folder_id": None,
+                        "source": "manual",
+                        "audio_source": None,
+                        "created_at": now,
+                        "updated_at": now,
+                        "summary": None,
+                        "tags": [],
+                        "transcript": None,
+                        "body_html": body_html,
+                        "plain_text_snapshot": body_html.removeprefix("<p>").removesuffix("</p>"),
+                        "deleted_at": None,
+                    },
+                }
+            ]
+        },
     )
     data = extract_response_data(payload)
-    fragment_id = data.get("id") if isinstance(data, dict) else None
-    if not isinstance(fragment_id, str) or not fragment_id.strip():
-        raise ScriptGenerationCheckError(f"创建碎片返回缺少 id: {json.dumps(payload, ensure_ascii=False)}")
+    if not isinstance(data, dict) or int(data.get("accepted_count") or 0) != 1:
+        raise ScriptGenerationCheckError(f"写入碎片快照失败: {json.dumps(payload, ensure_ascii=False)}")
     return fragment_id
 
 
@@ -194,8 +220,26 @@ def delete_fragment(
     headers: dict[str, str],
     fragment_id: str,
 ) -> None:
-    """删除联调中创建的测试碎片。"""
-    request_json(client, "DELETE", f"{backend_base_url}/api/fragments/{fragment_id}", headers=headers)
+    """把联调中创建的测试碎片标记为已删除快照。"""
+    now = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+    request_json(
+        client,
+        "POST",
+        f"{backend_base_url}/api/backups/batch",
+        headers=headers,
+        json_body={
+            "items": [
+                {
+                    "entity_type": "fragment",
+                    "entity_id": fragment_id,
+                    "entity_version": 2,
+                    "operation": "delete",
+                    "modified_at": now,
+                    "payload": None,
+                }
+            ]
+        },
+    )
 
 
 def cleanup_resources(

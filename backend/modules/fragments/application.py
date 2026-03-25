@@ -21,9 +21,8 @@ from modules.shared.ports import FileStorage, StoredFile, TextGenerationProvider
 from .asset_binding_service import FragmentAssetBindingService
 from .content_service import FragmentContentService
 from .derivative_service import FragmentDerivativeService
-from .mapper import build_fragment_audio_file, map_fragment, map_fragment_snapshot
+from .mapper import map_fragment, map_fragment_snapshot
 from .schemas import (
-    FragmentBatchMoveResponse,
     FragmentItem,
     FragmentListResponse,
     FragmentTagItem,
@@ -110,104 +109,6 @@ class FragmentCommandService:
             )
         self.content_service.create_initial_content(db=db, fragment=fragment, body_html=normalized_body_html)
         return fragment
-
-    def create_fragment_with_content(
-        self,
-        *,
-        db: Session,
-        user_id: str,
-        transcript: Optional[str],
-        body_html: str | None,
-        source: str,
-        audio_source: Optional[str],
-        audio_file: StoredFile | None,
-        folder_id: Optional[str] = None,
-        media_asset_ids: list[str] | None = None,
-    ) -> Fragment:
-        """创建碎片并返回完整正文与素材载荷。"""
-        fragment = self.create_fragment(
-            db=db,
-            user_id=user_id,
-            transcript=transcript,
-            body_html=body_html,
-            source=source,
-            audio_source=audio_source,
-            audio_file=audio_file,
-            folder_id=folder_id,
-            media_asset_ids=media_asset_ids,
-        )
-        return self.get_fragment(db=db, user_id=user_id, fragment_id=fragment.id)
-
-    def delete_fragment(self, *, db: Session, user_id: str, fragment_id: str) -> None:
-        """删除碎片及关联音频文件。"""
-        fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
-        self.file_storage.delete(build_fragment_audio_file(fragment))
-        fragment_repository.delete(db=db, fragment=fragment)
-
-    def update_fragment_folder(self, *, db: Session, user_id: str, fragment_id: str, folder_id: Optional[str]) -> Fragment:
-        """仅更新碎片文件夹归属。"""
-        fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
-        self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
-        return fragment_repository.update_folder(db=db, fragment=fragment, folder_id=folder_id)
-
-    async def update_fragment(
-        self,
-        *,
-        db: Session,
-        user_id: str,
-        fragment_id: str,
-        folder_id: Optional[str] = None,
-        folder_id_provided: bool = False,
-        body_html: str | None = None,
-        media_asset_ids: list[str] | None = None,
-    ) -> Fragment:
-        """更新碎片正文、文件夹和素材绑定。"""
-        fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
-        previous_effective_text = self.content_service.read_effective_text(fragment)
-        if folder_id_provided:
-            self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
-            fragment = fragment_repository.update_folder(db=db, fragment=fragment, folder_id=folder_id)
-        merged_asset_ids = media_asset_ids
-        if body_html is not None:
-            self.content_service.replace_content(db=db, fragment=fragment, body_html=body_html)
-            merged_asset_ids = self._merge_media_asset_ids(
-                media_asset_ids=media_asset_ids,
-                document_asset_ids=self.content_service.collect_body_asset_ids(body_html=body_html),
-            )
-        if media_asset_ids is not None:
-            self.asset_binding_service.replace_media_assets(
-                db=db,
-                user_id=user_id,
-                content_type="fragment",
-                content_id=fragment.id,
-                media_asset_ids=merged_asset_ids or [],
-            )
-        updated_fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
-        if body_html is not None:
-            await self.derivative_service.refresh_fragment_derivatives(
-                db=db,
-                user_id=user_id,
-                fragment=updated_fragment,
-                previous_effective_text=previous_effective_text,
-                current_effective_text=self.content_service.read_effective_text(updated_fragment),
-            )
-            updated_fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
-        return updated_fragment
-
-    def move_fragments(self, *, db: Session, user_id: str, fragment_ids: list[str], folder_id: Optional[str]) -> FragmentBatchMoveResponse:
-        """批量移动碎片到目标文件夹。"""
-        self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
-        fragments = fragment_repository.get_by_ids(db=db, user_id=user_id, fragment_ids=fragment_ids)
-        found_ids = {fragment.id for fragment in fragments}
-        missing_ids = sorted(set(fragment_ids) - found_ids)
-        if missing_ids:
-            raise NotFoundError(
-                message=f"部分碎片不存在或无权访问: {', '.join(missing_ids)}",
-                resource_type="fragment",
-                resource_id=",".join(missing_ids),
-            )
-        updated = fragment_repository.move_by_ids(db=db, fragments=fragments, folder_id=folder_id)
-        return FragmentBatchMoveResponse(items=[map_fragment(fragment, file_storage=self.file_storage) for fragment in updated], moved_count=len(updated))
 
     def get_fragment(self, *, db: Session, user_id: str, fragment_id: str) -> Fragment:
         """读取单条碎片并在找不到时抛出统一异常。"""

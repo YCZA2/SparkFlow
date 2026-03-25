@@ -562,12 +562,8 @@ sequenceDiagram
 - `GET /api/auth/me`
 - `POST /api/auth/refresh`
 - `GET /api/fragments`
-- `POST /api/fragments`
-- `POST /api/fragments/move`
 - `GET /api/fragments/tags`
 - `GET /api/fragments/{fragment_id}`
-- `PATCH /api/fragments/{fragment_id}`
-- `DELETE /api/fragments/{fragment_id}`
 - `POST /api/fragments/similar`
 - `GET /api/fragments/visualization`
 - `GET /api/fragment-folders`
@@ -619,7 +615,7 @@ sequenceDiagram
 ## 8. Current Architectural Notes
 
 - 代码已经从早期的 `routers + service` 形态迁移到 `modules/*` 主入口，但仓库里仍保留一部分 provider 与兼容性 service 文件，不应再把它们当成新的业务层规范。
-- 碎片管理现在分为“真实文件夹 + 全部系统视图”两层：文件夹模块负责容器管理，碎片模块负责内容与归类变更。
+- 碎片管理现在分为“真实文件夹 + 全部系统视图”两层：文件夹模块负责容器管理；fragment 主写链路已切到客户端 local-first，后端 `fragments` 模块主要保留 projection 查询、标签聚合和基于 snapshot 的检索/可视化能力。
 - `GET /api/fragments` 当前已支持按 `folder_id` 和单个 `tag` 精确过滤；`GET /api/fragments/tags` 提供热门 Tag 与模糊建议能力。
 - Tag 对外仍通过 `fragments.tags` 返回，后端使用 `fragment_tags` 作为 Tag 聚合、建议与过滤的查询主表。
 - 移动端当前是“文件夹入口优先”的首页结构，不是 PRD 里最初设想的 tab 首页；碎片列表主视图仍是核心工作区，但入口已经下沉到文件夹页。

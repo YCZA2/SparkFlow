@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from domains.fragments import repository as fragment_repository
 
 pytestmark = pytest.mark.integration
 
@@ -220,13 +221,27 @@ async def test_scheduler_daily_push_ignores_fragment_rows_without_backups(
     async_client,
     auth_headers_factory,
     app,
+    db_session_factory,
 ) -> None:
     """仅存在旧 fragments 表数据时，scheduler 不应误生成每日推盘。"""
-    response = await async_client.post(
-        "/api/fragments/content",
-        json={"body_html": "<p>只有旧表，没有备份</p>", "source": "manual"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert response.status_code == 201
+    with db_session_factory() as db:
+        fragment_repository.create(
+            db=db,
+            user_id="test-user-001",
+            transcript=None,
+            source="manual",
+            audio_source=None,
+            audio_storage_provider=None,
+            audio_bucket=None,
+            audio_object_key=None,
+            audio_access_level=None,
+            audio_original_filename=None,
+            audio_mime_type=None,
+            audio_file_size=None,
+            audio_checksum=None,
+            body_html="<p>只有旧表，没有备份</p>",
+            plain_text_snapshot="只有旧表，没有备份",
+            tags=[],
+        )
     result = await app.state.scheduler_service.run_job()
     assert result["queued_runs"] == 0

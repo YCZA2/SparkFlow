@@ -7,8 +7,6 @@ import {
   testConnection,
 } from '@/features/core/api/client';
 import {
-  createFragment,
-  deleteFragment,
   fetchFragmentDetail,
   fetchFragments,
 } from '@/features/fragments/api';
@@ -42,7 +40,6 @@ export function useApiTestSuite() {
   const [tests, setTests] = useState<TestResult[]>(buildInitialTests);
   const [isRunningAll, setIsRunningAll] = useState(false);
   const [lastUploadedFragmentId] = useState<string | null>(null);
-  const [lastCreatedFragmentId, setLastCreatedFragmentId] = useState<string | null>(null);
 
   useEffect(() => {
     getCurrentBackendUrl().then((url) => setBackendUrl(url));
@@ -103,22 +100,8 @@ export function useApiTestSuite() {
 
   const testCreateFragmentCase = async () => {
     updateTest(3, 'running');
-    try {
-      const data = await createFragment({
-        transcript: `[API测试] 测试碎片 - ${new Date().toLocaleString()}`,
-        source: 'manual',
-      });
-      setLastCreatedFragmentId(data.id);
-      updateTest(3, 'success', `创建成功: ${data.id.substring(0, 8)}...`, data);
-      return data;
-    } catch (err) {
-      if (err instanceof ApiError) {
-        updateTest(3, 'error', `${err.code}: ${err.message}`);
-      } else {
-        updateTest(3, 'error', (err as Error).message);
-      }
-      return null;
-    }
+    updateTest(3, 'success', '已跳过：手动碎片远端建单接口已移除，主链路改为本地创建 + 备份快照');
+    return null;
   };
 
   const testFragmentDetailCase = async (fragmentId: string) => {
@@ -139,24 +122,11 @@ export function useApiTestSuite() {
 
   const testDeleteFragmentCase = async (fragmentId: string) => {
     updateTest(5, 'running');
-    try {
-      await deleteFragment(fragmentId);
-      updateTest(5, 'success', '删除成功');
-      return true;
-    } catch (err) {
-      if (err instanceof ApiError) {
-        updateTest(5, 'error', `${err.code}: ${err.message}`);
-      } else {
-        updateTest(5, 'error', (err as Error).message);
-      }
-      return false;
-    }
+    updateTest(5, 'success', '已跳过：远端 fragments 删除接口已移除，主链路改为本地删除 + 备份 tombstone');
+    return fragmentId.length > 0;
   };
 
   const getTestFragmentId = async () => {
-    if (lastCreatedFragmentId) {
-      return lastCreatedFragmentId;
-    }
     const fragments = await fetchFragments();
     return fragments.items?.[0]?.id ?? null;
   };

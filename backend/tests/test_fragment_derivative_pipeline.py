@@ -6,6 +6,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from domains.fragments import repository as fragment_repository
 from models import Fragment
 
 from modules.fragments.derivative_pipeline import PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL
@@ -31,15 +32,28 @@ async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, att
     raise AssertionError(f"pipeline {run_id} did not finish")
 
 
-async def _create_fragment(async_client, auth_headers_factory, body_html: str) -> str:
-    """创建一条可用于异步回填的 fragment。"""
-    response = await async_client.post(
-        "/api/fragments/content",
-        json={"body_html": body_html, "source": "manual"},
-        headers=await _auth_headers(async_client, auth_headers_factory),
-    )
-    assert response.status_code == 201
-    return response.json()["data"]["id"]
+def _create_fragment(db_session_factory, body_html: str) -> str:
+    """直接写入 fragment projection，供异步回填流水线使用。"""
+    with db_session_factory() as db:
+        fragment = fragment_repository.create(
+            db=db,
+            user_id="test-user-001",
+            transcript=None,
+            source="manual",
+            audio_source=None,
+            audio_storage_provider=None,
+            audio_bucket=None,
+            audio_object_key=None,
+            audio_access_level=None,
+            audio_original_filename=None,
+            audio_mime_type=None,
+            audio_file_size=None,
+            audio_checksum=None,
+            body_html=body_html,
+            plain_text_snapshot="",
+            tags=[],
+        )
+        return fragment.id
 
 
 @pytest.mark.asyncio
@@ -51,7 +65,7 @@ async def test_fragment_derivative_pipeline_backfills_summary_tags_and_vector(
     vector_store,
 ) -> None:
     """异步衍生字段流水线应回填摘要、标签并写入向量。"""
-    fragment_id = await _create_fragment(async_client, auth_headers_factory, "<p>定位方法论测试文本</p>")
+    fragment_id = _create_fragment(db_session_factory, "<p>定位方法论测试文本</p>")
     run = await app.state.container.pipeline_runner.create_run(
         run_id=None,
         user_id="test-user-001",
@@ -91,7 +105,7 @@ async def test_fragment_derivative_pipeline_uses_fallback_when_llm_fails(
         health_check=llm_health_check,
     )
     try:
-        fragment_id = await _create_fragment(async_client, auth_headers_factory, "<p>创业增长策略测试</p>")
+        fragment_id = _create_fragment(db_session_factory, "<p>创业增长策略测试</p>")
         run = await app.state.container.pipeline_runner.create_run(
             run_id=None,
             user_id="test-user-001",
@@ -127,7 +141,7 @@ async def test_fragment_derivative_pipeline_logs_vector_failure_without_failing_
 
     app.state.container.vector_store.upsert_fragment = failing_upsert_fragment
     try:
-        fragment_id = await _create_fragment(async_client, auth_headers_factory, "<p>踏实成长测试文本</p>")
+        fragment_id = _create_fragment(db_session_factory, "<p>踏实成长测试文本</p>")
         run = await app.state.container.pipeline_runner.create_run(
             run_id=None,
             user_id="test-user-001",
