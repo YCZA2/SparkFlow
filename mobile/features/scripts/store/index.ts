@@ -7,6 +7,7 @@ export {
   mergeRestoredScriptRow,
   moveLocalScriptToTrash,
   readLocalScriptEntity,
+  shouldHydrateRemoteScriptEntity,
   updateLocalScriptEntity,
   upsertLocalScriptEntity,
 } from './localEntityStore';

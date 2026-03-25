@@ -93,6 +93,7 @@ def update(
     status_value: Optional[str],
     title: Optional[str],
     body_html: Optional[str] = None,
+    source_fragment_ids: Optional[str] = None,
 ) -> Script:
     if status_value is not None:
         script.status = status_value
@@ -100,6 +101,8 @@ def update(
         script.title = title
     if body_html is not None:
         script.body_html = body_html
+    if source_fragment_ids is not None:
+        script.source_fragment_ids = source_fragment_ids
     db.commit()
     db.refresh(script)
     return script

@@ -72,7 +72,7 @@ def test_persistence_service_rejects_missing_draft(db_session_factory) -> None:
 
 @pytest.mark.integration
 def test_persistence_service_persists_script_idempotently(db_session_factory) -> None:
-    """重复持久化同一 run 时应复用已创建脚本。"""
+    """重复持久化同一 run 时应复用脚本并刷新为本次生成结果。"""
     service = ScriptGenerationPersistenceService()
 
     with db_session_factory() as db:
@@ -87,14 +87,19 @@ def test_persistence_service_persists_script_idempotently(db_session_factory) ->
         second = service.persist_script(
             db=db,
             run=run,
-            input_payload={"topic": "测试主题", "fragment_ids": [], "mode": "mode_rag"},
-            parsed_result={"title": "标题", "draft": "正文"},
+            input_payload={"topic": "测试主题", "fragment_ids": ["fragment-1"], "mode": "mode_rag"},
+            parsed_result={"title": "新标题", "draft": "新正文"},
         )
         refreshed_run = pipeline_repository.get_by_id(db=db, user_id=TEST_USER_ID, run_id=run.id)
         script_count = script_repository.count_by_user(db=db, user_id=TEST_USER_ID)
+        persisted_script = script_repository.get_by_id(db=db, user_id=TEST_USER_ID, script_id=first["script_id"])
 
     assert first["script_id"] == second["script_id"]
     assert script_count == 1
     assert refreshed_run is not None
     assert refreshed_run.resource_type == "script"
     assert refreshed_run.resource_id == first["script_id"]
+    assert persisted_script is not None
+    assert persisted_script.title == "新标题"
+    assert "新正文" in persisted_script.body_html
+    assert persisted_script.source_fragment_ids == '["fragment-1"]'

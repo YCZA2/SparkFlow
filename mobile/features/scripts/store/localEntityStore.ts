@@ -1,7 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { getLocalDatabase } from '@/features/core/db/database';
-import { getScriptBodyFile, writeScriptBodyFile } from '@/features/core/files/runtime';
+import { getScriptBodyFile, readScriptBodyFile, writeScriptBodyFile } from '@/features/core/files/runtime';
 import { extractPlainTextFromHtml, normalizeBodyHtml } from '@/features/editor/html';
 import { scriptsTable } from '@/features/core/db/schema';
 import type { Script, ScriptCopyReason } from '@/types/script';
@@ -15,6 +15,7 @@ import {
   mapLocalScriptRowToScript,
   readScriptRows,
   serializeSourceFragmentIds,
+  shouldSkipRemoteScriptHydration,
   type ScriptRow,
 } from './shared';
 
@@ -78,6 +79,23 @@ export async function readLocalScriptEntity(scriptId: string): Promise<Script | 
   const script = await mapLocalScriptRowToScript(row);
   useScriptStore.getState().setDetail(scriptId, script);
   return script;
+}
+
+/*在远端回补前检查本地是否已有真值，避免旧投影覆盖已编辑正文。 */
+export async function shouldHydrateRemoteScriptEntity(scriptId: string): Promise<boolean> {
+  const database = await getLocalDatabase();
+  const rows = await database
+    .select()
+    .from(scriptsTable)
+    .where(eq(scriptsTable.id, scriptId))
+    .limit(1);
+  const row = rows[0];
+  const bodyHtml = await readScriptBodyFile(scriptId);
+  return !shouldSkipRemoteScriptHydration({
+    hasLocalRow: Boolean(row),
+    backupStatus: row?.backupStatus ?? null,
+    hasBodyFile: typeof bodyHtml === 'string' && bodyHtml.trim().length > 0,
+  });
 }
 
 /*按 local-first 语义更新 script 真值，并统一推进备份队列状态。 */

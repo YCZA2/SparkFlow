@@ -58,8 +58,21 @@ class ScriptGenerationPersistenceService:
         if not draft:
             raise ValidationError(message="工作流输出缺少 draft，无法创建口播稿", field_errors={"generation": "工作流执行失败"})
         draft_html = convert_markdown_to_basic_html(draft)
+        source_fragment_ids = json.dumps(
+            input_payload.get("fragment_ids")
+            or [item.get("id") for item in input_payload.get("fragment_snapshots") or []],
+            ensure_ascii=False,
+        )
         existing = script_repository.get_by_id(db=db, user_id=run.user_id, script_id=run.resource_id or "")
         if existing:
+            script_repository.update(
+                db=db,
+                script=existing,
+                status_value=None,
+                title=parsed_result.get("title"),
+                body_html=draft_html,
+                source_fragment_ids=source_fragment_ids,
+            )
             return self.build_run_output(
                 script_id=existing.id,
                 parsed_result=parsed_result,
@@ -71,11 +84,7 @@ class ScriptGenerationPersistenceService:
             user_id=run.user_id,
             body_html=draft_html,
             mode=input_payload["mode"],
-            source_fragment_ids=json.dumps(
-                input_payload.get("fragment_ids")
-                or [item.get("id") for item in input_payload.get("fragment_snapshots") or []],
-                ensure_ascii=False,
-            ),
+            source_fragment_ids=source_fragment_ids,
             title=parsed_result.get("title"),
         )
         run_output = self.build_run_output(

@@ -11,7 +11,7 @@
 - `media_ingestion` 已改成 transcript-first：上传录音和外链导入都会在 transcript 落库后立刻结束主 pipeline，摘要 / 标签 / 向量由单独的 fragment derivative pipeline 异步回填。
 - 向量检索链路已补齐对当前 Chroma 版本的兼容：`list_collections()` 返回字符串集合名时，namespace 检查、相似检索和文档枚举都按同一适配层处理。
 - 移动端已经补齐 backup queue、显式恢复、本地媒体缓存重建、音频 `object_key` 持久化与恢复链路。
-- `scripts` 本轮也切入 local-first：脚本生成成功后会立即落本地 SQLite + `body.html` 文件，后续详情编辑、回收站、恢复冲突副本与拍摄状态都以本地为真值。
+- `scripts` 本轮也切入 local-first：脚本生成成功后会立即落本地 SQLite + `body.html` 文件，后续详情编辑、回收站、恢复冲突副本与拍摄状态都以本地为真值；后端 `scripts` 表只保留生成初稿与兼容查询投影，不再反向覆盖本地正文。
 - `daily_push` 已切到“后端定时 + 备份快照输入”模式：调度器与手动补跑都从 `backup_records` 中读取 fragment snapshot，再交给 daily-push pipeline 生成脚本，不再把历史 `fragments` 表当作推盘输入真值。
 - `knowledge` 后端本轮补齐了文本型知识 ingestion：`txt/docx/pdf/xlsx` 统一走 `parsers -> chunking -> indexing -> application` 四层，默认仍写入 Chroma，但对上已通过独立知识索引接口解耦，后续可替换为 LightRAG 等底层引擎。
 - 脚本生成三层上下文本轮调整为“预置稳定内核 + 缓存方法论 + 实时相关素材召回”：稳定内核当前不再按用户素材动态生成，碎片方法论改由每日后台维护任务在阈值达标后静默刷新。
@@ -143,6 +143,7 @@ flowchart TD
 - 远端只负责自动备份与显式恢复，不再承担 fragments / folders / scripts 的主读取路径
 - 编辑与删除先更新本地实体，再由 backup queue 批量推送快照和 tombstone
 - AI 生成、转写、外链导入继续走后端，但输入来自客户端上传的本地快照或媒体文件；手动脚本生成发起前会先显式执行一次 `flushBackupQueue()`，确保后端读取到最新已同步 fragment snapshot；script 生成成功后会立刻回写本地 script 真值
+- `GET /api/scripts` 与 `GET /api/scripts/{id}` 当前仍读取后端 `scripts` 表，但移动端只在本地缺失该稿件时才会用它们补齐历史稿件；一旦本地已有 script 真值，远端旧投影不得覆盖本地 `body.html`
 - 单设备在线由 `device session` 约束；旧设备失效后仍可离线读写本地，但不能继续备份或调用远端 AI
 - 显式恢复入口当前挂在 `profile.tsx`，执行时会拉取 `/api/backups/snapshot` 并重建本地 SQLite 与 fragment / script `body.html`，同时最佳努力回填音频/图片本地缓存
 - 对于带 `backup_object_key` 的媒体资源，恢复前会额外调用 `/api/backups/assets/access` 刷新最新访问地址，再尝试下载到本地缓存
@@ -157,6 +158,7 @@ flowchart TD
 当前 local-first 内容层的备份/同步语义需要明确区分“本地真值”“远端快照”和“后端投影表”：
 
 - `fragment / folder / media_asset / script` 的真值仍然在移动端本地 SQLite + 文件系统
+- 后端 `scripts` 业务表对于移动端 script 来说属于 projection / 兼容查询层，而不是编辑后的主真值；脚本编辑后的最新正文应通过 `backup_records` 镜像到服务端
 - 服务端 `backup_records` 保存的是**按实体粒度**的最新 snapshot，而不是“某个时刻包含所有实体的大快照文件”
 - 一次 `flushBackupQueue()` 可以批量上传很多实体，但每个 item 仍只对应一条实体 snapshot；服务端按 `user_id + entity_type + entity_id` 覆盖为该实体当前最新版本
 - 这意味着 snapshot 的职责是“让服务端理解截至当前已同步成功的前端真值”，而不是替代本地真值本身

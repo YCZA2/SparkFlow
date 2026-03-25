@@ -5,6 +5,7 @@ import { getScriptBodyFile, readScriptBodyFile, writeScriptBodyFile } from '@/fe
 import { extractPlainTextFromHtml, normalizeBodyHtml } from '@/features/editor/html';
 import { scriptsTable } from '@/features/core/db/schema';
 import type { Script, ScriptCopyReason, ScriptGenerationKind, ScriptMode, ScriptStatus } from '@/types/script';
+export { shouldSkipRemoteScriptHydration, type LocalScriptHydrationGuardInput } from './hydrationGuard';
 
 export type ScriptRow = typeof scriptsTable.$inferSelect;
 

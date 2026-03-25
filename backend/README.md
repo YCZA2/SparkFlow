@@ -15,13 +15,13 @@ SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Doc
 - 脚本生成链路的 `稳定内核` 当前改为系统预置文案，不再在生成时按用户碎片和知识库动态生成。
 - `碎片方法论` 已从脚本生成主链路移出：生成时只读取已缓存条目；后台通过每日定时维护按“总量达标 / 增量达标”阈值静默刷新。
 - 仓库当前仍保留 `fragments / fragment_folders` 的历史业务表与少量兼容读取能力，但它们已不是移动端 fragments / folders 的主读取来源。
-- `script` 继续保留独立后端业务表与路由层；local-first 共享的是 backup/recovery 基础设施，不是把 fragment / script 合并为同一业务实体。
+- `script` 继续保留独立后端业务表与路由层；local-first 共享的是 backup/recovery 基础设施，不是把 fragment / script 合并为同一业务实体；后端 `scripts` 表当前只保存生成初稿与兼容查询投影，不再承担移动端编辑真值语义。
 
 当前第一阶段 local-first 改造已经落地几条基础约束：
 
 - `fragments / folders / scripts` 在移动端以本地 SQLite + 文件系统为真值
 - 后端新增 `/api/backups/*` 作为自动备份与显式恢复入口，不再要求移动端先把 fragment 存进后端业务表才能继续主流程
-- script 生成仍由后端 pipeline 驱动，但成功后客户端会把脚本详情立即落本地，后续编辑与拍摄状态同步走备份链路
+- script 生成仍由后端 pipeline 驱动，但成功后客户端会把脚本详情立即落本地，后续编辑与拍摄状态同步走备份链路；`GET /api/scripts/*` 继续读 `scripts` 表，仅用于缺失补齐和兼容查询，不应用来覆盖客户端已存在的本地 script 真值
 - `/api/backups/assets/access` 可按 `object_key` 批量换取最新访问地址，供恢复时重新下载媒体缓存，避免依赖旧 snapshot 里的过期签名 URL
 - 该地址刷新接口同时支持备份素材对象键与 fragment 音频对象键，便于移动端恢复时统一重建本地缓存
 

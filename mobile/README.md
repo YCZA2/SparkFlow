@@ -9,7 +9,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 本地 SQLite、fragment/script 正文文件、音频缓存与 staging 目录都已按 `user_id` 工作区隔离；切换账号会切换整套本地工作区。
 - 录音转写、抖音链接导入、脚本生成都已经切到“客户端上传本地快照或本地媒体”驱动，不再默认依赖服务端 fragment 业务表作为输入真值。
 - “创作工作台”已接入显式恢复；恢复时会重建本地 SQLite、`body.html` 与媒体缓存，并在需要时按 `object_key` 向后端刷新最新访问地址。
-- `script` 本轮已接入 local-first：生成成功后立即落本地 SQLite + `body.html` 文件，后续编辑、回收站、冲突恢复副本和拍摄状态都先写本地，再异步备份。
+- `script` 本轮已接入 local-first：生成成功后立即落本地 SQLite + `body.html` 文件，后续编辑、回收站、冲突恢复副本和拍摄状态都先写本地，再异步备份；后端 `scripts` 表只保留生成初稿与兼容查询投影，不再反向覆盖本地已编辑正文。
 - `fragment` 与 `script` 继续是两个独立领域对象：碎片负责素材沉淀与生成输入，成稿负责派生正文与拍摄消费；两者共享 editor / `body_html` / 导出与媒体能力，但不共享生命周期语义。
 - 本轮清理已经移除旧的 `localFragmentSyncQueue / localDraftStore / remoteFragments / remoteBodyDrafts` 主链路依赖，兼容层命名统一改成 `legacy*`。
 - 以后在移动端新增代码时，`server_id / sync_status / remote_id` 只允许作为 legacy cloud-binding 兼容字段出现，不能再被当作当前领域模型的核心语义。
@@ -39,7 +39,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
 - 生成页已经从旧的 `Mode A / Mode B` 双选切到统一主题输入：用户补一个主题后，后端按 `topic + SOP + few-shot/reference-script` 创建脚本任务。
 - 碎片正文详情和列表已接入本地真值与 legacy 兼容层：详情会优先读本地 HTML 与实体缓存，再按需叠加升级期兼容数据；正文与媒体改动统一留在本地真值并由 backup queue 异步备份。
-- 脚本详情页现在也采用 local-first：先读本地 script 真值，再按需补远端详情；`blur`、显式完成和应用退后台时会先落本地正文，再尽力调用 `PATCH /api/scripts/{id}` 做远端收敛。
+- 脚本详情页现在也采用 local-first：先读本地 script 真值，再按需补远端缺失稿件；编辑成功后正文只写本地并进入 backup queue，`/api/scripts/*` 只用于缺失补齐和兼容查询，不再作为已存在本地稿件的正文权威来源。
 - 首页系统区当前包含“全部”和按需出现的“成稿”；只有用户真的存在 script 时才会显示“成稿”入口，成稿列表与碎片列表继续分开，不做混排。
 - fragment 与 script 详情页统一成“正文主舞台 + 更多底部抽屉”交互；来源碎片、关联成稿、拍摄入口和附加元信息都收口到抽屉中。
 - `fragment` 与 `script` 都可以进入拍摄页；拍摄完成后会记录本地 `is_filmed / filmed_at`，默认不在列表卡片展示，只用于详情与后续筛选。
@@ -66,6 +66,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 编辑、删除、创建文件夹都会先修改本地实体并增加 `entity_version`
 - 图片、音频等大对象先存本地 staging，再由 `/api/backups/assets` 补传
 - 远端备份统一通过 `features/backups/queue.ts` 扫描 `backup_status=pending|failed` 的实体批量推送；当前 snapshot 已覆盖 fragment / folder / media_asset / script
+- scripts 列表页的远端同步当前只负责补齐本地缺失稿件，不会再用后端 `scripts` 旧投影覆盖已存在的本地 `body.html`
 - “创作工作台”页已提供显式“从备份恢复”入口：会先创建 restore session，再拉取 `/api/backups/snapshot` 重建本地 SQLite 与 `body.html`，并尽量把音频/图片重新缓存到 app sandbox
 - 恢复媒体缓存前，移动端会先调用 `/api/backups/assets/access` 按 `object_key` 刷新最新访问地址，减少签名 URL 过期导致的恢复失败
 - fragment 自身音频现在也会把 `audio_object_key` 持久化到本地真值与备份快照，恢复时会和媒体素材一起刷新访问地址并重建本地缓存
