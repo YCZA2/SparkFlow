@@ -25,6 +25,7 @@ export function useScriptDetailScreen(scriptId?: string | null) {
   const exitScreen = useCallback(async () => {
     /*离开脚本详情前先把本地真值固化，再标记列表需要刷新。 */
     try {
+      editor.editorRef.current?.blur?.();
       await editor.saveNow({ force: true });
       markScriptsStale();
       router.back();
@@ -44,6 +45,17 @@ export function useScriptDetailScreen(scriptId?: string | null) {
     }
     await Share.share({ message: shareText });
   }, [editor.editorRef, resource.script?.body_html]);
+
+  const done = useCallback(async () => {
+    /*右上角对勾只负责显式保存并收起键盘，保留当前成稿页继续编辑。 */
+    try {
+      editor.editorRef.current?.blur?.();
+      await editor.saveNow({ force: true });
+      markScriptsStale();
+    } catch (error) {
+      Alert.alert('保存失败', error instanceof Error ? error.message : '保存失败，请重试');
+    }
+  }, [editor]);
 
   const openShoot = useCallback(() => {
     /*拍摄入口始终携带当前编辑快照，保证提词内容与页面一致。 */
@@ -90,7 +102,7 @@ export function useScriptDetailScreen(scriptId?: string | null) {
         void exitScreen();
       },
       done: () => {
-        void exitScreen();
+        void done();
       },
       share,
     },

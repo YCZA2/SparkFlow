@@ -25,6 +25,7 @@ export function ScriptDetailScreen({ scriptId }: { scriptId?: string | null }) {
         isLoading={screen.resource.isLoading}
         error={screen.resource.error}
         isDraftHydrated={editor.isDraftHydrated}
+        showDoneButton={editor.isEditorFocused}
         formattingState={editor.formattingState}
         statusLabel={editor.statusLabel}
         editorRef={editor.editorRef}
