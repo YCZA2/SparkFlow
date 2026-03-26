@@ -30,11 +30,22 @@ interface ContentRichEditorProps {
   initialBodyHtml: string;
   autoFocus?: boolean;
   mediaAssets: EditorMediaAsset[];
+  onFocus?: () => void;
   onBlur?: () => void;
   onEditorReady: () => void;
   onSnapshotChange: (snapshot: EditorDocumentSnapshot) => void;
   onSelectionChange: (text: string) => void;
   onFormattingStateChange: (state: EditorFormattingState) => void;
+}
+
+async function readSnapshotFromNativeEditor(
+  editor: EnrichedTextInputInstance | null,
+  mediaAssets: EditorMediaAsset[]
+): Promise<EditorDocumentSnapshot | null> {
+  /*保存前直接向原生编辑器请求当前 HTML，减少桥接事件延迟带来的丢字风险。 */
+  if (!editor) return null;
+  const nextHtml = await editor.getHTML();
+  return buildSnapshotFromHtml(nextHtml, mediaAssets);
 }
 
 function replaceAssetIdsWithDisplayUrls(html: string, mediaAssets: EditorMediaAsset[]): string {
@@ -97,6 +108,7 @@ export function ContentRichEditor({
   initialBodyHtml,
   autoFocus = false,
   mediaAssets,
+  onFocus,
   onBlur,
   onEditorReady,
   onSnapshotChange,
@@ -173,8 +185,18 @@ export function ContentRichEditor({
       getSnapshot() {
         return latestSnapshotRef.current;
       },
+      async readSnapshot() {
+        const snapshot = await readSnapshotFromNativeEditor(nativeRef.current, mediaAssets);
+        if (snapshot) {
+          latestSnapshotRef.current = snapshot;
+        }
+        return snapshot ?? latestSnapshotRef.current;
+      },
       focus() {
         nativeRef.current?.focus();
+      },
+      blur() {
+        nativeRef.current?.blur();
       },
       insertImage(asset: EditorMediaAsset) {
         if (!asset.file_url) return;
@@ -184,7 +206,7 @@ export function ContentRichEditor({
         runCommand(nativeRef.current, formattingStateRef.current, command);
       },
     }),
-    [editorRef]
+    [editorRef, mediaAssets]
   );
 
   React.useEffect(() => {
@@ -208,11 +230,21 @@ export function ContentRichEditor({
     };
   }, []);
 
+  const flushSnapshotChange = React.useCallback(() => {
+    /*失焦时立即把最后一版快照抛给会话层，避免顶部按钮保存时还在等防抖定时器。 */
+    if (snapshotTimerRef.current) {
+      clearTimeout(snapshotTimerRef.current);
+      snapshotTimerRef.current = null;
+    }
+    onSnapshotChange(latestSnapshotRef.current);
+  }, [onSnapshotChange]);
+
   const handleHtmlChange = React.useCallback(
     (nextHtml: string) => {
       latestSnapshotRef.current = buildSnapshotFromHtml(nextHtml, mediaAssets);
       if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
       snapshotTimerRef.current = setTimeout(() => {
+        snapshotTimerRef.current = null;
         onSnapshotChange(latestSnapshotRef.current);
       }, 120);
     },
@@ -231,10 +263,14 @@ export function ContentRichEditor({
           autoCapitalize="sentences"
           style={{ ...styles.input, backgroundColor: editorBackground }}
           contextMenuItems={contextMenuItems}
+          onFocus={() => {
+            onFocus?.();
+          }}
           onChangeHtml={(event) => {
             handleHtmlChange(event.nativeEvent.value);
           }}
           onBlur={() => {
+            flushSnapshotChange();
             onBlur?.();
           }}
           onChangeSelection={(event: NativeSyntheticEvent<OnChangeSelectionEvent>) => {

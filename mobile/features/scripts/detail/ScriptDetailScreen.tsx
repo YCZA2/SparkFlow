@@ -42,6 +42,7 @@ export function ScriptDetailScreen({ scriptId }: { scriptId?: string | null }) {
             initialBodyHtml={editor.initialBodyHtml}
             autoFocus={editor.shouldAutoFocus}
             mediaAssets={editor.mediaAssets}
+            onFocus={editor.onEditorFocus}
             onBlur={editor.onEditorBlur}
             onEditorReady={editor.onEditorReady}
             onSnapshotChange={editor.onSnapshotChange}

@@ -111,6 +111,7 @@ interface ContentEditorScaffoldProps {
   formattingState: EditorFormattingState | null;
   statusLabel?: string | null;
   isUploadingImage?: boolean;
+  showDoneButton?: boolean;
   editorRef: React.RefObject<EditorSurfaceHandle | null>;
   onBack: () => void | Promise<void>;
   onDone: () => void | Promise<void>;
@@ -131,6 +132,7 @@ export function ContentEditorScaffold({
   formattingState,
   statusLabel,
   isUploadingImage = false,
+  showDoneButton = true,
   editorRef,
   onBack,
   onDone,
@@ -200,13 +202,15 @@ export function ContentEditorScaffold({
             ) : null}
           </View>
         ) : null}
-        <HeaderCircleButton
-          symbol="checkmark"
-          filled={true}
-          dark={isDark}
-          disabled={options?.disableActions}
-          onPress={onDone}
-        />
+        {showDoneButton ? (
+          <HeaderCircleButton
+            symbol="checkmark"
+            filled={true}
+            dark={isDark}
+            disabled={options?.disableActions}
+            onPress={onDone}
+          />
+        ) : null}
       </View>
     </View>
   );

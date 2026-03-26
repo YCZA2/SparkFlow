@@ -87,7 +87,9 @@ export interface EditorFormattingState {
 
 export interface EditorSurfaceHandle {
   getSnapshot: () => EditorDocumentSnapshot | null;
+  readSnapshot: () => Promise<EditorDocumentSnapshot | null>;
   focus: () => void;
+  blur: () => void;
   insertImage: (asset: EditorMediaAsset) => void;
   runCommand: (command: EditorCommand) => void;
 }

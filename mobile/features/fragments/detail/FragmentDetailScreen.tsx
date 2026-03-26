@@ -34,6 +34,7 @@ export function FragmentDetailScreen({
         isLoading={screen.resource.isLoading}
         error={screen.resource.error}
         isDraftHydrated={editor.isDraftHydrated}
+        showDoneButton={editor.isEditorFocused}
         formattingState={editor.formattingState}
         statusLabel={editor.statusLabel}
         isUploadingImage={editor.isUploadingImage}
@@ -53,6 +54,7 @@ export function FragmentDetailScreen({
             initialBodyHtml={editor.initialBodyHtml}
             autoFocus={editor.shouldAutoFocus}
             mediaAssets={editor.mediaAssets}
+            onFocus={editor.onEditorFocus}
             onBlur={editor.onEditorBlur}
             onEditorReady={editor.onEditorReady}
             onSnapshotChange={editor.onSnapshotChange}

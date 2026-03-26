@@ -16,6 +16,7 @@ import {
   reduceEditorSession,
   shouldPublishOptimisticDocument,
 } from '@/features/editor/sessionState';
+import { resolveEditorSnapshotForSave } from '@/features/editor/saveSnapshot';
 import type {
   EditorDocumentSnapshot,
   EditorFormattingState,
@@ -80,9 +81,11 @@ export interface EditorSessionResult<TDocument = any> {
   mediaAssets: EditorMediaAsset[];
   formattingState: EditorFormattingState | null;
   isDraftHydrated: boolean;
+  isEditorFocused: boolean;
   statusLabel: string | null;
   isUploadingImage: boolean;
   saveNow: (options?: { force?: boolean }) => Promise<void>;
+  onEditorFocus: () => void;
   onEditorBlur: () => void;
   onEditorReady: () => void;
   onSnapshotChange: (snapshot: EditorDocumentSnapshot) => void;
@@ -150,6 +153,7 @@ export function useEditorSession<TDocument>(
 
   // 图片上传状态
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isEditorFocused, setIsEditorFocused] = useState(false);
 
   // Refs
   const editorRef = useRef<EditorSurfaceHandle | null>(null);
@@ -173,6 +177,7 @@ export function useEditorSession<TDocument>(
       documentId,
       persistenceMode,
     });
+    setIsEditorFocused(false);
   }, [documentId, persistenceMode]);
 
   // 加载本地草稿
@@ -237,6 +242,14 @@ export function useEditorSession<TDocument>(
     return snapshot ?? stateRef.current.snapshot;
   }, []);
 
+  const readLatestSnapshot = useCallback(async (): Promise<EditorDocumentSnapshot> => {
+    /*显式保存时优先向编辑器桥接拉取当前 HTML，兜住按钮点击与输入事件的时序差。 */
+    return await resolveEditorSnapshotForSave({
+      editor: editorRef.current,
+      fallbackSnapshot: getLiveSnapshot(),
+    });
+  }, [getLiveSnapshot]);
+
   // 保存
   const saveNow = useCallback(
     async (options?: { force?: boolean }) => {
@@ -244,7 +257,7 @@ export function useEditorSession<TDocument>(
       const currentDocumentId = documentIdRef.current;
       if (!currentDocument || !currentDocumentId) return;
 
-      const latestSnapshot = getLiveSnapshot();
+      const latestSnapshot = await readLatestSnapshot();
       const baselineBodyHtml = normalizeBodyHtml(
         stateRef.current.baseline?.baseline_body_html ?? buildSourceDocument(currentDocument).body_html
       );
@@ -273,7 +286,7 @@ export function useEditorSession<TDocument>(
         throw error;
       }
     },
-    [buildSourceDocument, getLiveSnapshot, saveLocally]
+    [buildSourceDocument, readLatestSnapshot, saveLocally]
   );
 
   // 图片插入
@@ -355,7 +368,13 @@ export function useEditorSession<TDocument>(
     dispatch({ type: 'EDITOR_READY' });
   }, []);
 
+  const onEditorFocus = useCallback(() => {
+    /*编辑器聚焦时上报编辑态，供页面按 iOS 备忘录语义切换顶部操作按钮。 */
+    setIsEditorFocused(true);
+  }, []);
+
   const onEditorBlur = useCallback(() => {
+    setIsEditorFocused(false);
     if (shouldSaveOnBlur) {
       void saveNow().catch(() => undefined);
     }
@@ -410,9 +429,11 @@ export function useEditorSession<TDocument>(
     mediaAssets: state.mediaAssets,
     formattingState: state.formattingState,
     isDraftHydrated: state.isDraftHydrated,
+    isEditorFocused,
     statusLabel,
     isUploadingImage,
     saveNow,
+    onEditorFocus,
     onEditorBlur,
     onEditorReady,
     onSnapshotChange,

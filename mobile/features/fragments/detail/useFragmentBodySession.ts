@@ -78,10 +78,15 @@ export function useFragmentBodySession({
 
   const saveLocally = useCallback(
     async (id: string, snapshot: EditorDocumentSnapshot): Promise<void> => {
-      await updateLocalFragmentEntity(id, {
+      const updatedFragment = await updateLocalFragmentEntity(id, {
         body_html: snapshot.body_html,
         plain_text_snapshot: snapshot.plain_text,
       });
+
+      if (updatedFragment) {
+        await commitOptimisticFragment(updatedFragment);
+        return;
+      }
 
       const mediaAssets: EditorMediaAsset[] = snapshot.asset_ids.map((assetId) => ({
         id: assetId,

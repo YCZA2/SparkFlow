@@ -87,8 +87,9 @@ export function useFragmentDetailScreen(
   const exitScreen = async () => {
     /*离开详情前先保证最新输入已落本地，并把上云动作交给后台收敛，同时标记列表待刷新。 */
     try {
+      editor.editorRef.current?.blur?.();
+      await editor.saveNow({ force: true });
       const latestSnapshot = editor.editorRef.current?.getSnapshot?.() ?? null;
-      await editor.saveNow();
       if (
         fragmentId &&
         shouldDeleteEmptyManualFragmentOnExit({
@@ -162,8 +163,14 @@ export function useFragmentDetailScreen(
   };
 
   const done = async () => {
-    /*完成编辑与直接返回都复用同一套"先本地保存、再后台同步"的退出策略。 */
-    await exitScreen();
+    /*右上角对勾只负责显式保存并收起键盘，保留当前详情页继续编辑。 */
+    try {
+      editor.editorRef.current?.blur?.();
+      await editor.saveNow({ force: true });
+      markFragmentsStale();
+    } catch {
+      Alert.alert('本地保存失败', '请稍后重试，当前页会继续保留输入内容。');
+    }
   };
 
   const openShoot = () => {
