@@ -49,7 +49,11 @@ function ToolbarButton({
       style={[
         styles.toolButton,
         {
-          backgroundColor: active ? (isDark ? '#E0BB48' : '#D8B23C') : 'transparent',
+          backgroundColor: active
+            ? isDark
+              ? '#3B3320'
+              : '#FFF3C4'
+            : 'transparent',
           opacity: disabled ? 0.42 : 1,
         },
       ]}
@@ -58,13 +62,13 @@ function ToolbarButton({
         <SymbolView
           name={symbol}
           size={20}
-          tintColor={active ? '#2B2415' : isDark ? '#F7F3ED' : '#23201C'}
+          tintColor={active ? '#C88A00' : isDark ? '#F7F3ED' : '#23201C'}
         />
       ) : (
         <Text
           style={[
             compactText ? styles.toolCompactText : styles.toolText,
-            { color: active ? '#2B2415' : isDark ? '#F7F3ED' : '#23201C' },
+            { color: active ? '#C88A00' : isDark ? '#F7F3ED' : '#23201C' },
           ]}
         >
           {label}
@@ -109,8 +113,8 @@ export function EditorToolbar({
         style={[
           styles.toolbarShell,
           {
-            backgroundColor: isDark ? '#1B1916' : '#F4F1EC',
-            borderColor: isDark ? '#2A2723' : '#FAF7F2',
+            backgroundColor: isDark ? 'rgba(28,28,30,0.96)' : 'rgba(255,255,255,0.96)',
+            borderColor: isDark ? '#2A2723' : '#E7E3DC',
           },
         ]}
       >
@@ -175,7 +179,7 @@ export function EditorToolbar({
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingTop: 10,
   },
   statusRow: {
@@ -193,15 +197,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   toolbarShell: {
-    borderRadius: 32,
+    borderRadius: 26,
     borderWidth: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 8,
-    shadowColor: '#1E1913',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 4,
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 6,
   },
   toolbarContent: {
     alignItems: 'center',
@@ -209,12 +213,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   toolButton: {
-    minWidth: 52,
-    height: 52,
-    borderRadius: 20,
+    minWidth: 46,
+    height: 46,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
   toolText: {
     fontSize: 21,

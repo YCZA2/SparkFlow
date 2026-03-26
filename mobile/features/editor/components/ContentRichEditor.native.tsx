@@ -15,6 +15,7 @@ import {
   unwrapHtmlFromNativeEditor,
   wrapHtmlForNativeEditor,
 } from '@/features/editor/html';
+import { useAppTheme } from '@/theme/useAppTheme';
 import type {
   EditorCommand,
   EditorDocumentSnapshot,
@@ -103,7 +104,9 @@ export function ContentRichEditor({
   onFormattingStateChange,
 }: ContentRichEditorProps) {
   /*用原生富文本输入承接共享编辑器底座，并维持统一桥接接口。 */
+  const theme = useAppTheme();
   const nativeRef = React.useRef<EnrichedTextInputInstance | null>(null);
+  const editorBackground = theme.name === 'dark' ? '#111113' : '#F2F2F7';
   const [seededEditorHtml, setSeededEditorHtml] = React.useState(() =>
     wrapHtmlForNativeEditor(
       replaceAssetIdsWithDisplayUrls(stripEdgeEmptyParagraphs(initialBodyHtml), mediaAssets)
@@ -217,8 +220,8 @@ export function ContentRichEditor({
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.editorShell}>
+    <View style={[styles.container, { backgroundColor: editorBackground }]}>
+      <View style={[styles.editorShell, { backgroundColor: editorBackground }]}>
         <EnrichedTextInput
           key={editorKey}
           ref={nativeRef}
@@ -226,7 +229,7 @@ export function ContentRichEditor({
           defaultValue={seededEditorHtml}
           placeholder=""
           autoCapitalize="sentences"
-          style={styles.input}
+          style={{ ...styles.input, backgroundColor: editorBackground }}
           contextMenuItems={contextMenuItems}
           onChangeHtml={(event) => {
             handleHtmlChange(event.nativeEvent.value);

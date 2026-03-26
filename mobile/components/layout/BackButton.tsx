@@ -11,6 +11,8 @@ interface BackButtonProps {
   onPress?: () => void;
   /** 按钮颜色，默认使用主题文字色 */
   color?: string;
+  /** 视觉变体，circle 更贴近 iOS 备忘录页头按钮 */
+  variant?: 'plain' | 'circle';
   /** 是否显示文字，默认显示 */
   showText?: boolean;
   /** 文字内容，默认"返回" */
@@ -28,6 +30,7 @@ interface BackButtonProps {
 export function BackButton({
   onPress,
   color,
+  variant = 'plain',
   showText = true,
   text = '返回',
 }: BackButtonProps) {
@@ -49,12 +52,22 @@ export function BackButton({
       onPress={handlePress}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       activeOpacity={0.6}
-      style={styles.container}
+      style={[
+        styles.container,
+        variant === 'circle' ? styles.circleContainer : null,
+        variant === 'circle'
+          ? {
+              backgroundColor:
+                theme.name === 'dark' ? theme.colors.surfaceMuted : 'rgba(255,255,255,0.88)',
+              borderColor: theme.colors.border,
+            }
+          : null,
+      ]}
     >
       <SymbolView name="chevron.left" size={22} tintColor={tintColor} />
-      {showText && (
+      {showText && variant === 'plain' ? (
         <Text style={[styles.text, { color: tintColor }]}>{text}</Text>
-      )}
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -67,6 +80,17 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     minWidth: 44,
     minHeight: 44,
+  },
+  circleContainer: {
+    width: 44,
+    height: 44,
+    minWidth: 44,
+    minHeight: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    paddingVertical: 0,
+    paddingRight: 0,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   text: {
     fontSize: 17,

@@ -24,6 +24,7 @@ interface QuickAction {
  * 根据当前路由自动判断可见性和 folderId
  */
 export function QuickActionBar() {
+  /*把底部快捷入口收成备忘录式悬浮胶囊，主流程页保持轻量浮在内容之上。 */
   const theme = useAppTheme();
   const router = useRouter();
   const pathname = usePathname();
@@ -106,10 +107,10 @@ export function QuickActionBar() {
         exiting={FadeOutDown.duration(120)}
         style={[
           styles.quickActionPill,
-          theme.shadow.card,
           {
-            backgroundColor: theme.colors.surface,
+            backgroundColor: theme.name === 'dark' ? '#1C1C1E' : '#FFFFFF',
             borderColor: theme.colors.border,
+            shadowOpacity: theme.name === 'dark' ? 0.3 : 0.12,
           },
         ]}
       >
@@ -120,11 +121,22 @@ export function QuickActionBar() {
             onPress={action.onPress}
             activeOpacity={0.78}
           >
-            <SymbolView
-              name={action.icon}
-              size={30}
-              tintColor={action.active ? '#F05A28' : theme.colors.text}
-            />
+            <View
+              style={[
+                styles.quickActionIconShell,
+                action.active
+                  ? {
+                      backgroundColor: '#FFF4CC',
+                    }
+                  : null,
+              ]}
+            >
+              <SymbolView
+                name={action.icon}
+                size={22}
+                tintColor={action.active ? '#D49A00' : theme.colors.text}
+              />
+            </View>
           </TouchableOpacity>
         ))}
       </Animated.View>
@@ -144,17 +156,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 22,
+    gap: 14,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    minWidth: 248,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    minWidth: 208,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 24,
+    elevation: 8,
   },
   quickActionButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionIconShell: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },

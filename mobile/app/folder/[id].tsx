@@ -1,26 +1,19 @@
 import React, { useCallback, useEffect } from 'react';
-import {
-  RefreshControl,
-  SectionList,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { RefreshControl, SectionList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import { SymbolView } from 'expo-symbols';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { FragmentCard } from '@/components/FragmentCard';
 import { BackButton } from '@/components/layout/BackButton';
-import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
-import { useAppTheme } from '@/theme/useAppTheme';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useFolderFragments } from '@/features/folders/hooks';
 import { useQuickActionBar } from '@/providers/QuickActionBarProvider';
+import { useAppTheme } from '@/theme/useAppTheme';
 
-// 选择按钮组件
 function SelectButton({
   isSelectionMode,
   onPress,
@@ -30,16 +23,18 @@ function SelectButton({
   onPress: () => void;
   color: string;
 }) {
+  /*列表右上角操作保持轻量文本按钮，和备忘录“编辑”语义一致。 */
   return (
     <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.selectButton}>
       <Text style={[styles.selectAction, { color }]}>
-        {isSelectionMode ? '取消' : '选择'}
+        {isSelectionMode ? '完成' : '编辑'}
       </Text>
     </TouchableOpacity>
   );
 }
 
 export default function FolderDetailScreen() {
+  /*文件夹页改为备忘录式页头 + 分组列表，保留现有选择和生成流程。 */
   const theme = useAppTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -47,7 +42,6 @@ export default function FolderDetailScreen() {
   const screen = useFolderFragments(id, name);
   const { setVisible } = useQuickActionBar();
 
-  // 选择模式下隐藏 QuickActionBar，退出时恢复显示
   useEffect(() => {
     setVisible(!screen.selection.isSelectionMode);
   }, [screen.selection.isSelectionMode, setVisible]);
@@ -58,15 +52,15 @@ export default function FolderDetailScreen() {
 
   if (screen.isLoading && screen.fragments.length === 0) {
     return (
-      <ScreenContainer>
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}>
         <LoadingState message="正在加载碎片..." />
-      </ScreenContainer>
+      </View>
     );
   }
 
   if (screen.error && screen.fragments.length === 0) {
     return (
-      <ScreenContainer>
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}>
         <ScreenState
           icon="⚠️"
           title="加载失败"
@@ -74,45 +68,24 @@ export default function FolderDetailScreen() {
           actionLabel="点击重试"
           onAction={screen.reload}
         />
-      </ScreenContainer>
+      </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* 悬浮顶部导航栏 - 移到最前面确保点击事件优先 */}
-      <View style={[styles.floatingHeader, { paddingTop: insets.top + 12 }]}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerLeading}>
-            <BackButton onPress={handleBack} />
-          </View>
-          <View style={styles.headerTitleContainer}>
-            <Text style={[styles.headerTitle, { color: theme.colors.text }]} numberOfLines={1}>
-              {name || '文件夹'}
-            </Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]}>
-              {screen.totalLabel}
-            </Text>
-          </View>
-          <View style={styles.headerTrailing}>
-            <SelectButton
-              isSelectionMode={screen.selection.isSelectionMode}
-              onPress={screen.selection.toggleSelectionMode}
-              color={theme.colors.primary}
-            />
-          </View>
-        </View>
+      <View
+        pointerEvents="box-none"
+        style={[styles.floatingHeader, { top: insets.top + 12 }]}
+      >
+        <BackButton onPress={handleBack} variant="circle" showText={false} />
+        <SelectButton
+          isSelectionMode={screen.selection.isSelectionMode}
+          onPress={screen.selection.toggleSelectionMode}
+          color={theme.colors.primary}
+        />
       </View>
 
-      {/* 顶部渐隐遮罩 - 减小高度避免与返回按钮重叠 */}
-      <LinearGradient
-        colors={[theme.colors.background, `${theme.colors.background}00`]}
-        locations={[0.3, 1]}
-        style={[styles.topFade, { height: insets.top + 50 }]}
-        pointerEvents="none"
-      />
-
-      {/* 列表内容 */}
       <SectionList
         sections={screen.sections}
         keyExtractor={(item) => item.id}
@@ -129,13 +102,22 @@ export default function FolderDetailScreen() {
         renderSectionHeader={({ section }) => (
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{section.title}</Text>
         )}
+        ListHeaderComponent={
+          <View style={[styles.headerBlock, { paddingTop: insets.top + 66 }]}>
+            <View style={styles.heroBlock}>
+              <Text style={[styles.heroTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                {name || '文件夹'}
+              </Text>
+              <Text style={[styles.heroSubtitle, { color: theme.colors.textSubtle }]}>
+                {screen.totalLabel}
+              </Text>
+            </View>
+          </View>
+        }
         ListEmptyComponent={
           <ScreenState icon="📝" title="还没有灵感碎片" message="去录一条或记一条吧" />
         }
-        contentContainerStyle={[
-          screen.fragments.length === 0 ? styles.emptyList : styles.list,
-          { paddingTop: insets.top + 70, paddingBottom: insets.bottom + 100 }
-        ]}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
         refreshControl={
           <RefreshControl
             refreshing={screen.isRefreshing}
@@ -147,25 +129,30 @@ export default function FolderDetailScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* 底部渐隐遮罩 */}
       <LinearGradient
-        colors={[`${theme.colors.background}00`, theme.colors.background]}
-        locations={[0, 0.7]}
-        style={[styles.bottomFade, { height: insets.bottom + 100 }]}
+        colors={[theme.colors.background, `${theme.colors.background}00`]}
+        locations={[0.18, 1]}
+        style={[styles.topFade, { height: insets.top + 96 }]}
         pointerEvents="none"
       />
 
-      {/* 悬浮底部操作栏 - 选择模式 */}
-      {screen.selection.isSelectionMode && (
-        <View style={[styles.floatingFooter, { bottom: insets.bottom + 20 }]}>
+      <LinearGradient
+        colors={[`${theme.colors.background}00`, theme.colors.background]}
+        locations={[0, 0.78]}
+        style={[styles.bottomFade, { height: insets.bottom + 108 }]}
+        pointerEvents="none"
+      />
+
+      {screen.selection.isSelectionMode ? (
+        <View style={[styles.floatingFooter, { bottom: insets.bottom + 18 }]}>
           <Animated.View
             entering={FadeInDown.duration(160)}
             exiting={FadeOutDown.duration(120)}
             style={[
               styles.selectionBar,
-              theme.shadow.card,
               {
-                backgroundColor: theme.colors.surface,
+                backgroundColor:
+                  theme.name === 'dark' ? 'rgba(28,28,30,0.96)' : 'rgba(255,255,255,0.96)',
                 borderColor: theme.colors.border,
               },
             ]}
@@ -175,21 +162,25 @@ export default function FolderDetailScreen() {
                 styles.generateButton,
                 {
                   backgroundColor:
-                    screen.selection.selectedCount > 0
-                      ? theme.colors.primary
-                      : theme.colors.textSubtle,
+                    screen.selection.selectedCount > 0 ? theme.colors.warning : theme.colors.textSubtle,
                 },
               ]}
               onPress={screen.onGenerate}
               activeOpacity={0.85}
             >
-              <Text style={styles.generateButtonText}>
-                交给 AI 编导（已选 {screen.selection.selectedCount}/{screen.selection.maxSelection} 条）
+              <View style={styles.generateContent}>
+                <SymbolView name="sparkles" size={18} tintColor="#FFFFFF" />
+                <Text style={styles.generateButtonText}>
+                  交给 AI 编导
+                </Text>
+              </View>
+              <Text style={styles.generateHint}>
+                已选 {screen.selection.selectedCount}/{screen.selection.maxSelection}
               </Text>
             </TouchableOpacity>
           </Animated.View>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -198,97 +189,68 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  // 悬浮顶部导航栏
+  centered: {
+    justifyContent: 'center',
+  },
+  headerBlock: {
+    paddingHorizontal: 16,
+  },
   floatingHeader: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    backgroundColor: 'transparent',
-  },
-  headerContent: {
-    position: 'relative',
-    minHeight: 52,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-  },
-  headerLeading: {
-    position: 'absolute',
     left: 16,
-    top: 0,
-    bottom: 12,
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  headerTrailing: {
-    position: 'absolute',
     right: 16,
-    top: 0,
-    bottom: 12,
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  headerTitleContainer: {
-    minHeight: 40,
+    zIndex: 10,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 88,
+    justifyContent: 'space-between',
   },
-  subtitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  // 选择按钮样式
-  selectButton: {
-    minWidth: 44,
-    alignItems: 'flex-end',
-  },
-  selectAction: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // 列表样式
-  list: {
-    paddingHorizontal: 0,
-  },
-  emptyList: {
-    flexGrow: 1,
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 12,
-    marginBottom: 4,
-    marginLeft: 16,
-    color: '#8E8E93',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  // 渐隐遮罩
   topFade: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 90,
+    zIndex: 8,
   },
   bottomFade: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 90,
+    bottom: 0,
+    zIndex: 8,
   },
-  // 悬浮底部操作栏
+  heroBlock: {
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  heroTitle: {
+    fontSize: 32,
+    lineHeight: 36,
+    fontWeight: '800',
+    letterSpacing: -0.9,
+  },
+  heroSubtitle: {
+    marginTop: 3,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  selectButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  selectAction: {
+    fontSize: 17,
+    fontWeight: '500',
+  },
+  sectionTitle: {
+    marginTop: 12,
+    marginBottom: 8,
+    marginLeft: 16,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
   floatingFooter: {
     position: 'absolute',
     left: 0,
@@ -297,21 +259,38 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   selectionBar: {
-    width: '90%',
+    width: '92%',
     maxWidth: 420,
-    borderRadius: 26,
+    borderRadius: 24,
     borderWidth: 1,
-    padding: 10,
+    padding: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 8,
   },
   generateButton: {
-    borderRadius: 14,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
   },
+  generateContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   generateButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
+  },
+  generateHint: {
+    marginTop: 2,
+    color: 'rgba(255,255,255,0.86)',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
   },
 });

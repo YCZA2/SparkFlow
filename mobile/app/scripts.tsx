@@ -1,9 +1,9 @@
 import React, { useCallback } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ScriptCard } from '@/components/ScriptCard';
-import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { BackButton } from '@/components/layout/BackButton';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { useSingleFlightRouterPush } from '@/hooks/useSingleFlightRouterPush';
@@ -13,22 +13,23 @@ import { useAppTheme } from '@/theme/useAppTheme';
 import type { Script } from '@/types/script';
 
 export default function ScriptsScreen() {
+  /*成稿列表采用和备忘录一致的“圆形返回 + 大标题 + 分组列表”结构。 */
   const router = useRouter();
   const pushOnce = useSingleFlightRouterPush();
   const theme = useAppTheme();
+  const insets = useSafeAreaInsets();
   const { source_fragment_id } = useLocalSearchParams<{ source_fragment_id?: string }>();
   const sourceFragmentId = typeof source_fragment_id === 'string' ? source_fragment_id : null;
   const { items, isLoading, isRefreshing, error, reload, refresh } = useScripts({
     sourceFragmentId,
   });
   const isRelatedScriptsMode = Boolean(sourceFragmentId);
-  const title = isRelatedScriptsMode ? '关联成稿' : '成稿';
-  // 顶部副标题统一改成数量信息，和文件夹详情保持一致的双行居中结构。
+  const title = isRelatedScriptsMode ? '关联成稿' : '全部成稿';
   const subtitle = isRelatedScriptsMode ? `${items.length} 篇关联成稿` : `${items.length} 篇成稿`;
   const emptyTitle = isRelatedScriptsMode ? '还没有关联成稿' : '还没有口播稿';
   const emptyMessage = isRelatedScriptsMode
     ? '这条碎片暂时还没有生成过成稿。'
-    : '去碎片页选择灵感，生成你的第一篇口播稿';
+    : '去碎片页选择灵感，生成你的第一篇口播稿。';
 
   useFocusEffect(
     useCallback(() => {
@@ -38,7 +39,7 @@ export default function ScriptsScreen() {
 
   const handleScriptPress = useCallback(
     (script: Script) => {
-      /*成稿详情入口统一走单航班导航，避免用户快速连点时重复压栈。 */
+      /*成稿详情入口继续用单航班导航，避免快速连点时重复压栈。 */
       pushOnce(`/script/${script.id}`, `script:${script.id}`);
     },
     [pushOnce]
@@ -46,16 +47,16 @@ export default function ScriptsScreen() {
 
   if (isLoading && items.length === 0) {
     return (
-      <ScreenContainer>
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}>
         <Stack.Screen options={{ title, headerShown: false }} />
         <LoadingState message="正在加载口播稿..." />
-      </ScreenContainer>
+      </View>
     );
   }
 
   if (error && items.length === 0) {
     return (
-      <ScreenContainer>
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}>
         <Stack.Screen options={{ title, headerShown: false }} />
         <ScreenState
           icon="⚠️"
@@ -66,42 +67,39 @@ export default function ScriptsScreen() {
           secondaryActionLabel="网络设置"
           onSecondaryAction={() => router.push('/network-settings')}
         />
-      </ScreenContainer>
+      </View>
     );
   }
 
   return (
-    <ScreenContainer>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ title, headerShown: false }} />
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <ScriptCard script={item} onPress={handleScriptPress} />
+        renderItem={({ item, index }) => (
+          <ScriptCard
+            script={item}
+            onPress={handleScriptPress}
+            isFirst={index === 0}
+            isLast={index === items.length - 1}
+          />
         )}
         ListHeaderComponent={
-          <View style={styles.header}>
-            <View style={styles.headerBar}>
-              <View style={styles.headerBack}>
-                <BackButton color={theme.colors.primary} />
-              </View>
-              <View style={styles.headerCenter}>
-                <Text style={[styles.headerTitle, { color: theme.colors.text }]}>{title}</Text>
-                <Text style={[styles.headerSubtitle, { color: theme.colors.textSubtle }]}>
-                  {subtitle}
-                </Text>
-              </View>
+          <View style={[styles.headerBlock, { paddingTop: insets.top + 12 }]}>
+            <View style={styles.headerRow}>
+              <BackButton color={theme.colors.text} variant="circle" showText={false} />
+            </View>
+            <View style={styles.heroBlock}>
+              <Text style={[styles.heroTitle, { color: theme.colors.text }]}>{title}</Text>
+              <Text style={[styles.heroSubtitle, { color: theme.colors.textSubtle }]}>
+                {subtitle}
+              </Text>
             </View>
           </View>
         }
-        ListEmptyComponent={
-          <ScreenState
-            icon="📄"
-            title={emptyTitle}
-            message={emptyMessage}
-          />
-        }
-        contentContainerStyle={items.length === 0 ? styles.emptyList : styles.list}
+        ListEmptyComponent={<ScreenState icon="📄" title={emptyTitle} message={emptyMessage} />}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -111,51 +109,39 @@ export default function ScriptsScreen() {
         }
         showsVerticalScrollIndicator={false}
       />
-    </ScreenContainer>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  list: {
-    paddingBottom: 24,
+  container: {
+    flex: 1,
   },
-  emptyList: {
-    flexGrow: 1,
+  centered: {
+    justifyContent: 'center',
   },
-  header: {
+  headerBlock: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
   },
-  headerBar: {
-    position: 'relative',
-    minHeight: 52,
-    justifyContent: 'center',
-  },
-  headerBack: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  headerCenter: {
+  headerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 88,
+    justifyContent: 'space-between',
   },
-  headerTitle: {
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '700',
-    textAlign: 'center',
+  heroBlock: {
+    marginTop: 18,
+    marginBottom: 14,
   },
-  headerSubtitle: {
-    marginTop: 2,
-    fontSize: 13,
-    lineHeight: 18,
+  heroTitle: {
+    fontSize: 32,
+    lineHeight: 36,
+    fontWeight: '800',
+    letterSpacing: -0.9,
+  },
+  heroSubtitle: {
+    marginTop: 3,
+    fontSize: 15,
+    lineHeight: 20,
     fontWeight: '500',
-    textAlign: 'center',
   },
 });

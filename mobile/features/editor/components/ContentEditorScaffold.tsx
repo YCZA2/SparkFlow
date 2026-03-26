@@ -46,9 +46,13 @@ function HeaderCircleButton({
   onPress: () => void | Promise<void>;
 }) {
   /*统一顶部圆形操作按钮，保持编辑页主视图的备忘录式视觉密度。 */
-  const backgroundColor = filled ? '#D8B23C' : dark ? '#1B1916' : '#EFECE6';
-  const borderColor = filled ? '#E9CC68' : dark ? '#2A2723' : '#F7F4EF';
-  const tintColor = filled ? '#FFF6C9' : dark ? '#F7F3ED' : '#23201C';
+  const backgroundColor = filled
+    ? '#FFF3C4'
+    : dark
+      ? 'rgba(28,28,30,0.96)'
+      : 'rgba(255,255,255,0.92)';
+  const borderColor = filled ? '#F2DD8C' : dark ? '#2A2723' : '#E7E3DC';
+  const tintColor = filled ? '#C88A00' : dark ? '#F7F3ED' : '#23201C';
 
   return (
     <TouchableOpacity
@@ -142,15 +146,15 @@ export function ContentEditorScaffold({
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const isDark = theme.name === 'dark';
-  const noteBackground = isDark ? '#12110F' : '#ECE9E4';
-  const noteText = isDark ? '#F7F3ED' : '#23201C';
-  const chromePill = isDark ? '#181715' : '#F1EEEA';
+  const noteBackground = isDark ? '#111113' : '#F2F2F7';
+  const noteText = isDark ? '#F7F3ED' : '#1C1C1E';
+  const chromePill = isDark ? 'rgba(28,28,30,0.96)' : 'rgba(255,255,255,0.92)';
   const useNativeFormattingMenu = supportsNativeFormattingMenu();
   const hasHeaderPill = Boolean(onShare || onOpenDetailSheet);
 
   const renderPageHeader = (options?: { disableActions?: boolean }) => (
     <View style={styles.headerRow}>
-      <BackButton onPress={onBack} />
+      <BackButton onPress={onBack} variant="circle" showText={false} />
 
       <View style={styles.headerActions}>
         <HeaderCircleButton
@@ -165,7 +169,7 @@ export function ContentEditorScaffold({
               styles.headerPill,
               {
                 backgroundColor: chromePill,
-                borderColor: isDark ? '#2A2723' : '#F7F4EF',
+                borderColor: isDark ? '#2A2723' : '#E7E3DC',
                 opacity: options?.disableActions ? 0.55 : 1,
               },
             ]}
@@ -292,13 +296,13 @@ const styles = StyleSheet.create({
   },
   page: {
     flex: 1,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 18,
+    marginBottom: 20,
   },
   headerActions: {
     flexDirection: 'row',
@@ -306,26 +310,26 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerCircleButton: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
   },
   headerPill: {
-    height: 62,
-    borderRadius: 31,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 4,
     gap: 4,
   },
   headerPillButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -337,8 +341,8 @@ const styles = StyleSheet.create({
   },
   editorCanvas: {
     flex: 1,
-    paddingHorizontal: 10,
-    paddingTop: 4,
+    paddingHorizontal: 2,
+    paddingTop: 6,
   },
   bottomAccessory: {
     paddingHorizontal: 18,

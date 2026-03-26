@@ -112,6 +112,11 @@ export function FragmentCard({
         styles.container,
         {
           backgroundColor: theme.colors.surface,
+          borderTopLeftRadius: isFirstInSection ? 18 : 0,
+          borderTopRightRadius: isFirstInSection ? 18 : 0,
+          borderBottomLeftRadius: isLastInSection ? 18 : 0,
+          borderBottomRightRadius: isLastInSection ? 18 : 0,
+          marginTop: isFirstInSection ? 0 : StyleSheet.hairlineWidth,
         },
       ]}
       onPress={() => onPress?.(fragment)}
@@ -122,6 +127,9 @@ export function FragmentCard({
           <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={1}>
             {getTitle(fragment)}
           </Text>
+          {!selectable ? (
+            <Text style={[styles.countChevron, { color: theme.colors.textSubtle }]}>›</Text>
+          ) : null}
           {selectable ? (
             <View
               style={[
@@ -163,10 +171,8 @@ export function FragmentCard({
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
-    marginVertical: 4,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 12,
   },
   content: {
     gap: 2,
@@ -181,6 +187,11 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 22,
     fontWeight: '500',
+  },
+  countChevron: {
+    fontSize: 22,
+    lineHeight: 22,
+    fontWeight: '300',
   },
   metaRow: {
     flexDirection: 'row',

@@ -1,30 +1,65 @@
 import React, { useCallback } from 'react';
-import {
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-
-import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { LoadingState, ScreenState } from '@/components/ScreenState';
-import { Text } from '@/components/Themed';
-import { useAppTheme } from '@/theme/useAppTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useDrawer } from '@/providers/DrawerProvider';
-import { useFolders } from '@/features/folders/hooks';
-import type { FragmentFolder } from '@/types/folder';
-import { InputDialog } from '@/components/InputDialog';
 
-// 汉堡菜单图标组件
-function HamburgerMenu({ onPress, color }: { onPress: () => void; color: string }) {
+import { LoadingState, ScreenState } from '@/components/ScreenState';
+import { Text } from '@/components/Themed';
+import { InputDialog } from '@/components/InputDialog';
+import { useFolders } from '@/features/folders/hooks';
+import { useDrawer } from '@/providers/DrawerProvider';
+import { useAppTheme } from '@/theme/useAppTheme';
+import type { FragmentFolder } from '@/types/folder';
+
+type SymbolName = React.ComponentProps<typeof SymbolView>['name'];
+
+type FolderRow = {
+  kind: 'row';
+  id: string;
+  folder: FragmentFolder;
+  icon: SymbolName;
+  countLabel?: string;
+};
+
+type SectionRow = {
+  kind: 'section';
+  id: string;
+  title: string;
+};
+
+type ListItem = FolderRow | SectionRow;
+
+function getFolderIcon(folderId: string): SymbolName {
+  /*系统行图标统一走显式映射，避免符号名在推断时退化成普通字符串。 */
+  if (folderId === '__all__') return 'tray';
+  if (folderId === '__scripts__') return 'doc.text';
+  return 'folder';
+}
+
+function HeaderCircleButton({
+  icon,
+  onPress,
+  tintColor,
+}: {
+  icon: SymbolName;
+  onPress: () => void;
+  tintColor: string;
+}) {
+  /*首页顶部操作采用统一圆形按钮，视觉上向 iOS 备忘录靠拢。 */
   return (
-    <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.menuButton}>
+    <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.headerButton}>
+      <SymbolView name={icon} size={20} tintColor={tintColor} />
+    </TouchableOpacity>
+  );
+}
+
+function MenuButton({ onPress, color }: { onPress: () => void; color: string }) {
+  /*菜单入口保留为轻量圆形汉堡按钮，和右上操作形成一套视觉节奏。 */
+  return (
+    <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.headerButton}>
       <View style={styles.hamburger}>
         <View style={[styles.hamburgerLine, { backgroundColor: color }]} />
         <View style={[styles.hamburgerLine, { backgroundColor: color }]} />
@@ -34,72 +69,83 @@ function HamburgerMenu({ onPress, color }: { onPress: () => void; color: string 
   );
 }
 
-type SymbolName = React.ComponentProps<typeof SymbolView>['name'];
-
-// 文件夹卡片组件
 function FolderCard({
   folder,
   onPress,
   icon,
   countLabel,
+  isFirstInSection,
+  isLastInSection,
 }: {
   folder: FragmentFolder;
   onPress: (folder: FragmentFolder) => void;
-  icon?: SymbolName;
+  icon: SymbolName;
   countLabel?: string;
+  isFirstInSection?: boolean;
+  isLastInSection?: boolean;
 }) {
+  /*文件夹行采用分组列表样式，而不是厚重独立卡片。 */
   const theme = useAppTheme();
 
   return (
     <TouchableOpacity
       style={[
         styles.folderCard,
-        theme.shadow.card,
         {
           backgroundColor: theme.colors.surface,
           borderColor: theme.colors.border,
+          borderTopLeftRadius: isFirstInSection ? 18 : 0,
+          borderTopRightRadius: isFirstInSection ? 18 : 0,
+          borderBottomLeftRadius: isLastInSection ? 18 : 0,
+          borderBottomRightRadius: isLastInSection ? 18 : 0,
+          marginTop: isFirstInSection ? 0 : StyleSheet.hairlineWidth,
         },
       ]}
       onPress={() => onPress(folder)}
-      activeOpacity={0.85}
+      activeOpacity={0.84}
     >
-      <View style={styles.folderIconContainer}>
-        <SymbolView
-          name={icon || 'folder.fill'}
-          size={40}
-          tintColor={theme.colors.primary}
-        />
+      <View style={styles.folderLeading}>
+        <SymbolView name={icon} size={21} tintColor="#D4A21D" />
       </View>
       <View style={styles.folderInfo}>
-        <Text
-          style={[styles.folderName, { color: theme.colors.text }]}
-          numberOfLines={1}
-        >
+        <Text style={[styles.folderName, { color: theme.colors.text }]} numberOfLines={1}>
           {folder.name}
         </Text>
         <Text style={[styles.folderCount, { color: theme.colors.textSubtle }]}>
-          {countLabel ?? `${folder.fragment_count} 条碎片`}
+          {countLabel ?? `${folder.fragment_count} 条内容`}
         </Text>
       </View>
-      <SymbolView
-        name="chevron.right"
-        size={20}
-        tintColor={theme.colors.textSubtle}
-      />
+      <View style={styles.folderMeta}>
+        <Text style={[styles.folderCountValue, { color: theme.colors.textSubtle }]}>
+          {folder.fragment_count.toLocaleString('zh-CN')}
+        </Text>
+        <SymbolView name="chevron.right" size={15} tintColor={theme.colors.textSubtle} />
+      </View>
     </TouchableOpacity>
   );
 }
 
 export default function FoldersScreen() {
+  /*首页主要负责把系统入口和用户文件夹组织成 Notes 风格分组列表。 */
   const theme = useAppTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { toggle } = useDrawer();
-  const { folders, isLoading, isRefreshing, isCreating, error, total, allFragmentsCount, allScriptsCount, fetchFolders, refreshFolders, createNewFolder } =
-    useFolders();
+  const {
+    folders,
+    isLoading,
+    isRefreshing,
+    isCreating,
+    error,
+    total,
+    allFragmentsCount,
+    allScriptsCount,
+    fetchFolders,
+    refreshFolders,
+    createNewFolder,
+  } = useFolders();
   const [showCreateDialog, setShowCreateDialog] = React.useState(false);
 
-  // 构造显示用的文件夹列表，添加虚拟"全部"文件夹
   const displayFolders = React.useMemo(() => {
     const allFolder: FragmentFolder = {
       id: '__all__',
@@ -121,7 +167,58 @@ export default function FoldersScreen() {
     return [allFolder, ...(scriptFolder ? [scriptFolder] : []), ...folders];
   }, [allFragmentsCount, allScriptsCount, folders]);
 
-  // 页面聚焦时刷新
+  const listItems = React.useMemo<ListItem[]>(() => {
+    const quickRows = displayFolders.slice(0, Math.min(displayFolders.length, 2)).map((folder) => ({
+      kind: 'row' as const,
+      id: folder.id,
+      folder,
+      icon: getFolderIcon(folder.id),
+      countLabel: folder.id === '__scripts__' ? `${folder.fragment_count} 篇成稿` : undefined,
+    }));
+    const folderRows = displayFolders.slice(2).map((folder) => ({
+      kind: 'row' as const,
+      id: folder.id,
+      folder,
+      icon: 'folder' as const,
+    }));
+
+    return [
+      { kind: 'section', id: 'system', title: '系统' },
+      ...quickRows,
+      ...(folderRows.length > 0
+        ? [{ kind: 'section' as const, id: 'folders', title: '文件夹' }, ...folderRows]
+        : []),
+    ];
+  }, [displayFolders]);
+
+  const firstRowBySection = React.useMemo(() => {
+    const map = new Map<string, string>();
+    let currentSection = '';
+    for (const item of listItems) {
+      if (item.kind === 'section') {
+        currentSection = item.id;
+        continue;
+      }
+      if (!map.has(currentSection)) {
+        map.set(currentSection, item.id);
+      }
+    }
+    return map;
+  }, [listItems]);
+
+  const lastRowBySection = React.useMemo(() => {
+    const map = new Map<string, string>();
+    let currentSection = '';
+    for (const item of listItems) {
+      if (item.kind === 'section') {
+        currentSection = item.id;
+        continue;
+      }
+      map.set(currentSection, item.id);
+    }
+    return map;
+  }, [listItems]);
+
   useFocusEffect(
     useCallback(() => {
       void fetchFolders();
@@ -144,15 +241,15 @@ export default function FoldersScreen() {
 
   if (isLoading && folders.length === 0) {
     return (
-      <ScreenContainer>
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}>
         <LoadingState message="正在加载文件夹..." />
-      </ScreenContainer>
+      </View>
     );
   }
 
   if (error && folders.length === 0) {
     return (
-      <ScreenContainer>
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}>
         <ScreenState
           icon="⚠️"
           title="加载失败"
@@ -162,70 +259,64 @@ export default function FoldersScreen() {
           secondaryActionLabel="网络设置"
           onSecondaryAction={() => router.push('/network-settings')}
         />
-      </ScreenContainer>
+      </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* 悬浮顶部导航栏 - 移到最前面确保点击事件优先 */}
-      <View style={[styles.floatingHeader, { paddingTop: insets.top + 12 }]}>
-        <View style={styles.headerContent}>
-          <HamburgerMenu onPress={toggle} color={theme.colors.text} />
-          <View style={styles.headerTitleContainer}>
-            <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-              全部文件夹
-            </Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]}>
-              {total} 个文件夹
-            </Text>
-          </View>
-          <TouchableOpacity
+      <View
+        pointerEvents="box-none"
+        style={[styles.floatingHeader, { top: insets.top + 12 }]}
+      >
+        <MenuButton onPress={toggle} color={theme.colors.text} />
+        <View style={styles.headerRightActions}>
+          <HeaderCircleButton
+            icon="folder.badge.plus"
             onPress={() => setShowCreateDialog(true)}
-            disabled={isCreating}
-            style={styles.newFolderButton}
-            hitSlop={8}
-          >
-            <SymbolView
-              name="folder.badge.plus"
-              size={28}
-              tintColor={isCreating ? theme.colors.textSubtle : theme.colors.primary}
-            />
-          </TouchableOpacity>
+            tintColor={isCreating ? theme.colors.textSubtle : theme.colors.text}
+          />
+          <HeaderCircleButton
+            icon="square.and.pencil"
+            onPress={() => router.push('/text-note')}
+            tintColor={theme.colors.text}
+          />
         </View>
       </View>
 
-      {/* 顶部渐隐遮罩 - 减小高度避免与导航按钮重叠 */}
-      <LinearGradient
-        colors={[theme.colors.background, `${theme.colors.background}00`]}
-        locations={[0.3, 1]}
-        style={[styles.topFade, { height: insets.top + 50 }]}
-        pointerEvents="none"
-      />
-
-      {/* 列表内容 */}
       <FlatList
-        data={displayFolders}
+        data={listItems}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
+        renderItem={({ item }) => {
+          if (item.kind === 'section') {
+            return <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{item.title}</Text>;
+          }
+
+          return (
             <FolderCard
-              folder={item}
+              folder={item.folder}
               onPress={handleFolderPress}
-              icon={item.id === '__all__' ? 'tray.full' : item.id === '__scripts__' ? 'doc.text.fill' : 'folder.fill'}
-              countLabel={item.id === '__scripts__' ? `${item.fragment_count} 篇成稿` : undefined}
+              icon={item.icon}
+              countLabel={item.countLabel}
+              isFirstInSection={firstRowBySection.get('system') === item.id || firstRowBySection.get('folders') === item.id}
+              isLastInSection={lastRowBySection.get('system') === item.id || lastRowBySection.get('folders') === item.id}
             />
-        )}
-        ListEmptyComponent={
-          <ScreenState
-            icon="📁"
-            title="还没有文件夹"
-            message="系统会自动创建文件夹，或从后端同步"
-          />
+          );
+        }}
+        ListHeaderComponent={
+          <View style={[styles.headerBlock, { paddingTop: insets.top + 66 }]}>
+            <View style={styles.heroBlock}>
+              <Text style={[styles.heroTitle, { color: theme.colors.text }]}>文件夹</Text>
+              <Text style={[styles.heroSubtitle, { color: theme.colors.textSubtle }]}>
+                {total} 个文件夹
+              </Text>
+            </View>
+          </View>
         }
-        contentContainerStyle={[
-          displayFolders.length === 0 ? styles.emptyList : styles.list,
-          { paddingTop: insets.top + 70, paddingBottom: insets.bottom + 100 }
-        ]}
+        ListEmptyComponent={
+          <ScreenState icon="📁" title="还没有文件夹" message="系统会自动创建文件夹，或从后端同步" />
+        }
+        contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -236,15 +327,20 @@ export default function FoldersScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* 底部渐隐遮罩 */}
       <LinearGradient
-        colors={[`${theme.colors.background}00`, theme.colors.background]}
-        locations={[0, 0.7]}
-        style={[styles.bottomFade, { height: insets.bottom + 100 }]}
+        colors={[theme.colors.background, `${theme.colors.background}00`]}
+        locations={[0.18, 1]}
+        style={[styles.topFade, { height: insets.top + 96 }]}
         pointerEvents="none"
       />
 
-      {/* 新建文件夹弹窗 */}
+      <LinearGradient
+        colors={[`${theme.colors.background}00`, theme.colors.background]}
+        locations={[0, 0.78]}
+        style={[styles.bottomFade, { height: insets.bottom + 108 }]}
+        pointerEvents="none"
+      />
+
       <InputDialog
         visible={showCreateDialog}
         title="新建文件夹"
@@ -256,7 +352,7 @@ export default function FoldersScreen() {
             await createNewFolder(name);
             setShowCreateDialog(false);
           } catch {
-            // 错误已在hook中处理，这里只需保持弹窗打开
+            // 错误已在 hook 中处理，这里保持弹窗即可。
           }
         }}
         onCancel={() => setShowCreateDialog(false)}
@@ -269,100 +365,122 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  // 悬浮顶部导航栏
+  centered: {
+    justifyContent: 'center',
+  },
+  headerBlock: {
+    paddingHorizontal: 16,
+  },
   floatingHeader: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    backgroundColor: 'transparent',
-  },
-  headerContent: {
+    left: 16,
+    right: 16,
+    zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
   },
-  headerTitleContainer: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  subtitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  newFolderButton: {
-    minWidth: 44,
-    alignItems: 'flex-end',
-    padding: 4,
-  },
-  // 汉堡菜单样式
-  menuButton: {
-    padding: 4,
-    minWidth: 44,
-  },
-  hamburger: {
-    width: 24,
-    height: 20,
-    justifyContent: 'space-between',
-  },
-  hamburgerLine: {
-    width: 24,
-    height: 2.5,
-    borderRadius: 1.25,
-  },
-  // 列表样式
-  list: {
-    paddingHorizontal: 16,
-  },
-  emptyList: {
-    flexGrow: 1,
-    paddingHorizontal: 16,
-  },
-  // 文件夹卡片样式
-  folderCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  folderIconContainer: {
-    marginRight: 16,
-  },
-  folderInfo: {
-    flex: 1,
-  },
-  folderName: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  folderCount: {
-    fontSize: 14,
-    fontWeight: '400',
-  },
-  // 渐隐遮罩
   topFade: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 90,
+    zIndex: 8,
   },
   bottomFade: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 90,
+    bottom: 0,
+    zIndex: 8,
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  headerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E5EA',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  hamburger: {
+    width: 18,
+    height: 14,
+    justifyContent: 'space-between',
+  },
+  hamburgerLine: {
+    width: 18,
+    height: 2.2,
+    borderRadius: 1.1,
+  },
+  heroBlock: {
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  heroTitle: {
+    fontSize: 40,
+    lineHeight: 44,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+  },
+  heroSubtitle: {
+    marginTop: 4,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  sectionTitle: {
+    marginTop: 12,
+    marginBottom: 10,
+    marginHorizontal: 16,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  folderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  folderLeading: {
+    width: 28,
+    alignItems: 'flex-start',
+  },
+  folderInfo: {
+    flex: 1,
+    marginLeft: 6,
+  },
+  folderName: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  folderCount: {
+    marginTop: 2,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  folderMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  folderCountValue: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '400',
   },
 });

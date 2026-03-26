@@ -29,9 +29,11 @@ function getModeColor(mode: ScriptMode): string {
 interface ScriptCardProps {
   script: Script;
   onPress: (script: Script) => void;
+  isFirst?: boolean;
+  isLast?: boolean;
 }
 
-export function ScriptCard({ script, onPress }: ScriptCardProps) {
+export function ScriptCard({ script, onPress, isFirst = false, isLast = false }: ScriptCardProps) {
   const theme = useAppTheme();
 
   // 显示标题或内容前50字
@@ -53,50 +55,47 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
     <TouchableOpacity
       style={[
         styles.card,
-        theme.shadow.card,
-        { backgroundColor: theme.colors.surface },
+        {
+          backgroundColor: theme.colors.surface,
+          borderTopLeftRadius: isFirst ? 18 : 0,
+          borderTopRightRadius: isFirst ? 18 : 0,
+          borderBottomLeftRadius: isLast ? 18 : 0,
+          borderBottomRightRadius: isLast ? 18 : 0,
+          marginTop: isFirst ? 0 : StyleSheet.hairlineWidth,
+        },
       ]}
       onPress={() => onPress(script)}
       activeOpacity={0.7}
     >
-      {/* 标题 */}
-      <Text
-        style={[styles.title, { color: theme.colors.text }]}
-        numberOfLines={2}
-      >
-        {displayTitle}
+      <View style={styles.titleRow}>
+        <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={1}>
+          {displayTitle}
+        </Text>
+        <Text style={[styles.chevron, { color: theme.colors.textSubtle }]}>›</Text>
+      </View>
+
+      <Text style={[styles.timeInline, { color: theme.colors.textSubtle }]}>
+        {script.created_at ? formatDate(script.created_at) : '刚刚更新'}
       </Text>
 
       {previewText ? (
-        <Text
-          style={[styles.preview, { color: theme.colors.textSubtle }]}
-          numberOfLines={3}
-        >
+        <Text style={[styles.preview, { color: theme.colors.textSubtle }]} numberOfLines={2}>
           {previewText}
         </Text>
       ) : null}
 
-      {/* 标签行 */}
-      <View style={styles.tagsRow}>
-        {/* 模式标签 */}
-        <View style={[styles.tag, { backgroundColor: modeColor + '20' }]}>
-          <Text style={[styles.tagText, { color: modeColor }]}>{modeLabel}</Text>
-        </View>
-
-        {/* 每日推盘标记 */}
-        {script.is_daily_push && (
-          <View style={[styles.tag, { backgroundColor: `${theme.colors.warning}20` }]}>
-            <Text style={[styles.tagText, { color: theme.colors.warning }]}>每日推盘</Text>
+      <View style={styles.footerRow}>
+        <View style={styles.tagsRow}>
+          <View style={[styles.tag, { backgroundColor: modeColor + '18' }]}>
+            <Text style={[styles.tagText, { color: modeColor }]}>{modeLabel}</Text>
           </View>
-        )}
+          {script.is_daily_push && (
+            <View style={[styles.tag, { backgroundColor: `${theme.colors.warning}18` }]}>
+              <Text style={[styles.tagText, { color: theme.colors.warning }]}>每日推盘</Text>
+            </View>
+          )}
+        </View>
       </View>
-
-      {/* 时间 */}
-      {script.created_at && (
-          <Text style={[styles.time, { color: theme.colors.textSubtle }]}>
-            {formatDate(script.created_at)}
-          </Text>
-      )}
     </TouchableOpacity>
   );
 }
@@ -104,37 +103,50 @@ export function ScriptCard({ script, onPress }: ScriptCardProps) {
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   title: {
-    fontSize: 16,
-    fontWeight: '600',
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '500',
     lineHeight: 22,
-    marginBottom: 8,
+  },
+  chevron: {
+    fontSize: 22,
+    lineHeight: 22,
+    fontWeight: '300',
+  },
+  timeInline: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
   },
   preview: {
     fontSize: 13,
-    lineHeight: 20,
-    marginBottom: 10,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  footerRow: {
+    marginTop: 10,
   },
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginBottom: 10,
   },
   tag: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingVertical: 5,
+    borderRadius: 999,
   },
   tagText: {
     fontSize: 12,
     fontWeight: '500',
-  },
-  time: {
-    fontSize: 12,
   },
 });
