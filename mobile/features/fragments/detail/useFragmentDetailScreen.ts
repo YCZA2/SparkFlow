@@ -11,6 +11,7 @@ import { listLocalScriptsBySourceFragment } from '@/features/scripts/store';
 import { getErrorMessage } from '@/utils/error';
 
 import { useFragmentBodySession } from './useFragmentBodySession';
+import { shouldDeleteEmptyManualFragmentOnExit } from './exitState';
 import { useFragmentDetailResource } from './useFragmentDetailResource';
 
 interface FragmentDetailScreenOptions {
@@ -86,7 +87,19 @@ export function useFragmentDetailScreen(
   const exitScreen = async () => {
     /*离开详情前先保证最新输入已落本地，并把上云动作交给后台收敛，同时标记列表待刷新。 */
     try {
+      const latestSnapshot = editor.editorRef.current?.getSnapshot?.() ?? null;
       await editor.saveNow();
+      if (
+        fragmentId &&
+        shouldDeleteEmptyManualFragmentOnExit({
+          fragment,
+          snapshot: latestSnapshot,
+          mediaAssets: editor.mediaAssets,
+        })
+      ) {
+        const deviceId = await getOrCreateDeviceId();
+        await deleteLocalFragmentEntity(fragmentId, { deviceId });
+      }
       // 标记碎片列表需要刷新
       markFragmentsStale();
       router.back();
