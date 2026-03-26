@@ -21,9 +21,9 @@ function getModeLabel(mode: ScriptMode): string {
 /**
  * 获取模式颜色
  */
-function getModeColor(mode: ScriptMode): string {
-  if (mode === 'mode_daily_push') return 'warning';
-  return 'primary';
+function getModeColor(mode: ScriptMode, colors: { warning: string; primary: string }): string {
+  if (mode === 'mode_daily_push') return colors.warning;
+  return colors.primary;
 }
 
 interface ScriptCardProps {
@@ -36,20 +36,12 @@ interface ScriptCardProps {
 export function ScriptCard({ script, onPress, isFirst = false, isLast = false }: ScriptCardProps) {
   const theme = useAppTheme();
 
-  // 显示标题或内容前50字
-  const displayTitle =
-    script.title ||
-    extractPlainTextFromHtml(script.body_html ?? '').slice(0, 50) ||
-    '无标题口播稿';
-  const previewText = extractPlainTextFromHtml(script.body_html ?? '').trim();
+  // 显示标题或内容前50字；body_html 只解析一次，同时用于标题回退和预览
+  const bodyText = extractPlainTextFromHtml(script.body_html ?? '');
+  const displayTitle = script.title || bodyText.slice(0, 50) || '无标题口播稿';
+  const previewText = bodyText.trim();
   const modeLabel = getModeLabel(script.mode);
-  const modeColorToken = getModeColor(script.mode);
-  const modeColor =
-    modeColorToken === 'danger'
-      ? theme.colors.danger
-      : modeColorToken === 'warning'
-        ? theme.colors.warning
-        : theme.colors.primary;
+  const modeColor = getModeColor(script.mode, theme.colors);
 
   return (
     <TouchableOpacity

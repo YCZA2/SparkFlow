@@ -84,8 +84,6 @@ const styles = StyleSheet.create({
   circleContainer: {
     width: 44,
     height: 44,
-    minWidth: 44,
-    minHeight: 44,
     borderRadius: 22,
     justifyContent: 'center',
     paddingVertical: 0,

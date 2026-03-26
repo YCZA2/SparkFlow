@@ -22,6 +22,7 @@ type FolderRow = {
   folder: FragmentFolder;
   icon: SymbolName;
   countLabel?: string;
+  countValue: string;
 };
 
 type SectionRow = {
@@ -43,14 +44,16 @@ function HeaderCircleButton({
   icon,
   onPress,
   tintColor,
+  disabled,
 }: {
   icon: SymbolName;
   onPress: () => void;
   tintColor: string;
+  disabled?: boolean;
 }) {
   /*首页顶部操作采用统一圆形按钮，视觉上向 iOS 备忘录靠拢。 */
   return (
-    <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.headerButton}>
+    <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.headerButton} disabled={disabled}>
       <SymbolView name={icon} size={20} tintColor={tintColor} />
     </TouchableOpacity>
   );
@@ -74,6 +77,7 @@ function FolderCard({
   onPress,
   icon,
   countLabel,
+  countValue,
   isFirstInSection,
   isLastInSection,
 }: {
@@ -81,6 +85,7 @@ function FolderCard({
   onPress: (folder: FragmentFolder) => void;
   icon: SymbolName;
   countLabel?: string;
+  countValue: string;
   isFirstInSection?: boolean;
   isLastInSection?: boolean;
 }) {
@@ -117,7 +122,7 @@ function FolderCard({
       </View>
       <View style={styles.folderMeta}>
         <Text style={[styles.folderCountValue, { color: theme.colors.textSubtle }]}>
-          {folder.fragment_count.toLocaleString('zh-CN')}
+          {countValue}
         </Text>
         <SymbolView name="chevron.right" size={15} tintColor={theme.colors.textSubtle} />
       </View>
@@ -174,12 +179,14 @@ export default function FoldersScreen() {
       folder,
       icon: getFolderIcon(folder.id),
       countLabel: folder.id === '__scripts__' ? `${folder.fragment_count} 篇成稿` : undefined,
+      countValue: folder.fragment_count.toLocaleString('zh-CN'),
     }));
     const folderRows = displayFolders.slice(2).map((folder) => ({
       kind: 'row' as const,
       id: folder.id,
       folder,
       icon: 'folder' as const,
+      countValue: folder.fragment_count.toLocaleString('zh-CN'),
     }));
 
     return [
@@ -191,32 +198,20 @@ export default function FoldersScreen() {
     ];
   }, [displayFolders]);
 
-  const firstRowBySection = React.useMemo(() => {
-    const map = new Map<string, string>();
+  const { firstRowBySection, lastRowBySection } = React.useMemo(() => {
+    /*单次遍历同时计算每个分区的首尾行 id，避免两次独立 useMemo 重复扫描。 */
+    const first = new Map<string, string>();
+    const last = new Map<string, string>();
     let currentSection = '';
     for (const item of listItems) {
       if (item.kind === 'section') {
         currentSection = item.id;
         continue;
       }
-      if (!map.has(currentSection)) {
-        map.set(currentSection, item.id);
-      }
+      if (!first.has(currentSection)) first.set(currentSection, item.id);
+      last.set(currentSection, item.id);
     }
-    return map;
-  }, [listItems]);
-
-  const lastRowBySection = React.useMemo(() => {
-    const map = new Map<string, string>();
-    let currentSection = '';
-    for (const item of listItems) {
-      if (item.kind === 'section') {
-        currentSection = item.id;
-        continue;
-      }
-      map.set(currentSection, item.id);
-    }
-    return map;
+    return { firstRowBySection: first, lastRowBySection: last };
   }, [listItems]);
 
   useFocusEffect(
@@ -275,6 +270,7 @@ export default function FoldersScreen() {
             icon="folder.badge.plus"
             onPress={() => setShowCreateDialog(true)}
             tintColor={isCreating ? theme.colors.textSubtle : theme.colors.text}
+            disabled={isCreating}
           />
           <HeaderCircleButton
             icon="square.and.pencil"
@@ -298,6 +294,7 @@ export default function FoldersScreen() {
               onPress={handleFolderPress}
               icon={item.icon}
               countLabel={item.countLabel}
+              countValue={item.countValue}
               isFirstInSection={firstRowBySection.get('system') === item.id || firstRowBySection.get('folders') === item.id}
               isLastInSection={lastRowBySection.get('system') === item.id || lastRowBySection.get('folders') === item.id}
             />

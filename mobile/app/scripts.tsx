@@ -45,6 +45,18 @@ export default function ScriptsScreen() {
     [pushOnce]
   );
 
+  const renderItem = useCallback(
+    ({ item, index }: { item: Script; index: number }) => (
+      <ScriptCard
+        script={item}
+        onPress={handleScriptPress}
+        isFirst={index === 0}
+        isLast={index === items.length - 1}
+      />
+    ),
+    [handleScriptPress, items.length]
+  );
+
   if (isLoading && items.length === 0) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}>
@@ -77,19 +89,10 @@ export default function ScriptsScreen() {
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
-          <ScriptCard
-            script={item}
-            onPress={handleScriptPress}
-            isFirst={index === 0}
-            isLast={index === items.length - 1}
-          />
-        )}
+        renderItem={renderItem}
         ListHeaderComponent={
           <View style={[styles.headerBlock, { paddingTop: insets.top + 12 }]}>
-            <View style={styles.headerRow}>
-              <BackButton color={theme.colors.text} variant="circle" showText={false} />
-            </View>
+            <BackButton color={theme.colors.text} variant="circle" showText={false} />
             <View style={styles.heroBlock}>
               <Text style={[styles.heroTitle, { color: theme.colors.text }]}>{title}</Text>
               <Text style={[styles.heroSubtitle, { color: theme.colors.textSubtle }]}>
@@ -122,11 +125,6 @@ const styles = StyleSheet.create({
   },
   headerBlock: {
     paddingHorizontal: 16,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   heroBlock: {
     marginTop: 18,
