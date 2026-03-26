@@ -39,6 +39,7 @@ backend/.vendor/
 # IDE
 .idea/
 .vscode/
+.worktrees/
 *.swp
 *.swo
 *~
