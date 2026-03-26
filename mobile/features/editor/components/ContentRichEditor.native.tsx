@@ -263,9 +263,7 @@ export function ContentRichEditor({
           autoCapitalize="sentences"
           style={{ ...styles.input, backgroundColor: editorBackground }}
           contextMenuItems={contextMenuItems}
-          onFocus={() => {
-            onFocus?.();
-          }}
+          onFocus={onFocus}
           onChangeHtml={(event) => {
             handleHtmlChange(event.nativeEvent.value);
           }}

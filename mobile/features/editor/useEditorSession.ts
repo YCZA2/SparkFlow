@@ -242,14 +242,6 @@ export function useEditorSession<TDocument>(
     return snapshot ?? stateRef.current.snapshot;
   }, []);
 
-  const readLatestSnapshot = useCallback(async (): Promise<EditorDocumentSnapshot> => {
-    /*显式保存时优先向编辑器桥接拉取当前 HTML，兜住按钮点击与输入事件的时序差。 */
-    return await resolveEditorSnapshotForSave({
-      editor: editorRef.current,
-      fallbackSnapshot: getLiveSnapshot(),
-    });
-  }, [getLiveSnapshot]);
-
   // 保存
   const saveNow = useCallback(
     async (options?: { force?: boolean }) => {
@@ -257,7 +249,11 @@ export function useEditorSession<TDocument>(
       const currentDocumentId = documentIdRef.current;
       if (!currentDocument || !currentDocumentId) return;
 
-      const latestSnapshot = await readLatestSnapshot();
+      /*显式保存时优先向编辑器桥接拉取当前 HTML，兜住按钮点击与输入事件的时序差。 */
+      const latestSnapshot = await resolveEditorSnapshotForSave({
+        editor: editorRef.current,
+        fallbackSnapshot: getLiveSnapshot(),
+      });
       const baselineBodyHtml = normalizeBodyHtml(
         stateRef.current.baseline?.baseline_body_html ?? buildSourceDocument(currentDocument).body_html
       );
@@ -286,7 +282,7 @@ export function useEditorSession<TDocument>(
         throw error;
       }
     },
-    [buildSourceDocument, readLatestSnapshot, saveLocally]
+    [buildSourceDocument, getLiveSnapshot, saveLocally]
   );
 
   // 图片插入
