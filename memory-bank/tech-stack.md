@@ -121,6 +121,8 @@
 - ORM：SQLAlchemy
 - 迁移工具：Alembic
 - 后台任务表：`pipeline_runs` / `pipeline_step_runs`
+- 写作上下文表：`stable_core_profiles`（用户级预置稳定内核）、`methodology_entries`（碎片方法论缓存条目，含来源类型与启用状态）
+- 认证：`users` 表含 `email` / `password_hash`，手机号验证码链路已移除
 
 ### 4.2 File storage
 
@@ -135,10 +137,11 @@
 - 碎片 namespace：`fragments_{user_id}`
 - 知识库 namespace：`knowledge_{user_id}`
 - 知识库索引策略：当前已切到 chunk 级写入与文档级聚合检索；业务层通过独立 `knowledge_index_store` 抽象接入，后续可替换为 LightRAG 等底层引擎
-- 脚本生成上下文策略：当前已升级为“三层写作上下文”
-- `稳定内核层`：由历史碎片和长期资料后台聚合为用户级画像，不使用 AI 历史脚本反哺
-- `方法论层`：由碎片提炼、上传资料和预置模板共同组成
-- `相关素材层`：动态召回与主题相关的历史脚本、碎片和知识文档
+- 脚本生成上下文策略：当前已升级为”三层写作上下文”
+- `稳定内核层`：系统预置文案（`prompts/stable_core_preset.txt`），不在生成时动态合成
+- `方法论层`：只读已缓存的 `methodology_entries` 条目；后台每日定时维护（凌晨 04:00），按”总量达标 / 增量达标”阈值静默刷新，不在生成主链路在线提炼
+- `相关素材层`：动态召回，上限为相关碎片 3 条、知识文档 3 条、参考脚本 2 条（`writing_context_builder.py` 中的模块常数）
+- 方法论维护来源碎片上限：30 条（`_MAX_METHODOLOGY_FRAGMENT_SOURCES`）
 
 ## 5. AI and Provider Strategy
 
