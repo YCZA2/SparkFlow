@@ -30,6 +30,7 @@ from modules.shared.ports import (
     TextGenerationProvider,
     VectorStore,
     WebSearchProvider,
+    WorkflowProvider,
 )
 
 
@@ -50,6 +51,7 @@ class ServiceContainer:
     pipeline_runner: Any | None = None
     pipeline_dispatcher: Any | None = None
     pipeline_recovery_service: Any | None = None
+    external_provider: WorkflowProvider | None = None  # 接入 Dify/Multi-Agent 时注入
 
 
 def build_container() -> ServiceContainer:

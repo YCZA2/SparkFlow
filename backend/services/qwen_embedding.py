@@ -7,7 +7,10 @@
 import os
 from typing import List, Optional
 
+from core.logging_config import get_logger
 from .base import BaseEmbeddingService, EmbeddingResult, EmbeddingError, EmbeddingRateLimitError
+
+logger = get_logger(__name__)
 
 
 class QwenEmbeddingService(BaseEmbeddingService):
@@ -160,11 +163,13 @@ class QwenEmbeddingService(BaseEmbeddingService):
 
             except Exception as e:
                 # 如果批量失败，尝试单独调用作为回退
+                logger.warning("batch_embedding_failed_falling_back_to_single", exc_info=True)
                 for text in batch:
                     try:
                         result = await self.embed(text)
                         results.append(result)
                     except Exception:
+                        logger.warning("single_embedding_fallback_failed", exc_info=True)
                         results.append(None)
 
         return results

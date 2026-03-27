@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from core.logging_config import get_logger
 from domains.knowledge import repository as knowledge_repository
 from domains.scripts import repository as script_repository
 from domains.writing_context import repository as writing_context_repository
@@ -22,6 +23,8 @@ from modules.shared.prompt_loader import load_prompt_text
 from utils.serialization import parse_json_object_list
 
 from .writing_context import MethodologyPayload, StableCorePayload, WritingContextBundle
+
+logger = get_logger(__name__)
 
 _METHODOLOGY_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "methodology_distillation.txt"
 _STABLE_CORE_PRESET_PATH = Path(__file__).parent.parent.parent / "prompts" / "stable_core_preset.txt"
@@ -243,6 +246,7 @@ async def refresh_fragment_methodology_entries_for_all_users(
                 llm_provider=llm_provider,
             )
         except Exception:
+            logger.warning("refresh_fragment_methodology_failed", user_id=user_id, exc_info=True)
             failed_user_ids.append(user_id)
             continue
 

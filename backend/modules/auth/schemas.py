@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class TokenRequest(BaseModel):
@@ -18,8 +18,7 @@ class AuthenticatedUserPayload(BaseModel):
     user_id: str
     role: str
     nickname: str | None = None
-    phone_country_code: str = "+86"
-    phone_number: str | None = None
+    email: str | None = None
     status: str = "active"
     device_id: str | None = None
     session_version: int | None = None
@@ -29,22 +28,16 @@ class CurrentUserResponse(AuthenticatedUserPayload):
     pass
 
 
-class VerificationCodeRequest(BaseModel):
-    phone_number: str = Field(..., min_length=11, max_length=11, description="中国大陆手机号")
-    phone_country_code: str = Field("+86", description="手机号国家码")
+class EmailRegisterRequest(BaseModel):
+    email: str = Field(..., description="邮箱地址")
+    password: str = Field(..., min_length=8, description="登录密码（至少8位）")
+    nickname: str | None = Field(None, description="用户昵称（可选）")
+    device_id: str = Field("sparkflow-default-device", description="设备唯一标识")
 
 
-class VerificationCodeResponse(BaseModel):
-    sent: bool
-    resend_after_seconds: int
-    expires_in_seconds: int
-    debug_code: str | None = None
-
-
-class PhoneLoginRequest(BaseModel):
-    phone_number: str = Field(..., min_length=11, max_length=11, description="中国大陆手机号")
-    verification_code: str = Field(..., min_length=4, max_length=8, description="短信验证码")
-    phone_country_code: str = Field("+86", description="手机号国家码")
+class EmailLoginRequest(BaseModel):
+    email: str = Field(..., description="邮箱地址")
+    password: str = Field(..., description="登录密码")
     device_id: str = Field("sparkflow-default-device", description="设备唯一标识")
 
 

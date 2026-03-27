@@ -38,7 +38,7 @@ class DouyinVideoParser:
 
     def set_cookie(self, cookie: str):
         self.cookie = (cookie or "").lstrip("\ufeff").strip()
-        print("Cookie updated successfully:", self.cookie)
+        logger.info("douyin_cookie_updated")
 
     def get_video_id(self, share_url: str) -> str | None:
         """从分享链接中提取视频ID，支持多种格式"""
@@ -849,7 +849,7 @@ class DouyinVideoParser:
                     a_bogus = ABogus().get_value(params)
                     params["a_bogus"] = quote(a_bogus, safe="")
                 except Exception:
-                    pass
+                    logger.debug("abogus_computation_failed_skipping", exc_info=True)
 
             data = self._request_json(api_url, params, headers)
             if not data:

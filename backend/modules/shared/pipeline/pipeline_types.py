@@ -28,12 +28,19 @@ class PipelineExecutionError(Exception):
 
 @dataclass
 class PipelineStepDefinition:
-    """描述一个可执行的流水线步骤。"""
+    """描述一个可执行的流水线步骤。
+
+    runner_type="local" 时由 executor 函数处理（默认）；
+    runner_type="external" 时由 ServiceContainer.external_provider 处理，
+    executor 字段在此模式下不会被调用，可设为 None。
+    """
 
     step_name: str
-    executor: Callable[[PipelineExecutionContext], Awaitable[dict[str, Any] | None]]
+    executor: Callable[[PipelineExecutionContext], Awaitable[dict[str, Any] | None]] | None
     max_attempts: int = 3
     input_payload: dict[str, Any] | None = None
+    runner_type: str = "local"              # "local" | "external"
+    external_workflow_id: str | None = None  # runner_type="external" 时指定外部工作流标识
 
 
 @dataclass

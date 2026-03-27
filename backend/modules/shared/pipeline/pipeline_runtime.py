@@ -42,8 +42,9 @@ class StepExecutorRegistry:
         self._executors: dict[tuple[str, str], Callable[[PipelineExecutionContext], Awaitable[dict[str, Any] | None]]] = {}
 
     def register(self, pipeline_type: str, definition: PipelineStepDefinition) -> None:
-        """注册某类流水线的步骤执行器。"""
-        self._executors[(pipeline_type, definition.step_name)] = definition.executor
+        """注册某类流水线的步骤执行器；runner_type=external 的步骤无需提供 executor。"""
+        if definition.executor is not None:
+            self._executors[(pipeline_type, definition.step_name)] = definition.executor
 
     def get(self, pipeline_type: str, step_name: str) -> Callable[[PipelineExecutionContext], Awaitable[dict[str, Any] | None]]:
         """按类型和步骤名读取执行器。"""
@@ -230,8 +231,16 @@ class PipelineDispatcher:
                     container=self.container,
                     step_outputs=step_outputs,
                 )
-                executor = self.executor_registry.get(run.pipeline_type, step.step_name)
-                output = await executor(context) or {}
+                definition = next(
+                    (d for d in self.definition_registry.get(run.pipeline_type) if d.step_name == step.step_name),
+                    None,
+                )
+                if definition and definition.runner_type == "external":
+                    # 将步骤委托给外部工作流提供商（Dify / Multi-Agent 等）
+                    output = await self._run_external_step(context=context, definition=definition)
+                else:
+                    executor = self.executor_registry.get(run.pipeline_type, step.step_name)
+                    output = await executor(context) or {}
             await self._handle_step_success(
                 step_id=step_id,
                 output=output,
@@ -263,6 +272,34 @@ class PipelineDispatcher:
                 retryable=False,
                 trigger_followup_wake=trigger_followup_wake,
             )
+
+    async def _run_external_step(
+        self,
+        *,
+        context: PipelineExecutionContext,
+        definition: PipelineStepDefinition,
+    ) -> dict[str, Any]:
+        """向 external_provider 提交步骤并轮询结果，供 runner_type="external" 的步骤使用。"""
+        provider = getattr(self.container, "external_provider", None)
+        if provider is None:
+            raise PipelineExecutionError(
+                f"步骤 {definition.step_name} 声明了 runner_type=external，但容器未配置 external_provider",
+                retryable=False,
+            )
+        workflow_id = definition.external_workflow_id or definition.step_name
+        run_result = await provider.submit_run(
+            inputs=context.input_payload,
+            user_id=context.run.user_id,
+        )
+        # 轮询直至完成，使用指数退避避免对外部服务过度请求
+        poll_interval = 1.0
+        while run_result.status in ("queued", "running"):
+            await asyncio.sleep(poll_interval)
+            run_result = await provider.get_run(run_id=run_result.run_id)
+            poll_interval = min(poll_interval * 1.5, 10.0)
+        if run_result.status == "failed":
+            raise PipelineExecutionError(f"外部工作流执行失败: {workflow_id}", retryable=True)
+        return run_result.outputs
 
     async def _handle_step_success(
         self,

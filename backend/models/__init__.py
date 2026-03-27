@@ -6,7 +6,7 @@
 
 from models.database import Base, engine, SessionLocal, get_db, init_db
 from models.utils import generate_uuid
-from models.user import User, DeviceSession, PhoneVerificationCode
+from models.user import User, DeviceSession
 from models.backup import BackupRecord, BackupRestoreSession
 from models.fragment import Fragment, FragmentBlock, FragmentFolder, FragmentTag
 from models.script import Script
@@ -26,7 +26,6 @@ __all__ = [
     # 用户与认证
     "User",
     "DeviceSession",
-    "PhoneVerificationCode",
     # 备份
     "BackupRecord",
     "BackupRestoreSession",

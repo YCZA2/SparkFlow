@@ -10,12 +10,11 @@ from modules.shared.infrastructure.container import get_db_session
 from .application import AuthUseCase
 from .schemas import (
     CurrentUserResponse,
+    EmailLoginRequest,
+    EmailRegisterRequest,
     LoginResponse,
-    PhoneLoginRequest,
     TokenPayload,
     TokenRequest,
-    VerificationCodeRequest,
-    VerificationCodeResponse,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -23,42 +22,43 @@ use_case = AuthUseCase()
 
 
 @router.post(
-    "/verification-codes",
-    response_model=ResponseModel[VerificationCodeResponse],
-    summary="发送手机验证码",
-    description="为中国大陆手机号发送登录验证码；开发环境会返回 debug_code 便于本地联调。",
+    "/register",
+    response_model=ResponseModel[LoginResponse],
+    summary="邮箱注册",
+    description="使用邮箱和密码注册新账号，注册成功后自动完成登录并创建设备会话。",
 )
-async def request_verification_code(
-    payload: VerificationCodeRequest,
+async def register(
+    payload: EmailRegisterRequest,
     db: Session = Depends(get_db_session),
 ):
     return success_response(
-        data=use_case.request_verification_code(
+        data=use_case.register_with_email(
             db=db,
-            phone_number=payload.phone_number,
-            phone_country_code=payload.phone_country_code,
+            email=payload.email,
+            password=payload.password,
+            device_id=payload.device_id,
+            nickname=payload.nickname,
         ),
-        message="验证码发送成功",
+        message="注册成功",
     )
 
 
 @router.post(
     "/login",
     response_model=ResponseModel[LoginResponse],
-    summary="手机号验证码登录",
-    description="使用手机号和验证码完成注册或登录，并创建当前设备会话。",
+    summary="邮箱密码登录",
+    description="使用邮箱和密码完成登录，并创建当前设备会话。",
 )
 async def login(
-    payload: PhoneLoginRequest,
+    payload: EmailLoginRequest,
     db: Session = Depends(get_db_session),
 ):
     return success_response(
-        data=use_case.login_with_phone_code(
+        data=use_case.login_with_email_password(
             db=db,
-            phone_number=payload.phone_number,
-            verification_code=payload.verification_code,
+            email=payload.email,
+            password=payload.password,
             device_id=payload.device_id,
-            phone_country_code=payload.phone_country_code,
         ),
         message="登录成功",
     )

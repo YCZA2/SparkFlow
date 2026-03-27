@@ -75,19 +75,6 @@ class Settings(BaseSettings):
         default=False,
         description="是否启用仅本地开发使用的测试令牌入口"
     )
-    PHONE_VERIFICATION_CODE_TTL_SECONDS: int = Field(
-        default=300,
-        description="手机验证码有效期（秒）"
-    )
-    PHONE_VERIFICATION_CODE_RESEND_SECONDS: int = Field(
-        default=60,
-        description="手机验证码发送冷却时间（秒）"
-    )
-    PHONE_VERIFICATION_CODE_MAX_SENDS: int = Field(
-        default=5,
-        description="单个手机号在验证码有效窗口内允许发送的最大次数"
-    )
-
     # 数据库配置
     DATABASE_URL: str = Field(
         default=DEFAULT_POSTGRES_URL,

@@ -7,6 +7,9 @@ from pathlib import PurePosixPath
 from xml.etree import ElementTree as ET
 
 from core.exceptions import ValidationError
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def parse_uploaded_text(*, file_content: bytes, filename: str) -> str:
@@ -55,10 +58,12 @@ def _parse_pdf(file_content: bytes) -> str:
         content = "\n".join((page.extract_text() or "") for page in reader.pages)
         return _ensure_non_empty(content)
     except ImportError:
+        logger.debug("pypdf_not_installed_falling_back_to_pdf_fallback_parser")
         return _ensure_non_empty(_extract_pdf_text_fallback(file_content))
     except ValidationError:
         raise
     except Exception:
+        logger.debug("pdf_primary_parse_failed_falling_back", exc_info=True)
         return _ensure_non_empty(_extract_pdf_text_fallback(file_content))
 
 
@@ -93,10 +98,12 @@ def _parse_xlsx(file_content: bytes) -> str:
                     lines.append("\t".join(values))
         return _ensure_non_empty("\n".join(lines))
     except ImportError:
+        logger.debug("openpyxl_not_installed_falling_back_to_xlsx_fallback_parser")
         return _ensure_non_empty(_extract_xlsx_text_fallback(file_content))
     except ValidationError:
         raise
     except Exception:
+        logger.debug("xlsx_primary_parse_failed_falling_back", exc_info=True)
         return _ensure_non_empty(_extract_xlsx_text_fallback(file_content))
 
 
@@ -162,7 +169,7 @@ def _read_xlsx_cell(cell: ET.Element, shared_strings: list[str]) -> str:
     if cell_type == "s":
         try:
             return shared_strings[int(raw)]
-        except Exception:
+        except (IndexError, KeyError, ValueError):
             return ""
     return raw
 

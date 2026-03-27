@@ -235,6 +235,7 @@ class FragmentDerivativeService:
                 body_html=body_html,
             )
         except Exception:
+            logger.warning("summary_and_tags_generation_failed", exc_info=True)
             return build_fallback_summary_and_tags(normalized_text)
 
     @staticmethod

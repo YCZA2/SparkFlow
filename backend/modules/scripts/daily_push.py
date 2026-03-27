@@ -4,11 +4,14 @@ from math import ceil
 from typing import Any
 
 from core.config import settings
+from core.logging_config import get_logger
 from core.exceptions import ValidationError
 from modules.shared.fragment_snapshots import read_fragment_snapshot_text
 from modules.shared.ports import VectorStore
 
 from .daily_push_snapshots import DailyPushFragmentSnapshot
+
+logger = get_logger(__name__)
 
 
 def build_fragments_text(fragments: list[Any]) -> str:
@@ -50,6 +53,7 @@ class DailyPushFragmentSelector:
                     exclude_ids=[fragment.id],
                 )
             except Exception:
+                logger.warning("daily_push_vector_query_failed", fragment_id=fragment.id, exc_info=True)
                 continue
             for match in matches:
                 matched_id = match.get("fragment_id")

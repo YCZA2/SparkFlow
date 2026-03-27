@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from core.logging_config import get_logger
 from modules.shared.content.fragment_body_markdown import (
     extract_plain_text_from_body_markdown,
     normalize_fragment_body_markdown,
 )
 from modules.shared.ports import TextGenerationProvider
 from modules.shared.prompt_loader import load_prompt_text, render_prompt_template
+
+logger = get_logger(__name__)
 
 _AI_EDIT_SYSTEM_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "fragment_ai_edit_system.txt"
 _AI_EDIT_USER_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "fragment_ai_edit_user.txt"
@@ -90,5 +93,6 @@ class FragmentAiEditService:
                 max_tokens=600,
             )
         except Exception:
+            logger.warning("ai_edit_generation_failed", exc_info=True)
             return focus_text.strip()
         return str(result or "").strip() or focus_text.strip()

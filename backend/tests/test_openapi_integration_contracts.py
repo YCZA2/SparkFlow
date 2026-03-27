@@ -45,19 +45,38 @@ def test_auth_token_openapi_contract_smoke(api_schema) -> None:
     case.validate_response(response)
 
 
+def test_auth_register_openapi_contract_smoke(api_schema) -> None:
+    """邮箱注册入口应满足 OpenAPI 中声明的最小契约。"""
+    operation = api_schema["/api/auth/register"]["POST"]
+    case = operation.make_case(
+        body={
+            "email": "contracttest@example.com",
+            "password": "testpass123",
+            "device_id": "test-device",
+        }
+    )
+    response = case.call()
+    case.validate_response(response)
+
+
 def test_auth_login_openapi_contract_smoke(api_schema) -> None:
-    """手机号验证码登录入口应满足 OpenAPI 中声明的最小契约。"""
-    verification_operation = api_schema["/api/auth/verification-codes"]["POST"]
-    verification_case = verification_operation.make_case(body={"phone_number": "13800138000", "phone_country_code": "+86"})
-    verification_response = verification_case.call()
-    verification_case.validate_response(verification_response)
+    """邮箱密码登录入口应满足 OpenAPI 中声明的最小契约。"""
+    # 先注册再登录，确保用户存在
+    register_operation = api_schema["/api/auth/register"]["POST"]
+    register_case = register_operation.make_case(
+        body={
+            "email": "logincontract@example.com",
+            "password": "testpass123",
+            "device_id": "test-device-reg",
+        }
+    )
+    register_case.call()
 
     operation = api_schema["/api/auth/login"]["POST"]
     case = operation.make_case(
         body={
-            "phone_number": "13800138000",
-            "phone_country_code": "+86",
-            "verification_code": "123456",
+            "email": "logincontract@example.com",
+            "password": "testpass123",
             "device_id": "test-device",
         }
     )
