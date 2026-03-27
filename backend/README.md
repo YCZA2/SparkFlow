@@ -2,10 +2,15 @@
 
 SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Docker PostgreSQL + ChromaDB 联调；文件存储已统一走对象存储抽象，本地开发默认使用 `local` provider，线上可切阿里云 OSS。
 
-## 今日进展（2026-03-25）
+## 当前进展（2026-03-27）
 
-- 后端已经补齐 phase 1 local-first 所需的备份恢复能力：`/api/backups/batch`、`/api/backups/snapshot`、`/api/backups/restore`、`/api/backups/assets` 与 `/api/backups/assets/access`。
-- 正式认证链路已经升级为邮箱 + 密码登录（`POST /api/auth/register` + `POST /api/auth/login`），JWT 继续携带 `device_id + session_version`；登录、刷新 token、备份、恢复和 AI / 转写相关请求都受单设备在线约束。
+- **认证改造（P1）**：已完成邮箱 + 密码登录替换手机验证码，删除 `phone_verification_codes` 表，`users` 表改为 `email/password_hash`；保留设备会话机制，登录错误不区分邮箱与密码以防枚举攻击。
+- **Pipeline 扩展性（P1）**：`PipelineStepDefinition` 新增 `runner_type/external_workflow_id` 字段，`PipelineDispatcher` 支持外部工作流调度，为后续扩展预留接口。
+- **Android 支持**：`app.json` 补齐 Android 权限与图标配置，`dev-mobile.sh` 新增 `android` 子命令，支持 Android 真机与模拟器联调。
+- **代码质量修缮（P2）**：补齐所有静默 `except Exception` 的日志输出，parsers 异常捕获收窄为 `(IndexError, KeyError, ValueError)`，Douyin parser 的 `print()` 替换为 `logger.info`。
+- **测试拆分**：`test_core_flows.py`（1072行）按领域拆分为 `test_auth_flows.py`、`test_fragment_flows.py`、`test_knowledge_flows.py`、`test_script_flows.py` 四个专题文件。
+- **文档修正**：清理 Mode A/B 残留描述，补全认证接口声明与代码的不一致，统一 legacy 命名约定说明。
+- 后端已补齐 phase 1 local-first 所需的备份恢复能力：`/api/backups/batch`、`/api/backups/snapshot`、`/api/backups/restore`、`/api/backups/assets` 与 `/api/backups/assets/access`。
 - `transcriptions`、`external_media`、`scripts/generation` 现已支持客户端本地快照 / 本地 placeholder 驱动，不再把“先创建远端 fragment 业务记录”作为默认入口。
 - 后端已补齐通用 `fragment snapshot reader`：脚本生成上下文、相似检索、灵感云图和每日推盘都统一从 `backup_records` 读取已同步成功的 fragment snapshot，不再把 `fragments` 表当输入真值。
 - `media_ingestion` 已调整为 transcript-first：主 pipeline 在转写落库后即可成功，`summary` / `tags` / vector 改为异步衍生回填，不再阻塞上传和抖音导入主链路。
@@ -55,11 +60,11 @@ bash scripts/test-all.sh
 
 正式产品登录当前走：
 
-- `POST /api/auth/verification-codes`
-- `POST /api/auth/login`
-- `GET /api/auth/me`
-- `POST /api/auth/refresh`
-- `POST /api/auth/logout`
+- `POST /api/auth/register` — 邮箱注册
+- `POST /api/auth/login` — 邮箱密码登录
+- `GET /api/auth/me` — 获取当前用户信息
+- `POST /api/auth/refresh` — 刷新访问令牌
+- `POST /api/auth/logout` — 退出登录
 
 本地联调仍保留测试入口：
 
