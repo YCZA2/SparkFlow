@@ -155,10 +155,10 @@ class AuthUseCase:
     ) -> LoginResponse:
         """使用邮箱和密码注册新用户，注册成功后自动登录。"""
         normalized_email = self._normalize_email(email)
+        self._validate_password(password)
         existing = db.query(User).filter(User.email == normalized_email).first()
         if existing is not None:
             raise ValidationError("该邮箱已被注册", {"email": "already_exists"})
-        self._validate_password(password)
         user = User(
             role="user",
             nickname=nickname or f"用户{normalized_email.split('@')[0][:8]}",

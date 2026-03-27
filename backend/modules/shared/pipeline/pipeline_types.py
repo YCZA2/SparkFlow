@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Literal
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -39,7 +39,7 @@ class PipelineStepDefinition:
     executor: Callable[[PipelineExecutionContext], Awaitable[dict[str, Any] | None]] | None
     max_attempts: int = 3
     input_payload: dict[str, Any] | None = None
-    runner_type: str = "local"              # "local" | "external"
+    runner_type: Literal["local", "external"] = "local"
     external_workflow_id: str | None = None  # runner_type="external" 时指定外部工作流标识
 
 

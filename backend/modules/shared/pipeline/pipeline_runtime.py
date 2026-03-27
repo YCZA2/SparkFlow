@@ -291,9 +291,15 @@ class PipelineDispatcher:
             inputs=context.input_payload,
             user_id=context.run.user_id,
         )
-        # 轮询直至完成，使用指数退避避免对外部服务过度请求
+        # 轮询直至完成，使用指数退避避免对外部服务过度请求；超过 stale_step_seconds 则放弃
         poll_interval = 1.0
+        deadline = asyncio.get_running_loop().time() + self.stale_step_seconds
         while run_result.status in ("queued", "running"):
+            if asyncio.get_running_loop().time() >= deadline:
+                raise PipelineExecutionError(
+                    f"外部工作流轮询超时（{self.stale_step_seconds}s）: {workflow_id}",
+                    retryable=True,
+                )
             await asyncio.sleep(poll_interval)
             run_result = await provider.get_run(run_id=run_result.run_id)
             poll_interval = min(poll_interval * 1.5, 10.0)

@@ -29,14 +29,14 @@ class CurrentUserResponse(AuthenticatedUserPayload):
 
 
 class EmailRegisterRequest(BaseModel):
-    email: str = Field(..., description="邮箱地址")
+    email: EmailStr = Field(..., description="邮箱地址")
     password: str = Field(..., min_length=8, description="登录密码（至少8位）")
     nickname: str | None = Field(None, description="用户昵称（可选）")
     device_id: str = Field("sparkflow-default-device", description="设备唯一标识")
 
 
 class EmailLoginRequest(BaseModel):
-    email: str = Field(..., description="邮箱地址")
+    email: EmailStr = Field(..., description="邮箱地址")
     password: str = Field(..., description="登录密码")
     device_id: str = Field("sparkflow-default-device", description="设备唯一标识")
 
