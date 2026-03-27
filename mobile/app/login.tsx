@@ -11,40 +11,24 @@ import { getErrorMessage } from '@/utils/error';
 export default function LoginScreen() {
   const router = useRouter();
   const theme = useAppTheme();
-  const { error, sessionStatus, requestVerificationCode, loginWithPhoneCode } = useAuth();
-  const verificationCodeInputRef = useRef<TextInput | null>(null);
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [debugCode, setDebugCode] = useState<string | null>(null);
-  const [isSending, setIsSending] = useState(false);
+  const { error, sessionStatus, loginWithEmailPassword } = useAuth();
+  const passwordInputRef = useRef<TextInput | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const canSend = /^1\d{10}$/.test(phoneNumber);
-  const canSubmit = canSend && verificationCode.trim().length >= 4 && !isSubmitting;
+  // 简单校验邮箱格式和密码长度（至少 8 位）。
+  const canSubmit = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && password.length >= 8 && !isSubmitting;
 
-  // 发送短信验证码，并在开发环境展示调试验证码。
-  const handleSendCode = async () => {
-    try {
-      setIsSending(true);
-      const result = await requestVerificationCode(phoneNumber.trim());
-      setDebugCode(result.debug_code ?? null);
-      Alert.alert('验证码已发送', result.debug_code ? `开发环境验证码：${result.debug_code}` : '请查看短信后输入验证码');
-    } catch (sendError) {
-      Alert.alert('发送失败', getErrorMessage(sendError, '验证码发送失败'));
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  // 提交手机号和验证码登录，成功后进入工作区首页。
+  // 提交邮箱和密码登录，成功后进入工作区首页。
   const handleLogin = async () => {
     try {
       Keyboard.dismiss();
       setIsSubmitting(true);
-      await loginWithPhoneCode(phoneNumber.trim(), verificationCode.trim());
+      await loginWithEmailPassword(email.trim(), password);
       router.replace('/');
     } catch (loginError) {
-      Alert.alert('登录失败', getErrorMessage(loginError, '登录失败，请稍后重试'));
+      Alert.alert('登录失败', getErrorMessage(loginError, '邮箱或密码不正确，请重试'));
     } finally {
       setIsSubmitting(false);
     }
@@ -70,62 +54,39 @@ export default function LoginScreen() {
         </View>
 
         <View style={[styles.card, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.label, { color: theme.colors.textSubtle }]}>手机号</Text>
+          <Text style={[styles.label, { color: theme.colors.textSubtle }]}>邮箱</Text>
           <TextInput
             style={[styles.input, { borderColor: theme.colors.border, color: theme.colors.text }]}
-            keyboardType="number-pad"
-            maxLength={11}
-            placeholder="请输入 11 位手机号"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            placeholder="请输入注册邮箱"
             placeholderTextColor={theme.colors.textMuted}
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
+            value={email}
+            onChangeText={setEmail}
             returnKeyType="next"
-            onSubmitEditing={() => verificationCodeInputRef.current?.focus()}
+            onSubmitEditing={() => passwordInputRef.current?.focus()}
           />
 
-          <Text style={[styles.label, { color: theme.colors.textSubtle }]}>验证码</Text>
-          <View style={styles.codeRow}>
-            <TextInput
-              ref={verificationCodeInputRef}
-              style={[
-                styles.input,
-                styles.codeInput,
-                { borderColor: theme.colors.border, color: theme.colors.text },
-              ]}
-              keyboardType="number-pad"
-              maxLength={6}
-              placeholder="请输入验证码"
-              placeholderTextColor={theme.colors.textMuted}
-              value={verificationCode}
-              onChangeText={setVerificationCode}
-              returnKeyType="done"
-              onSubmitEditing={() => {
-                if (canSubmit) {
-                  void handleLogin();
-                } else {
-                  Keyboard.dismiss();
-                }
-              }}
-            />
-            <TouchableOpacity
-              style={[
-                styles.secondaryButton,
-                {
-                  backgroundColor: canSend && !isSending ? theme.colors.primary : theme.colors.border,
-                },
-              ]}
-              disabled={!canSend || isSending}
-              onPress={handleSendCode}
-            >
-              <Text style={styles.secondaryButtonText}>{isSending ? '发送中' : '获取验证码'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {debugCode ? (
-            <Text style={[styles.debugCode, { color: theme.colors.textSubtle }]}>
-              开发环境验证码：{debugCode}
-            </Text>
-          ) : null}
+          <Text style={[styles.label, { color: theme.colors.textSubtle }]}>密码</Text>
+          <TextInput
+            ref={passwordInputRef}
+            style={[styles.input, { borderColor: theme.colors.border, color: theme.colors.text }]}
+            secureTextEntry
+            autoComplete="password"
+            placeholder="请输入密码（至少 8 位）"
+            placeholderTextColor={theme.colors.textMuted}
+            value={password}
+            onChangeText={setPassword}
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              if (canSubmit) {
+                void handleLogin();
+              } else {
+                Keyboard.dismiss();
+              }
+            }}
+          />
 
           <TouchableOpacity
             style={[
@@ -185,27 +146,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     fontSize: 16,
-  },
-  codeRow: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-  },
-  codeInput: {
-    flex: 1,
-  },
-  secondaryButton: {
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  secondaryButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  debugCode: {
-    fontSize: 12,
   },
   primaryButton: {
     marginTop: 8,

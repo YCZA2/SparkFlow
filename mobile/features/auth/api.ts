@@ -20,12 +20,6 @@ export interface UserInfo {
   session_version?: number;
 }
 
-export interface VerificationCodeResult {
-  sent: boolean;
-  resend_after_seconds: number;
-  expires_in_seconds: number;
-  debug_code?: string | null;
-}
 
 interface LoginResponsePayload {
   access_token: string;
@@ -68,31 +62,19 @@ export function parseUserFromToken(token: string): UserInfo {
   }
 }
 
-export async function requestVerificationCode(phoneNumber: string): Promise<VerificationCodeResult> {
-  return await fetchApi<VerificationCodeResult>(
-    API_ENDPOINTS.AUTH.VERIFICATION_CODES,
-    'POST',
-    {
-      phone_number: phoneNumber,
-      phone_country_code: '+86',
-    },
-    { requiresAuth: false }
-  );
-}
-
 export async function fetchCurrentUser(): Promise<UserInfo> {
   return await fetchApi<UserInfo>(API_ENDPOINTS.AUTH.ME, 'GET');
 }
 
-export async function loginWithPhoneCode(phoneNumber: string, verificationCode: string): Promise<UserInfo> {
+// 使用邮箱和密码登录，成功后写入 token 并激活用户工作区。
+export async function loginWithEmailPassword(email: string, password: string): Promise<UserInfo> {
   const deviceId = await getOrCreateDeviceId();
   const payload = await fetchApi<LoginResponsePayload>(
     API_ENDPOINTS.AUTH.LOGIN,
     'POST',
     {
-      phone_number: phoneNumber,
-      verification_code: verificationCode,
-      phone_country_code: '+86',
+      email,
+      password,
       device_id: deviceId,
     },
     { requiresAuth: false }

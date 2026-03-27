@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SparkFlow 用户管理</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f7; color: #1d1d1f; min-height: 100vh; }
+
+  /* ── 登录页 ── */
+  #login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .login-card { background: #fff; border-radius: 16px; padding: 40px; width: 360px; box-shadow: 0 4px 24px rgba(0,0,0,.10); }
+  .login-card h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .login-card p { font-size: 13px; color: #888; margin-bottom: 28px; }
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .field label { font-size: 12px; font-weight: 600; color: #555; }
+  .field input { border: 1px solid #d2d2d7; border-radius: 10px; padding: 10px 14px; font-size: 15px; outline: none; }
+  .field input:focus { border-color: #0071e3; }
+  .btn { width: 100%; padding: 12px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .btn-primary { background: #0071e3; color: #fff; }
+  .btn-primary:hover { background: #0077ed; }
+  .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+  .error-msg { color: #e00; font-size: 13px; margin-top: 10px; min-height: 18px; }
+
+  /* ── 管理页 ── */
+  #admin-page { display: none; }
+  header { background: #fff; border-bottom: 1px solid #e5e5ea; padding: 0 24px; height: 52px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 17px; font-weight: 700; }
+  header .meta { display: flex; align-items: center; gap: 16px; }
+  header .meta span { font-size: 13px; color: #888; }
+  .btn-sm { padding: 6px 14px; font-size: 13px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; }
+  .btn-logout { background: #f2f2f7; color: #1d1d1f; }
+  .btn-logout:hover { background: #e5e5ea; }
+
+  main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+  .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .toolbar h2 { font-size: 15px; font-weight: 600; }
+  .btn-create { background: #0071e3; color: #fff; }
+  .btn-create:hover { background: #0077ed; }
+
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,.07); }
+  th { background: #f5f5f7; font-size: 12px; font-weight: 600; color: #666; text-align: left; padding: 10px 14px; border-bottom: 1px solid #e5e5ea; }
+  td { font-size: 13px; padding: 11px 14px; border-bottom: 1px solid #f0f0f5; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafafa; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-creator { background: #fff3cd; color: #856404; }
+  .badge-user { background: #e8f4fd; color: #0a6ebd; }
+  .badge-active { background: #d1f5de; color: #1a7f4b; }
+  .badge-inactive { background: #f5d0d0; color: #c0392b; }
+
+  .actions { display: flex; gap: 6px; }
+  .btn-action { padding: 4px 10px; font-size: 12px; font-weight: 500; border: 1px solid #d2d2d7; border-radius: 6px; cursor: pointer; background: #fff; }
+  .btn-action:hover { background: #f5f5f7; }
+  .btn-danger { color: #e00; border-color: #fca5a5; }
+  .btn-danger:hover { background: #fff5f5; }
+
+  /* ── 弹窗 ── */
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 100; align-items: center; justify-content: center; }
+  .overlay.show { display: flex; }
+  .modal { background: #fff; border-radius: 16px; padding: 28px; width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,.18); }
+  .modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 20px; }
+  .modal .field { margin-bottom: 14px; }
+  .modal .foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  .btn-cancel { background: #f2f2f7; color: #1d1d1f; }
+  .btn-cancel:hover { background: #e5e5ea; }
+  .btn-confirm { background: #0071e3; color: #fff; }
+  .btn-confirm:hover { background: #0077ed; }
+  .btn-del-confirm { background: #e00; color: #fff; }
+  .btn-del-confirm:hover { background: #c00; }
+
+  select { border: 1px solid #d2d2d7; border-radius: 10px; padding: 10px 14px; font-size: 15px; outline: none; width: 100%; }
+  select:focus { border-color: #0071e3; }
+
+  .loading { text-align: center; padding: 40px; color: #888; font-size: 14px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1d1d1f; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- 登录页 -->
+<div id="login-page">
+  <div class="login-card">
+    <h1>SparkFlow 管理后台</h1>
+    <p>请使用 creator 账号登录</p>
+    <div class="field">
+      <label>邮箱</label>
+      <input id="l-email" type="email" placeholder="admin@example.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>密码</label>
+      <input id="l-password" type="password" placeholder="至少 8 位" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" id="login-btn" onclick="doLogin()">登录</button>
+    <div class="error-msg" id="login-error"></div>
+  </div>
+</div>
+
+<!-- 管理页 -->
+<div id="admin-page">
+  <header>
+    <h1>用户管理</h1>
+    <div class="meta">
+      <span id="current-user-info"></span>
+      <button class="btn-sm btn-logout" onclick="doLogout()">退出登录</button>
+    </div>
+  </header>
+  <main>
+    <div class="toolbar">
+      <h2 id="user-count">用户列表</h2>
+      <button class="btn-sm btn-create" onclick="openCreateModal()">＋ 新增用户</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>邮箱</th>
+          <th>昵称</th>
+          <th>角色</th>
+          <th>状态</th>
+          <th>注册时间</th>
+          <th>最后登录</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="user-tbody">
+        <tr><td colspan="7" class="loading">加载中…</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+
+<!-- 编辑用户弹窗 -->
+<div class="overlay" id="edit-overlay">
+  <div class="modal">
+    <h3>编辑用户</h3>
+    <div class="field"><label>昵称</label><input id="e-nickname" type="text" placeholder="用户昵称"></div>
+    <div class="field"><label>角色</label>
+      <select id="e-role">
+        <option value="user">user（普通用户）</option>
+        <option value="creator">creator（管理员）</option>
+      </select>
+    </div>
+    <div class="field"><label>状态</label>
+      <select id="e-status">
+        <option value="active">active（正常）</option>
+        <option value="inactive">inactive（禁用）</option>
+      </select>
+    </div>
+    <div class="foot">
+      <button class="btn-sm btn-cancel" onclick="closeModal('edit-overlay')">取消</button>
+      <button class="btn-sm btn-confirm" onclick="doUpdate()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 重置密码弹窗 -->
+<div class="overlay" id="pwd-overlay">
+  <div class="modal">
+    <h3>重置密码</h3>
+    <div class="field"><label>新密码</label><input id="p-password" type="password" placeholder="至少 8 位"></div>
+    <div class="foot">
+      <button class="btn-sm btn-cancel" onclick="closeModal('pwd-overlay')">取消</button>
+      <button class="btn-sm btn-confirm" onclick="doResetPassword()">确认重置</button>
+    </div>
+  </div>
+</div>
+
+<!-- 删除确认弹窗 -->
+<div class="overlay" id="del-overlay">
+  <div class="modal">
+    <h3>删除用户</h3>
+    <p id="del-confirm-text" style="font-size:14px;color:#555;margin-bottom:8px;"></p>
+    <p style="font-size:13px;color:#e00;">此操作不可撤销，将删除该用户的所有数据。</p>
+    <div class="foot">
+      <button class="btn-sm btn-cancel" onclick="closeModal('del-overlay')">取消</button>
+      <button class="btn-sm btn-del-confirm" onclick="doDelete()">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增用户弹窗 -->
+<div class="overlay" id="create-overlay">
+  <div class="modal">
+    <h3>新增用户</h3>
+    <div class="field"><label>邮箱</label><input id="c-email" type="email" placeholder="user@example.com"></div>
+    <div class="field"><label>密码</label><input id="c-password" type="password" placeholder="至少 8 位"></div>
+    <div class="field"><label>昵称（可选）</label><input id="c-nickname" type="text" placeholder="留空则自动生成"></div>
+    <div class="field"><label>角色</label>
+      <select id="c-role">
+        <option value="user">user（普通用户）</option>
+        <option value="creator">creator（管理员）</option>
+      </select>
+    </div>
+    <div class="foot">
+      <button class="btn-sm btn-cancel" onclick="closeModal('create-overlay')">取消</button>
+      <button class="btn-sm btn-confirm" onclick="doCreate()">创建</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── 配置 ──────────────────────────────────────────────
+// 自动从当前页面地址推断后端 origin，也可手动改为固定地址
+const API_BASE = window.location.origin;
+
+// ── 状态 ──────────────────────────────────────────────
+let token = sessionStorage.getItem('sf_admin_token') || '';
+let currentUserId = '';
+let editingUserId = '';
+let deletingUserId = '';
+let users = [];
+
+// ── 初始化 ─────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  if (token) {
+    showAdmin();
+  }
+  document.getElementById('l-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+});
+
+// ── 工具函数 ────────────────────────────────────────────
+async function apiFetch(path, method = 'GET', body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch(API_BASE + path, opts);
+  const json = await res.json();
+  if (!res.ok || json.success === false) {
+    throw new Error(json.message || json.detail || `HTTP ${res.status}`);
+  }
+  return json.data;
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function roleBadge(role) {
+  return role === 'creator'
+    ? '<span class="badge badge-creator">creator</span>'
+    : '<span class="badge badge-user">user</span>';
+}
+
+function statusBadge(status) {
+  return status === 'active'
+    ? '<span class="badge badge-active">active</span>'
+    : '<span class="badge badge-inactive">inactive</span>';
+}
+
+// ── 登录 ────────────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('l-email').value.trim();
+  const password = document.getElementById('l-password').value;
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  if (!email || !password) { errEl.textContent = '请填写邮箱和密码'; return; }
+  btn.disabled = true;
+  btn.textContent = '登录中…';
+  try {
+    const data = await apiFetch('/api/auth/login', 'POST', {
+      email, password, device_id: 'admin-web',
+    });
+    token = data.access_token;
+    sessionStorage.setItem('sf_admin_token', token);
+    currentUserId = data.user?.user_id || '';
+    if (data.user?.role !== 'creator') {
+      token = '';
+      sessionStorage.removeItem('sf_admin_token');
+      errEl.textContent = '该账号没有管理员权限（需要 creator 角色）';
+      return;
+    }
+    showAdmin();
+  } catch (e) {
+    errEl.textContent = e.message || '登录失败';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '登录';
+  }
+}
+
+function showAdmin() {
+  document.getElementById('login-page').style.display = 'none';
+  document.getElementById('admin-page').style.display = 'block';
+  loadUsers();
+}
+
+// ── 登出 ────────────────────────────────────────────────
+async function doLogout() {
+  try { await apiFetch('/api/auth/logout', 'POST'); } catch {}
+  token = '';
+  sessionStorage.removeItem('sf_admin_token');
+  document.getElementById('login-page').style.display = 'flex';
+  document.getElementById('admin-page').style.display = 'none';
+  document.getElementById('l-password').value = '';
+  document.getElementById('login-error').textContent = '';
+}
+
+// ── 用户列表 ─────────────────────────────────────────────
+async function loadUsers() {
+  document.getElementById('user-tbody').innerHTML = '<tr><td colspan="7" class="loading">加载中…</td></tr>';
+  try {
+    users = await apiFetch('/api/admin/users');
+    currentUserId = currentUserId || (users.find(u => u.role === 'creator') || {}).user_id || '';
+    renderUsers();
+  } catch (e) {
+    if (e.message.includes('401') || e.message.includes('认证') || e.message.includes('权限')) {
+      token = ''; sessionStorage.removeItem('sf_admin_token');
+      document.getElementById('login-page').style.display = 'flex';
+      document.getElementById('admin-page').style.display = 'none';
+    } else {
+      document.getElementById('user-tbody').innerHTML = `<tr><td colspan="7" class="loading" style="color:#e00">加载失败：${e.message}</td></tr>`;
+    }
+  }
+}
+
+function renderUsers() {
+  document.getElementById('user-count').textContent = `用户列表（共 ${users.length} 人）`;
+  const tbody = document.getElementById('user-tbody');
+  if (users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="loading">暂无用户</td></tr>';
+    return;
+  }
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td>${u.email || '—'}</td>
+      <td>${u.nickname || '—'}</td>
+      <td>${roleBadge(u.role)}</td>
+      <td>${statusBadge(u.status)}</td>
+      <td>${fmtDate(u.created_at)}</td>
+      <td>${fmtDate(u.last_login_at)}</td>
+      <td>
+        <div class="actions">
+          <button class="btn-action" onclick="openEditModal('${u.user_id}')">编辑</button>
+          <button class="btn-action" onclick="openResetModal('${u.user_id}')">重置密码</button>
+          <button class="btn-action btn-danger" onclick="openDeleteModal('${u.user_id}', '${(u.email||'').replace(/'/g,"\\'")}')">删除</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// ── 新增用户 ──────────────────────────────────────────────
+function openCreateModal() {
+  document.getElementById('c-email').value = '';
+  document.getElementById('c-password').value = '';
+  document.getElementById('c-nickname').value = '';
+  document.getElementById('c-role').value = 'user';
+  document.getElementById('create-overlay').classList.add('show');
+}
+
+async function doCreate() {
+  const email = document.getElementById('c-email').value.trim();
+  const password = document.getElementById('c-password').value;
+  const nickname = document.getElementById('c-nickname').value.trim();
+  const role = document.getElementById('c-role').value;
+  if (!email || !password) { alert('邮箱和密码不能为空'); return; }
+  try {
+    await apiFetch('/api/admin/users', 'POST', { email, password, nickname: nickname || null, role });
+    closeModal('create-overlay');
+    showToast('用户创建成功');
+    loadUsers();
+  } catch (e) {
+    alert('创建失败：' + e.message);
+  }
+}
+
+// ── 编辑用户 ──────────────────────────────────────────────
+function openEditModal(userId) {
+  const u = users.find(x => x.user_id === userId);
+  if (!u) return;
+  editingUserId = userId;
+  document.getElementById('e-nickname').value = u.nickname || '';
+  document.getElementById('e-role').value = u.role;
+  document.getElementById('e-status').value = u.status;
+  document.getElementById('edit-overlay').classList.add('show');
+}
+
+async function doUpdate() {
+  const nickname = document.getElementById('e-nickname').value.trim();
+  const role = document.getElementById('e-role').value;
+  const status = document.getElementById('e-status').value;
+  try {
+    await apiFetch(`/api/admin/users/${editingUserId}`, 'PATCH', {
+      nickname: nickname || null, role, status,
+    });
+    closeModal('edit-overlay');
+    showToast('更新成功');
+    loadUsers();
+  } catch (e) {
+    alert('更新失败：' + e.message);
+  }
+}
+
+// ── 重置密码 ──────────────────────────────────────────────
+function openResetModal(userId) {
+  editingUserId = userId;
+  document.getElementById('p-password').value = '';
+  document.getElementById('pwd-overlay').classList.add('show');
+}
+
+async function doResetPassword() {
+  const password = document.getElementById('p-password').value;
+  if (password.length < 8) { alert('密码至少 8 位'); return; }
+  try {
+    await apiFetch(`/api/admin/users/${editingUserId}/reset-password`, 'POST', { password });
+    closeModal('pwd-overlay');
+    showToast('密码已重置');
+  } catch (e) {
+    alert('操作失败：' + e.message);
+  }
+}
+
+// ── 删除用户 ──────────────────────────────────────────────
+function openDeleteModal(userId, email) {
+  deletingUserId = userId;
+  document.getElementById('del-confirm-text').textContent = `确定要删除用户 ${email} 吗？`;
+  document.getElementById('del-overlay').classList.add('show');
+}
+
+async function doDelete() {
+  try {
+    await apiFetch(`/api/admin/users/${deletingUserId}`, 'DELETE');
+    closeModal('del-overlay');
+    showToast('用户已删除');
+    loadUsers();
+  } catch (e) {
+    alert('删除失败：' + e.message);
+  }
+}
+
+// 点击遮罩关闭弹窗
+document.querySelectorAll('.overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('show'); });
+});
+</script>
+</body>
+</html>

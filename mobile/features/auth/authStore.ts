@@ -9,8 +9,7 @@ import {
   fetchCurrentUser,
   getUserInfo,
   hydrateAuthenticatedWorkspace,
-  loginWithPhoneCode as loginWithPhoneCodeApi,
-  requestVerificationCode as requestVerificationCodeApi,
+  loginWithEmailPassword as loginWithEmailPasswordApi,
   logout as logoutApi,
   parseUserFromToken,
   type UserInfo,
@@ -32,13 +31,7 @@ export interface AuthActions {
   setUser: (user: UserInfo | null) => void;
   setReady: (ready: boolean) => void;
   setError: (error: string | null) => void;
-  requestVerificationCode: (phoneNumber: string) => Promise<{
-    sent: boolean;
-    resend_after_seconds: number;
-    expires_in_seconds: number;
-    debug_code?: string | null;
-  }>;
-  loginWithPhoneCode: (phoneNumber: string, verificationCode: string) => Promise<UserInfo>;
+  loginWithEmailPassword: (email: string, password: string) => Promise<UserInfo>;
   logout: () => Promise<void>;
   refreshUserInfo: () => Promise<void>;
   bootstrap: () => Promise<void>;
@@ -72,21 +65,10 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     set({ error });
   },
 
-  requestVerificationCode: async (phoneNumber) => {
+  // 邮箱密码登录，成功后更新认证状态。
+  loginWithEmailPassword: async (email, password) => {
     try {
-      const result = await requestVerificationCodeApi(phoneNumber);
-      set({ error: null });
-      return result;
-    } catch (err) {
-      const error = getErrorMessage(err, '验证码发送失败');
-      set({ error });
-      throw err;
-    }
-  },
-
-  loginWithPhoneCode: async (phoneNumber, verificationCode) => {
-    try {
-      const user = await loginWithPhoneCodeApi(phoneNumber, verificationCode);
+      const user = await loginWithEmailPasswordApi(email, password);
       set({ user, isAuthenticated: true, error: null, sessionStatus: 'authenticated' });
       return user;
     } catch (err) {

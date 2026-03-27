@@ -102,8 +102,7 @@ export function useAppSession() {
   const isReady = useAuthStore((state) => state.isReady);
   const error = useAuthStore((state) => state.error);
   const sessionStatus = useAuthStore((state) => state.sessionStatus);
-  const requestVerificationCode = useAuthStore((state) => state.requestVerificationCode);
-  const loginWithPhoneCode = useAuthStore((state) => state.loginWithPhoneCode);
+  const loginWithEmailPassword = useAuthStore((state) => state.loginWithEmailPassword);
   const logout = useAuthStore((state) => state.logout);
   const refreshUserInfo = useAuthStore((state) => state.refreshUserInfo);
 
@@ -113,8 +112,7 @@ export function useAppSession() {
     user,
     error,
     sessionStatus,
-    requestVerificationCode,
-    loginWithPhoneCode,
+    loginWithEmailPassword,
     logout,
     refreshUserInfo,
   };

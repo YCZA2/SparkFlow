@@ -10,8 +10,7 @@ export function useAuth() {
     isAuthenticated: session.isAuthenticated,
     error: session.error,
     sessionStatus: session.sessionStatus,
-    requestVerificationCode: session.requestVerificationCode,
-    loginWithPhoneCode: session.loginWithPhoneCode,
+    loginWithEmailPassword: session.loginWithEmailPassword,
     logout: session.logout,
     refreshUserInfo: session.refreshUserInfo,
   };

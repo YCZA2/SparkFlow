@@ -1,4 +1,5 @@
 """SparkFlow backend application entrypoint."""
+import os
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable
 from uuid import uuid4
@@ -16,6 +17,7 @@ from core.exceptions import (
 )
 from core.logging_config import configure_logging, get_logger
 from models import SessionLocal
+from modules.admin.presentation import router as admin_router
 from modules.auth.application import AuthUseCase
 from modules.auth.presentation import router as auth_router
 from modules.backups.presentation import router as backups_router
@@ -125,6 +127,10 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
     )
     if settings.FILE_STORAGE_PROVIDER == "local":
         app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+    # 挂载后台管理静态资源，admin.html 通过 /static/admin.html 访问
+    _static_dir = os.path.join(os.path.dirname(__file__), "static")
+    if os.path.isdir(_static_dir):
+        app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
     register_exception_handlers(app)
     register_routes(app)
@@ -216,6 +222,7 @@ def register_routes(app: FastAPI) -> None:
     async def health_check_head() -> Response:
         return Response(status_code=200)
 
+    app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(backups_router)
     app.include_router(debug_logs_router)
