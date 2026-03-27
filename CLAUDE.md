@@ -39,12 +39,21 @@ FastAPI Backend (Python)
 ### Full Stack (recommended)
 
 ```bash
-bash scripts/dev-mobile.sh           # Start PostgreSQL + FastAPI + Expo (LAN mode)
-bash scripts/dev-mobile.sh simulator # Use iOS Simulator instead of device
-bash scripts/dev-mobile.sh build     # Rebuild iOS native (after native config changes)
+npm run dev:mobile:ios         # iOS 开发（自动检测是否需要 build）
+npm run dev:mobile:android     # Android 开发（自动检测是否需要 build）
+npm run dev:mobile:web         # Web 开发
+npm run dev:mobile             # 通用启动（LAN 模式，多设备共用）
 ```
 
-Equivalent npm aliases: `npm run dev:mobile`, `npm run dev:mobile:simulator`.
+或直接调用脚本：
+```bash
+bash scripts/dev-mobile.sh ios           # iOS 开发
+bash scripts/dev-mobile.sh ios:rebuild   # 强制重建 iOS
+bash scripts/dev-mobile.sh android       # Android 开发
+bash scripts/dev-mobile.sh android:rebuild # 强制重建 Android
+bash scripts/dev-mobile.sh web           # Web 开发
+bash scripts/dev-mobile.sh               # 默认 LAN 模式
+```
 
 ### Backend Only
 

@@ -145,26 +145,26 @@ npm run dev:db:status
 执行命令：
 
 ```bash
-bash scripts/dev-mobile.sh build
+bash scripts/dev-mobile.sh ios:rebuild
 ```
 
 也可以用 npm 别名：
 
 ```bash
-npm run dev:mobile:build
+npm run dev:mobile:ios:rebuild
 ```
 
-这个模式只做重建相关步骤，不会启动前后端。
+这个模式会先重建 iOS dev client，再继续启动后端和 Expo，适合首次安装或原生配置刚变更后的联调。
 
-执行完模式2后，再执行模式1开始联调：
+如果只是日常 iOS 联调：
 
 ```bash
-bash scripts/dev-mobile.sh
+bash scripts/dev-mobile.sh ios
 ```
 
 ## 二、模式2 实际会做什么
 
-`build` 模式会依次执行：
+`ios:rebuild` 会依次执行：
 
 ```bash
 cd mobile
@@ -174,7 +174,7 @@ npx pod-install ios
 npx expo run:ios --device
 ```
 
-完成后脚本会提示你回到模式1。
+完成后会继续启动后端和 Expo，并尝试自动打开 iOS 模拟器里的 dev client。
 
 ## 三、真机联调约定
 
@@ -200,13 +200,13 @@ npx expo run:ios --device
 
 推荐流程：
 
-1. 如果刚改了原生配置，先执行模式2：
+1. 如果刚改了原生配置，先执行 iOS 重建模式：
 
 ```bash
-bash scripts/dev-mobile.sh build
+bash scripts/dev-mobile.sh ios:rebuild
 ```
 
-2. 再执行模式1：
+2. 之后日常联调直接执行默认模式：
 
 ```bash
 bash scripts/dev-mobile.sh
@@ -218,20 +218,20 @@ bash scripts/dev-mobile.sh
 
 如果使用 iOS 模拟器，推荐流程改为：
 
-1. 首次安装或原生配置变更后，先执行模式2：
+1. 首次安装或原生配置变更后，先执行：
 
 ```bash
-bash scripts/dev-mobile.sh build
+bash scripts/dev-mobile.sh ios:rebuild
 ```
 
 2. 日常联调执行：
 
 ```bash
-bash scripts/dev-mobile.sh simulator
+bash scripts/dev-mobile.sh ios
 ```
 
-3. 如果你手动删掉了 simulator 里的 app，`simulator` 模式现在会先检测 `com.sparkflow.mobile` 是否存在；缺失时会自动调用 `expo run:ios --simulator "<当前已启动模拟器>"` 补装后再继续打开。
-4. 若自动补装失败，再重新执行一次 build 模式。
+3. 如果你手动删掉了 simulator 里的 app，`ios` 模式会先检测 `com.sparkflow.mobile` 是否存在；缺失时会自动补装后再继续打开。
+4. 若自动补装失败，再重新执行一次 `ios:rebuild`。
 
 ### 3. 应用内网络设置填什么
 
@@ -303,10 +303,10 @@ http://192.168.31.157:8000
 
 处理步骤：
 
-1. 执行模式2重新安装开发包：
+1. 执行 `ios:rebuild` 重新安装开发包：
 
 ```bash
-bash scripts/dev-mobile.sh build
+bash scripts/dev-mobile.sh ios:rebuild
 ```
 
 2. 再执行模式1启动联调：

@@ -16,30 +16,29 @@ MODE="${1:-start}"
 BACKEND_PID=""
 EXPO_PID=""
 BACKEND_PYTHON=""
+FORCE_REBUILD=""
 
 print_usage() {
   cat <<'USAGE'
 用法：
-  bash scripts/dev-mobile.sh           # 模式1：启动前后端联调（默认，LAN 模式）
-  bash scripts/dev-mobile.sh start     # 模式1：启动前后端联调（LAN 模式）
-  bash scripts/dev-mobile.sh web       # 模式4：启动前后端联调（Expo Web）
-  bash scripts/dev-mobile.sh simulator # 模式3：启动前后端联调（iOS Simulator）
-  bash scripts/dev-mobile.sh build     # 模式2：执行 iOS 重建，不启动前后端
-  bash scripts/dev-mobile.sh android   # 模式5：为 Android 生成原生工程并在设备/模拟器上运行（prebuild + run）
-  bash scripts/dev-mobile.sh help      # 查看帮助
+  bash scripts/dev-mobile.sh              # 启动后端 + Expo（LAN 模式，多设备共用）
+  bash scripts/dev-mobile.sh ios          # iOS 开发（自动检测是否需要 build）
+  bash scripts/dev-mobile.sh ios:rebuild  # 强制重建 iOS 并启动
+  bash scripts/dev-mobile.sh android      # Android 开发（自动检测是否需要 build）
+  bash scripts/dev-mobile.sh android:rebuild # 强制重建 Android 并启动
+  bash scripts/dev-mobile.sh web          # Web 开发
+  bash scripts/dev-mobile.sh help         # 查看帮助
 
 说明：
-  模式1 适合：只改 JS / TS / 样式 / 页面逻辑，LAN 模式便于真机测试。
-  模式3 适合：只改 JS / TS / 样式 / 页面逻辑，使用本地 iOS Simulator 调试。
-  模式4 适合：调试 Web 端页面或浏览器交互，使用 Expo Web 本地开发。
-  模式2 适合：改了原生配置、插件、Pod、Info.plist、AppDelegate 后，需要重新 Build。
-  执行完模式2后，再执行模式1、模式3或模式4即可开始联调。
-  模式5 适合：需要在本地 Android 模拟器或真机上调试原生模块或 dev-client。
-            该模式会在 mobile/ 下执行 expo prebuild --platform android --clean 然后尝试 expo run:android。
-            Android 开发环境要求：
-              - 安装 Android Studio 和 Android SDK
-              - 配置 ANDROID_HOME 环境变量
-              - 启动 Android 模拟器或连接真机并开启 USB 调试
+  ios       → 自动检测原生配置变化，按需 rebuild 后启动 iOS 模拟器
+  android   → 自动检测原生配置变化，按需 rebuild 后启动 Android
+  web       → 启动后端 + Expo Web，浏览器调试
+  默认模式   → 启动后端 + Expo LAN，适合已安装 dev client 的设备扫码连接
+
+自动检测规则：
+  - 原生目录不存在 → 自动 build
+  - 检测 app.json/app.config/package.json/ios/Podfile 等 native 配置变化 → 自动 build
+  - 使用 .ios-build-hash / .android-build-hash 标记文件追踪上次 build 状态
 USAGE
 }
 
@@ -84,6 +83,199 @@ cleanup() {
   if [[ -n "${BACKEND_PID}" ]]; then
     kill "${BACKEND_PID}" 2>/dev/null || true
   fi
+}
+
+# 判断文件是否属于会影响原生工程的输入，避免把普通 JS/TS 改动误判成 rebuild。
+is_native_input_path() {
+  local platform="$1"
+  local path="$2"
+
+  case "${path}" in
+    app.json|app.config.js|app.config.ts|app.config.mjs|app.config.cjs|app.config.json|package.json|package-lock.json|eas.json)
+      return 0
+      ;;
+    "${platform}"/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# 计算原生输入签名，覆盖未提交改动并避免同一批改动重复 rebuild。
+compute_build_signature() {
+  local platform="$1"
+  local native_dir="${MOBILE_DIR}/${platform}"
+  local file=""
+  local -a files=()
+
+  if [[ ! -d "${native_dir}" ]]; then
+    echo "missing:${platform}"
+    return 0
+  fi
+
+  for file in app.json app.config.js app.config.ts app.config.mjs app.config.cjs app.config.json package.json package-lock.json eas.json; do
+    if [[ -f "${MOBILE_DIR}/${file}" ]]; then
+      files+=("${file}")
+    fi
+  done
+
+  while IFS= read -r file; do
+    files+=("${file}")
+  done < <(cd "${MOBILE_DIR}" && find "${platform}" -type f | sort)
+
+  if [[ "${#files[@]}" -eq 0 ]]; then
+    echo "empty:${platform}"
+    return 0
+  fi
+
+  (
+    cd "${MOBILE_DIR}"
+    shasum "${files[@]}" | shasum | awk '{print $1}'
+  )
+}
+
+# 找出会影响当前平台原生工程的改动文件，便于提示用户为什么触发 rebuild。
+collect_native_input_changes() {
+  local platform="$1"
+  local path=""
+  local -a raw_files=()
+  local -a changed_files=()
+
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] && raw_files+=("${path}")
+  done < <(
+    cd "${MOBILE_DIR}" && {
+      git diff --name-only 2>/dev/null || true
+      git diff --cached --name-only 2>/dev/null || true
+      git ls-files --others --exclude-standard 2>/dev/null || true
+    } | sort -u
+  )
+
+  for path in "${raw_files[@]}"; do
+    if is_native_input_path "${platform}" "${path}"; then
+      changed_files+=("${path}")
+    fi
+  done
+
+  printf '%s\n' "${changed_files[@]}"
+}
+
+# 判断 iOS 是否需要 rebuild，并给出触发 rebuild 的关键原因。
+needs_ios_rebuild() {
+  local platform="ios"
+  local build_marker="${MOBILE_DIR}/.${platform}-build-hash"
+  local last_signature current_signature changed_files
+
+  if [[ ! -f "${build_marker}" ]]; then
+    echo "[dev-mobile] 检测到缺少 build 标记文件，需要 build"
+    return 0
+  fi
+
+  current_signature="$(compute_build_signature "${platform}")"
+  last_signature="$(cat "${build_marker}" 2>/dev/null || true)"
+
+  if [[ -z "${last_signature}" || -z "${current_signature}" ]]; then
+    echo "[dev-mobile] 无法计算原生输入签名，保守处理需要 build"
+    return 0
+  fi
+
+  if [[ "${last_signature}" != "${current_signature}" ]]; then
+    echo "[dev-mobile] 检测到 iOS 原生输入变化，需要 rebuild"
+    changed_files="$(collect_native_input_changes "${platform}")"
+    if [[ -n "${changed_files}" ]]; then
+      echo "[dev-mobile] 变化文件："
+      echo "${changed_files}" | head -5
+    fi
+    return 0
+  fi
+
+  return 1
+}
+
+# 判断 Android 是否需要 rebuild，并给出触发 rebuild 的关键原因。
+needs_android_rebuild() {
+  local platform="android"
+  local build_marker="${MOBILE_DIR}/.${platform}-build-hash"
+  local last_signature current_signature changed_files
+
+  if [[ ! -f "${build_marker}" ]]; then
+    echo "[dev-mobile] 检测到缺少 build 标记文件，需要 build"
+    return 0
+  fi
+
+  current_signature="$(compute_build_signature "${platform}")"
+  last_signature="$(cat "${build_marker}" 2>/dev/null || true)"
+
+  if [[ -z "${last_signature}" || -z "${current_signature}" ]]; then
+    echo "[dev-mobile] 无法计算原生输入签名，保守处理需要 build"
+    return 0
+  fi
+
+  if [[ "${last_signature}" != "${current_signature}" ]]; then
+    echo "[dev-mobile] 检测到 Android 原生输入变化，需要 rebuild"
+    changed_files="$(collect_native_input_changes "${platform}")"
+    if [[ -n "${changed_files}" ]]; then
+      echo "[dev-mobile] 变化文件："
+      echo "${changed_files}" | head -5
+    fi
+    return 0
+  fi
+
+  return 1
+}
+
+# 保存 build 标记
+save_build_marker() {
+  local platform="$1"
+  local build_marker="${MOBILE_DIR}/.${platform}-build-hash"
+  local current_signature
+
+  current_signature="$(compute_build_signature "${platform}")"
+  if [[ -n "${current_signature}" ]]; then
+    echo "${current_signature}" > "${build_marker}"
+    echo "[dev-mobile] 已保存 build 标记: ${build_marker}"
+  fi
+}
+
+# 执行 iOS build 并保存标记
+run_ios_build() {
+  echo "[dev-mobile] 执行 iOS build..."
+
+  cd "${MOBILE_DIR}"
+
+  echo "[dev-mobile] step 1/4: npm install"
+  npm install
+
+  echo "[dev-mobile] step 2/4: expo prebuild --platform ios --clean"
+  npx expo prebuild --platform "${IOS_PLATFORM}" --clean
+
+  echo "[dev-mobile] step 3/4: pod-install ios"
+  npx pod-install ios
+
+  echo "[dev-mobile] step 4/4: expo run:ios --device"
+  npx expo run:ios --device
+
+  save_build_marker "ios"
+}
+
+# 执行 Android build 并保存标记
+run_android_build() {
+  echo "[dev-mobile] 执行 Android build..."
+
+  cd "${MOBILE_DIR}"
+
+  echo "[dev-mobile] step 1/3: npm install"
+  npm install
+
+  echo "[dev-mobile] step 2/3: expo prebuild --platform android --clean"
+  npx expo prebuild --platform "android" --clean
+
+  echo "[dev-mobile] step 3/3: expo run:android"
+  npx expo run:android
+
+  save_build_marker "android"
 }
 
 ensure_workspace() {
@@ -206,13 +398,13 @@ open_expo_in_simulator() {
     echo "[dev-mobile] iOS dev client is missing from the booted simulator."
     simulator_name="$(get_booted_simulator_name)"
     if ! install_dev_client_to_booted_simulator "${simulator_name}"; then
-      echo "[dev-mobile] auto-install failed. run 'bash scripts/dev-mobile.sh build' and retry."
+      echo "[dev-mobile] auto-install failed. run 'bash scripts/dev-mobile.sh ios:rebuild' and retry."
       return 1
     fi
 
     if ! xcrun simctl listapps booted | grep -q "\"${bundle_id}\""; then
       echo "[dev-mobile] dev client install finished but app is still not detected."
-      echo "[dev-mobile] run 'bash scripts/dev-mobile.sh build' and retry."
+      echo "[dev-mobile] run 'bash scripts/dev-mobile.sh ios:rebuild' and retry."
       return 1
     fi
   fi
@@ -330,7 +522,7 @@ run_start_mode() {
   echo "[dev-mobile] starting expo (LAN mode)..."
   (
     cd "${MOBILE_DIR}"
-    exec npx expo start --lan --port "${EXPO_PORT}"
+    exec npx expo start --dev-client --lan --port "${EXPO_PORT}"
   ) &
   EXPO_PID=$!
 
@@ -408,16 +600,33 @@ run_web_mode() {
   wait "${EXPO_PID}"
 }
 
-run_simulator_mode() {
-  local local_ip public_backend_url local_backend_health_url backend_ready metro_ready
+run_ios_mode() {
+  local needs_build=0
 
   trap cleanup EXIT INT TERM
+
+  # 检测是否需要 rebuild
+  if [[ -n "${FORCE_REBUILD}" ]] || needs_ios_rebuild; then
+    needs_build=1
+  fi
+
+  if [[ "${needs_build}" -eq 1 ]]; then
+    echo "[dev-mobile] iOS 模式：检测到需要 rebuild，正在执行..."
+    run_ios_build
+    echo
+    echo "[dev-mobile] build 完成，继续启动后端 + Expo..."
+  else
+    echo "[dev-mobile] iOS 模式：跳过 build，直接启动..."
+  fi
+
+  # 启动后端 + iOS 模拟器，复用原有 simulator 调试逻辑。
+  local local_ip public_backend_url local_backend_health_url backend_ready metro_ready
 
   local_ip="127.0.0.1"
   public_backend_url="http://${local_ip}:${BACKEND_PORT}"
   local_backend_health_url="http://127.0.0.1:${BACKEND_PORT}/health"
 
-  echo "[dev-mobile] mode3: starting backend + expo (iOS Simulator)..."
+  echo "[dev-mobile] 启动后端 + Expo（iOS Simulator）..."
   free_port "${BACKEND_PORT}" "backend"
   free_port "${EXPO_PORT}" "expo"
 
@@ -434,7 +643,6 @@ run_simulator_mode() {
   echo "[dev-mobile] waiting backend readiness check: HEAD ${local_backend_health_url}"
   backend_ready=0
   for _ in $(seq 1 30); do
-    # 开发启动只需要确认 FastAPI 已监听端口，避免 GET /health 触发外部依赖深度探活。
     if curl -fsSI "${local_backend_health_url}" >/dev/null 2>&1; then
       backend_ready=1
       break
@@ -468,7 +676,7 @@ run_simulator_mode() {
 
   echo
   echo "========================================"
-  echo "SparkFlow mobile mode3 is ready"
+  echo "SparkFlow iOS 模式已就绪"
   echo "Backend API: ${public_backend_url}"
   echo "Backend health: ${local_backend_health_url}"
   echo "Tip: app 内网络设置填 127.0.0.1:8000"
@@ -479,52 +687,80 @@ run_simulator_mode() {
   wait "${EXPO_PID}"
 }
 
-run_build_mode() {
-  echo "[dev-mobile] mode2: rebuilding iOS app only..."
-  echo "[dev-mobile] this mode does not start backend or expo."
+run_android_mode() {
+  local needs_build=0
 
-  cd "${MOBILE_DIR}"
+  trap cleanup EXIT INT TERM
 
-  echo "[dev-mobile] step 1/4: npm install"
-  npm install
+  # 检测是否需要 rebuild
+  if [[ -n "${FORCE_REBUILD}" ]] || needs_android_rebuild; then
+    needs_build=1
+  fi
 
-  echo "[dev-mobile] step 2/4: expo prebuild --platform ${IOS_PLATFORM} --clean"
-  npx expo prebuild --platform "${IOS_PLATFORM}" --clean
+  if [[ "${needs_build}" -eq 1 ]]; then
+    echo "[dev-mobile] Android 模式：检测到需要 rebuild，正在执行..."
+    run_android_build
+    echo
+    echo "[dev-mobile] build 完成，继续启动后端 + Expo..."
+  else
+    echo "[dev-mobile] Android 模式：跳过 build，直接启动..."
+  fi
 
-  echo "[dev-mobile] step 3/4: pod-install ios"
-  npx pod-install ios
+  # 启动后端 + Expo（LAN 模式，Android 设备扫码连接）
+  local local_ip public_backend_url local_backend_health_url backend_ready
 
-  echo "[dev-mobile] step 4/4: expo run:ios --device"
-  npx expo run:ios --device
+  local_ip="$(get_local_ip)"
+  public_backend_url="http://${local_ip}:${BACKEND_PORT}"
+  local_backend_health_url="http://127.0.0.1:${BACKEND_PORT}/health"
+
+  echo "[dev-mobile] 启动后端 + Expo（LAN 模式，Android 设备连接）..."
+  free_port "${BACKEND_PORT}" "backend"
+  free_port "${EXPO_PORT}" "expo"
+
+  ensure_local_postgres
+  run_backend_migrations
+
+  echo "[dev-mobile] starting backend..."
+  (
+    cd "${BACKEND_DIR}"
+    exec "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
+  ) &
+  BACKEND_PID=$!
+
+  echo "[dev-mobile] waiting backend readiness check: HEAD ${local_backend_health_url}"
+  backend_ready=0
+  for _ in $(seq 1 30); do
+    if curl -fsSI "${local_backend_health_url}" >/dev/null 2>&1; then
+      backend_ready=1
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ "${backend_ready}" -ne 1 ]]; then
+    echo "[dev-mobile] backend readiness check timeout, but continue to start expo."
+  fi
+
+  echo "[dev-mobile] starting expo (Android dev client)..."
+  (
+    cd "${MOBILE_DIR}"
+    exec npx expo start --dev-client --lan --port "${EXPO_PORT}"
+  ) &
+  EXPO_PID=$!
 
   echo
   echo "========================================"
-  echo "Mode2 build finished."
-  echo "Next step: run 'bash scripts/dev-mobile.sh'"
-  echo "That will start backend + expo for daily development."
+  echo "SparkFlow Android 模式已就绪"
+  echo "Backend API (app network settings): ${public_backend_url}"
+  echo "Backend health: ${local_backend_health_url}"
+  echo "Metro / Expo bundler: http://${local_ip}:${EXPO_PORT}"
+  echo "Tip 1: app 内网络设置填 8000，不要填 8081"
+  echo "Tip 2: Android 设备请打开已安装的 SparkFlow dev client 或扫码连接"
+  echo "Press Ctrl+C to stop backend and expo."
   echo "========================================"
-  }
+  echo
 
-  run_android_mode() {
-    echo "[dev-mobile] mode-android: prebuild + run android (Debug)..."
-
-    cd "${MOBILE_DIR}"
-
-    echo "[dev-mobile] step 1/3: npm install"
-    npm install
-
-    echo "[dev-mobile] step 2/3: expo prebuild --platform android --clean"
-    npx expo prebuild --platform "android" --clean
-
-    echo "[dev-mobile] step 3/3: expo run:android"
-    npx expo run:android
-
-    echo
-    echo "========================================"
-    echo "Android prebuild+run finished (Debug)."
-    echo "Next step: run 'bash scripts/dev-mobile.sh' to start backend + expo (LAN) if you want to use Metro bundler separately."
-    echo "========================================"
-    echo
+  wait "${EXPO_PID}"
 }
 
 case "${MODE}" in
@@ -532,21 +768,25 @@ case "${MODE}" in
     ensure_start_mode_deps
     run_start_mode
     ;;
+  ios)
+    ensure_start_mode_deps
+    run_ios_mode
+    ;;
+  ios:rebuild)
+    ensure_start_mode_deps
+    FORCE_REBUILD=1 run_ios_mode
+    ;;
+  android)
+    ensure_start_mode_deps
+    run_android_mode
+    ;;
+  android:rebuild)
+    ensure_start_mode_deps
+    FORCE_REBUILD=1 run_android_mode
+    ;;
   web)
     ensure_start_mode_deps
     run_web_mode
-    ;;
-  simulator)
-    ensure_start_mode_deps
-    run_simulator_mode
-    ;;
-  build)
-    ensure_build_mode_deps
-    run_build_mode
-    ;;
-  android)
-    ensure_build_mode_deps
-    run_android_mode
     ;;
   help|-h|--help)
     ensure_workspace

@@ -194,7 +194,7 @@ npm run dev:mobile:start
 如果改了 `mobile/ios`、原生配置、Expo 插件或 `app.json`：
 
 ```bash
-bash scripts/dev-mobile.sh build
+bash scripts/dev-mobile.sh ios:rebuild
 ```
 
 ### 6.3 Backend only

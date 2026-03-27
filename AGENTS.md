@@ -100,13 +100,13 @@ bash scripts/postgres-local.sh logs
 If you changed native config, Expo plugins, `app.json`, or files under `mobile/ios`, rebuild first:
 
 ```bash
-bash scripts/dev-mobile.sh build
+bash scripts/dev-mobile.sh ios:rebuild
 ```
 
 Then return to normal dev mode:
 
 ```bash
-bash scripts/dev-mobile.sh
+bash scripts/dev-mobile.sh ios
 ```
 
 ### Backend only
