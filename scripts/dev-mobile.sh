@@ -25,6 +25,7 @@ print_usage() {
   bash scripts/dev-mobile.sh web       # 模式4：启动前后端联调（Expo Web）
   bash scripts/dev-mobile.sh simulator # 模式3：启动前后端联调（iOS Simulator）
   bash scripts/dev-mobile.sh build     # 模式2：执行 iOS 重建，不启动前后端
+  bash scripts/dev-mobile.sh android   # 模式5：为 Android 生成原生工程并在设备/模拟器上运行（prebuild + run）
   bash scripts/dev-mobile.sh help      # 查看帮助
 
 说明：
@@ -33,6 +34,12 @@ print_usage() {
   模式4 适合：调试 Web 端页面或浏览器交互，使用 Expo Web 本地开发。
   模式2 适合：改了原生配置、插件、Pod、Info.plist、AppDelegate 后，需要重新 Build。
   执行完模式2后，再执行模式1、模式3或模式4即可开始联调。
+  模式5 适合：需要在本地 Android 模拟器或真机上调试原生模块或 dev-client。
+            该模式会在 mobile/ 下执行 expo prebuild --platform android --clean 然后尝试 expo run:android。
+            Android 开发环境要求：
+              - 安装 Android Studio 和 Android SDK
+              - 配置 ANDROID_HOME 环境变量
+              - 启动 Android 模拟器或连接真机并开启 USB 调试
 USAGE
 }
 
@@ -496,6 +503,28 @@ run_build_mode() {
   echo "Next step: run 'bash scripts/dev-mobile.sh'"
   echo "That will start backend + expo for daily development."
   echo "========================================"
+  }
+
+  run_android_mode() {
+    echo "[dev-mobile] mode-android: prebuild + run android (Debug)..."
+
+    cd "${MOBILE_DIR}"
+
+    echo "[dev-mobile] step 1/3: npm install"
+    npm install
+
+    echo "[dev-mobile] step 2/3: expo prebuild --platform android --clean"
+    npx expo prebuild --platform "android" --clean
+
+    echo "[dev-mobile] step 3/3: expo run:android"
+    npx expo run:android
+
+    echo
+    echo "========================================"
+    echo "Android prebuild+run finished (Debug)."
+    echo "Next step: run 'bash scripts/dev-mobile.sh' to start backend + expo (LAN) if you want to use Metro bundler separately."
+    echo "========================================"
+    echo
 }
 
 case "${MODE}" in
@@ -514,6 +543,10 @@ case "${MODE}" in
   build)
     ensure_build_mode_deps
     run_build_mode
+    ;;
+  android)
+    ensure_build_mode_deps
+    run_android_mode
     ;;
   help|-h|--help)
     ensure_workspace

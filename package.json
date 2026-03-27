@@ -17,6 +17,7 @@
     "dev:mobile:web": "bash scripts/dev-mobile.sh web",
     "dev:mobile:simulator": "bash scripts/dev-mobile.sh simulator",
     "dev:mobile:build": "bash scripts/dev-mobile.sh build",
+    "dev:mobile:android": "bash scripts/dev-mobile.sh android",
     "dev:db": "bash scripts/postgres-local.sh start all",
     "dev:db:stop": "bash scripts/postgres-local.sh stop",
     "dev:db:status": "bash scripts/postgres-local.sh status",
