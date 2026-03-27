@@ -15,7 +15,6 @@ from models import (
     User,
     DeviceSession,
     Fragment,
-    FragmentBlock,
     FragmentFolder,
     FragmentTag,
     Script,
@@ -184,11 +183,13 @@ async def delete_user(
     # 2. 流水线运行
     db.query(PipelineRun).filter(PipelineRun.user_id == user_id).delete()
 
-    # 2. 碎片相关数据
-    db.query(FragmentBlock).filter(FragmentBlock.user_id == user_id).delete()
-    db.query(FragmentTag).filter(FragmentTag.user_id == user_id).delete()
+    # 3. 碎片相关数据（Fragment 有 cascade，会自动删除 blocks）
+    # 先删除文件夹，因为 Fragment 有 folder_id 外键
     db.query(FragmentFolder).filter(FragmentFolder.user_id == user_id).delete()
+    # 删除碎片，cascade 会自动删除 FragmentBlock
     db.query(Fragment).filter(Fragment.user_id == user_id).delete()
+    # FragmentTag 有 user_id 外键，单独清理可能的孤儿记录
+    db.query(FragmentTag).filter(FragmentTag.user_id == user_id).delete()
 
     # 3. 成稿
     db.query(Script).filter(Script.user_id == user_id).delete()
