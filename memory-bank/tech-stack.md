@@ -32,7 +32,7 @@
 
 ### 2.1 Core dependencies
 
-来自 [`mobile/package.json`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/package.json)：
+来自 [`mobile/package.json`](../mobile/package.json)：
 
 - `expo ~54.0.0`
 - `react 19.1.0`
@@ -72,7 +72,7 @@
 
 ### 3.1 Core dependencies
 
-来自 [`backend/requirements.txt`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/requirements.txt)：
+来自 [`backend/requirements.txt`](../backend/requirements.txt)：
 
 - `fastapi==0.135.1`
 - `uvicorn==0.41.0`
@@ -144,7 +144,7 @@
 
 ### 5.1 Current defaults
 
-来自 [`backend/core/config.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/core/config.py) 与 [`backend/services/factory.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/services/factory.py)：
+来自 [`backend/core/config.py`](../backend/core/config.py) 与 [`backend/services/factory.py`](../backend/services/factory.py)：
 
 - `LLM_PROVIDER=qwen`
 - `LLM_MODEL=qwen-turbo`

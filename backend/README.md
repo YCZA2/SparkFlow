@@ -234,7 +234,7 @@ cd backend
 - `presentation.py` 通过 `response_model=ResponseModel[...]` 声明标准返回结构。
 - OpenAPI 文档默认使用中文 `summary` / `description`，便于产品、前端和后端共同阅读。
 
-当前仓库的前后端并行开发约定见 [`memory-bank/frontend-backend-collaboration.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/frontend-backend-collaboration.md)。如果接口字段、状态枚举或返回结构发生变化，后端需要在更新 `schemas.py` 的同时同步这份协作规范涉及的联调约定。
+当前仓库的前后端并行开发约定见 [`memory-bank/frontend-backend-collaboration.md`](../memory-bank/frontend-backend-collaboration.md)。如果接口字段、状态枚举或返回结构发生变化，后端需要在更新 `schemas.py` 的同时同步这份协作规范涉及的联调约定。
 
 Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `media_assets`, `exports`, `pipelines`, `debug_logs`, and `scheduler`.
 
@@ -313,10 +313,10 @@ bash scripts/postgres-local.sh stop
 运行时日志现在会同时：
 
 - 后端结构化日志继续输出到控制台
-- 后端全量业务日志写入 [`backend/runtime_logs/backend.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend.log)
-- 后端 `ERROR` 及以上日志额外写入 [`backend/runtime_logs/backend-error.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend-error.log)
+- 后端全量业务日志写入 [`backend/runtime_logs/backend.log`](./runtime_logs/backend.log)
+- 后端 `ERROR` 及以上日志额外写入 [`backend/runtime_logs/backend-error.log`](./runtime_logs/backend-error.log)
 - 移动端上报的调试日志保存在 App 内错误日志页中
-- 移动端调试日志通过专用 file handler 写入 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
+- 移动端调试日志通过专用 file handler 写入 [`backend/runtime_logs/mobile-debug.log`](./runtime_logs/mobile-debug.log)
 
 后端接收接口：
 

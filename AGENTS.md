@@ -52,7 +52,6 @@ If the change also updates repository conventions, development workflow, or agen
 - `backend/domains/*`: domain repositories and persistence logic
 - `backend/services/*`: provider integrations and service implementations
 - `backend/models/`: SQLAlchemy models and DB session setup
-- `backend/dify_dsl/`: Dify workflow DSL templates for script generation
 - `backend/tests/`: backend tests
 
 ### Mobile

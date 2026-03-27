@@ -2,7 +2,7 @@
 
 > 最后更新：2026-03-10
 > 历史文档：本文件记录的是 2026-03-10 对阶段 11-14 的实现快照，包含 `body_markdown`、旧内容层规划等当时口径，不再代表当前实现。
-> 当前真实状态请以 [`PRD.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/PRD.md)、[`architecture.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/architecture.md)、[`mobile/README.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/README.md) 和 [`backend/README.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/README.md) 为准。
+> 当前真实状态请以 [`PRD.md`](./PRD.md)、[`architecture.md`](./architecture.md)、[`mobile/README.md`](../mobile/README.md) 和 [`backend/README.md`](../backend/README.md) 为准。
 
 本文档只记录阶段 11-14 在当前仓库中的真实落地状态，不再沿用已经失真的旧路径和旧任务描述。
 
@@ -21,10 +21,10 @@
 
 ### 当前实现位置
 
-- Router: [`backend/modules/knowledge/presentation.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/knowledge/presentation.py)
-- Use case: [`backend/modules/knowledge/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/knowledge/application.py)
+- Router: [`backend/modules/knowledge/presentation.py`](../backend/modules/knowledge/presentation.py)
+- Use case: [`backend/modules/knowledge/application.py`](../backend/modules/knowledge/application.py)
 - Repository: `backend/domains/knowledge/repository.py`
-- Mobile placeholder: [`mobile/app/knowledge.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/knowledge.tsx)
+- Mobile placeholder: [`mobile/app/knowledge.tsx`](../mobile/app/knowledge.tsx)
 
 ### 已落地能力
 
@@ -58,10 +58,10 @@
 
 ### 当前实现位置
 
-- Vector adapter: [`backend/modules/shared/vector_store.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/vector_store.py)
-- Container entry: [`backend/modules/shared/container.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/container.py)
-- Fragment query/use case: [`backend/modules/fragments/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/application.py)
-- Visualization: [`backend/modules/fragments/visualization.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/visualization.py)
+- Vector adapter: [`backend/modules/shared/vector_store.py`](../backend/modules/shared/vector_store.py)
+- Container entry: [`backend/modules/shared/container.py`](../backend/modules/shared/container.py)
+- Fragment query/use case: [`backend/modules/fragments/application.py`](../backend/modules/fragments/application.py)
+- Visualization: [`backend/modules/fragments/visualization.py`](../backend/modules/fragments/visualization.py)
 - Chroma provider: `backend/services/chroma_vector_db.py`
 
 ### 已落地能力
@@ -95,12 +95,12 @@
 
 ### 当前实现位置
 
-- Use case: [`backend/modules/scripts/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/application.py)
-- Pipeline: [`backend/modules/scripts/daily_push_pipeline.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/daily_push_pipeline.py)
-- Selector rules: [`backend/modules/scripts/daily_push.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/daily_push.py)
-- Router: [`backend/modules/scripts/presentation.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scripts/presentation.py)
-- Scheduler: [`backend/modules/scheduler/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/scheduler/application.py)
-- App bootstrap: [`backend/main.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/main.py)
+- Use case: [`backend/modules/scripts/application.py`](../backend/modules/scripts/application.py)
+- Pipeline: [`backend/modules/scripts/daily_push_pipeline.py`](../backend/modules/scripts/daily_push_pipeline.py)
+- Selector rules: [`backend/modules/scripts/daily_push.py`](../backend/modules/scripts/daily_push.py)
+- Router: [`backend/modules/scripts/presentation.py`](../backend/modules/scripts/presentation.py)
+- Scheduler: [`backend/modules/scheduler/application.py`](../backend/modules/scheduler/application.py)
+- App bootstrap: [`backend/main.py`](../backend/main.py)
 - Mobile hooks: `mobile/features/scripts/hooks.ts`
 
 ### 已落地能力
@@ -143,7 +143,6 @@
 - 真机**缓存优先**文本链路冒烟：离线进入编辑器 -> 杀进程恢复 -> 远端建单绑定 -> 本地图片收敛。
 - daily push 前端主路径验证。
 - 知识库移动端真实入口验证。
-- `backend/dify_dsl/README.md` 和 onboarding 口径还需要继续收口。
 
 ## 当前结论
 

@@ -14,7 +14,7 @@ SparkFlow（灵感编导 AI）- A mobile-first app for knowledge content creator
 | **Mobile State** | Zustand 5; local truth via expo-sqlite + drizzle-orm |
 | **Backend** | FastAPI + SQLAlchemy 2.0 + Alembic + APScheduler + structlog |
 | **Database** | PostgreSQL (default, Docker-provided) + ChromaDB (vector DB) |
-| **External APIs** | DashScope/Qwen (LLM / STT / Embeddings), Dify (current workflow provider) |
+| **External APIs** | DashScope/Qwen (LLM / STT / Embeddings), Dify (experimental external workflow, not on main pipeline) |
 
 ## Architecture
 
@@ -99,9 +99,9 @@ backend/
 ├── domains/                 # Domain repositories and persistence
 ├── services/                # Provider adapters (Dify, DashScope, Qwen, ChromaDB, external_media)
 ├── models/database.py       # Engine / session setup
-├── prompts/                 # LLM prompt templates (mode_a_boom.txt, mode_b_brain.txt)
+├── prompts/                 # LLM prompt templates (RAG generation, daily push, enrichment, etc.)
 ├── alembic/                 # Migrations
-└── dify_dsl/                # Dify workflow DSL templates
+└── scripts/                 # Dev/test utilities (e.g. test_dify_script_generation.py)
 
 mobile/
 ├── app/                     # expo-router file-based pages
@@ -116,9 +116,8 @@ mobile/
 
 1. **Voice Capture** → POST `/api/transcriptions` → poll `pipeline_run_id` → fragment stored locally + synced
 2. **Manual Fragment** → local draft created immediately → background sync via `/api/backups/batch`
-3. **AI Script Generation** → select fragments → POST `/api/scripts/generation` → poll `pipeline_run_id`
-   - Mode A "导师爆款": enforced structure (hook + pain point + value + CTA)
-   - Mode B "专属二脑": mimics user's writing style from knowledge base
+3. **AI Script Generation** → topic + fragment_ids → POST `/api/scripts/generation` → poll `pipeline_run_id`
+   - Unified RAG pipeline: topic + SOP outline + few-shot/reference context → script (`mode_rag`)
 4. **Daily Auto-Aggregation** → ≥3 related fragments from yesterday → `daily_push_generation` pipeline run
 5. **Teleprompter Recording** → overlay teleprompter on camera → save video to local photos
 

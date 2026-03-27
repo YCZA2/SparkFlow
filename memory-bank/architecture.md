@@ -68,7 +68,7 @@ flowchart LR
 
 ### 3.1 Routing
 
-移动端路由位于 `mobile/app/`，由 [`mobile/app/_layout.tsx`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/app/_layout.tsx) 统一挂载 `Stack`。
+移动端路由位于 `mobile/app/`，由 [`mobile/app/_layout.tsx`](../mobile/app/_layout.tsx) 统一挂载 `Stack`。
 
 当前主要页面：
 
@@ -652,4 +652,4 @@ sequenceDiagram
 - 联调问题优先结合 `backend/runtime_logs/mobile-debug.log` 与后端接口日志排查，而不是只看前端截图。
 - 启动方式、环境假设或模块边界发生变化时，文档必须与代码同一轮更新。
 
-更完整的执行细则见 [`memory-bank/frontend-backend-collaboration.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/frontend-backend-collaboration.md)。
+更完整的执行细则见 [`memory-bank/frontend-backend-collaboration.md`](./frontend-backend-collaboration.md)。

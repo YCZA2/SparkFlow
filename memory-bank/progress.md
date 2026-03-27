@@ -2,7 +2,7 @@
 
 > 最后更新：2026-03-10
 > 历史文档：本文件记录的是 2026-03-10 时点的阶段性快照，包含当时的 `body_markdown`、缓存优先等旧口径，不再代表当前实现。
-> 当前真实状态请以 [`PRD.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/PRD.md)、[`architecture.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/architecture.md)、[`mobile/README.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile/README.md) 和 [`backend/README.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/README.md) 为准。
+> 当前真实状态请以 [`PRD.md`](./PRD.md)、[`architecture.md`](./architecture.md)、[`mobile/README.md`](../mobile/README.md) 和 [`backend/README.md`](../backend/README.md) 为准。
 
 这份文档保留当时的阶段判断，便于回看项目在 2026-03-10 的范围、取舍和阶段目标；如与现状不一致，应以当前实现和最新架构文档为准。
 
@@ -99,21 +99,21 @@ bash scripts/dev-mobile.sh
 后端单独运行：
 
 ```bash
-cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend
+cd backend
 .venv/bin/python -m uvicorn main:app --reload
 ```
 
 移动端单独运行：
 
 ```bash
-cd /Users/hujiahui/Desktop/VibeCoding/SparkFlow/mobile
+cd mobile
 npx expo start --lan
 ```
 
 ## 相关文档
 
-- [PRD.md](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/PRD.md)
-- [architecture.md](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/architecture.md)
-- [frontend-backend-collaboration.md](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/frontend-backend-collaboration.md)
-- [tech-stack.md](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/tech-stack.md)
-- [progress-phase-11-14.md](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/progress-phase-11-14.md)
+- [PRD.md](./PRD.md)
+- [architecture.md](./architecture.md)
+- [frontend-backend-collaboration.md](./frontend-backend-collaboration.md)
+- [tech-stack.md](./tech-stack.md)
+- [progress-phase-11-14.md](./progress-phase-11-14.md)

@@ -340,8 +340,8 @@ bash scripts/postgres-local.sh status
 可以执行：
 
 ```bash
-watchman watch-del '/Users/hujiahui/Desktop/VibeCoding/SparkFlow'
-watchman watch-project '/Users/hujiahui/Desktop/VibeCoding/SparkFlow'
+watchman watch-del "$(pwd)"
+watchman watch-project "$(pwd)"
 ```
 
 ### 5. 让 Codex 直接读取前端报错
@@ -349,7 +349,7 @@ watchman watch-project '/Users/hujiahui/Desktop/VibeCoding/SparkFlow'
 现在移动端错误日志会同时：
 
 - 显示在 App 内的 `错误日志` 页面
-- 同步进入后端结构化日志链路，并写入本地文件 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
+- 同步进入后端结构化日志链路，并写入本地文件 [`backend/runtime_logs/mobile-debug.log`](../backend/runtime_logs/mobile-debug.log)
 
 推荐调试方式：
 
@@ -434,7 +434,7 @@ cd backend
 
 如果移动端和后端由不同成员并行开发，默认遵守仓库内的协作规范：
 
-- 协作规范：[`memory-bank/frontend-backend-collaboration.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/frontend-backend-collaboration.md)
-- 架构总览：[`memory-bank/architecture.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/architecture.md)
+- 协作规范：[`memory-bank/frontend-backend-collaboration.md`](../memory-bank/frontend-backend-collaboration.md)
+- 架构总览：[`memory-bank/architecture.md`](../memory-bank/architecture.md)
 
 移动端开发时，优先依据后端 `schemas.py`、`response_model` 和 `/docs` 中的 contract 接口说明接入；在真实接口未完成前，可以先按契约做 mock，但联调前要回到真实结构校验 loading、空态、错误态和处理中状态。
