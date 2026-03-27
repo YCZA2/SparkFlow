@@ -21,7 +21,11 @@
   .btn-primary { background: #0071e3; color: #fff; }
   .btn-primary:hover { background: #0077ed; }
   .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+  .login-links { margin-top: 16px; text-align: center; }
+  .login-links a { color: #0071e3; font-size: 13px; text-decoration: none; }
+  .login-links a:hover { text-decoration: underline; }
   .error-msg { color: #e00; font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .hint-msg { color: #666; font-size: 12px; margin-top: 10px; }
 
   /* ── 管理页 ── */
   #admin-page { display: none; }
@@ -85,7 +89,7 @@
 <div id="login-page">
   <div class="login-card">
     <h1>SparkFlow 管理后台</h1>
-    <p>请使用 creator 账号登录</p>
+    <p id="login-hint">请使用 creator 账号登录</p>
     <div class="field">
       <label>邮箱</label>
       <input id="l-email" type="email" placeholder="admin@example.com" autocomplete="email">
@@ -96,6 +100,9 @@
     </div>
     <button class="btn btn-primary" id="login-btn" onclick="doLogin()">登录</button>
     <div class="error-msg" id="login-error"></div>
+    <div class="login-links">
+      <a href="#" onclick="openRegisterModal(); return false;">注册账号</a>
+    </div>
   </div>
 </div>
 
@@ -201,6 +208,27 @@
   </div>
 </div>
 
+<!-- 注册弹窗 -->
+<div class="overlay" id="register-overlay">
+  <div class="modal">
+    <h3>注册账号</h3>
+    <div class="field"><label>邮箱</label><input id="r-email" type="email" placeholder="your@email.com"></div>
+    <div class="field"><label>密码</label><input id="r-password" type="password" placeholder="至少 8 位"></div>
+    <div class="field"><label>昵称（可选）</label><input id="r-nickname" type="text" placeholder="留空则自动生成"></div>
+    <div class="field"><label>角色</label>
+      <select id="r-role">
+        <option value="user">user（普通用户）</option>
+        <option value="creator">creator（管理员）</option>
+      </select>
+    </div>
+    <p class="hint-msg" id="register-hint"></p>
+    <div class="foot">
+      <button class="btn-sm btn-cancel" onclick="closeModal('register-overlay')">取消</button>
+      <button class="btn-sm btn-confirm" id="register-btn" onclick="doRegister()">注册</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -214,6 +242,7 @@ let currentUserId = '';
 let editingUserId = '';
 let deletingUserId = '';
 let users = [];
+let hasCreator = false; // 系统中是否已有 creator 用户
 
 // ── 初始化 ─────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
@@ -447,6 +476,90 @@ async function doDelete() {
     loadUsers();
   } catch (e) {
     alert('删除失败：' + e.message);
+  }
+}
+
+// ── 注册账号（公开入口）────────────────────────────────
+async function openRegisterModal() {
+  // 先检查系统中是否已有 creator 用户
+  document.getElementById('register-overlay').classList.add('show');
+  document.getElementById('register-hint').textContent = '检查系统中用户...';
+  document.getElementById('r-role').disabled = true;
+  document.getElementById('register-btn').disabled = true;
+
+  try {
+    const checkRes = await fetch(API_BASE + '/api/admin/check-creator');
+    const checkJson = await checkRes.json();
+    hasCreator = checkJson.data?.has_creator || false;
+  } catch {
+    // 如果检查接口不存在，默认允许注册 creator
+    hasCreator = false;
+  }
+
+  // 清空表单
+  document.getElementById('r-email').value = '';
+  document.getElementById('r-password').value = '';
+  document.getElementById('r-nickname').value = '';
+
+  // 根据是否有 creator 来设置角色选项
+  const roleSelect = document.getElementById('r-role');
+  roleSelect.innerHTML = hasCreator
+    ? '<option value="user">user（普通用户）</option>'
+    : '<option value="creator">creator（管理员）</option><option value="user">user（普通用户）</option>';
+  roleSelect.value = hasCreator ? 'user' : 'creator';
+  roleSelect.disabled = false;
+
+  // 提示信息
+  document.getElementById('register-hint').textContent = hasCreator
+    ? '系统中已有管理员，只能注册普通用户。'
+    : '系统中暂无管理员，可注册 creator 账号。';
+
+  document.getElementById('register-btn').disabled = false;
+}
+
+async function doRegister() {
+  const email = document.getElementById('r-email').value.trim();
+  const password = document.getElementById('r-password').value;
+  const nickname = document.getElementById('r-nickname').value.trim();
+  const role = document.getElementById('r-role').value;
+
+  if (!email || !password) { alert('邮箱和密码不能为空'); return; }
+  if (password.length < 8) { alert('密码至少 8 位'); return; }
+
+  const btn = document.getElementById('register-btn');
+  btn.disabled = true;
+  btn.textContent = '注册中...';
+
+  try {
+    // 直接调用注册接口，传递 role 参数
+    const data = await apiFetch('/api/auth/register', 'POST', {
+      email,
+      password,
+      nickname: nickname || null,
+      device_id: 'admin-web-register',
+      role,
+    });
+
+    // 注册成功后自动登录
+    token = data.access_token;
+    sessionStorage.setItem('sf_admin_token', token);
+
+    closeModal('register-overlay');
+    showToast(role === 'creator' ? '管理员账号注册成功' : '用户注册成功');
+
+    // 如果注册的是 creator，直接进入管理页
+    if (role === 'creator') {
+      showAdmin();
+    } else {
+      // 普通用户提示登录
+      token = '';
+      sessionStorage.removeItem('sf_admin_token');
+    }
+  } catch (e) {
+    alert('注册失败：' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '注册';
   }
 }
 

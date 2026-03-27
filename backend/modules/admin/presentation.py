@@ -11,7 +11,24 @@ from sqlalchemy.orm import Session
 from core import success_response
 from core.auth import get_current_user
 from core.exceptions import AuthenticationError, ValidationError
-from models import User
+from models import (
+    User,
+    DeviceSession,
+    Fragment,
+    FragmentBlock,
+    FragmentFolder,
+    FragmentTag,
+    Script,
+    BackupRecord,
+    BackupRestoreSession,
+    MediaAsset,
+    ContentMediaLink,
+    KnowledgeDoc,
+    PipelineRun,
+    PipelineStepRun,
+    StableCoreProfile,
+    MethodologyEntry,
+)
 from modules.auth.password_service import hash_password
 from modules.shared.infrastructure.container import get_db_session
 
@@ -23,6 +40,17 @@ def require_creator(current_user: dict = Depends(get_current_user)) -> dict:
     if current_user.get("role") != "creator":
         raise AuthenticationError("需要管理员权限")
     return current_user
+
+
+@router.get(
+    "/check-creator",
+    summary="检查是否已有管理员",
+    description="公开接口，用于注册页面判断是否允许注册 creator 账号。",
+)
+async def check_creator(db: Session = Depends(get_db_session)):
+    """检查系统中是否存在 creator 角色的用户。"""
+    count = db.query(User).filter(User.role == "creator").count()
+    return success_response(data={"has_creator": count > 0})
 
 
 class CreateUserRequest(BaseModel):
@@ -144,6 +172,44 @@ async def delete_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise ValidationError("用户不存在", {"user_id": "not_found"})
+
+    # 删除所有关联数据（按依赖顺序）
+    # 1. 流水线步骤（必须先删除，因为有外键依赖 pipeline_runs）
+    db.query(PipelineStepRun).filter(
+        PipelineStepRun.pipeline_run_id.in_(
+            db.query(PipelineRun.id).filter(PipelineRun.user_id == user_id)
+        )
+    ).delete(synchronize_session=False)
+
+    # 2. 流水线运行
+    db.query(PipelineRun).filter(PipelineRun.user_id == user_id).delete()
+
+    # 2. 碎片相关数据
+    db.query(FragmentBlock).filter(FragmentBlock.user_id == user_id).delete()
+    db.query(FragmentTag).filter(FragmentTag.user_id == user_id).delete()
+    db.query(FragmentFolder).filter(FragmentFolder.user_id == user_id).delete()
+    db.query(Fragment).filter(Fragment.user_id == user_id).delete()
+
+    # 3. 成稿
+    db.query(Script).filter(Script.user_id == user_id).delete()
+
+    # 4. 媒体与知识库
+    db.query(ContentMediaLink).filter(ContentMediaLink.user_id == user_id).delete()
+    db.query(KnowledgeDoc).filter(KnowledgeDoc.user_id == user_id).delete()
+    db.query(MediaAsset).filter(MediaAsset.user_id == user_id).delete()
+
+    # 5. 备份相关
+    db.query(BackupRestoreSession).filter(BackupRestoreSession.user_id == user_id).delete()
+    db.query(BackupRecord).filter(BackupRecord.user_id == user_id).delete()
+
+    # 6. 设备会话
+    db.query(DeviceSession).filter(DeviceSession.user_id == user_id).delete()
+
+    # 7. 写作上下文
+    db.query(MethodologyEntry).filter(MethodologyEntry.user_id == user_id).delete()
+    db.query(StableCoreProfile).filter(StableCoreProfile.user_id == user_id).delete()
+
+    # 最后删除用户本身
     db.delete(user)
     db.commit()
     return success_response(data=None, message="用户已删除")

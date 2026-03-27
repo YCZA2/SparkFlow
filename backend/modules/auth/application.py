@@ -152,15 +152,29 @@ class AuthUseCase:
         password: str,
         device_id: str,
         nickname: str | None = None,
+        role: str | None = None,
     ) -> LoginResponse:
-        """使用邮箱和密码注册新用户，注册成功后自动登录。"""
+        """使用邮箱和密码注册新用户，注册成功后自动登录。
+
+        首次注册时可指定 role=creator，但系统中已有 creator 时只能注册 user。
+        """
         normalized_email = self._normalize_email(email)
         self._validate_password(password)
         existing = db.query(User).filter(User.email == normalized_email).first()
         if existing is not None:
             raise ValidationError("该邮箱已被注册", {"email": "already_exists"})
+
+        # 处理角色：只有系统中没有 creator 时才允许注册 creator
+        resolved_role = "user"
+        if role == "creator":
+            creator_count = db.query(User).filter(User.role == "creator").count()
+            if creator_count == 0:
+                resolved_role = "creator"
+            else:
+                raise ValidationError("系统中已有管理员，只能注册普通用户", {"role": "creator_exists"})
+
         user = User(
-            role="user",
+            role=resolved_role,
             nickname=nickname or f"用户{normalized_email.split('@')[0][:8]}",
             email=normalized_email,
             password_hash=hash_password(password),

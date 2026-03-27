@@ -33,6 +33,7 @@ class EmailRegisterRequest(BaseModel):
     password: str = Field(..., min_length=8, description="登录密码（至少8位）")
     nickname: str | None = Field(None, description="用户昵称（可选）")
     device_id: str = Field("sparkflow-default-device", description="设备唯一标识")
+    role: str | None = Field(None, description="角色（user 或 creator，仅首次注册允许 creator）")
 
 
 class EmailLoginRequest(BaseModel):
