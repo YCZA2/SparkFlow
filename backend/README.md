@@ -60,11 +60,29 @@ bash scripts/test-all.sh
 
 正式产品登录当前走：
 
-- `POST /api/auth/register` — 邮箱注册
+- `POST /api/auth/register` — 初始化首个管理员（系统已有 admin 后关闭公开注册）
 - `POST /api/auth/login` — 邮箱密码登录
 - `GET /api/auth/me` — 获取当前用户信息
 - `POST /api/auth/refresh` — 刷新访问令牌
 - `POST /api/auth/logout` — 退出登录
+
+内置用户管理后台：
+
+- 固定入口：`GET /admin`
+- 后台静态页仍由 FastAPI 内置托管，实际页面位于 `backend/static/admin.html`
+- `GET /api/admin/bootstrap-status`：查询系统是否尚未初始化管理员
+- `GET /api/admin/users`：管理员查看用户列表，支持 `query / role / status` 筛选
+- `POST /api/admin/users`：管理员手动创建可登录用户
+- `PATCH /api/admin/users/{user_id}`：更新昵称、角色、状态
+- `POST /api/admin/users/{user_id}/reset-password`：重置密码
+- `POST /api/admin/users/{user_id}/force-logout`：强制下线所有活跃设备
+- `DELETE /api/admin/users/{user_id}`：删除用户
+
+当前账号开通规则：
+
+- 系统首次启动且还没有管理员时，可通过 `/admin` 初始化首个 admin
+- 初始化完成后，公开注册立即关闭
+- 后续普通用户和额外管理员都只能由后台手动创建
 
 本地联调仍保留测试入口：
 

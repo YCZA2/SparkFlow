@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 import structlog
@@ -221,6 +221,11 @@ def register_routes(app: FastAPI) -> None:
     @app.head("/health")
     async def health_check_head() -> Response:
         return Response(status_code=200)
+
+    @app.get("/admin", include_in_schema=False)
+    async def admin_console() -> RedirectResponse:
+        """把固定后台入口重定向到内置管理页。"""
+        return RedirectResponse(url="/static/admin.html", status_code=307)
 
     app.include_router(admin_router)
     app.include_router(auth_router)

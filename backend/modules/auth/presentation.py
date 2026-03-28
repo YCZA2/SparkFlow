@@ -24,8 +24,8 @@ use_case = AuthUseCase()
 @router.post(
     "/register",
     response_model=ResponseModel[LoginResponse],
-    summary="邮箱注册",
-    description="使用邮箱和密码注册新账号，注册成功后自动完成登录并创建设备会话。首次注册时可指定 role=admin。",
+    summary="初始化首个管理员",
+    description="仅当系统中还没有管理员时可用；初始化成功后会自动登录并创建设备会话。",
 )
 async def register(
     payload: EmailRegisterRequest,
