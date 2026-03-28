@@ -43,6 +43,21 @@ bash ../scripts/postgres-local.sh start dev
 uvicorn main:app --reload
 ```
 
+如需重置本地开发数据库并重新应用当前基线迁移，可执行：
+
+```bash
+docker exec "$(docker compose -f ../docker-compose.postgres.yml -p sparkflow-postgres ps -q postgres)" \
+  psql -U sparkflow -d postgres -v ON_ERROR_STOP=1 \
+  -c "DROP DATABASE IF EXISTS sparkflow WITH (FORCE);" \
+  -c "DROP DATABASE IF EXISTS sparkflow_test WITH (FORCE);" \
+  -c "CREATE DATABASE sparkflow;" \
+  -c "CREATE DATABASE sparkflow_test;"
+
+.venv/bin/alembic upgrade heads
+DATABASE_URL=postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow_test \
+  .venv/bin/alembic upgrade heads
+```
+
 Default local address: `http://127.0.0.1:8000`
 
 默认数据库：

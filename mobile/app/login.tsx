@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import { useRouter } from 'expo-router';
 import { Alert, Keyboard, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -9,7 +8,6 @@ import { useAppTheme } from '@/theme/useAppTheme';
 import { getErrorMessage } from '@/utils/error';
 
 export default function LoginScreen() {
-  const router = useRouter();
   const theme = useAppTheme();
   const { error, sessionStatus, loginWithEmailPassword } = useAuth();
   const passwordInputRef = useRef<TextInput | null>(null);
@@ -20,13 +18,12 @@ export default function LoginScreen() {
   // 简单校验邮箱格式和密码长度（至少 8 位）。
   const canSubmit = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && password.length >= 8 && !isSubmitting;
 
-  // 提交邮箱和密码登录，成功后进入工作区首页。
+  // 提交邮箱和密码登录，成功后由根路由的受保护导航自动切到工作区首页。
   const handleLogin = async () => {
     try {
       Keyboard.dismiss();
       setIsSubmitting(true);
       await loginWithEmailPassword(email.trim(), password);
-      router.replace('/');
     } catch (loginError) {
       Alert.alert('登录失败', getErrorMessage(loginError, '邮箱或密码不正确，请重试'));
     } finally {

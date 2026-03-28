@@ -52,7 +52,11 @@ export async function getSQLiteClient(): Promise<SQLiteDatabase> {
       const database = await openDatabaseAsync(resolveDatabaseName());
       await runLocalDatabaseMigrations(database);
       return database;
-    })();
+    })().catch((error) => {
+      databasePromise = null;
+      drizzlePromise = null;
+      throw error;
+    });
   }
   return databasePromise;
 }
@@ -65,7 +69,10 @@ export async function getLocalDatabase(): Promise<
     drizzlePromise = (async () => {
       const client = await getSQLiteClient();
       return drizzle(client, { schema: localSchema });
-    })();
+    })().catch((error) => {
+      drizzlePromise = null;
+      throw error;
+    });
   }
   return drizzlePromise;
 }

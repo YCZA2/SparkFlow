@@ -1,6 +1,6 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
@@ -84,30 +84,22 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const session = useAppSession();
   const { isOpen, close } = useDrawer();
-  const router = useRouter();
-
-  /*session 就绪后，未登录则强制跳转到登录页（冷启动和会话失效均覆盖）。*/
-  useEffect(() => {
-    if (!session.isReady) return;
-    if (!session.isAuthenticated) {
-      router.replace('/login');
-    }
-  }, [session.isReady, session.isAuthenticated, router]);
 
   if (!session.isReady) {
     return <LoadingState message="正在准备应用..." />;
   }
 
-  if (!session.isAuthenticated) {
-    return (
-      <PaperProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack
-            screenOptions={{
-              headerBackTitle: '返回',
-              headerLeft: () => <BackButton />,
-            }}
-          >
+  return (
+    <PaperProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        {/* 根导航器保持稳定，只切换受保护的屏幕集合，避免 Android 原生栈在登录态切换时换容器。 */}
+        <Stack
+          screenOptions={{
+            headerBackTitle: '返回',
+            headerLeft: () => <BackButton />,
+          }}
+        >
+          <Stack.Protected guard={!session.isAuthenticated}>
             <Stack.Screen
               name="login"
               options={{
@@ -115,84 +107,76 @@ function RootLayoutNav() {
                 title: '登录',
               }}
             />
-          </Stack>
-        </ThemeProvider>
-      </PaperProvider>
-    );
-  }
-
-  return (
-    <PaperProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack
-          screenOptions={{
-            headerBackTitle: '返回',
-            headerLeft: () => <BackButton />,
-          }}
-        >
-          <Stack.Screen
-            name="index"
-            options={{
-              headerShown: false,
-              title: '返回',
-            }}
-          />
-          <Stack.Screen
-            name="profile"
-            options={{
-              headerShown: false,
-              title: '我的',
-            }}
-          />
-          <Stack.Screen
-            name="folder/[id]"
-            options={{
-              headerShown: false,
-              title: '文件夹',
-            }}
-          />
-          <Stack.Screen name="fragment-cloud" options={{ title: '灵感云图' }} />
-          <Stack.Screen name="generate" options={{ title: 'AI 编导' }} />
-          <Stack.Screen name="script/[id]" options={{ title: '口播稿详情' }} />
-          <Stack.Screen name="shoot" options={{ title: '拍摄' }} />
-          <Stack.Screen
-            name="record-audio"
-            options={{ title: '录音', headerShown: false, gestureEnabled: false }}
-          />
-          <Stack.Screen
-            name="text-note"
-            options={{ title: '写下灵感', headerShown: false }}
-          />
-          <Stack.Screen name="import-link" options={{ title: '导入链接', headerShown: true }} />
-          <Stack.Screen name="knowledge" options={{ title: '知识库', headerShown: true }} />
-          <Stack.Screen
-            name="debug-logs"
-            options={{
-              title: '错误日志',
-              headerShown: true,
-            }}
-          />
-          <Stack.Screen
-            name="network-settings"
-            options={{
-              title: '网络设置',
-              headerShown: true,
-            }}
-          />
-          <Stack.Screen
-            name="test-api"
-            options={{
-              title: 'API 测试',
-              headerShown: true,
-            }}
-          />
+          </Stack.Protected>
+          <Stack.Protected guard={session.isAuthenticated}>
+            <Stack.Screen
+              name="index"
+              options={{
+                headerShown: false,
+                title: '返回',
+              }}
+            />
+            <Stack.Screen
+              name="profile"
+              options={{
+                headerShown: false,
+                title: '我的',
+              }}
+            />
+            <Stack.Screen
+              name="folder/[id]"
+              options={{
+                headerShown: false,
+                title: '文件夹',
+              }}
+            />
+            <Stack.Screen name="fragment-cloud" options={{ title: '灵感云图' }} />
+            <Stack.Screen name="generate" options={{ title: 'AI 编导' }} />
+            <Stack.Screen name="script/[id]" options={{ title: '口播稿详情' }} />
+            <Stack.Screen name="shoot" options={{ title: '拍摄' }} />
+            <Stack.Screen
+              name="record-audio"
+              options={{ title: '录音', headerShown: false, gestureEnabled: false }}
+            />
+            <Stack.Screen
+              name="text-note"
+              options={{ title: '写下灵感', headerShown: false }}
+            />
+            <Stack.Screen name="import-link" options={{ title: '导入链接', headerShown: true }} />
+            <Stack.Screen name="knowledge" options={{ title: '知识库', headerShown: true }} />
+            <Stack.Screen
+              name="debug-logs"
+              options={{
+                title: '错误日志',
+                headerShown: true,
+              }}
+            />
+            <Stack.Screen
+              name="network-settings"
+              options={{
+                title: '网络设置',
+                headerShown: true,
+              }}
+            />
+            <Stack.Screen
+              name="test-api"
+              options={{
+                title: 'API 测试',
+                headerShown: true,
+              }}
+            />
+          </Stack.Protected>
         </Stack>
-        {/* 底部快捷操作栏 - 悬浮在页面之上 */}
-        <QuickActionBar />
-        <ImportActionSheet />
-        {/* 抽屉菜单 */}
-        {isOpen && <DrawerBackdrop onPress={close} />}
-        {isOpen && <Drawer />}
+        {session.isAuthenticated ? (
+          <>
+            {/* 底部快捷操作栏 - 悬浮在页面之上 */}
+            <QuickActionBar />
+            <ImportActionSheet />
+            {/* 抽屉菜单 */}
+            {isOpen && <DrawerBackdrop onPress={close} />}
+            {isOpen && <Drawer />}
+          </>
+        ) : null}
       </ThemeProvider>
     </PaperProvider>
   );
