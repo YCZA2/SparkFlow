@@ -13,13 +13,13 @@ class User(Base):
     """
     用户表
 
-    存储用户基本信息，支持 RBAC 角色权限控制（预留 creator 角色）。
+    存储用户基本信息，支持 RBAC 角色权限控制。
     通过邮箱 + 密码登录，email 与 password_hash 在注册时写入。
     """
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    role = Column(String, default="user", nullable=False)  # 'user' | 'creator'
+    role = Column(String, default="user", nullable=False)  # 'user' | 'admin'
     nickname = Column(String, nullable=True)
     email = Column(String, nullable=True, unique=True)  # 登录凭证，迁移兼容 nullable
     password_hash = Column(String, nullable=True)        # bcrypt 哈希，迁移兼容 nullable

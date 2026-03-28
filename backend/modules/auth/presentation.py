@@ -25,7 +25,7 @@ use_case = AuthUseCase()
     "/register",
     response_model=ResponseModel[LoginResponse],
     summary="邮箱注册",
-    description="使用邮箱和密码注册新账号，注册成功后自动完成登录并创建设备会话。首次注册时可指定 role=creator。",
+    description="使用邮箱和密码注册新账号，注册成功后自动完成登录并创建设备会话。首次注册时可指定 role=admin。",
 )
 async def register(
     payload: EmailRegisterRequest,

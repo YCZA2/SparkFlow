@@ -50,7 +50,7 @@
   tr:hover td { background: #fafafa; }
 
   .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
-  .badge-creator { background: #fff3cd; color: #856404; }
+  .badge-admin { background: #fff3cd; color: #856404; }
   .badge-user { background: #e8f4fd; color: #0a6ebd; }
   .badge-active { background: #d1f5de; color: #1a7f4b; }
   .badge-inactive { background: #f5d0d0; color: #c0392b; }
@@ -89,7 +89,7 @@
 <div id="login-page">
   <div class="login-card">
     <h1>SparkFlow 管理后台</h1>
-    <p id="login-hint">请使用 creator 账号登录</p>
+    <p id="login-hint">请使用 admin 账号登录</p>
     <div class="field">
       <label>邮箱</label>
       <input id="l-email" type="email" placeholder="admin@example.com" autocomplete="email">
@@ -147,7 +147,7 @@
     <div class="field"><label>角色</label>
       <select id="e-role">
         <option value="user">user（普通用户）</option>
-        <option value="creator">creator（管理员）</option>
+        <option value="admin">admin（管理员）</option>
       </select>
     </div>
     <div class="field"><label>状态</label>
@@ -198,7 +198,7 @@
     <div class="field"><label>角色</label>
       <select id="c-role">
         <option value="user">user（普通用户）</option>
-        <option value="creator">creator（管理员）</option>
+        <option value="admin">admin（管理员）</option>
       </select>
     </div>
     <div class="foot">
@@ -218,7 +218,7 @@
     <div class="field"><label>角色</label>
       <select id="r-role">
         <option value="user">user（普通用户）</option>
-        <option value="creator">creator（管理员）</option>
+        <option value="admin">admin（管理员）</option>
       </select>
     </div>
     <p class="hint-msg" id="register-hint"></p>
@@ -242,7 +242,6 @@ let currentUserId = '';
 let editingUserId = '';
 let deletingUserId = '';
 let users = [];
-let hasCreator = false; // 系统中是否已有 creator 用户
 
 // ── 初始化 ─────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
@@ -286,8 +285,8 @@ function fmtDate(iso) {
 }
 
 function roleBadge(role) {
-  return role === 'creator'
-    ? '<span class="badge badge-creator">creator</span>'
+  return role === 'admin'
+    ? '<span class="badge badge-admin">admin</span>'
     : '<span class="badge badge-user">user</span>';
 }
 
@@ -314,10 +313,10 @@ async function doLogin() {
     token = data.access_token;
     sessionStorage.setItem('sf_admin_token', token);
     currentUserId = data.user?.user_id || '';
-    if (data.user?.role !== 'creator') {
+    if (data.user?.role !== 'admin') {
       token = '';
       sessionStorage.removeItem('sf_admin_token');
-      errEl.textContent = '该账号没有管理员权限（需要 creator 角色）';
+      errEl.textContent = '该账号没有管理员权限（需要 admin 角色）';
       return;
     }
     showAdmin();
@@ -351,7 +350,7 @@ async function loadUsers() {
   document.getElementById('user-tbody').innerHTML = '<tr><td colspan="7" class="loading">加载中…</td></tr>';
   try {
     users = await apiFetch('/api/admin/users');
-    currentUserId = currentUserId || (users.find(u => u.role === 'creator') || {}).user_id || '';
+    currentUserId = currentUserId || (users.find(u => u.role === 'admin') || {}).user_id || '';
     renderUsers();
   } catch (e) {
     if (e.message.includes('401') || e.message.includes('认证') || e.message.includes('权限')) {
@@ -481,39 +480,33 @@ async function doDelete() {
 
 // ── 注册账号（公开入口）────────────────────────────────
 async function openRegisterModal() {
-  // 先检查系统中是否已有 creator 用户
   document.getElementById('register-overlay').classList.add('show');
   document.getElementById('register-hint').textContent = '检查系统中用户...';
   document.getElementById('r-role').disabled = true;
   document.getElementById('register-btn').disabled = true;
-
-  try {
-    const checkRes = await fetch(API_BASE + '/api/admin/check-creator');
-    const checkJson = await checkRes.json();
-    hasCreator = checkJson.data?.has_creator || false;
-  } catch {
-    // 如果检查接口不存在，默认允许注册 creator
-    hasCreator = false;
-  }
-
-  // 清空表单
+  // 先清空表单，避免二次打开时旧内容在网络等待期间显示
   document.getElementById('r-email').value = '';
   document.getElementById('r-password').value = '';
   document.getElementById('r-nickname').value = '';
 
-  // 根据是否有 creator 来设置角色选项
+  let hasCreator = false;
+  try {
+    const checkRes = await fetch(API_BASE + '/api/admin/check-admin');
+    const checkJson = await checkRes.json();
+    hasCreator = checkJson.data?.has_admin || false;
+  } catch {
+    // 接口异常时默认允许注册 admin
+  }
+
   const roleSelect = document.getElementById('r-role');
   roleSelect.innerHTML = hasCreator
     ? '<option value="user">user（普通用户）</option>'
-    : '<option value="creator">creator（管理员）</option><option value="user">user（普通用户）</option>';
-  roleSelect.value = hasCreator ? 'user' : 'creator';
+    : '<option value="admin">admin（管理员）</option><option value="user">user（普通用户）</option>';
+  roleSelect.value = hasCreator ? 'user' : 'admin';
   roleSelect.disabled = false;
-
-  // 提示信息
   document.getElementById('register-hint').textContent = hasCreator
     ? '系统中已有管理员，只能注册普通用户。'
-    : '系统中暂无管理员，可注册 creator 账号。';
-
+    : '系统中暂无管理员，可注册 admin 账号。';
   document.getElementById('register-btn').disabled = false;
 }
 
@@ -545,10 +538,10 @@ async function doRegister() {
     sessionStorage.setItem('sf_admin_token', token);
 
     closeModal('register-overlay');
-    showToast(role === 'creator' ? '管理员账号注册成功' : '用户注册成功');
+    showToast(role === 'admin' ? '管理员账号注册成功' : '用户注册成功');
 
-    // 如果注册的是 creator，直接进入管理页
-    if (role === 'creator') {
+    // 如果注册的是 admin，直接进入管理页
+    if (role === 'admin') {
       showAdmin();
     } else {
       // 普通用户提示登录

@@ -156,7 +156,7 @@ class AuthUseCase:
     ) -> LoginResponse:
         """使用邮箱和密码注册新用户，注册成功后自动登录。
 
-        首次注册时可指定 role=creator，但系统中已有 creator 时只能注册 user。
+        首次注册时可指定 role=admin，但系统中已有 admin 时只能注册 user。
         """
         normalized_email = self._normalize_email(email)
         self._validate_password(password)
@@ -164,14 +164,14 @@ class AuthUseCase:
         if existing is not None:
             raise ValidationError("该邮箱已被注册", {"email": "already_exists"})
 
-        # 处理角色：只有系统中没有 creator 时才允许注册 creator
+        # 处理角色：只有系统中没有 admin 时才允许注册 admin
         resolved_role = "user"
-        if role == "creator":
-            creator_count = db.query(User).filter(User.role == "creator").count()
-            if creator_count == 0:
-                resolved_role = "creator"
+        if role == "admin":
+            admin_count = db.query(User).filter(User.role == "admin").count()
+            if admin_count == 0:
+                resolved_role = "admin"
             else:
-                raise ValidationError("系统中已有管理员，只能注册普通用户", {"role": "creator_exists"})
+                raise ValidationError("系统中已有管理员，只能注册普通用户", {"role": "admin_exists"})
 
         user = User(
             role=resolved_role,

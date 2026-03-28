@@ -35,7 +35,7 @@ def create_access_token(
 
     Args:
         user_id: 用户唯一标识符
-        role: 用户角色 ('user' 或 'creator')
+        role: 用户角色 ('user' 或 'admin')
         expires_delta: 令牌过期时间，默认为 settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
     Returns:
