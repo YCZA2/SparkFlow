@@ -82,3 +82,11 @@ def test_auth_login_openapi_contract_smoke(api_schema) -> None:
     )
     response = case.call()
     case.validate_response(response)
+
+
+def test_admin_bootstrap_status_openapi_contract_smoke(api_schema) -> None:
+    """后台初始化状态入口应满足 OpenAPI 中声明的最小契约。"""
+    operation = api_schema["/api/admin/bootstrap-status"]["GET"]
+    case = operation.make_case()
+    response = case.call()
+    case.validate_response(response)

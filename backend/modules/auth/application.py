@@ -123,6 +123,10 @@ class AuthUseCase:
         db.refresh(test_user)
         return test_user
 
+    def has_admin(self, *, db: Session) -> bool:
+        """判断系统是否已经完成首个管理员初始化。"""
+        return db.query(User).filter(User.role == "admin").count() > 0
+
     def issue_test_token(self, *, db: Session, device_id: str) -> TokenPayload:
         """仅在本地开发开启时签发测试令牌。"""
         from core import settings
@@ -154,27 +158,17 @@ class AuthUseCase:
         nickname: str | None = None,
         role: str | None = None,
     ) -> LoginResponse:
-        """使用邮箱和密码注册新用户，注册成功后自动登录。
-
-        首次注册时可指定 role=admin，但系统中已有 admin 时只能注册 user。
-        """
+        """使用邮箱和密码初始化首个管理员，注册成功后自动登录。"""
+        if self.has_admin(db=db):
+            raise ValidationError("公开注册已关闭，请联系管理员开通账号", {"register": "closed"})
         normalized_email = self._normalize_email(email)
         self._validate_password(password)
         existing = db.query(User).filter(User.email == normalized_email).first()
         if existing is not None:
             raise ValidationError("该邮箱已被注册", {"email": "already_exists"})
 
-        # 处理角色：只有系统中没有 admin 时才允许注册 admin
-        resolved_role = "user"
-        if role == "admin":
-            admin_count = db.query(User).filter(User.role == "admin").count()
-            if admin_count == 0:
-                resolved_role = "admin"
-            else:
-                raise ValidationError("系统中已有管理员，只能注册普通用户", {"role": "admin_exists"})
-
         user = User(
-            role=resolved_role,
+            role="admin",
             nickname=nickname or f"用户{normalized_email.split('@')[0][:8]}",
             email=normalized_email,
             password_hash=hash_password(password),

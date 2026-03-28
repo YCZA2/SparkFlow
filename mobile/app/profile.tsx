@@ -93,7 +93,7 @@ export default function ProfileScreen() {
   }, []);
 
   const handleLogout = useCallback(() => {
-    /*账号中心里显式退出登录，切回手机号验证码页。 */
+    /*账号中心里显式退出登录，切回邮箱密码登录页。 */
     void (async () => {
       try {
         setIsLoggingOut(true);
@@ -184,7 +184,7 @@ export default function ProfileScreen() {
               subtitle={
                 isLoggingOut
                   ? '正在退出当前账号工作区'
-                  : '退出后将返回手机号验证码登录页'
+                  : '退出后将返回邮箱密码登录页'
               }
               onPress={handleLogout}
               disabled={isLoggingOut || isRestoring}

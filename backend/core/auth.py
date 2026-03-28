@@ -112,7 +112,7 @@ async def get_current_user(
     payload = decode_token(token)
 
     user_id = payload.get("sub")
-    role = payload.get("role", "user")
+    token_role = payload.get("role", "user")
     device_id = payload.get("device_id")
     session_version = payload.get("session_version")
 
@@ -143,6 +143,9 @@ async def get_current_user(
                 seen_at=datetime.now(timezone.utc),
             )
             db.commit()
+            role = user.role
+    else:
+        role = token_role
 
     return {
         "user_id": user_id,

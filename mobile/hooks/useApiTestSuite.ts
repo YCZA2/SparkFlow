@@ -57,7 +57,7 @@ export function useApiTestSuite() {
     try {
       let token = await getToken();
       if (!token) {
-        throw new Error('当前未登录，请先在登录页完成手机号验证码登录');
+        throw new Error('当前未登录，请先在登录页完成邮箱密码登录');
       }
       const user = await getUserInfo();
       updateTest(1, 'success', `Token: ${token?.substring(0, 20)}...`, { user });

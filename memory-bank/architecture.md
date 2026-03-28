@@ -301,8 +301,11 @@ flowchart TD
 
 ### 4.4 Backend Modules
 
+- `admin`: 内置用户管理后台、管理员初始化状态、用户 CRUD、重置密码与强制下线。
 - `auth`: 测试 token 签发、当前用户信息、refresh。
-- 正式认证当前采用手机号验证码登录，JWT 仍携带 `device_id + session_version`，继续保持单设备在线。
+- 正式认证当前采用邮箱 + 密码登录；`POST /api/auth/register` 已收口为“首个管理员初始化”入口，系统存在 admin 后公开注册立即关闭。
+- 内置后台固定入口为 `/admin`，页面由 FastAPI 托管的 `backend/static/admin.html` 提供。
+- 后台权限判断以数据库中的当前 `user.role` 为准，而不是仅信任 JWT 中的历史角色快照，避免管理员降级后旧 token 继续拥有后台权限。
 - 移动端本地 SQLite、fragment/script 正文文件、音频缓存与 staging 目录都已按 `user_id` 工作区隔离；切换账号时会切换整套本地工作区，而不是共用一份本地真值。
 - 本地联调仍可通过 `POST /api/auth/token` 走测试用户 `test-user-001`，但该入口只作为开发调试后门，不能再当作产品主登录流。
 - `backups`: 远端备份批量写入、快照拉取、restore session 审计与备份素材上传；不承担 fragments / folders 的日常主读取职责，但脚本生成、相似检索、可视化和 daily push 都会通过内部 snapshot reader 消费其中的 fragment snapshot。
