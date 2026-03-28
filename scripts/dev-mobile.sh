@@ -239,25 +239,24 @@ save_build_marker() {
   fi
 }
 
-# 执行 iOS build 并保存标记
+# 执行 iOS 原生工程生成（不启动 Metro，只生成原生代码）
 run_ios_build() {
-  echo "[dev-mobile] 执行 iOS build..."
+  echo "[dev-mobile] 执行 iOS 原生工程生成..."
 
   cd "${MOBILE_DIR}"
 
-  echo "[dev-mobile] step 1/4: npm install"
+  echo "[dev-mobile] step 1/3: npm install"
   npm install
 
-  echo "[dev-mobile] step 2/4: expo prebuild --platform ios --clean"
+  echo "[dev-mobile] step 2/3: expo prebuild --platform ios --clean"
   npx expo prebuild --platform "${IOS_PLATFORM}" --clean
 
-  echo "[dev-mobile] step 3/4: pod-install ios"
+  echo "[dev-mobile] step 3/3: pod-install ios"
   npx pod-install ios
 
-  echo "[dev-mobile] step 4/4: expo run:ios --device"
-  npx expo run:ios --device
-
   save_build_marker "ios"
+
+  echo "[dev-mobile] iOS 原生工程生成完成"
 }
 
 # 执行 Android build 并保存标记
@@ -374,30 +373,22 @@ get_booted_simulator_name() {
 
 install_dev_client_to_booted_simulator() {
   # 若用户手动删除了模拟器内 app，则自动重装到当前已启动设备。
-  local simulator_name="$1"
+  # 使用 --no-bundler 避免 Metro 重复启动，仅编译安装原生工程。
 
-  if [[ -z "${simulator_name}" ]]; then
-    echo "[dev-mobile] failed to resolve booted simulator name."
-    return 1
-  fi
+  echo "[dev-mobile] installing iOS dev client to simulator..."
 
-  echo "[dev-mobile] installing iOS dev client to simulator: ${simulator_name}"
-  (
-    cd "${MOBILE_DIR}"
-    npx expo run:ios --device "${simulator_name}" --no-bundler
-  )
+  cd "${MOBILE_DIR}"
+  npx expo run:ios --no-bundler
 }
 
 open_expo_in_simulator() {
   # 手动打开 dev client，并对 deep link 做重试，规避 Expo CLI 偶发超时。
   local bundle_id="com.sparkflow.mobile"
   local deep_link="exp+sparkflow-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A${EXPO_PORT}"
-  local simulator_name=""
 
   if ! xcrun simctl listapps booted | grep -q "\"${bundle_id}\""; then
     echo "[dev-mobile] iOS dev client is missing from the booted simulator."
-    simulator_name="$(get_booted_simulator_name)"
-    if ! install_dev_client_to_booted_simulator "${simulator_name}"; then
+    if ! install_dev_client_to_booted_simulator; then
       echo "[dev-mobile] auto-install failed. run 'bash scripts/dev-mobile.sh ios:rebuild' and retry."
       return 1
     fi
