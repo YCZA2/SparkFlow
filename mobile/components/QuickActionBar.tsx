@@ -2,8 +2,6 @@ import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { useRouter, usePathname } from 'expo-router';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
-
 import { useAppTheme } from '@/theme/useAppTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useImportActionSheet } from '@/providers/ImportActionSheetProvider';
@@ -102,9 +100,7 @@ export function QuickActionBar() {
 
   return (
     <View style={[styles.floatingFooter, { bottom: insets.bottom + 20 }]}>
-      <Animated.View
-        entering={FadeInDown.duration(160)}
-        exiting={FadeOutDown.duration(120)}
+      <View
         style={[
           styles.quickActionPill,
           {
@@ -139,7 +135,7 @@ export function QuickActionBar() {
             </View>
           </TouchableOpacity>
         ))}
-      </Animated.View>
+      </View>
     </View>
   );
 }

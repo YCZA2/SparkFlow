@@ -14,10 +14,10 @@
   "scripts": {
     "dev:mobile": "bash scripts/dev-mobile.sh",
     "dev:mobile:ios": "bash scripts/dev-mobile.sh ios",
-    "dev:mobile:ios:rebuild": "bash scripts/dev-mobile.sh ios:rebuild",
     "dev:mobile:android": "bash scripts/dev-mobile.sh android",
-    "dev:mobile:android:rebuild": "bash scripts/dev-mobile.sh android:rebuild",
     "dev:mobile:web": "bash scripts/dev-mobile.sh web",
+    "dev:mobile:ios:rebuild": "bash scripts/dev-mobile.sh ios:rebuild",
+    "dev:mobile:android:rebuild": "bash scripts/dev-mobile.sh android:rebuild",
     "dev:db": "bash scripts/postgres-local.sh start all",
     "dev:db:stop": "bash scripts/postgres-local.sh stop",
     "dev:db:status": "bash scripts/postgres-local.sh status",
