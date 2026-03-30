@@ -21,7 +21,7 @@ function resolveDatabaseName(): string {
 
 async function disposeCurrentClient(): Promise<void> {
   /*切换工作区前尽力关闭旧连接，避免继续读写上一个账号的本地库。 */
-  if (databasePromise) {
+  if (databasePromise && currentWorkspaceUserId) {
     const client = await databasePromise.catch((err) => {
       console.warn('[DB] 关闭旧连接时获取客户端失败:', err);
       return null;
