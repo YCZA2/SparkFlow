@@ -59,6 +59,3 @@ chroma_data/
 
 # MiniMax
 .minimax
-
-# Claude Code local data
-.claude/
