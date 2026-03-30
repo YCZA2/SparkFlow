@@ -64,6 +64,15 @@ def test_public_api_routes_are_stable() -> None:
         ("/api/pipelines/{run_id}/steps", frozenset({"GET"})),
         ("/api/pipelines/{run_id}/retry", frozenset({"POST"})),
         ("/api/transcriptions", frozenset({"POST"})),
+        ("/api/admin/stats", frozenset({"GET"})),
+        ("/api/admin/users", frozenset({"GET"})),
+        ("/api/admin/users/batch", frozenset({"POST"})),
+        ("/api/admin/users/{user_id}", frozenset({"GET"})),
+        ("/api/admin/users/{user_id}", frozenset({"PATCH"})),
+        ("/api/admin/users/{user_id}", frozenset({"DELETE"})),
+        ("/api/admin/users/{user_id}/sessions", frozenset({"GET"})),
+        ("/api/admin/users/{user_id}/sessions", frozenset({"DELETE"})),
+        ("/api/admin/users/{user_id}/reset-password", frozenset({"POST"})),
     }
 
     normalized_routes = {

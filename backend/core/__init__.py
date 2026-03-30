@@ -22,6 +22,7 @@ from .auth import (
     decode_token,
     get_current_user,
     get_optional_user,
+    require_role,
     TokenResponse,
     security,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "decode_token",
     "get_current_user",
     "get_optional_user",
+    "require_role",
     "TokenResponse",
     "security",
 ]

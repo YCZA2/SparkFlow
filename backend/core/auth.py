@@ -12,7 +12,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from .config import settings
-from .exceptions import AuthenticationError
+from .exceptions import AuthenticationError, PermissionDeniedError
 from models import SessionLocal, User
 from domains.device_sessions import repository as device_session_repository
 
@@ -151,6 +151,16 @@ async def get_current_user(
         "device_id": device_id,
         "session_version": session_version,
     }
+
+
+def require_role(required_role: str):
+    """生成角色守卫依赖，调用方通过 Depends(require_role('admin')) 保护端点。"""
+    async def _guard(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+        # 校验当前用户角色是否满足要求
+        if current_user.get("role") != required_role:
+            raise PermissionDeniedError(message=f"权限不足，需要 {required_role} 角色")
+        return current_user
+    return _guard
 
 
 async def get_optional_user(

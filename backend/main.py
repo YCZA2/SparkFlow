@@ -17,6 +17,7 @@ from core.exceptions import (
 from core.logging_config import configure_logging, get_logger
 from models import SessionLocal
 from modules.auth.application import AuthUseCase
+from modules.admin_users.presentation import router as admin_users_router
 from modules.auth.presentation import router as auth_router
 from modules.backups.presentation import router as backups_router
 from modules.debug_logs.presentation import router as debug_logs_router
@@ -216,6 +217,7 @@ def register_routes(app: FastAPI) -> None:
     async def health_check_head() -> Response:
         return Response(status_code=200)
 
+    app.include_router(admin_users_router)
     app.include_router(auth_router)
     app.include_router(backups_router)
     app.include_router(debug_logs_router)
