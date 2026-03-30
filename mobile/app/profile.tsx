@@ -130,11 +130,11 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.userInfo}>
               <Text style={[styles.userName, { color: theme.colors.text }]}>
-                {isAuthenticated ? user?.nickname || `用户${user?.phone_number?.slice(-4) ?? ''}` : '未登录'}
+                {isAuthenticated ? user?.nickname || user?.email?.split('@')[0] || '用户' : '未登录'}
               </Text>
               <Text style={[styles.userId, { color: theme.colors.textSubtle }]}>
                 {isAuthenticated
-                  ? `${user?.phone_country_code || '+86'} ${user?.phone_number || user?.user_id}`
+                  ? user?.email || user?.user_id
                   : error || '请先登录后使用'}
               </Text>
             </View>
