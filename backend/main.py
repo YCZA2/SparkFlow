@@ -1,11 +1,12 @@
 """SparkFlow backend application entrypoint."""
+import os
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 import structlog
@@ -126,6 +127,10 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
     )
     if settings.FILE_STORAGE_PROVIDER == "local":
         app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+    # 挂载管理后台静态文件目录
+    _static_dir = os.path.join(os.path.dirname(__file__), "static")
+    if os.path.isdir(_static_dir):
+        app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
     register_exception_handlers(app)
     register_routes(app)
@@ -178,6 +183,12 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 def register_routes(app: FastAPI) -> None:
     """注册应用公开路由。"""
+    @app.get("/admin", include_in_schema=False)
+    async def admin_ui():
+        """提供管理后台 HTML 页面。"""
+        admin_file = os.path.join(os.path.dirname(__file__), "static", "admin.html")
+        return FileResponse(admin_file)
+
     @app.get("/")
     async def root():
         return build_root_health_payload()

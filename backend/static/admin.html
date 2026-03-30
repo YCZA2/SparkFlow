@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SparkFlow 管理后台</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --danger: #EF4444;
+            --danger-hover: #DC2626;
+            --success: #10B981;
+            --warning: #F59E0B;
+            --gray-50: #F9FAFB;
+            --gray-100: #F3F4F6;
+            --gray-200: #E5E7EB;
+            --gray-300: #D1D5DB;
+            --gray-500: #6B7280;
+            --gray-700: #374151;
+            --gray-900: #111827;
+            --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,.1);
+            --radius: 8px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-900);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        /* ── Login ─────────────────────────────────────── */
+        .login-page {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .login-card {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,.2);
+            width: 100%;
+            max-width: 400px;
+        }
+        .login-card h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: .4rem; }
+        .login-card p  { color: var(--gray-500); font-size: .875rem; margin-bottom: 1.75rem; }
+
+        /* ── App layout ────────────────────────────────── */
+        .app { display: none; flex-direction: column; min-height: 100vh; }
+
+        .header {
+            background: white;
+            border-bottom: 1px solid var(--gray-200);
+            padding: 0 1.5rem;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            box-shadow: var(--shadow);
+        }
+        .header-logo { font-weight: 700; font-size: 1.05rem; color: var(--primary); }
+        .header-user { display: flex; align-items: center; gap: 1rem; color: var(--gray-500); font-size: .875rem; }
+
+        .main { padding: 1.5rem; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+        /* ── Stats ─────────────────────────────────────── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .stat-card { background: white; border-radius: var(--radius); padding: 1.25rem 1.5rem; box-shadow: var(--shadow); }
+        .stat-label { color: var(--gray-500); font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .35rem; }
+        .stat-value { font-size: 2rem; font-weight: 700; }
+        .stat-value.blue   { color: var(--primary); }
+        .stat-value.green  { color: var(--success); }
+        .stat-value.orange { color: var(--warning); }
+
+        /* ── Card ──────────────────────────────────────── */
+        .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+        .card-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--gray-100);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: .75rem;
+        }
+        .card-title { font-weight: 600; font-size: .95rem; }
+
+        /* ── Toolbar ───────────────────────────────────── */
+        .toolbar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+        .toolbar input[type="text"] {
+            padding: .4rem .75rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: .875rem;
+            width: 200px;
+            outline: none;
+        }
+        .toolbar input[type="text"]:focus { border-color: var(--primary); }
+        .toolbar select {
+            padding: .4rem .65rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: .875rem;
+            background: white;
+            outline: none;
+            cursor: pointer;
+        }
+
+        /* ── Buttons ───────────────────────────────────── */
+        .btn {
+            display: inline-flex; align-items: center; gap: .3rem;
+            padding: .4rem .85rem;
+            border-radius: 6px;
+            font-size: .875rem;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: background .15s, opacity .15s;
+            white-space: nowrap;
+        }
+        .btn:disabled { opacity: .5; cursor: not-allowed; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+        .btn-danger  { background: var(--danger); color: white; }
+        .btn-danger:hover:not(:disabled)  { background: var(--danger-hover); }
+        .btn-ghost   { background: transparent; color: var(--gray-700); border: 1px solid var(--gray-300); }
+        .btn-ghost:hover:not(:disabled)   { background: var(--gray-50); }
+        .btn-sm { padding: .25rem .6rem; font-size: .8rem; }
+
+        /* ── Table ─────────────────────────────────────── */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        thead tr { background: var(--gray-50); }
+        th {
+            padding: .75rem 1rem;
+            text-align: left;
+            font-size: .75rem;
+            font-weight: 600;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            border-bottom: 1px solid var(--gray-200);
+            white-space: nowrap;
+        }
+        td { padding: .875rem 1rem; border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: var(--gray-50); }
+        .td-actions { display: flex; gap: .4rem; align-items: center; }
+
+        /* ── Badges ────────────────────────────────────── */
+        .badge {
+            display: inline-block;
+            padding: .2rem .6rem;
+            border-radius: 99px;
+            font-size: .75rem;
+            font-weight: 600;
+        }
+        .badge-admin    { background: #EDE9FE; color: #7C3AED; }
+        .badge-creator  { background: #FEF3C7; color: #D97706; }
+        .badge-user     { background: var(--gray-100); color: var(--gray-700); }
+        .badge-active   { background: #D1FAE5; color: #065F46; }
+        .badge-inactive { background: #FEE2E2; color: #991B1B; }
+        .badge-deleted  { background: var(--gray-200); color: var(--gray-500); }
+
+        /* ── Pagination ────────────────────────────────── */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: .875rem 1.5rem;
+            border-top: 1px solid var(--gray-100);
+            font-size: .875rem;
+            color: var(--gray-500);
+        }
+        .pagination-btns { display: flex; gap: .5rem; }
+
+        /* ── Form ──────────────────────────────────────── */
+        .form-group { margin-bottom: 1rem; }
+        .form-label { display: block; font-size: .875rem; font-weight: 500; color: var(--gray-700); margin-bottom: .4rem; }
+        .form-control {
+            width: 100%;
+            padding: .5rem .75rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: .875rem;
+            outline: none;
+            background: white;
+        }
+        .form-control:focus { border-color: var(--primary); }
+
+        /* ── Modal ─────────────────────────────────────── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.5);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,.25);
+            width: 100%;
+            max-width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--gray-100);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .modal-title  { font-weight: 600; font-size: 1rem; }
+        .modal-close  { background: none; border: none; cursor: pointer; color: var(--gray-500); font-size: 1.2rem; line-height: 1; padding: .25rem; }
+        .modal-close:hover { color: var(--gray-900); }
+        .modal-body   { padding: 1.5rem; }
+        .modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--gray-100);
+            display: flex;
+            justify-content: flex-end;
+            gap: .75rem;
+        }
+
+        /* ── Batch bar ─────────────────────────────────── */
+        .batch-bar {
+            display: none;
+            background: var(--primary);
+            color: white;
+            padding: .6rem 1.5rem;
+            align-items: center;
+            gap: 1rem;
+            font-size: .875rem;
+        }
+        .batch-bar.show { display: flex; }
+        .batch-bar select {
+            background: rgba(255,255,255,.15);
+            border: 1px solid rgba(255,255,255,.3);
+            color: white;
+            border-radius: 5px;
+            padding: .3rem .6rem;
+            font-size: .875rem;
+        }
+        .batch-bar select option { background: #4338CA; }
+
+        /* ── Sessions table ────────────────────────────── */
+        .sessions-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+        .sessions-table th {
+            padding: .5rem .75rem;
+            background: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
+            text-align: left;
+            font-weight: 600;
+            color: var(--gray-500);
+            font-size: .75rem;
+            text-transform: uppercase;
+        }
+        .sessions-table td { padding: .625rem .75rem; border-bottom: 1px solid var(--gray-100); }
+
+        /* ── Toast ─────────────────────────────────────── */
+        .toast-container {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+        }
+        .toast {
+            padding: .75rem 1.25rem;
+            border-radius: 8px;
+            color: white;
+            font-size: .875rem;
+            font-weight: 500;
+            box-shadow: var(--shadow-md);
+            animation: slideIn .2s ease;
+        }
+        .toast-success { background: var(--success); }
+        .toast-error   { background: var(--danger); }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to   { transform: translateX(0);    opacity: 1; }
+        }
+
+        /* ── Empty state ───────────────────────────────── */
+        .empty { padding: 3rem; text-align: center; color: var(--gray-500); }
+        .empty-icon { font-size: 2rem; margin-bottom: .5rem; }
+
+        /* ── Responsive ────────────────────────────────── */
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .toolbar { flex-direction: column; align-items: stretch; }
+            .toolbar input, .toolbar select { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ════════════════════ Login Page ════════════════════ -->
+<div class="login-page" id="loginPage">
+    <div class="login-card">
+        <h1>⚡ SparkFlow</h1>
+        <p>管理后台 — 请使用管理员账号登录</p>
+
+        <div class="form-group">
+            <label class="form-label">后端地址</label>
+            <input class="form-control" id="apiBase" value="http://localhost:8000">
+        </div>
+        <div class="form-group">
+            <label class="form-label">邮箱</label>
+            <input class="form-control" id="loginEmail" type="email" placeholder="admin@example.com" autocomplete="username">
+        </div>
+        <div class="form-group">
+            <label class="form-label">密码</label>
+            <input class="form-control" id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div id="loginError" style="color:#EF4444;font-size:.85rem;margin-bottom:.75rem;display:none;"></div>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;padding:.625rem;" id="loginBtn" onclick="doLogin()">
+            登录
+        </button>
+    </div>
+</div>
+
+<!-- ════════════════════ App ════════════════════════════ -->
+<div class="app" id="app">
+
+    <div class="header">
+        <div class="header-logo">⚡ SparkFlow 管理后台</div>
+        <div class="header-user">
+            <span id="headerUser"></span>
+            <button class="btn btn-ghost btn-sm" onclick="doLogout()">退出登录</button>
+        </div>
+    </div>
+
+    <div class="main">
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">总用户数</div>
+                <div class="stat-value blue"   id="statTotal">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">活跃用户</div>
+                <div class="stat-value green"  id="statActive">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">今日新增</div>
+                <div class="stat-value orange" id="statToday">—</div>
+            </div>
+        </div>
+
+        <!-- User Table -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">用户列表</div>
+                <div class="toolbar">
+                    <input type="text" id="searchInput" placeholder="搜索邮箱 / 昵称…" oninput="debouncedLoad()">
+                    <select id="roleFilter" onchange="resetAndLoad()">
+                        <option value="">全部角色</option>
+                        <option value="user">user</option>
+                        <option value="creator">creator</option>
+                        <option value="admin">admin</option>
+                    </select>
+                    <select id="statusFilter" onchange="resetAndLoad()">
+                        <option value="">全部状态</option>
+                        <option value="active">active</option>
+                        <option value="inactive">inactive</option>
+                        <option value="deleted">deleted</option>
+                    </select>
+                    <button class="btn btn-ghost btn-sm" onclick="loadStats();loadUsers()">↻ 刷新</button>
+                </div>
+            </div>
+
+            <!-- Batch bar -->
+            <div class="batch-bar" id="batchBar">
+                <span id="batchCount">0 人已选</span>
+                <select id="batchAction">
+                    <option value="activate">批量激活</option>
+                    <option value="deactivate">批量停用</option>
+                    <option value="delete">批量删除</option>
+                </select>
+                <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3);" onclick="doBatch()">执行</button>
+                <button class="btn btn-sm" style="background:transparent;color:rgba(255,255,255,.7);border:none;margin-left:auto;" onclick="clearSelection()">取消选择</button>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:40px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+                            <th>昵称</th>
+                            <th>邮箱</th>
+                            <th>角色</th>
+                            <th>状态</th>
+                            <th>注册时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userTableBody">
+                        <tr><td colspan="7" class="empty"><div class="empty-icon">⏳</div>加载中…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                <span id="pageInfo">—</span>
+                <div class="pagination-btns">
+                    <button class="btn btn-ghost btn-sm" id="prevBtn" onclick="changePage(-1)" disabled>← 上一页</button>
+                    <button class="btn btn-ghost btn-sm" id="nextBtn" onclick="changePage(1)"  disabled>下一页 →</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════ Modals ════════════════════════ -->
+
+<!-- Edit User -->
+<div class="modal-overlay" id="editModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">编辑用户</div>
+            <button class="modal-close" onclick="closeModal('editModal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="editUserId">
+            <div class="form-group">
+                <label class="form-label">昵称</label>
+                <input class="form-control" id="editNickname" placeholder="用户昵称">
+            </div>
+            <div class="form-group">
+                <label class="form-label">邮箱</label>
+                <input class="form-control" id="editEmail" type="email">
+            </div>
+            <div class="form-group">
+                <label class="form-label">角色</label>
+                <select class="form-control" id="editRole">
+                    <option value="user">user</option>
+                    <option value="creator">creator</option>
+                    <option value="admin">admin</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">状态</label>
+                <select class="form-control" id="editStatus">
+                    <option value="active">active</option>
+                    <option value="inactive">inactive</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">存储配额（字节）</label>
+                <input class="form-control" id="editQuota" type="number" min="0">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('editModal')">取消</button>
+            <button class="btn btn-primary" onclick="saveUser()">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Password -->
+<div class="modal-overlay" id="resetModal">
+    <div class="modal" style="max-width:400px">
+        <div class="modal-header">
+            <div class="modal-title">重置密码</div>
+            <button class="modal-close" onclick="closeModal('resetModal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="resetUserId">
+            <p style="color:var(--gray-500);font-size:.875rem;margin-bottom:1.25rem;">设置后原密码立即失效。</p>
+            <div class="form-group">
+                <label class="form-label">新密码（至少 8 位）</label>
+                <input class="form-control" id="resetPassword" type="password" placeholder="••••••••">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('resetModal')">取消</button>
+            <button class="btn btn-primary" onclick="confirmResetPassword()">确认重置</button>
+        </div>
+    </div>
+</div>
+
+<!-- Sessions -->
+<div class="modal-overlay" id="sessionsModal">
+    <div class="modal" style="max-width:600px">
+        <div class="modal-header">
+            <div class="modal-title">设备会话</div>
+            <button class="modal-close" onclick="closeModal('sessionsModal')">✕</button>
+        </div>
+        <div class="modal-body" style="padding:0">
+            <div style="padding:.875rem 1.5rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:.875rem;color:var(--gray-500);" id="sessionsUserLabel"></span>
+                <button class="btn btn-danger btn-sm" onclick="revokeAllSessions()">强制登出所有设备</button>
+            </div>
+            <div style="overflow-x:auto">
+                <table class="sessions-table">
+                    <thead>
+                        <tr>
+                            <th>设备 ID</th>
+                            <th>状态</th>
+                            <th>最后活跃</th>
+                            <th>创建时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sessionsBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('sessionsModal')">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirm -->
+<div class="modal-overlay" id="deleteModal">
+    <div class="modal" style="max-width:400px">
+        <div class="modal-header">
+            <div class="modal-title">确认删除</div>
+            <button class="modal-close" onclick="closeModal('deleteModal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="color:var(--gray-700);" id="deleteModalMsg"></p>
+            <div style="margin-top:1rem;display:flex;align-items:center;gap:.5rem;">
+                <input type="checkbox" id="hardDeleteCheck">
+                <label for="hardDeleteCheck" style="font-size:.875rem;color:var(--gray-500);cursor:pointer;">
+                    物理删除（不可恢复，会删除所有关联数据）
+                </label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('deleteModal')">取消</button>
+            <button class="btn btn-danger" onclick="confirmDelete()">删除</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ════════════════════ Script ════════════════════════ -->
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let token       = localStorage.getItem('sf_admin_token') || '';
+let apiBase     = localStorage.getItem('sf_admin_api')   || 'http://localhost:8000';
+let currentPage = 0;
+const PAGE_SIZE = 20;
+let selectedIds      = new Set();
+let deleteTargetId   = null;
+let sessionsTargetId = null;
+
+// ── API helper ─────────────────────────────────────────────────────
+async function api(method, path, body) {
+    const base = document.getElementById('apiBase')?.value.replace(/\/$/, '') || apiBase;
+    const res  = await fetch(base + path, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+        const msg = json?.error?.message || json?.detail?.message || `HTTP ${res.status}`;
+        throw new Error(msg);
+    }
+    return json?.data ?? json;
+}
+
+// ── Auth ───────────────────────────────────────────────────────────
+function getDeviceId() {
+    let id = localStorage.getItem('sf_device_id');
+    if (!id) {
+        id = 'web-admin-' + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem('sf_device_id', id);
+    }
+    return id;
+}
+
+async function doLogin() {
+    const email    = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const base     = document.getElementById('apiBase').value.trim().replace(/\/$/, '');
+    const btn      = document.getElementById('loginBtn');
+    const errEl    = document.getElementById('loginError');
+
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = '登录中…';
+
+    try {
+        const res = await fetch(base + '/api/auth/login', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ email, password, device_id: getDeviceId() }),
+        });
+        const data = await res.json();
+
+        if (!data.success) throw new Error(data.error?.message || '登录失败');
+        if (data.data.user.role !== 'admin') throw new Error('该账号没有管理员权限（role ≠ admin）');
+
+        token = data.data.access_token;
+        apiBase = base;
+        localStorage.setItem('sf_admin_token', token);
+        localStorage.setItem('sf_admin_api',   base);
+
+        document.getElementById('headerUser').textContent = data.data.user.email || data.data.user.nickname;
+        showApp();
+    } catch (e) {
+        errEl.textContent  = e.message;
+        errEl.style.display = 'block';
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = '登录';
+    }
+}
+
+function doLogout() {
+    token = '';
+    localStorage.removeItem('sf_admin_token');
+    document.getElementById('app').style.display       = 'none';
+    document.getElementById('loginPage').style.display = 'flex';
+}
+
+function showApp() {
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('app').style.display       = 'flex';
+    loadStats();
+    loadUsers();
+}
+
+// ── Stats ──────────────────────────────────────────────────────────
+async function loadStats() {
+    try {
+        const d = await api('GET', '/api/admin/stats');
+        document.getElementById('statTotal').textContent  = d.total_users;
+        document.getElementById('statActive').textContent = d.active_users;
+        document.getElementById('statToday').textContent  = d.new_users_today;
+    } catch { /* 静默失败 */ }
+}
+
+// ── User List ──────────────────────────────────────────────────────
+let debounceTimer;
+function debouncedLoad() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => { currentPage = 0; loadUsers(); }, 350);
+}
+function resetAndLoad() { currentPage = 0; loadUsers(); }
+
+async function loadUsers() {
+    const search = document.getElementById('searchInput').value.trim();
+    const role   = document.getElementById('roleFilter').value;
+    const status = document.getElementById('statusFilter').value;
+    const offset = currentPage * PAGE_SIZE;
+
+    let qs = `?limit=${PAGE_SIZE}&offset=${offset}`;
+    if (search) qs += `&search=${encodeURIComponent(search)}`;
+    if (role)   qs += `&role=${role}`;
+    if (status) qs += `&status=${status}`;
+
+    const tbody = document.getElementById('userTableBody');
+    tbody.innerHTML = '<tr><td colspan="7" class="empty"><div class="empty-icon">⏳</div>加载中…</td></tr>';
+
+    try {
+        const d = await api('GET', '/api/admin/users' + qs);
+        renderUsers(d.items);
+        renderPagination(d.total, d.offset, d.limit);
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty"><div class="empty-icon">❌</div>${escHtml(e.message)}</td></tr>`;
+        if (e.message.includes('401') || e.message.includes('认证')) doLogout();
+    }
+}
+
+function renderUsers(users) {
+    const tbody = document.getElementById('userTableBody');
+    if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty"><div class="empty-icon">🔍</div>没有符合条件的用户</td></tr>';
+        return;
+    }
+    tbody.innerHTML = users.map(u => `
+        <tr>
+            <td><input type="checkbox" class="row-check" value="${u.id}"
+                ${selectedIds.has(u.id) ? 'checked' : ''}
+                onchange="toggleSelect('${u.id}', this.checked)"></td>
+            <td>${escHtml(u.nickname || '—')}</td>
+            <td style="color:var(--gray-500)">${escHtml(u.email || '—')}</td>
+            <td><span class="badge badge-${u.role}">${u.role}</span></td>
+            <td><span class="badge badge-${u.status}">${u.status}</span></td>
+            <td style="color:var(--gray-500);white-space:nowrap">${fmtDate(u.created_at)}</td>
+            <td>
+                <div class="td-actions">
+                    <button class="btn btn-ghost btn-sm" title="编辑"
+                        onclick="openEdit(${JSON.stringify(u)})">✏️</button>
+                    <button class="btn btn-ghost btn-sm" title="设备会话"
+                        onclick="openSessions('${u.id}','${escAttr(u.nickname||u.email||u.id)}')">📱</button>
+                    <button class="btn btn-ghost btn-sm" title="重置密码"
+                        onclick="openReset('${u.id}')">🔑</button>
+                    <button class="btn btn-ghost btn-sm" title="删除" style="color:var(--danger)"
+                        onclick="openDelete('${u.id}','${escAttr(u.nickname||u.email||u.id)}')">🗑️</button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function renderPagination(total, offset, limit) {
+    const page       = Math.floor(offset / limit);
+    const totalPages = Math.ceil(total / limit) || 1;
+    const from = total === 0 ? 0 : offset + 1;
+    const to   = Math.min(offset + limit, total);
+    document.getElementById('pageInfo').textContent     = total === 0 ? '无数据' : `第 ${from}–${to} 条，共 ${total} 条`;
+    document.getElementById('prevBtn').disabled         = page === 0;
+    document.getElementById('nextBtn').disabled         = page >= totalPages - 1;
+}
+
+function changePage(delta) { currentPage += delta; loadUsers(); }
+
+// ── Selection & Batch ──────────────────────────────────────────────
+function toggleSelectAll() {
+    const all = document.getElementById('selectAll').checked;
+    document.querySelectorAll('.row-check').forEach(cb => {
+        cb.checked = all;
+        toggleSelect(cb.value, all);
+    });
+}
+function toggleSelect(id, checked) {
+    checked ? selectedIds.add(id) : selectedIds.delete(id);
+    updateBatchBar();
+}
+function updateBatchBar() {
+    const bar   = document.getElementById('batchBar');
+    const count = selectedIds.size;
+    bar.classList.toggle('show', count > 0);
+    document.getElementById('batchCount').textContent = `${count} 人已选`;
+}
+function clearSelection() {
+    selectedIds.clear();
+    document.querySelectorAll('.row-check').forEach(cb => cb.checked = false);
+    document.getElementById('selectAll').checked = false;
+    updateBatchBar();
+}
+async function doBatch() {
+    const action = document.getElementById('batchAction').value;
+    const labels = { activate: '激活', deactivate: '停用', delete: '删除' };
+    if (!confirm(`确定要批量${labels[action]} ${selectedIds.size} 个用户吗？`)) return;
+    try {
+        const d = await api('POST', '/api/admin/users/batch', {
+            user_ids: [...selectedIds], action,
+        });
+        toast(`已${labels[action]} ${d.affected} 个用户`, 'success');
+        clearSelection();
+        loadStats();
+        loadUsers();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Edit User ──────────────────────────────────────────────────────
+function openEdit(u) {
+    document.getElementById('editUserId').value  = u.id;
+    document.getElementById('editNickname').value = u.nickname || '';
+    document.getElementById('editEmail').value   = u.email    || '';
+    document.getElementById('editRole').value    = u.role;
+    document.getElementById('editStatus').value  = u.status;
+    document.getElementById('editQuota').value   = u.storage_quota;
+    openModal('editModal');
+}
+async function saveUser() {
+    const id   = document.getElementById('editUserId').value;
+    const body = {
+        nickname:      document.getElementById('editNickname').value || null,
+        email:         document.getElementById('editEmail').value    || null,
+        role:          document.getElementById('editRole').value,
+        status:        document.getElementById('editStatus').value,
+        storage_quota: parseInt(document.getElementById('editQuota').value) || null,
+    };
+    try {
+        await api('PATCH', `/api/admin/users/${id}`, body);
+        toast('用户信息已更新', 'success');
+        closeModal('editModal');
+        loadUsers();
+        loadStats();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Reset Password ─────────────────────────────────────────────────
+function openReset(userId) {
+    document.getElementById('resetUserId').value    = userId;
+    document.getElementById('resetPassword').value = '';
+    openModal('resetModal');
+}
+async function confirmResetPassword() {
+    const id  = document.getElementById('resetUserId').value;
+    const pwd = document.getElementById('resetPassword').value;
+    if (pwd.length < 8) { toast('密码至少 8 位', 'error'); return; }
+    try {
+        await api('POST', `/api/admin/users/${id}/reset-password`, { new_password: pwd });
+        toast('密码已重置', 'success');
+        closeModal('resetModal');
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Sessions ───────────────────────────────────────────────────────
+async function openSessions(userId, label) {
+    sessionsTargetId = userId;
+    document.getElementById('sessionsUserLabel').textContent = label;
+    document.getElementById('sessionsBody').innerHTML =
+        '<tr><td colspan="4" style="padding:1.5rem;text-align:center;color:var(--gray-500)">加载中…</td></tr>';
+    openModal('sessionsModal');
+    try {
+        const d = await api('GET', `/api/admin/users/${userId}/sessions`);
+        if (!d.items.length) {
+            document.getElementById('sessionsBody').innerHTML =
+                '<tr><td colspan="4" style="padding:1.5rem;text-align:center;color:var(--gray-500)">暂无会话记录</td></tr>';
+            return;
+        }
+        document.getElementById('sessionsBody').innerHTML = d.items.map(s => `
+            <tr>
+                <td style="font-family:monospace;font-size:.8rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                    ${escHtml(s.device_id)}</td>
+                <td><span class="badge badge-${s.status === 'active' ? 'active' : 'deleted'}">${s.status}</span></td>
+                <td style="white-space:nowrap;color:var(--gray-500)">${fmtDate(s.last_seen_at)}</td>
+                <td style="white-space:nowrap;color:var(--gray-500)">${fmtDate(s.created_at)}</td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        document.getElementById('sessionsBody').innerHTML =
+            `<tr><td colspan="4" style="padding:1.5rem;text-align:center;color:var(--danger)">${escHtml(e.message)}</td></tr>`;
+    }
+}
+async function revokeAllSessions() {
+    if (!confirm('确定要强制登出该用户的所有设备吗？')) return;
+    try {
+        await api('DELETE', `/api/admin/users/${sessionsTargetId}/sessions`);
+        toast('已强制登出所有设备', 'success');
+        openSessions(sessionsTargetId, document.getElementById('sessionsUserLabel').textContent);
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Delete ─────────────────────────────────────────────────────────
+function openDelete(userId, label) {
+    deleteTargetId = userId;
+    document.getElementById('deleteModalMsg').textContent    = `确定要删除用户「${label}」吗？`;
+    document.getElementById('hardDeleteCheck').checked       = false;
+    openModal('deleteModal');
+}
+async function confirmDelete() {
+    const hard = document.getElementById('hardDeleteCheck').checked;
+    try {
+        await api('DELETE', `/api/admin/users/${deleteTargetId}?hard=${hard}`);
+        toast(hard ? '用户已物理删除' : '用户已软删除', 'success');
+        closeModal('deleteModal');
+        loadUsers();
+        loadStats();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Modal helpers ──────────────────────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(el => {
+    el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+});
+
+// ── Toast ──────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+    const el       = document.createElement('div');
+    el.className   = `toast toast-${type}`;
+    el.textContent = msg;
+    document.getElementById('toastContainer').appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+}
+
+// ── Utils ──────────────────────────────────────────────────────────
+function escHtml(s)  { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s)  { return String(s).replace(/'/g,"&#39;").replace(/"/g,'&quot;'); }
+function fmtDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('zh-CN') + ' ' + d.toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' });
+}
+
+// ── Enter to login ─────────────────────────────────────────────────
+document.getElementById('loginPassword').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+});
+
+// ── Auto-restore session ───────────────────────────────────────────
+if (token) {
+    const saved = localStorage.getItem('sf_admin_api');
+    if (saved) document.getElementById('apiBase').value = saved;
+    api('GET', '/api/admin/stats')
+        .then(() => showApp())
+        .catch(() => { token = ''; localStorage.removeItem('sf_admin_token'); });
+}
+</script>
+</body>
+</html>
