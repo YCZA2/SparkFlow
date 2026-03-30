@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Alert, Keyboard, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -11,40 +11,31 @@ import { getErrorMessage } from '@/utils/error';
 export default function LoginScreen() {
   const router = useRouter();
   const theme = useAppTheme();
-  const { error, sessionStatus, requestVerificationCode, loginWithPhoneCode } = useAuth();
-  const verificationCodeInputRef = useRef<TextInput | null>(null);
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [debugCode, setDebugCode] = useState<string | null>(null);
-  const [isSending, setIsSending] = useState(false);
+  const { error, sessionStatus, registerWithEmail, loginWithEmail } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [nickname, setNickname] = useState('');
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const canSend = /^1\d{10}$/.test(phoneNumber);
-  const canSubmit = canSend && verificationCode.trim().length >= 4 && !isSubmitting;
+  const canSubmit = email.trim().length > 0 && password.trim().length >= 8 && !isSubmitting;
 
-  // 发送短信验证码，并在开发环境展示调试验证码。
-  const handleSendCode = async () => {
-    try {
-      setIsSending(true);
-      const result = await requestVerificationCode(phoneNumber.trim());
-      setDebugCode(result.debug_code ?? null);
-      Alert.alert('验证码已发送', result.debug_code ? `开发环境验证码：${result.debug_code}` : '请查看短信后输入验证码');
-    } catch (sendError) {
-      Alert.alert('发送失败', getErrorMessage(sendError, '验证码发送失败'));
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  // 提交手机号和验证码登录，成功后进入工作区首页。
-  const handleLogin = async () => {
+  // 注册或登录
+  const handleSubmit = async () => {
     try {
       Keyboard.dismiss();
       setIsSubmitting(true);
-      await loginWithPhoneCode(phoneNumber.trim(), verificationCode.trim());
+
+      if (isRegisterMode) {
+        await registerWithEmail(email.trim(), password.trim(), nickname.trim() || undefined);
+        Alert.alert('注册成功', '账号已创建并自动登录');
+      } else {
+        await loginWithEmail(email.trim(), password.trim());
+      }
+
       router.replace('/');
-    } catch (loginError) {
-      Alert.alert('登录失败', getErrorMessage(loginError, '登录失败，请稍后重试'));
+    } catch (submitError) {
+      Alert.alert(isRegisterMode ? '注册失败' : '登录失败', getErrorMessage(submitError, '请稍后重试'));
     } finally {
       setIsSubmitting(false);
     }
@@ -60,7 +51,7 @@ export default function LoginScreen() {
         <View style={styles.hero}>
           <Text style={[styles.title, { color: theme.colors.text }]}>登录 SparkFlow</Text>
           <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]}>
-            登录后才能进入灵感库、脚本工作区和全部 AI 能力。
+            {isRegisterMode ? '创建账号后即可进入灵感库和脚本工作区' : '登录后才能进入灵感库、脚本工作区和全部 AI 能力。'}
           </Text>
           {sessionStatus === 'expired' || error ? (
             <Text style={[styles.notice, { color: theme.colors.warning }]}>
@@ -70,62 +61,51 @@ export default function LoginScreen() {
         </View>
 
         <View style={[styles.card, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.label, { color: theme.colors.textSubtle }]}>手机号</Text>
+          <Text style={[styles.label, { color: theme.colors.textSubtle }]}>邮箱地址</Text>
           <TextInput
             style={[styles.input, { borderColor: theme.colors.border, color: theme.colors.text }]}
-            keyboardType="number-pad"
-            maxLength={11}
-            placeholder="请输入 11 位手机号"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="请输入邮箱地址"
             placeholderTextColor={theme.colors.textMuted}
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
+            value={email}
+            onChangeText={setEmail}
             returnKeyType="next"
-            onSubmitEditing={() => verificationCodeInputRef.current?.focus()}
           />
 
-          <Text style={[styles.label, { color: theme.colors.textSubtle }]}>验证码</Text>
-          <View style={styles.codeRow}>
-            <TextInput
-              ref={verificationCodeInputRef}
-              style={[
-                styles.input,
-                styles.codeInput,
-                { borderColor: theme.colors.border, color: theme.colors.text },
-              ]}
-              keyboardType="number-pad"
-              maxLength={6}
-              placeholder="请输入验证码"
-              placeholderTextColor={theme.colors.textMuted}
-              value={verificationCode}
-              onChangeText={setVerificationCode}
-              returnKeyType="done"
-              onSubmitEditing={() => {
-                if (canSubmit) {
-                  void handleLogin();
-                } else {
-                  Keyboard.dismiss();
-                }
-              }}
-            />
-            <TouchableOpacity
-              style={[
-                styles.secondaryButton,
-                {
-                  backgroundColor: canSend && !isSending ? theme.colors.primary : theme.colors.border,
-                },
-              ]}
-              disabled={!canSend || isSending}
-              onPress={handleSendCode}
-            >
-              <Text style={styles.secondaryButtonText}>{isSending ? '发送中' : '获取验证码'}</Text>
-            </TouchableOpacity>
-          </View>
+          {isRegisterMode && (
+            <>
+              <Text style={[styles.label, { color: theme.colors.textSubtle }]}>昵称（可选）</Text>
+              <TextInput
+                style={[styles.input, { borderColor: theme.colors.border, color: theme.colors.text }]}
+                placeholder="给自己起个名字"
+                placeholderTextColor={theme.colors.textMuted}
+                value={nickname}
+                onChangeText={setNickname}
+                returnKeyType="next"
+              />
+            </>
+          )}
 
-          {debugCode ? (
-            <Text style={[styles.debugCode, { color: theme.colors.textSubtle }]}>
-              开发环境验证码：{debugCode}
-            </Text>
-          ) : null}
+          <Text style={[styles.label, { color: theme.colors.textSubtle }]}>密码</Text>
+          <TextInput
+            style={[styles.input, { borderColor: theme.colors.border, color: theme.colors.text }]}
+            secureTextEntry
+            autoCapitalize="none"
+            placeholder={isRegisterMode ? '至少 8 位密码' : '请输入密码'}
+            placeholderTextColor={theme.colors.textMuted}
+            value={password}
+            onChangeText={setPassword}
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              if (canSubmit) {
+                void handleSubmit();
+              } else {
+                Keyboard.dismiss();
+              }
+            }}
+          />
 
           <TouchableOpacity
             style={[
@@ -133,9 +113,24 @@ export default function LoginScreen() {
               { backgroundColor: canSubmit ? theme.colors.text : theme.colors.border },
             ]}
             disabled={!canSubmit}
-            onPress={handleLogin}
+            onPress={handleSubmit}
           >
-            <Text style={styles.primaryButtonText}>{isSubmitting ? '登录中...' : '登录并进入工作区'}</Text>
+            <Text style={styles.primaryButtonText}>
+              {isSubmitting ? (isRegisterMode ? '注册中...' : '登录中...') : isRegisterMode ? '注册并进入工作区' : '登录并进入工作区'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.switchModeButton}
+            onPress={() => {
+              setIsRegisterMode(!isRegisterMode);
+              setPassword('');
+              setNickname('');
+            }}
+          >
+            <Text style={[styles.switchModeText, { color: theme.colors.primary }]}>
+              {isRegisterMode ? '已有账号？立即登录' : '没有账号？立即注册'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -146,7 +141,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   screenContent: {
     flexGrow: 1,
-    justifyContent: 'center',
   },
   container: {
     flex: 1,
@@ -186,27 +180,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
   },
-  codeRow: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-  },
-  codeInput: {
-    flex: 1,
-  },
-  secondaryButton: {
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  secondaryButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  debugCode: {
-    fontSize: 12,
-  },
   primaryButton: {
     marginTop: 8,
     borderRadius: 16,
@@ -217,5 +190,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
+  },
+  switchModeButton: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  switchModeText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

@@ -9,8 +9,8 @@ import {
   fetchCurrentUser,
   getUserInfo,
   hydrateAuthenticatedWorkspace,
-  loginWithPhoneCode as loginWithPhoneCodeApi,
-  requestVerificationCode as requestVerificationCodeApi,
+  loginWithEmail as loginWithEmailApi,
+  registerWithEmail as registerWithEmailApi,
   logout as logoutApi,
   parseUserFromToken,
   type UserInfo,
@@ -32,13 +32,8 @@ export interface AuthActions {
   setUser: (user: UserInfo | null) => void;
   setReady: (ready: boolean) => void;
   setError: (error: string | null) => void;
-  requestVerificationCode: (phoneNumber: string) => Promise<{
-    sent: boolean;
-    resend_after_seconds: number;
-    expires_in_seconds: number;
-    debug_code?: string | null;
-  }>;
-  loginWithPhoneCode: (phoneNumber: string, verificationCode: string) => Promise<UserInfo>;
+  registerWithEmail: (email: string, password: string, nickname?: string) => Promise<UserInfo>;
+  loginWithEmail: (email: string, password: string) => Promise<UserInfo>;
   logout: () => Promise<void>;
   refreshUserInfo: () => Promise<void>;
   bootstrap: () => Promise<void>;
@@ -72,21 +67,21 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     set({ error });
   },
 
-  requestVerificationCode: async (phoneNumber) => {
+  registerWithEmail: async (email, password, nickname) => {
     try {
-      const result = await requestVerificationCodeApi(phoneNumber);
-      set({ error: null });
-      return result;
+      const user = await registerWithEmailApi(email, password, nickname);
+      set({ user, isAuthenticated: true, error: null, sessionStatus: 'authenticated' });
+      return user;
     } catch (err) {
-      const error = getErrorMessage(err, '验证码发送失败');
-      set({ error });
+      const error = getErrorMessage(err, '注册失败');
+      set({ error, sessionStatus: 'anonymous' });
       throw err;
     }
   },
 
-  loginWithPhoneCode: async (phoneNumber, verificationCode) => {
+  loginWithEmail: async (email, password) => {
     try {
-      const user = await loginWithPhoneCodeApi(phoneNumber, verificationCode);
+      const user = await loginWithEmailApi(email, password);
       set({ user, isAuthenticated: true, error: null, sessionStatus: 'authenticated' });
       return user;
     } catch (err) {

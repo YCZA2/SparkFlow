@@ -99,7 +99,7 @@ backend/
 ├── domains/                 # Domain repositories and persistence
 ├── services/                # Provider adapters (Dify, DashScope, Qwen, ChromaDB, external_media)
 ├── models/database.py       # Engine / session setup
-├── prompts/                 # LLM prompt templates (mode_a_boom.txt, mode_b_brain.txt)
+├── prompts/                 # LLM prompt templates (script generation, enrichment, methodology distillation)
 ├── alembic/                 # Migrations
 └── dify_dsl/                # Dify workflow DSL templates
 
@@ -117,8 +117,10 @@ mobile/
 1. **Voice Capture** → POST `/api/transcriptions` → poll `pipeline_run_id` → fragment stored locally + synced
 2. **Manual Fragment** → local draft created immediately → background sync via `/api/backups/batch`
 3. **AI Script Generation** → select fragments → POST `/api/scripts/generation` → poll `pipeline_run_id`
-   - Mode A "导师爆款": enforced structure (hook + pain point + value + CTA)
-   - Mode B "专属二脑": mimics user's writing style from knowledge base
+   - Topic-driven generation with three-layer writing context
+   - Stable core: system preset values and themes
+   - Methodology: cached fragment distillation + uploaded materials + preset templates
+   - Related materials: dynamic recall from historical scripts, fragments, and knowledge docs
 4. **Daily Auto-Aggregation** → ≥3 related fragments from yesterday → `daily_push_generation` pipeline run
 5. **Teleprompter Recording** → overlay teleprompter on camera → save video to local photos
 

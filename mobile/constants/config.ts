@@ -30,7 +30,7 @@ export const STORAGE_KEYS = {
 export const API_ENDPOINTS = {
   AUTH: {
     TOKEN: '/api/auth/token',
-    VERIFICATION_CODES: '/api/auth/verification-codes',
+    REGISTER: '/api/auth/register',
     LOGIN: '/api/auth/login',
     ME: '/api/auth/me',
     REFRESH: '/api/auth/refresh',

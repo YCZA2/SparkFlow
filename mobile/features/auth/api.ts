@@ -13,18 +13,10 @@ export interface UserInfo {
   user_id: string;
   role: string;
   nickname?: string;
-  phone_country_code?: string;
-  phone_number?: string;
+  email?: string;
   status?: string;
   device_id?: string;
   session_version?: number;
-}
-
-export interface VerificationCodeResult {
-  sent: boolean;
-  resend_after_seconds: number;
-  expires_in_seconds: number;
-  debug_code?: string | null;
 }
 
 interface LoginResponsePayload {
@@ -68,31 +60,15 @@ export function parseUserFromToken(token: string): UserInfo {
   }
 }
 
-export async function requestVerificationCode(phoneNumber: string): Promise<VerificationCodeResult> {
-  return await fetchApi<VerificationCodeResult>(
-    API_ENDPOINTS.AUTH.VERIFICATION_CODES,
-    'POST',
-    {
-      phone_number: phoneNumber,
-      phone_country_code: '+86',
-    },
-    { requiresAuth: false }
-  );
-}
-
-export async function fetchCurrentUser(): Promise<UserInfo> {
-  return await fetchApi<UserInfo>(API_ENDPOINTS.AUTH.ME, 'GET');
-}
-
-export async function loginWithPhoneCode(phoneNumber: string, verificationCode: string): Promise<UserInfo> {
+export async function registerWithEmail(email: string, password: string, nickname?: string): Promise<UserInfo> {
   const deviceId = await getOrCreateDeviceId();
   const payload = await fetchApi<LoginResponsePayload>(
-    API_ENDPOINTS.AUTH.LOGIN,
+    API_ENDPOINTS.AUTH.REGISTER,
     'POST',
     {
-      phone_number: phoneNumber,
-      verification_code: verificationCode,
-      phone_country_code: '+86',
+      email,
+      password,
+      nickname,
       device_id: deviceId,
     },
     { requiresAuth: false }
@@ -107,6 +83,34 @@ export async function loginWithPhoneCode(phoneNumber: string, verificationCode: 
   };
   await saveUserInfo(user);
   return user;
+}
+
+export async function loginWithEmail(email: string, password: string): Promise<UserInfo> {
+  const deviceId = await getOrCreateDeviceId();
+  const payload = await fetchApi<LoginResponsePayload>(
+    API_ENDPOINTS.AUTH.LOGIN,
+    'POST',
+    {
+      email,
+      password,
+      device_id: deviceId,
+    },
+    { requiresAuth: false }
+  );
+  await clearDeviceSessionInvalid();
+  await setToken(payload.access_token);
+  await activateUserWorkspace(payload.user.user_id);
+  const user: UserInfo = {
+    ...payload.user,
+    device_id: payload.device_id,
+    session_version: payload.session_version,
+  };
+  await saveUserInfo(user);
+  return user;
+}
+
+export async function fetchCurrentUser(): Promise<UserInfo> {
+  return await fetchApi<UserInfo>(API_ENDPOINTS.AUTH.ME, 'GET');
 }
 
 export async function hydrateAuthenticatedWorkspace(): Promise<UserInfo | null> {

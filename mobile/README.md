@@ -5,7 +5,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 ## 今日进展（2026-03-17）
 
 - `fragments / folders` 的 local-first phase 1 已经落地完成：列表、详情、编辑、删除都以本地 SQLite + 文件系统为真值，远端只负责备份与恢复。
-- 移动端正式入口已经切到“登录后工作区”：未登录只显示手机号验证码登录页；登录成功后才挂载本地 SQLite、正文文件和备份队列。
+- 移动端正式入口已经切到”登录后工作区”：未登录只显示登录页；登录成功后才挂载本地 SQLite、正文文件和备份队列。
 - 本地 SQLite、fragment/script 正文文件、音频缓存与 staging 目录都已按 `user_id` 工作区隔离；切换账号会切换整套本地工作区。
 - 录音转写、抖音链接导入、脚本生成都已经切到“客户端上传本地快照或本地媒体”驱动，不再默认依赖服务端 fragment 业务表作为输入真值。
 - “创作工作台”已接入显式恢复；恢复时会重建本地 SQLite、`body.html` 与媒体缓存，并在需要时按 `object_key` 向后端刷新最新访问地址。
@@ -28,7 +28,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 - fragments / folders 主链路当前采用**local-first 架构**：列表、详情、编辑、删除统一读取本地 SQLite / 文件系统，远端只做自动备份与显式恢复
 - 远端快照、本地草稿、待上传图片不再混放在 `AsyncStorage`；`AsyncStorage` 仅保留 token、用户信息、后端地址和少量轻量配置
-- 当前不再自动使用测试用户进入主流程；正式登录默认走 `+86` 手机号验证码，`/api/auth/token` 仅用于本地开发联调
+- 当前不再自动使用测试用户进入主流程；正式登录采用邮箱密码认证，`/api/auth/token` 仅用于本地开发联调
 - “写下灵感”文本链路当前直接创建本地 fragment 实体；编辑完成后只标记待备份，不再先建远端 fragment 空壳。
 - legacy 草稿会聚合进首页/文件夹页列表顶部；若后续绑定了 legacy 云端记录 ID，列表会自动对兼容卡片去重。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
@@ -37,7 +37,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 移动端编辑器已抽出 `features/editor/*` 共享底座：统一承载 HTML helper、editor session reducer、`react-native-enriched` 富文本桥接、toolbar 和页面 scaffold，fragment 与 script 详情共用同一套正文编辑协议。
 - 碎片详情内部仍保留 `detail resource / editor session / sheet / screen actions` 四层，但 resource 已经切换为只读本地实体；后台由 backup queue 负责把改动推到远端备份。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
-- 生成页已经从旧的 `Mode A / Mode B` 双选切到统一主题输入：用户补一个主题后，后端按 `topic + SOP + few-shot/reference-script` 创建脚本任务。
+- 生成页现在采用统一主题输入：用户补一个主题后，后端按 `topic + SOP + 三层写作上下文` 创建脚本任务。
 - 碎片正文详情和列表已接入本地真值与 legacy 兼容层：详情会优先读本地 HTML 与实体缓存，再按需叠加升级期兼容数据；正文与媒体改动统一留在本地真值并由 backup queue 异步备份。
 - 脚本详情页现在也采用 local-first：先读本地 script 真值，再按需补远端缺失稿件；编辑成功后正文只写本地并进入 backup queue，`/api/scripts/*` 只用于缺失补齐和兼容查询，不再作为已存在本地稿件的正文权威来源。
 - 首页系统区当前包含“全部”和按需出现的“成稿”；只有用户真的存在 script 时才会显示“成稿”入口，成稿列表与碎片列表继续分开，不做混排。
