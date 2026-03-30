@@ -5,6 +5,10 @@ import {
   isFailedMediaIngestionFragment,
   isProcessingMediaIngestionFragment,
 } from '@/features/pipelines/mediaIngestionRecoveryState';
+import {
+  extractPreviewSkippingTitle,
+  extractTitleFromFirstLine,
+} from '@/features/editor/html';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
 
@@ -49,6 +53,7 @@ function getSourceLabel(source: string): string {
 }
 
 function getTitle(fragment: Fragment): string {
+  /*优先从首行提取标题，实现"首行即标题"的产品体验。 */
   if (isFailedMediaIngestionFragment(fragment)) {
     return '转录失败';
   }
@@ -57,19 +62,27 @@ function getTitle(fragment: Fragment): string {
     return '转录中...';
   }
 
-  const summary = getCleanText(fragment.summary);
-  if (summary) return truncate(summary, 30);
+  // 优先从 body_html 首行提取标题
+  const titleFromFirstLine = extractTitleFromFirstLine(fragment.body_html, 30);
+  if (titleFromFirstLine) return titleFromFirstLine;
 
-  const body = getCleanText(fragment.plain_text_snapshot);
-  if (body) return truncate(body, 30);
+  // 兜底：从 plain_text_snapshot 首行提取
+  const plainTitle = getCleanText(fragment.plain_text_snapshot);
+  if (plainTitle) return truncate(plainTitle, 30);
 
-  const transcript = getCleanText(fragment.transcript);
-  if (transcript) return truncate(transcript, 30);
+  // 兜底：从 transcript 首行提取
+  const transcriptTitle = getCleanText(fragment.transcript);
+  if (transcriptTitle) return truncate(transcriptTitle, 30);
+
+  // 兜底：从 summary 提取
+  const summaryTitle = getCleanText(fragment.summary);
+  if (summaryTitle) return truncate(summaryTitle, 30);
 
   return '无标题灵感';
 }
 
 function getPreview(fragment: Fragment): string {
+  /*从正文提取预览（跳过首行标题），避免标题和预览重复。 */
   if (isFailedMediaIngestionFragment(fragment)) {
     return truncate(getCleanText(fragment.media_pipeline_error_message) || '下拉刷新后会自动重试', 42);
   }
@@ -78,15 +91,13 @@ function getPreview(fragment: Fragment): string {
     return '正在提取正文';
   }
 
-  const body = getCleanText(fragment.plain_text_snapshot);
+  // 优先从 body_html 提取预览（跳过首行）
+  const previewFromBody = extractPreviewSkippingTitle(fragment.body_html, 42);
+  if (previewFromBody) return previewFromBody;
+
+  // 兜底：使用 transcript
   const transcript = getCleanText(fragment.transcript);
   const summary = getCleanText(fragment.summary);
-
-  if (body) return truncate(body, 42);
-
-  if (summary && transcript && summary !== transcript) {
-    return truncate(transcript, 42);
-  }
 
   if (transcript) return truncate(transcript, 42);
   if (summary) return truncate(summary, 42);

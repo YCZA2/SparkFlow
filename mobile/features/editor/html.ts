@@ -53,6 +53,64 @@ export function extractPlainTextFromHtml(html: string | null | undefined): strin
     .trim();
 }
 
+/**
+ * 从 HTML 首行提取标题文本。
+ * 优先识别第一个 h1 元素；若无则取第一个 p 元素内容的前 50 字。
+ * 用于列表卡片显示标题，实现"首行即标题"的产品体验。
+ */
+export function extractTitleFromFirstLine(html: string | null | undefined, maxTitleLength = 50): string {
+  const normalized = normalizeBodyHtml(html);
+  if (!normalized) return '';
+
+  // 尝试匹配第一个 h1 元素
+  const h1Match = normalized.match(/<h1[^>]*>(.*?)<\/h1>/i);
+  if (h1Match && h1Match[1]) {
+    const title = extractPlainTextFromHtml(h1Match[1]).trim();
+    if (title) return title.slice(0, maxTitleLength);
+  }
+
+  // 尝试匹配第一个 p 元素
+  const pMatch = normalized.match(/<p[^>]*>(.*?)<\/p>/i);
+  if (pMatch && pMatch[1]) {
+    const title = extractPlainTextFromHtml(pMatch[1]).trim();
+    if (title) return title.slice(0, maxTitleLength);
+  }
+
+  // 兜底：从纯文本首行提取
+  const plainText = extractPlainTextFromHtml(normalized);
+  const firstLine = plainText.split('\n')[0]?.trim();
+  if (firstLine) return firstLine.slice(0, maxTitleLength);
+
+  return '';
+}
+
+/**
+ * 从 HTML 提取正文预览（跳过首行标题）。
+ * 用于列表卡片的预览文本显示，避免标题和预览重复。
+ */
+export function extractPreviewSkippingTitle(html: string | null | undefined, maxPreviewLength = 100): string {
+  const normalized = normalizeBodyHtml(html);
+  if (!normalized) return '';
+
+  // 移除首行 h1 或 p 元素
+  let previewHtml = normalized;
+
+  // 如果首行是 h1，移除它
+  const h1Match = previewHtml.match(/<h1[^>]*>.*?<\/h1>/i);
+  if (h1Match) {
+    previewHtml = previewHtml.replace(h1Match[0], '');
+  } else {
+    // 否则移除第一个 p 元素
+    const pMatch = previewHtml.match(/<p[^>]*>.*?<\/p>/i);
+    if (pMatch) {
+      previewHtml = previewHtml.replace(pMatch[0], '');
+    }
+  }
+
+  const previewText = extractPlainTextFromHtml(previewHtml).trim();
+  return previewText.slice(0, maxPreviewLength);
+}
+
 export function extractAssetIdsFromHtml(html: string | null | undefined): string[] {
   /*从 HTML 中提取 asset:// 图片引用，保持顺序并去重。 */
   const normalized = normalizeBodyHtml(html);

@@ -79,6 +79,22 @@ export function createEditorBaseCss(): string {
       margin: 0 0 18px;
       letter-spacing: 0.1px;
     }
+    /* 首行默认为标题样式：加粗加大，实现"首行即标题"的产品体验 */
+    .ProseMirror p:first-of-type {
+      font-size: 28px;
+      line-height: 1.25;
+      font-weight: 700;
+      letter-spacing: -0.4px;
+      margin-bottom: 24px;
+    }
+    /* 若首行是空段落，跳过它让第二个段落成为标题样式 */
+    .ProseMirror p:first-of-type:empty + p {
+      font-size: 28px;
+      line-height: 1.25;
+      font-weight: 700;
+      letter-spacing: -0.4px;
+      margin-bottom: 24px;
+    }
     .ProseMirror h1 {
       margin: 0 0 28px;
       font-size: 34px;

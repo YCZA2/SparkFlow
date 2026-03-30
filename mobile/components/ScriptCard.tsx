@@ -6,7 +6,11 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import type { Script, ScriptMode } from '@/types/script';
-import { extractPlainTextFromHtml } from '@/features/editor/html';
+import {
+  extractPlainTextFromHtml,
+  extractPreviewSkippingTitle,
+  extractTitleFromFirstLine,
+} from '@/features/editor/html';
 import { formatDate } from '@/utils/date';
 import { useAppTheme } from '@/theme/useAppTheme';
 
@@ -36,10 +40,12 @@ interface ScriptCardProps {
 export function ScriptCard({ script, onPress, isFirst = false, isLast = false }: ScriptCardProps) {
   const theme = useAppTheme();
 
-  // 显示标题或内容前50字；body_html 只解析一次，同时用于标题回退和预览
-  const bodyText = extractPlainTextFromHtml(script.body_html ?? '');
-  const displayTitle = script.title || bodyText.slice(0, 50) || '无标题口播稿';
-  const previewText = bodyText.trim();
+  // 优先从首行提取标题，实现"首行即标题"的产品体验
+  const titleFromFirstLine = extractTitleFromFirstLine(script.body_html ?? '', 50);
+  const displayTitle = titleFromFirstLine || script.title || '无标题口播稿';
+
+  // 从正文提取预览（跳过首行标题），避免标题和预览重复
+  const previewText = extractPreviewSkippingTitle(script.body_html ?? '', 100);
   const modeLabel = getModeLabel(script.mode);
   const modeColor = getModeColor(script.mode, theme.colors);
 
