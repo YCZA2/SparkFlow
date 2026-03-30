@@ -59,3 +59,6 @@ chroma_data/
 
 # MiniMax
 .minimax
+
+# Claude Code 临时工作目录（嵌套 git 仓库，不纳入版本控制）
+.claude/worktrees/
