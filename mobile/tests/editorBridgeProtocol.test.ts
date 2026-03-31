@@ -13,6 +13,7 @@ import test from 'node:test';
 
 import {
   createImageHtml,
+  ensureFirstLineIsTitle,
   extractAssetIdsFromHtml,
   extractPlainTextFromHtml,
   unwrapHtmlFromNativeEditor,
@@ -34,9 +35,9 @@ function buildSnapshot(bodyHtml: string): EditorDocumentSnapshot {
 // wrapHtmlForNativeEditor
 // ============================================================================
 
-test('wrapHtmlForNativeEditor 对空输入返回包含空段落的最小合法 HTML 壳', () => {
-  assert.equal(wrapHtmlForNativeEditor(''), '<html>\n<p></p>\n</html>');
-  assert.equal(wrapHtmlForNativeEditor(null), '<html>\n<p></p>\n</html>');
+test('wrapHtmlForNativeEditor 对空输入返回以 h1 占位的最小合法 HTML 壳', () => {
+  assert.equal(wrapHtmlForNativeEditor(''), '<html>\n<h1></h1>\n</html>');
+  assert.equal(wrapHtmlForNativeEditor(null), '<html>\n<h1></h1>\n</html>');
 });
 
 test('wrapHtmlForNativeEditor 包裹非空正文并保留内容', () => {
@@ -143,6 +144,53 @@ test('extractPlainTextFromHtml 将图片替换为空格而非删除', () => {
 test('extractPlainTextFromHtml 对空输入返回空字符串', () => {
   assert.equal(extractPlainTextFromHtml(''), '');
   assert.equal(extractPlainTextFromHtml(null), '');
+});
+
+// ============================================================================
+// resolveEditorSnapshotForSave — 桥接读取为 null 时的回退
+// ============================================================================
+
+// ============================================================================
+// ensureFirstLineIsTitle
+// ============================================================================
+
+test('ensureFirstLineIsTitle 把首个 <p> 块升格为 <h1>', () => {
+  assert.equal(
+    ensureFirstLineIsTitle('<p>我的标题</p><p>正文段落</p>'),
+    '<h1>我的标题</h1><p>正文段落</p>'
+  );
+});
+
+test('ensureFirstLineIsTitle 空 <p> 也升格为 <h1>', () => {
+  assert.equal(ensureFirstLineIsTitle('<p></p>'), '<h1></h1>');
+});
+
+test('ensureFirstLineIsTitle 首块已是 <h1> 时保持不变', () => {
+  const html = '<h1>已是标题</h1><p>段落</p>';
+  assert.equal(ensureFirstLineIsTitle(html), html);
+});
+
+test('ensureFirstLineIsTitle 首块为 <ul> 等非 <p> 块时保持不变', () => {
+  const html = '<ul><li>列表项</li></ul>';
+  assert.equal(ensureFirstLineIsTitle(html), html);
+});
+
+test('ensureFirstLineIsTitle 保留 <p> 上的属性', () => {
+  assert.equal(
+    ensureFirstLineIsTitle('<p class="lead">内容</p>'),
+    '<h1 class="lead">内容</h1>'
+  );
+});
+
+test('ensureFirstLineIsTitle 对空字符串返回空字符串', () => {
+  assert.equal(ensureFirstLineIsTitle(''), '');
+});
+
+test('ensureFirstLineIsTitle 首段含行内标签时保持内容完整', () => {
+  assert.equal(
+    ensureFirstLineIsTitle('<p><strong>加粗标题</strong></p><p>正文</p>'),
+    '<h1><strong>加粗标题</strong></h1><p>正文</p>'
+  );
 });
 
 // ============================================================================

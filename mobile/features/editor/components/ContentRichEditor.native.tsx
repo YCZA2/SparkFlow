@@ -8,6 +8,7 @@ import {
 } from 'react-native-enriched';
 
 import {
+  ensureFirstLineIsTitle,
   extractAssetIdsFromHtml,
   extractPlainTextFromHtml,
   normalizeBodyHtml,
@@ -125,7 +126,9 @@ export function ContentRichEditor({
   const seededEditorHtml = React.useMemo(
     () =>
       wrapHtmlForNativeEditor(
-        replaceAssetIdsWithDisplayUrls(stripEdgeEmptyParagraphs(initialBodyHtml), mediaAssets)
+        ensureFirstLineIsTitle(
+          replaceAssetIdsWithDisplayUrls(stripEdgeEmptyParagraphs(initialBodyHtml), mediaAssets)
+        )
       ),
     [initialBodyHtml, mediaAssets]
   );

@@ -18,12 +18,27 @@ export function stripEdgeEmptyParagraphs(html: string): string {
 }
 
 export function wrapHtmlForNativeEditor(html: string | null | undefined): string {
-  /*把项目正文包装成原生编辑器内部协议，确保 Android 会按 HTML 解析 defaultValue。 */
+  /*把项目正文包装成原生编辑器内部协议，确保 Android 会按 HTML 解析 defaultValue。
+   * 空内容默认以 <h1> 占位，使新建文档在光标落下时即处于标题输入模式。 */
   const normalized = normalizeBodyHtml(html);
   if (!normalized) {
-    return '<html>\n<p></p>\n</html>';
+    return '<html>\n<h1></h1>\n</html>';
   }
   return `<html>\n${normalized}\n</html>`;
+}
+
+export function ensureFirstLineIsTitle(html: string): string {
+  /* 把正文首个 <p> 块升格为 <h1>，实现"首行即标题"的编辑体验。
+   * 若首块已是 <h1>（或其他非 <p> 块元素）则保持不变；空内容直接返回。
+   * 调用时机：编辑器 seed HTML 管道，不影响持久化存储路径。 */
+  const normalized = normalizeBodyHtml(html);
+  if (!normalized) return normalized;
+
+  // 首块已经是非 <p> 元素（h1-h6、ul、ol、blockquote 等），无需转换
+  if (!/^<p[\s>]/i.test(normalized)) return normalized;
+
+  // 把首个 <p>...</p> 替换为 <h1>...</h1>，保留原有属性
+  return normalized.replace(/^<p([^>]*)>([\s\S]*?)<\/p>/i, '<h1$1>$2</h1>');
 }
 
 export function unwrapHtmlFromNativeEditor(html: string | null | undefined): string {
