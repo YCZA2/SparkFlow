@@ -132,6 +132,15 @@ export function ContentRichEditor({
       ),
     [initialBodyHtml, mediaAssets]
   );
+  const htmlStyle = React.useMemo(
+    () => ({
+      h1: {
+        fontSize: 24, // H1 字号必须大于正文 18px，否则 iOS 上会表现异常
+        bold: true, // 首行标题加粗
+      },
+    }),
+    []
+  );
   const latestSnapshotRef = React.useRef<EditorDocumentSnapshot>({
     body_html: normalizeBodyHtml(initialBodyHtml),
     plain_text: extractPlainTextFromHtml(initialBodyHtml),
@@ -272,6 +281,7 @@ export function ContentRichEditor({
           placeholder=""
           autoCapitalize="sentences"
           style={{ ...styles.input, backgroundColor: editorBackground }}
+          htmlStyle={htmlStyle}
           contextMenuItems={contextMenuItems}
           onFocus={onFocus}
           onChangeHtml={(event) => {

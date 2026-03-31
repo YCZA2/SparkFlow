@@ -143,7 +143,8 @@ export function createImageHtml(assetId: string, alt = ''): string {
 }
 
 export function convertPlainTextToHtml(text: string | null | undefined): string {
-  /*把纯文本稳定转换成基础 HTML，供转写内容首次落为可编辑正文。 */
+  /*把纯文本稳定转换成基础 HTML，供转写内容首次落为可编辑正文。
+   * 对于长文本（> 100 字且无段落分割），智能提取首句为 H1 标题，剩余部分为正文段落。 */
   const normalized = String(text ?? '').replace(/\r\n/g, '\n').trim();
   if (!normalized) return '';
 
@@ -155,8 +156,28 @@ export function convertPlainTextToHtml(text: string | null | undefined): string 
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
 
-  return normalized
-    .split(/\n{2,}/)
+  // 按双换行分割段落
+  const paragraphs = normalized.split(/\n{2,}/);
+
+  // 只有一个段落且超过 100 字，智能分割为"首句标题 + 剩余正文"
+  if (paragraphs.length === 1 && paragraphs[0].length > 100) {
+    const fullText = paragraphs[0];
+    // 提取首句（前 50 字或第一句）
+    const sentenceMatch = fullText.match(/^[^。？！\n]{1,50}[。？！]?/);
+    const firstSentence = sentenceMatch ? sentenceMatch[0] : fullText.slice(0, 50);
+    const remainingText = fullText.slice(firstSentence.length).trim();
+
+    // 构建首句 H1 + 剩余段落 <p>
+    const h1Paragraph = `<h1>${escapeHtml(firstSentence)}</h1>`;
+    const remainingParagraph = remainingText
+      ? `\n<p>${remainingText.split('\n').map(escapeHtml).join('<br />')}</p>`
+      : '';
+
+    return `${h1Paragraph}${remainingParagraph}`;
+  }
+
+  // 多段落或短单段落，按原有逻辑处理（后续 ensureFirstLineIsTitle 会把首段转为 H1）
+  return paragraphs
     .map((paragraph) => `<p>${paragraph.split('\n').map(escapeHtml).join('<br />')}</p>`)
     .join('\n');
 }
