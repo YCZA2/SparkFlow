@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Share } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 
 import { getOrCreateDeviceId } from '@/features/auth/device';
 import { registerFragmentCleanupTicket } from '@/features/fragments/cleanup/cleanupTicket';
@@ -15,6 +16,7 @@ import {
   resolveFragmentDetailCleanupOnReturn,
   type FragmentDetailCleanupOnReturn,
 } from './cleanupOnReturn';
+import { resolveFragmentDetailCleanupTicket } from './exitCleanup';
 import { useFragmentBodySession } from './useFragmentBodySession';
 import { useFragmentDetailResource } from './useFragmentDetailResource';
 
@@ -29,11 +31,13 @@ export function useFragmentDetailScreen(
 ) {
   /*聚合详情页资源、编辑会话、抽屉状态和页面动作，供页面层按分组消费。 */
   const router = useRouter();
+  const navigation = useNavigation();
   const resource = useFragmentDetailResource(fragmentId);
   const cleanupOnReturn = resolveFragmentDetailCleanupOnReturn(options?.cleanupOnReturn);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [relatedScriptsCount, setRelatedScriptsCount] = useState(0);
+  const skipNextCleanupTicketRef = useRef(false);
   const fragment = resource.fragment;
 
   const editor = useFragmentBodySession({
@@ -90,8 +94,11 @@ export function useFragmentDetailScreen(
     };
   }, [fragment?.id, isSheetOpen]);
 
-  const leaveDetailScreen = () => {
+  const leaveDetailScreen = useCallback((input?: { skipCleanupTicket?: boolean }) => {
     /*优先返回现有导航栈；只有无可返回历史时，才 replace 到来源页兜底。 */
+    if (input?.skipCleanupTicket) {
+      skipNextCleanupTicketRef.current = true;
+    }
     if (router.canGoBack()) {
       router.back();
       return;
@@ -101,30 +108,32 @@ export function useFragmentDetailScreen(
       return;
     }
     router.replace('/');
-  };
+  }, [options?.exitTo, router]);
 
-  const exitScreen = async () => {
-    /*离开详情前先保证最新输入已落本地，并把 manual 空碎片清理延后到返回页聚焦时处理。 */
-    try {
-      editor.editorRef.current?.blur?.();
-      await editor.saveNow({ force: true });
-      if (fragmentId && cleanupOnReturn === 'empty_manual_placeholder') {
-        registerFragmentCleanupTicket({
-          fragmentId,
-          kind: 'empty_manual_placeholder',
-        });
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', () => {
+      const cleanupTicket = resolveFragmentDetailCleanupTicket({
+        skipCleanupTicket: skipNextCleanupTicketRef.current,
+        fragmentId,
+        fragment,
+        cleanupOnReturn,
+        createdAtMs: Date.now(),
+        currentSnapshot: editor.editorRef.current?.getSnapshot?.() ?? null,
+      });
+      skipNextCleanupTicketRef.current = false;
+
+      if (cleanupTicket) {
+        registerFragmentCleanupTicket(cleanupTicket);
       }
       markFragmentsStale();
-      leaveDetailScreen();
-    } catch {
-      Alert.alert('本地保存失败', '请稍后重试，当前页会继续保留输入内容。');
-      return;
-    }
-  };
+    });
+
+    return unsubscribe;
+  }, [cleanupOnReturn, editor.editorRef, fragment, fragmentId, navigation]);
 
   const exitAfterDelete = () => {
-    /*删除后返回上一页，列表页会在聚焦时自动刷新。 */
-    leaveDetailScreen();
+    /*删除后返回时跳过空碎片 cleanup ticket 登记，避免重复走返回清理。 */
+    leaveDetailScreen({ skipCleanupTicket: true });
   };
 
   const confirmDelete = async () => {
@@ -260,9 +269,7 @@ export function useFragmentDetailScreen(
       },
     },
     actions: {
-      goBack: () => {
-        void exitScreen();
-      },
+      goBack: () => leaveDetailScreen(),
       share,
       done,
       requestDelete,

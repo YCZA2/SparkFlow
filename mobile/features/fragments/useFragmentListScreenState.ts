@@ -94,50 +94,60 @@ export function useFragmentListScreenState({
       let cancelled = false;
 
       const consumePendingCleanup = async () => {
-        const ticket = peekFragmentCleanupTicket();
-        if (!ticket) {
-          return;
-        }
+        while (!cancelled) {
+          const ticket = peekFragmentCleanupTicket();
+          if (!ticket) {
+            return;
+          }
 
-        const [latestFragments, fragment] = await Promise.all([
-          listLocalFragmentEntities(folderId),
-          readLocalFragmentEntity(ticket.fragmentId),
-        ]);
-        if (cancelled) {
-          return;
-        }
-
-        const resolution = resolveFragmentCleanupForList(ticket, latestFragments, fragment);
-        if (resolution.action === 'skip') {
-          return;
-        }
-        if (resolution.action === 'clear') {
-          clearFragmentCleanupTicket(resolution.fragmentId);
-          return;
-        }
-
-        markFragmentRemoving(resolution.fragmentId);
-
-        try {
-          await new Promise((resolve) =>
-            setTimeout(resolve, getFragmentRemovalAnimationDuration())
-          );
+          const [latestFragments, fragment] = await Promise.all([
+            listLocalFragmentEntities(folderId),
+            readLocalFragmentEntity(ticket.fragmentId),
+          ]);
           if (cancelled) {
             return;
           }
-          const deviceId = await getOrCreateDeviceId();
-          await deleteLocalFragmentEntity(resolution.fragmentId, { deviceId });
-          if (cancelled) {
+
+          const resolution = resolveFragmentCleanupForList(ticket, latestFragments, fragment);
+          if (resolution.action === 'skip') {
             return;
           }
-          clearFragmentCleanupTicket(resolution.fragmentId);
-          markFragmentsStale();
-          await fetchFragments();
-        } catch {
-          /*清理失败时保留 ticket，等待下一次聚焦继续重试。 */
-        } finally {
-          if (!cancelled) {
-            unmarkFragmentRemoving(resolution.fragmentId);
+          if (resolution.action === 'defer') {
+            await new Promise((resolve) => {
+              setTimeout(resolve, resolution.delay_ms);
+            });
+            continue;
+          }
+          if (resolution.action === 'clear') {
+            clearFragmentCleanupTicket(resolution.fragmentId);
+            return;
+          }
+
+          markFragmentRemoving(resolution.fragmentId);
+
+          try {
+            await new Promise((resolve) =>
+              setTimeout(resolve, getFragmentRemovalAnimationDuration())
+            );
+            if (cancelled) {
+              return;
+            }
+            const deviceId = await getOrCreateDeviceId();
+            await deleteLocalFragmentEntity(resolution.fragmentId, { deviceId });
+            if (cancelled) {
+              return;
+            }
+            clearFragmentCleanupTicket(resolution.fragmentId);
+            markFragmentsStale();
+            await fetchFragments();
+            return;
+          } catch {
+            /*清理失败时保留 ticket，等待下一次聚焦继续重试。 */
+            return;
+          } finally {
+            if (!cancelled) {
+              unmarkFragmentRemoving(resolution.fragmentId);
+            }
           }
         }
       };
