@@ -157,20 +157,16 @@ export function useEditorSession<TDocument>(
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
 
-  // Refs
+  // Refs — 渲染期直接赋值保证同步，避免 useEffect 异步窗口导致 saveNow 读到上一帧状态
   const editorRef = useRef<EditorSurfaceHandle | null>(null);
   const stateRef = useRef(state);
   const documentRef = useRef(document);
   const documentIdRef = useRef(documentId);
   const commitOptimisticRef = useRef(commitOptimistic);
-
-  // 同步 refs
-  useEffect(() => {
-    stateRef.current = state;
-    documentRef.current = document;
-    documentIdRef.current = documentId;
-    commitOptimisticRef.current = commitOptimistic;
-  }, [commitOptimistic, document, documentId, state]);
+  stateRef.current = state;
+  documentRef.current = document;
+  documentIdRef.current = documentId;
+  commitOptimisticRef.current = commitOptimistic;
 
   // 重置会话
   useEffect(() => {
