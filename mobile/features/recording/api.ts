@@ -19,7 +19,7 @@ export interface UploadAudioResponse {
 
 export async function uploadAudio(
   uri: string,
-  folderId?: string,
+  folderId: string | undefined,
   localFragmentId: string
 ): Promise<UploadAudioResponse> {
   /*录音上传前先统一落到 staging，保证文件名、路径和重试语义稳定。 */

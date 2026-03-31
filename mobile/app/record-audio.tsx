@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -6,12 +6,13 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { Text } from '@/components/Themed';
+import { consumePendingFragmentCleanupDirectly } from '@/features/fragments/cleanup/runtime';
 import { useAudioCaptureSession } from '@/features/recording/AudioCaptureProvider';
 import { useAppTheme } from '@/theme/useAppTheme';
 
@@ -103,6 +104,14 @@ export default function RecordAudioScreen() {
       void session.start();
     }
   }, [session]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void consumePendingFragmentCleanupDirectly().catch(() => {
+        /*录音页兜底清理失败时保留 ticket，等待下次返回重试。 */
+      });
+    }, [])
+  );
 
   const showPlaceholderAlert = (title: string) => {
     Alert.alert(title, '这个入口会在下一版接入，当前先保留视觉位置。');

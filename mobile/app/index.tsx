@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
 import { InputDialog } from '@/components/InputDialog';
+import { consumePendingFragmentCleanupDirectly } from '@/features/fragments/cleanup/runtime';
 import { useFolders } from '@/features/folders/hooks';
 import { useDrawer } from '@/providers/DrawerProvider';
 import { useAppTheme } from '@/theme/useAppTheme';
@@ -216,7 +217,15 @@ export default function FoldersScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void fetchFolders();
+      void (async () => {
+        try {
+          await consumePendingFragmentCleanupDirectly();
+        } catch {
+          /*兜底清理失败时静默保留 ticket，避免影响首页继续刷新。 */
+        } finally {
+          await fetchFolders();
+        }
+      })();
     }, [fetchFolders])
   );
 

@@ -17,12 +17,14 @@ const FRAGMENT_EDITOR_CAPABILITIES = {
 export function FragmentDetailScreen({
   fragmentId,
   exitTo,
+  cleanupOnReturn,
 }: {
   fragmentId?: string | null;
   exitTo?: Href | null;
+  cleanupOnReturn?: 'empty_manual_placeholder' | null;
 }) {
   /*碎片详情页只组装共享编辑壳层和 fragment 专属抽屉内容，接收来源路径用于删除后返回。 */
-  const screen = useFragmentDetailScreen(fragmentId, { exitTo });
+  const screen = useFragmentDetailScreen(fragmentId, { exitTo, cleanupOnReturn });
   const fragment = screen.resource.fragment;
   const editor = screen.editor;
   const sheet = screen.sheet;

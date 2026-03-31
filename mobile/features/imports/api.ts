@@ -16,7 +16,7 @@ export interface ExternalAudioImportTask {
  */
 export async function importExternalAudio(
   shareUrl: string,
-  folderId?: string,
+  folderId: string | undefined,
   localFragmentId: string
 ): Promise<ExternalAudioImportTask> {
   return post<ExternalAudioImportTask>(

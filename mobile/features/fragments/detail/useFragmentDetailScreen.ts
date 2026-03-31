@@ -3,6 +3,7 @@ import { Alert, Share } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 
 import { getOrCreateDeviceId } from '@/features/auth/device';
+import { registerFragmentCleanupTicket } from '@/features/fragments/cleanup/cleanupTicket';
 import { useFragmentAudioPlayer } from '@/features/fragments/hooks/useFragmentAudioPlayer';
 import { getActiveSegmentIndex } from '@/features/fragments/presenters/speakerSegments';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
@@ -11,11 +12,11 @@ import { listLocalScriptsBySourceFragment } from '@/features/scripts/store';
 import { getErrorMessage } from '@/utils/error';
 
 import { useFragmentBodySession } from './useFragmentBodySession';
-import { shouldDeleteEmptyManualFragmentOnExit } from './exitState';
 import { useFragmentDetailResource } from './useFragmentDetailResource';
 
 interface FragmentDetailScreenOptions {
   exitTo?: Href | null;
+  cleanupOnReturn?: 'empty_manual_placeholder' | null;
 }
 
 export function useFragmentDetailScreen(
@@ -84,26 +85,32 @@ export function useFragmentDetailScreen(
     };
   }, [fragment?.id, isSheetOpen]);
 
+  const leaveDetailScreen = () => {
+    /*优先返回现有导航栈；只有无可返回历史时，才 replace 到来源页兜底。 */
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (options?.exitTo) {
+      router.replace(options.exitTo);
+      return;
+    }
+    router.replace('/');
+  };
+
   const exitScreen = async () => {
-    /*离开详情前先保证最新输入已落本地，并把上云动作交给后台收敛，同时标记列表待刷新。 */
+    /*离开详情前先保证最新输入已落本地，并把空占位清理延后到上一页聚焦时处理。 */
     try {
       editor.editorRef.current?.blur?.();
       await editor.saveNow({ force: true });
-      const latestSnapshot = editor.editorRef.current?.getSnapshot?.() ?? null;
-      if (
-        fragmentId &&
-        shouldDeleteEmptyManualFragmentOnExit({
-          fragment,
-          snapshot: latestSnapshot,
-          mediaAssets: editor.mediaAssets,
-        })
-      ) {
-        const deviceId = await getOrCreateDeviceId();
-        await deleteLocalFragmentEntity(fragmentId, { deviceId });
+      if (fragmentId && options?.cleanupOnReturn === 'empty_manual_placeholder') {
+        registerFragmentCleanupTicket({
+          fragmentId,
+          kind: 'empty_manual_placeholder',
+        });
       }
-      // 标记碎片列表需要刷新
       markFragmentsStale();
-      router.back();
+      leaveDetailScreen();
     } catch {
       Alert.alert('本地保存失败', '请稍后重试，当前页会继续保留输入内容。');
       return;
@@ -112,7 +119,7 @@ export function useFragmentDetailScreen(
 
   const exitAfterDelete = () => {
     /*删除后返回上一页，列表页会在聚焦时自动刷新。 */
-    router.back();
+    leaveDetailScreen();
   };
 
   const confirmDelete = async () => {

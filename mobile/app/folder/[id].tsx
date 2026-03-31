@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { FragmentCard } from '@/components/FragmentCard';
 import { BackButton } from '@/components/layout/BackButton';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
+import { AnimatedFragmentListItem } from '@/features/fragments/components/AnimatedFragmentListItem';
 import { Text } from '@/components/Themed';
 import { useFolderFragments } from '@/features/folders/hooks';
 import { useQuickActionBar } from '@/providers/QuickActionBarProvider';
@@ -90,14 +91,16 @@ export default function FolderDetailScreen() {
         sections={screen.sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item, index, section }) => (
-          <FragmentCard
-            fragment={item}
-            onPress={screen.onFragmentPress}
-            selectable={screen.selection.isSelectionMode}
-            selected={screen.selection.selectedSet.has(item.id)}
-            isFirstInSection={index === 0}
-            isLastInSection={index === section.data.length - 1}
-          />
+          <AnimatedFragmentListItem isRemoving={screen.removingFragmentIds.has(item.id)}>
+            <FragmentCard
+              fragment={item}
+              onPress={screen.onFragmentPress}
+              selectable={screen.selection.isSelectionMode}
+              selected={screen.selection.selectedSet.has(item.id)}
+              isFirstInSection={index === 0}
+              isLastInSection={index === section.data.length - 1}
+            />
+          </AnimatedFragmentListItem>
         )}
         renderSectionHeader={({ section }) => (
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{section.title}</Text>

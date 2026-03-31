@@ -195,13 +195,14 @@ export async function deleteLocalFragmentEntity(
   id: string,
   options?: { deviceId?: string | null }
 ): Promise<void> {
+  /*删除本地 fragment 后同步剔除详情和列表缓存，避免当前页闪空或残留旧卡片。 */
   await updateLocalFragmentEntity(id, {
     deleted_at: new Date().toISOString(),
     backup_status: 'pending',
     last_modified_device_id: options?.deviceId ?? null,
   });
   useFragmentStore.getState().deleteDetail(id);
-  useFragmentStore.getState().clearCache();
+  useFragmentStore.getState().removeFragmentFromLists(id);
 }
 
 export async function markLocalFragmentFilmed(

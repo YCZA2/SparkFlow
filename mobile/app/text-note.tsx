@@ -47,12 +47,24 @@ export default function TextNoteScreen() {
     };
   }, [attempt, params.folderId]);
 
-  const exitTo: Href | null = params.returnTo
-    ? { pathname: '/', params: { refresh: 'true' } }
-    : null;
+  const exitTo: Href | null =
+    params.returnTo === '/record-audio'
+      ? {
+          pathname: '/record-audio',
+          params: params.folderId ? { folderId: params.folderId } : {},
+        }
+      : params.returnTo === '/'
+        ? '/'
+        : null;
 
   if (fragmentId) {
-    return <FragmentDetailScreen fragmentId={fragmentId} exitTo={exitTo} />;
+    return (
+      <FragmentDetailScreen
+        fragmentId={fragmentId}
+        exitTo={exitTo}
+        cleanupOnReturn="empty_manual_placeholder"
+      />
+    );
   }
 
   if (error) {

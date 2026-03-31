@@ -9,6 +9,7 @@ export interface FragmentsScreenState {
   error: string | null;
   totalLabel: string;
   selection: ReturnType<typeof useFragmentListScreenState>['selection'];
+  removingFragmentIds: ReturnType<typeof useFragmentListScreenState>['removingFragmentIds'];
   openCloud: () => void;
   openRecorder: () => void;
   openTextNote: () => void;
@@ -20,6 +21,7 @@ export interface FragmentsScreenState {
   onGenerate: () => void;
 }
 export function useFragmentsScreen(): FragmentsScreenState {
+  /*首页碎片入口统一转发列表 view-model 和页面级导航动作。 */
   const router = useRouter();
   const list = useFragmentListScreenState({ enableRefreshParam: true });
 
@@ -31,6 +33,7 @@ export function useFragmentsScreen(): FragmentsScreenState {
     error: list.error,
     totalLabel: list.totalLabel,
     selection: list.selection,
+    removingFragmentIds: list.removingFragmentIds,
     openCloud: () => router.push('/fragment-cloud'),
     openRecorder: () => router.push('/record-audio'),
     openTextNote: () => router.push('/text-note'),

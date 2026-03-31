@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { shouldDeleteEmptyManualFragmentOnExit } from '../features/fragments/detail/exitState';
+import { isEmptyManualPlaceholderFragment } from '../features/fragments/cleanup/policy';
 import type { Fragment } from '../types/fragment';
 
 function buildFragment(overrides: Partial<Fragment> = {}): Fragment {
@@ -36,46 +36,32 @@ function buildFragment(overrides: Partial<Fragment> = {}): Fragment {
   };
 }
 
-test('shouldDeleteEmptyManualFragmentOnExit returns true for untouched manual placeholder', () => {
+test('isEmptyManualPlaceholderFragment returns true for untouched manual placeholder', () => {
   assert.equal(
-    shouldDeleteEmptyManualFragmentOnExit({
-      fragment: buildFragment(),
-      snapshot: {
-        body_html: '',
-        plain_text: '',
-        asset_ids: [],
-      },
-      mediaAssets: [],
-    }),
+    isEmptyManualPlaceholderFragment(buildFragment()),
     true
   );
 });
 
-test('shouldDeleteEmptyManualFragmentOnExit keeps fragment when body has meaningful text', () => {
+test('isEmptyManualPlaceholderFragment keeps fragment when body has meaningful text', () => {
   assert.equal(
-    shouldDeleteEmptyManualFragmentOnExit({
-      fragment: buildFragment(),
-      snapshot: {
+    isEmptyManualPlaceholderFragment(
+      buildFragment({
         body_html: '<p>有内容</p>',
-        plain_text: '有内容',
-        asset_ids: [],
-      },
-      mediaAssets: [],
-    }),
+        plain_text_snapshot: '有内容',
+        content_state: 'body_present',
+      })
+    ),
     false
   );
 });
 
-test('shouldDeleteEmptyManualFragmentOnExit keeps fragment when only image exists', () => {
+test('isEmptyManualPlaceholderFragment keeps fragment when only image exists', () => {
   assert.equal(
-    shouldDeleteEmptyManualFragmentOnExit({
-      fragment: buildFragment(),
-      snapshot: {
+    isEmptyManualPlaceholderFragment(
+      buildFragment({
         body_html: '<img src="asset://asset-1" alt="" />',
-        plain_text: '',
-        asset_ids: ['asset-1'],
-      },
-      mediaAssets: [
+        media_assets: [
         {
           id: 'asset-1',
           media_kind: 'image',
@@ -91,23 +77,16 @@ test('shouldDeleteEmptyManualFragmentOnExit keeps fragment when only image exist
           file_url: 'file:///tmp/cover.png',
           expires_at: null,
         },
-      ],
-    }),
+        ],
+      })
+    ),
     false
   );
 });
 
-test('shouldDeleteEmptyManualFragmentOnExit keeps non-manual fragments', () => {
+test('isEmptyManualPlaceholderFragment keeps non-manual fragments', () => {
   assert.equal(
-    shouldDeleteEmptyManualFragmentOnExit({
-      fragment: buildFragment({ source: 'voice' }),
-      snapshot: {
-        body_html: '',
-        plain_text: '',
-        asset_ids: [],
-      },
-      mediaAssets: [],
-    }),
+    isEmptyManualPlaceholderFragment(buildFragment({ source: 'voice' })),
     false
   );
 });

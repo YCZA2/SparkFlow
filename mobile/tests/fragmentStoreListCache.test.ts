@@ -45,3 +45,21 @@ test('fragment list cache updates when item content version changes without id c
   assert.equal(cached?.[0]?.updated_at, '2026-03-25T08:05:00.000Z');
   assert.equal(cached?.[0]?.plain_text_snapshot, '新的正文标题');
 });
+
+test('fragment list cache removes a deleted fragment without clearing unrelated rows', () => {
+  useFragmentStore.getState().clearCache();
+
+  useFragmentStore.getState().setList(null, [
+    buildFragment({ id: 'fragment-1' }),
+    buildFragment({ id: 'fragment-2' }),
+  ] as any);
+  useFragmentStore.getState().setList('folder-1', [buildFragment({ id: 'fragment-1' })] as any);
+
+  useFragmentStore.getState().removeFragmentFromLists('fragment-1');
+
+  assert.deepEqual(
+    useFragmentStore.getState().getList(null)?.map((item) => item.id),
+    ['fragment-2']
+  );
+  assert.deepEqual(useFragmentStore.getState().getList('folder-1'), []);
+});

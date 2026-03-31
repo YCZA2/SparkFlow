@@ -33,6 +33,7 @@ export interface FragmentActions {
   setList: (folderId: string | null, fragments: Fragment[]) => void;
   getList: (folderId: string | null) => Fragment[] | undefined;
   deleteList: (folderId: string | null) => void;
+  removeFragmentFromLists: (fragmentId: string) => void;
 
   /*批量更新（从 SQLite 同步后调用）*/
   batchUpdateDetails: (fragments: Fragment[]) => void;
@@ -172,6 +173,29 @@ export const useFragmentStore = create<FragmentStore>()(
           },
           false,
           'deleteList'
+        );
+      },
+
+      removeFragmentFromLists: (fragmentId) => {
+        set(
+          (state) => {
+            /*按 id 裁剪所有列表缓存，避免删除单条碎片时把当前列表整表清空。 */
+            const nextListCache = new Map(state.listCache);
+            let didChange = false;
+
+            for (const [key, fragments] of nextListCache.entries()) {
+              const filtered = fragments.filter((fragment) => fragment.id !== fragmentId);
+              if (filtered.length === fragments.length) {
+                continue;
+              }
+              nextListCache.set(key, filtered);
+              didChange = true;
+            }
+
+            return didChange ? { listCache: nextListCache } : state;
+          },
+          false,
+          'removeFragmentFromLists'
         );
       },
 
