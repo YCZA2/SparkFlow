@@ -223,9 +223,16 @@ export function ContentRichEditor({
   }, [seededEditorHtml, mediaAssets]);
 
   React.useEffect(() => {
-    /*桥接挂载后立即通知会话层进入可交互态。 */
+    /*桥接挂载后立即通知会话层进入可交互态。
+     * 若正文为空或仅含空段落，自动切换到 H1 模式，使首行输入即标题。 */
     onEditorReady();
-  }, [editorKey, onEditorReady]);
+
+    // 初始内容为空时自动进入 H1 输入模式，实现"首行即标题"
+    if (!normalizeBodyHtml(initialBodyHtml)) {
+      // 延迟调用确保原生层已完全初始化
+      setTimeout(() => nativeRef.current?.toggleH1(), 50);
+    }
+  }, [editorKey, onEditorReady, initialBodyHtml]);
 
   React.useEffect(() => {
     return () => {

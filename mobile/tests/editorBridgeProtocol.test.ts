@@ -35,9 +35,9 @@ function buildSnapshot(bodyHtml: string): EditorDocumentSnapshot {
 // wrapHtmlForNativeEditor
 // ============================================================================
 
-test('wrapHtmlForNativeEditor 对空输入返回以 h1 占位的最小合法 HTML 壳', () => {
-  assert.equal(wrapHtmlForNativeEditor(''), '<html>\n<h1></h1>\n</html>');
-  assert.equal(wrapHtmlForNativeEditor(null), '<html>\n<h1></h1>\n</html>');
+test('wrapHtmlForNativeEditor 对空输入返回包含空段落的最小合法 HTML 壳', () => {
+  assert.equal(wrapHtmlForNativeEditor(''), '<html>\n<p></p>\n</html>');
+  assert.equal(wrapHtmlForNativeEditor(null), '<html>\n<p></p>\n</html>');
 });
 
 test('wrapHtmlForNativeEditor 包裹非空正文并保留内容', () => {

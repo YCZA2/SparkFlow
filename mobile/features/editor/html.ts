@@ -18,11 +18,10 @@ export function stripEdgeEmptyParagraphs(html: string): string {
 }
 
 export function wrapHtmlForNativeEditor(html: string | null | undefined): string {
-  /*把项目正文包装成原生编辑器内部协议，确保 Android 会按 HTML 解析 defaultValue。
-   * 空内容默认以 <h1> 占位，使新建文档在光标落下时即处于标题输入模式。 */
+  /*把项目正文包装成原生编辑器内部协议，确保 Android 会按 HTML 解析 defaultValue。 */
   const normalized = normalizeBodyHtml(html);
   if (!normalized) {
-    return '<html>\n<h1></h1>\n</html>';
+    return '<html>\n<p></p>\n</html>';
   }
   return `<html>\n${normalized}\n</html>`;
 }
