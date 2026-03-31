@@ -38,8 +38,11 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
 - 碎片详情页默认进入轻量正文编辑视图，正文改动会优先写本地 HTML 草稿；`transcript`、音频、摘要、标签收口到右上角“更多”底部抽屉，AI patch 本期已下线。
 - 移动端编辑器已抽出 `features/editor/*` 共享底座：统一承载 HTML helper、editor session reducer、`react-native-enriched` 富文本桥接、toolbar 和页面 scaffold，fragment 与 script 详情共用同一套正文编辑协议。
+- `useEditorSession` 当前已经按 `hydration / persistence / image insertion / runtime refs` 拆成内部子模块；页面侧继续只消费同一套 `EditorSessionResult`，不会感知拆分细节。
 - 碎片详情内部仍保留 `detail resource / editor session / sheet / screen actions` 四层，但 resource 已经切换为只读本地实体；后台由 backup queue 负责把改动推到远端备份。
+- `FragmentDetailSheet` 当前已改成“modal 壳层 + section 组合 + sheet state helper”结构：抽屉 UI 细节不再和详情页数据组装写在同一个文件里。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
+- 首页、文件夹页、成稿页现在共享一层 `NotesListScreenShell / NotesListHero / NotesScreenStateView` 页面壳层；各页面仍各自保留列表数据源、导航和选择态逻辑。
 - 生成页现在采用统一主题输入：用户补一个主题后，后端按 `topic + SOP + 三层写作上下文` 创建脚本任务。
 - 碎片正文详情和列表已接入本地真值与 legacy 兼容层：详情会优先读本地 HTML 与实体缓存，再按需叠加升级期兼容数据；正文与媒体改动统一留在本地真值并由 backup queue 异步备份。
 - 脚本详情页现在也采用 local-first：先读本地 script 真值，再按需补远端缺失稿件；编辑成功后正文只写本地并进入 backup queue，`/api/scripts/*` 只用于缺失补齐和兼容查询，不再作为已存在本地稿件的正文权威来源。

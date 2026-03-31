@@ -50,6 +50,8 @@ function buildCleanupCandidateFragment(
     ...fragment,
     body_html: currentSnapshot.body_html,
     plain_text_snapshot: currentSnapshot.plain_text,
-    media_assets: currentSnapshot.asset_ids.map((assetId) => ({ id: assetId } as Fragment['media_assets'][number])),
+    media_assets: currentSnapshot.asset_ids.map(
+      (assetId) => ({ id: assetId } as NonNullable<Fragment['media_assets']>[number])
+    ),
   };
 }

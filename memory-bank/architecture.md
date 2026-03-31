@@ -126,12 +126,15 @@ flowchart TD
 - `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
 - `features/editor/*` 提供共享正文编辑底座：HTML helper、session reducer、富文本桥接、toolbar 和页面 scaffold；fragment 与 script 详情统一复用这套协议，但不合并成统一业务实体。
+- `features/editor/useEditorSession.ts` 当前只负责组装共享正文会话协议；hydration、保存生命周期、图片插入和运行时 ref 同步已经拆到内部 helper / 子 hook，避免 fragment 与 script 两端继续往主 hook 堆副作用。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
 - `features/fragments/store/*` 现在承接 fragment 的 **local-first 真值**：列表、详情、编辑和删除统一读写本地 SQLite / 文件系统；主链路集中在 `localEntityStore` 与 `runtime`，`legacyMigration*` 相关文件只在升级时负责接住旧缓存与旧正文草稿。
 - `features/core/db/schema.ts` 仍映射旧 SQLite 物理列名，但 Drizzle 属性名已经显式标成 `legacy*` 语义，避免在实现层误把云端绑定字段当成本地真值。
 - `features/fragments/detail/*` 保留 `resource / 编辑会话 / sheet / screen actions` 四层，但资源层已经改成优先读取本地实体，不再把远端详情当作首屏真值。
+- `features/fragments/components/detailSheet/*` 现在承接碎片更多抽屉的 section 组合与只读展示逻辑；`detail/fragmentDetailSheetState.ts` 负责 related scripts 计数和抽屉载荷组装，避免 `useFragmentDetailScreen` 同时维护 UI 拼装与页面动作。
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
 - `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用；其中 `features/scripts/store/*` 现在承接 script 的 **local-first 真值**，`detail/*` 通过共享 editor 底座实现本地正文编辑、来源碎片抽屉与拍摄跳转。
+- `components/layout/*` 当前补齐了 `NotesListScreenShell / NotesListHero / NotesScreenStateView`，首页、文件夹页、成稿页统一复用同一层 notes 风格列表壳层；页面本身只保留各自的数据源、交互和导航逻辑。
 
 ### 3.4 Local Persistence
 

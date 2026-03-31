@@ -9,7 +9,6 @@ import { useFragmentAudioPlayer } from '@/features/fragments/hooks/useFragmentAu
 import { getActiveSegmentIndex } from '@/features/fragments/presenters/speakerSegments';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { deleteLocalFragmentEntity } from '@/features/fragments/store';
-import { listLocalScriptsBySourceFragment } from '@/features/scripts/store';
 import { getErrorMessage } from '@/utils/error';
 
 import {
@@ -17,6 +16,11 @@ import {
   type FragmentDetailCleanupOnReturn,
 } from './cleanupOnReturn';
 import { resolveFragmentDetailCleanupTicket } from './exitCleanup';
+import {
+  buildFragmentDetailSheetContent,
+  buildFragmentDetailSheetMetadata,
+  useRelatedScriptsCount,
+} from './fragmentDetailSheetState';
 import { useFragmentBodySession } from './useFragmentBodySession';
 import { useFragmentDetailResource } from './useFragmentDetailResource';
 
@@ -36,7 +40,6 @@ export function useFragmentDetailScreen(
   const cleanupOnReturn = resolveFragmentDetailCleanupOnReturn(options?.cleanupOnReturn);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [relatedScriptsCount, setRelatedScriptsCount] = useState(0);
   const skipNextCleanupTicketRef = useRef(false);
   const fragment = resource.fragment;
 
@@ -52,47 +55,12 @@ export function useFragmentDetailScreen(
     if (!segments?.length) return null;
     return getActiveSegmentIndex(segments, player.positionMs);
   }, [fragment?.speaker_segments, isSheetOpen, player.positionMs]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const nextFragmentId = fragment?.id;
-    if (!nextFragmentId) {
-      setRelatedScriptsCount(0);
-      return;
-    }
-    void (async () => {
-      try {
-        const scripts = await listLocalScriptsBySourceFragment(nextFragmentId);
-        if (!cancelled) {
-          setRelatedScriptsCount(scripts.length);
-        }
-      } catch {
-        if (!cancelled) {
-          setRelatedScriptsCount(0);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [fragment?.id, fragment?.updated_at]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const nextFragmentId = fragment?.id;
-    if (!isSheetOpen || !nextFragmentId) {
-      return;
-    }
-    void (async () => {
-      const scripts = await listLocalScriptsBySourceFragment(nextFragmentId);
-      if (!cancelled) {
-        setRelatedScriptsCount(scripts.length);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [fragment?.id, isSheetOpen]);
+  const relatedScriptsCount = useRelatedScriptsCount(fragment?.id, fragment?.updated_at, isSheetOpen);
+  const sheetContent = useMemo(() => buildFragmentDetailSheetContent(fragment), [fragment]);
+  const sheetMetadata = useMemo(
+    () => buildFragmentDetailSheetMetadata(fragment, relatedScriptsCount),
+    [fragment, relatedScriptsCount]
+  );
 
   const leaveDetailScreen = useCallback((input?: { skipCleanupTicket?: boolean }) => {
     /*优先返回现有导航栈；只有无可返回历史时，才 replace 到来源页兜底。 */
@@ -235,26 +203,8 @@ export function useFragmentDetailScreen(
       close: () => setIsSheetOpen(false),
       activeSegmentIndex,
       player,
-      content: fragment
-        ? {
-            audioFileUrl: fragment.audio_file_url,
-            transcript: fragment.transcript,
-            speakerSegments: fragment.speaker_segments,
-            summary: fragment.summary,
-            tags: fragment.tags,
-            bodyHtml: fragment.body_html,
-          }
-        : null,
-      metadata: fragment
-        ? {
-            source: fragment.source,
-            audioSource: fragment.audio_source ?? null,
-            createdAt: fragment.created_at,
-            folderName: fragment.folder?.name ?? '未归档',
-            isFilmed: fragment.is_filmed ?? false,
-            relatedScriptsCount,
-          }
-        : null,
+      content: sheetContent,
+      metadata: sheetMetadata,
       tools: {
         supportsImages: true,
         isUploadingImage: editor.isUploadingImage,

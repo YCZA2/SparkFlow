@@ -5,15 +5,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ScriptCard } from '@/components/ScriptCard';
 import { BackButton } from '@/components/layout/BackButton';
+import { NotesListHero } from '@/components/layout/NotesListHero';
+import { NotesListScreenShell } from '@/components/layout/NotesListScreenShell';
+import { NotesScreenStateView } from '@/components/layout/NotesScreenStateView';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { useSingleFlightRouterPush } from '@/hooks/useSingleFlightRouterPush';
-import { Text } from '@/components/Themed';
 import { useScripts } from '@/features/scripts/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Script } from '@/types/script';
 
 export default function ScriptsScreen() {
-  /*成稿列表采用和备忘录一致的“圆形返回 + 大标题 + 分组列表”结构。 */
+  /*成稿列表复用统一列表壳层，继续保持轻量的圆形返回 + hero 结构。 */
   const router = useRouter();
   const pushOnce = useSingleFlightRouterPush();
   const theme = useAppTheme();
@@ -59,16 +61,16 @@ export default function ScriptsScreen() {
 
   if (isLoading && items.length === 0) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}>
+      <NotesScreenStateView backgroundColor={theme.colors.background}>
         <Stack.Screen options={{ title, headerShown: false }} />
         <LoadingState message="正在加载口播稿..." />
-      </View>
+      </NotesScreenStateView>
     );
   }
 
   if (error && items.length === 0) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}>
+      <NotesScreenStateView backgroundColor={theme.colors.background}>
         <Stack.Screen options={{ title, headerShown: false }} />
         <ScreenState
           icon="⚠️"
@@ -79,12 +81,12 @@ export default function ScriptsScreen() {
           secondaryActionLabel="网络设置"
           onSecondaryAction={() => router.push('/network-settings')}
         />
-      </View>
+      </NotesScreenStateView>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <NotesListScreenShell backgroundColor={theme.colors.background}>
       <Stack.Screen options={{ title, headerShown: false }} />
       <FlatList
         data={items}
@@ -93,12 +95,7 @@ export default function ScriptsScreen() {
         ListHeaderComponent={
           <View style={[styles.headerBlock, { paddingTop: insets.top + 12 }]}>
             <BackButton color={theme.colors.text} variant="circle" showText={false} />
-            <View style={styles.heroBlock}>
-              <Text style={[styles.heroTitle, { color: theme.colors.text }]}>{title}</Text>
-              <Text style={[styles.heroSubtitle, { color: theme.colors.textSubtle }]}>
-                {subtitle}
-              </Text>
-            </View>
+            <NotesListHero title={title} subtitle={subtitle} containerStyle={styles.heroBlock} />
           </View>
         }
         ListEmptyComponent={<ScreenState icon="📄" title={emptyTitle} message={emptyMessage} />}
@@ -112,34 +109,16 @@ export default function ScriptsScreen() {
         }
         showsVerticalScrollIndicator={false}
       />
-    </View>
+    </NotesListScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  centered: {
-    justifyContent: 'center',
-  },
   headerBlock: {
     paddingHorizontal: 16,
   },
   heroBlock: {
     marginTop: 18,
     marginBottom: 14,
-  },
-  heroTitle: {
-    fontSize: 32,
-    lineHeight: 36,
-    fontWeight: '800',
-    letterSpacing: -0.9,
-  },
-  heroSubtitle: {
-    marginTop: 3,
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '500',
   },
 });
