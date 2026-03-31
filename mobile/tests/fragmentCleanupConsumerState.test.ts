@@ -81,6 +81,32 @@ test('resolveFragmentCleanupForList clears ticket when fragment already has cont
   });
 });
 
+test('resolveFragmentCleanupForList clears ticket for empty non-manual fragment', () => {
+  const resolution = resolveFragmentCleanupForList(
+    emptyManualPlaceholderTicket,
+    [{ id: 'fragment-1' }],
+    buildFragment({ source: 'voice' })
+  );
+
+  assert.deepEqual(resolution, {
+    action: 'clear',
+    fragmentId: 'fragment-1',
+  });
+});
+
+test('resolveFragmentCleanupForList clears ticket when manual fragment keeps metadata', () => {
+  const resolution = resolveFragmentCleanupForList(
+    emptyManualPlaceholderTicket,
+    [{ id: 'fragment-1' }],
+    buildFragment({ summary: '保留摘要' })
+  );
+
+  assert.deepEqual(resolution, {
+    action: 'clear',
+    fragmentId: 'fragment-1',
+  });
+});
+
 test('resolveFragmentCleanupDirect deletes empty placeholder even outside fragment list', () => {
   const resolution = resolveFragmentCleanupDirect(
     emptyManualPlaceholderTicket,
@@ -89,6 +115,30 @@ test('resolveFragmentCleanupDirect deletes empty placeholder even outside fragme
 
   assert.deepEqual(resolution, {
     action: 'delete',
+    fragmentId: 'fragment-1',
+  });
+});
+
+test('resolveFragmentCleanupDirect clears ticket for empty non-manual fragment', () => {
+  const resolution = resolveFragmentCleanupDirect(
+    emptyManualPlaceholderTicket,
+    buildFragment({ source: 'video_parse' })
+  );
+
+  assert.deepEqual(resolution, {
+    action: 'clear',
+    fragmentId: 'fragment-1',
+  });
+});
+
+test('resolveFragmentCleanupDirect clears ticket when manual fragment keeps audio', () => {
+  const resolution = resolveFragmentCleanupDirect(
+    emptyManualPlaceholderTicket,
+    buildFragment({ audio_object_key: 'audio/manual/demo.m4a' })
+  );
+
+  assert.deepEqual(resolution, {
+    action: 'clear',
     fragmentId: 'fragment-1',
   });
 });

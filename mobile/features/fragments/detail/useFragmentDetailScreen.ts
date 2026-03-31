@@ -11,12 +11,16 @@ import { deleteLocalFragmentEntity } from '@/features/fragments/store';
 import { listLocalScriptsBySourceFragment } from '@/features/scripts/store';
 import { getErrorMessage } from '@/utils/error';
 
+import {
+  resolveFragmentDetailCleanupOnReturn,
+  type FragmentDetailCleanupOnReturn,
+} from './cleanupOnReturn';
 import { useFragmentBodySession } from './useFragmentBodySession';
 import { useFragmentDetailResource } from './useFragmentDetailResource';
 
 interface FragmentDetailScreenOptions {
   exitTo?: Href | null;
-  cleanupOnReturn?: 'empty_manual_placeholder' | null;
+  cleanupOnReturn?: FragmentDetailCleanupOnReturn | undefined;
 }
 
 export function useFragmentDetailScreen(
@@ -26,6 +30,7 @@ export function useFragmentDetailScreen(
   /*聚合详情页资源、编辑会话、抽屉状态和页面动作，供页面层按分组消费。 */
   const router = useRouter();
   const resource = useFragmentDetailResource(fragmentId);
+  const cleanupOnReturn = resolveFragmentDetailCleanupOnReturn(options?.cleanupOnReturn);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [relatedScriptsCount, setRelatedScriptsCount] = useState(0);
@@ -99,11 +104,11 @@ export function useFragmentDetailScreen(
   };
 
   const exitScreen = async () => {
-    /*离开详情前先保证最新输入已落本地，并把空占位清理延后到上一页聚焦时处理。 */
+    /*离开详情前先保证最新输入已落本地，并把 manual 空碎片清理延后到返回页聚焦时处理。 */
     try {
       editor.editorRef.current?.blur?.();
       await editor.saveNow({ force: true });
-      if (fragmentId && options?.cleanupOnReturn === 'empty_manual_placeholder') {
+      if (fragmentId && cleanupOnReturn === 'empty_manual_placeholder') {
         registerFragmentCleanupTicket({
           fragmentId,
           kind: 'empty_manual_placeholder',

@@ -84,6 +84,17 @@ test('isEmptyManualPlaceholderFragment keeps fragment when only image exists', (
   );
 });
 
+test('isEmptyManualPlaceholderFragment treats editor placeholder html as empty', () => {
+  assert.equal(
+    isEmptyManualPlaceholderFragment(
+      buildFragment({
+        body_html: '<p><br></p>',
+      })
+    ),
+    true
+  );
+});
+
 test('isEmptyManualPlaceholderFragment keeps non-manual fragments', () => {
   assert.equal(
     isEmptyManualPlaceholderFragment(buildFragment({ source: 'voice' })),
