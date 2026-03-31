@@ -97,6 +97,7 @@ function buildFormattingState(event: OnChangeStateEvent): EditorFormattingState 
     bullet_list: event.unorderedList.isActive,
     ordered_list: event.orderedList.isActive,
     blockquote: event.blockQuote.isActive,
+    // TODO: 从 OnChangeStateEvent 接入 can_undo / can_redo，确认 react-native-enriched 暴露字段后补全
     can_undo: false,
     can_redo: false,
   };
@@ -119,10 +120,14 @@ export function ContentRichEditor({
   const theme = useAppTheme();
   const nativeRef = React.useRef<EnrichedTextInputInstance | null>(null);
   const editorBackground = theme.name === 'dark' ? '#111113' : '#F2F2F7';
-  const [seededEditorHtml, setSeededEditorHtml] = React.useState(() =>
-    wrapHtmlForNativeEditor(
-      replaceAssetIdsWithDisplayUrls(stripEdgeEmptyParagraphs(initialBodyHtml), mediaAssets)
-    )
+  // useMemo 保证切换会话时新 EnrichedTextInput 挂载时能同步拿到正确 defaultValue，
+  // 同时避免 useState+effect 的异步更新产生的额外 re-render。
+  const seededEditorHtml = React.useMemo(
+    () =>
+      wrapHtmlForNativeEditor(
+        replaceAssetIdsWithDisplayUrls(stripEdgeEmptyParagraphs(initialBodyHtml), mediaAssets)
+      ),
+    [initialBodyHtml, mediaAssets]
   );
   const latestSnapshotRef = React.useRef<EditorDocumentSnapshot>({
     body_html: normalizeBodyHtml(initialBodyHtml),
@@ -210,14 +215,9 @@ export function ContentRichEditor({
   );
 
   React.useEffect(() => {
-    /*只在真正切换编辑会话时重置初始正文，避免输入中被新 defaultValue 回灌。 */
-    const strippedInitialHtml = stripEdgeEmptyParagraphs(initialBodyHtml);
-    const nextSeededHtml = wrapHtmlForNativeEditor(
-      replaceAssetIdsWithDisplayUrls(strippedInitialHtml, mediaAssets)
-    );
-    setSeededEditorHtml(nextSeededHtml);
-    latestSnapshotRef.current = buildSnapshotFromHtml(nextSeededHtml, mediaAssets);
-  }, [editorKey, initialBodyHtml, mediaAssets]);
+    /*会话或初始内容变化时同步更新 latestSnapshotRef，保证显式保存前 getSnapshot 返回正确基准值。 */
+    latestSnapshotRef.current = buildSnapshotFromHtml(seededEditorHtml, mediaAssets);
+  }, [seededEditorHtml, mediaAssets]);
 
   React.useEffect(() => {
     /*桥接挂载后立即通知会话层进入可交互态。 */

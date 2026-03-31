@@ -64,7 +64,6 @@ export function useScriptBodySession({
   const session = useEditorSession<Script>({
     documentId: resolvedScriptId,
     document: script,
-    persistenceMode: 'local-first',
     buildSourceDocument: buildEditorDocumentFromScript,
     saveLocally,
     commitOptimistic: commitOptimisticScript,

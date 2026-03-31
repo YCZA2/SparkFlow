@@ -112,7 +112,6 @@ export function useFragmentBodySession({
   const session = useEditorSession<Fragment>({
     documentId: resolvedFragmentId,
     document: fragment,
-    persistenceMode: 'local-first',
     buildSourceDocument: buildEditorDocumentFromFragment,
     loadLocalDraft,
     loadCache,

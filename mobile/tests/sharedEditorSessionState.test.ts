@@ -24,7 +24,6 @@ test('resolveEditorSessionBaseline prefers local draft over cache and remote', (
     document: buildDocument({ body_html: '远端正文' }),
     draftHtml: '<p>本地草稿</p>',
     cachedBodyHtml: '<p>缓存正文</p>',
-    persistenceMode: 'local-first',
   });
 
   assert.equal(baseline.snapshot.body_html, '<p>本地草稿</p>');
@@ -33,7 +32,7 @@ test('resolveEditorSessionBaseline prefers local draft over cache and remote', (
 });
 
 test('shared session keeps local draft snapshot stable across remote refresh', () => {
-  let state = createInitialEditorSessionState('document-1', 'local-first');
+  let state = createInitialEditorSessionState('document-1');
   state = reduceEditorSession(state, {
     type: 'SOURCE_DOCUMENT_LOADED',
     document: buildDocument({ body_html: '远端正文' }),
@@ -58,7 +57,7 @@ test('shared session keeps local draft snapshot stable across remote refresh', (
 });
 
 test('shared session keeps hydrated baseline stable while typing locally', () => {
-  let state = createInitialEditorSessionState('document-1', 'local-first');
+  let state = createInitialEditorSessionState('document-1');
   state = reduceEditorSession(state, {
     type: 'SOURCE_DOCUMENT_LOADED',
     document: buildDocument({ body_html: '<p>远端正文</p>' }),
@@ -85,7 +84,7 @@ test('shared session keeps hydrated baseline stable while typing locally', () =>
 });
 
 test('local-first save success keeps session in unsynced state until remote reconciliation', () => {
-  let state = createInitialEditorSessionState('local-doc-1', 'local-first');
+  let state = createInitialEditorSessionState('local-doc-1');
   state = reduceEditorSession(state, {
     type: 'SOURCE_DOCUMENT_LOADED',
     document: buildDocument({
@@ -123,7 +122,7 @@ test('local-first save success keeps session in unsynced state until remote reco
 });
 
 test('save failure keeps attempted snapshot and exposes unsynced state', () => {
-  let state = createInitialEditorSessionState('script-1', 'local-first');
+  let state = createInitialEditorSessionState('script-1');
   state = reduceEditorSession(state, {
     type: 'SAVE_FAILED',
     attemptedHtml: '<p>失败正文</p>',

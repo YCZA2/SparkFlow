@@ -21,7 +21,6 @@ import type {
   EditorDocumentSnapshot,
   EditorFormattingState,
   EditorMediaAsset,
-  EditorPersistenceMode,
   EditorSourceDocument,
   EditorSurfaceHandle,
 } from '@/features/editor/types';
@@ -35,7 +34,6 @@ export interface EditorSessionConfig<TDocument> {
   // 基础配置
   documentId: string | null;
   document: TDocument | null;
-  persistenceMode: EditorPersistenceMode;
   buildSourceDocument: (doc: TDocument) => EditorSourceDocument;
 
   // 持久化钩子
@@ -130,7 +128,6 @@ export function useEditorSession<TDocument>(
   const {
     documentId,
     document,
-    persistenceMode,
     buildSourceDocument,
     loadLocalDraft,
     loadCache,
@@ -148,8 +145,13 @@ export function useEditorSession<TDocument>(
   const [state, dispatch] = useReducer(
     reduceEditorSession,
     documentId,
-    (initialId) => createInitialEditorSessionState(initialId, persistenceMode)
+    createInitialEditorSessionState
   );
+
+  // 格式化状态脱离 reducer，避免每次按键都触发整棵树重渲染
+  const [formattingState, setFormattingState] = useState<EditorFormattingState | null>(null);
+  // 选区文本存 ref 供未来 AI 功能使用，不写入 reducer 避免光标移动触发 state 更新
+  const selectionRef = useRef<string>('');
 
   // 图片上传状态
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -172,13 +174,10 @@ export function useEditorSession<TDocument>(
 
   // 重置会话
   useEffect(() => {
-    dispatch({
-      type: 'RESET_SESSION',
-      documentId,
-      persistenceMode,
-    });
+    dispatch({ type: 'RESET_SESSION', documentId });
     setIsEditorFocused(false);
-  }, [documentId, persistenceMode]);
+    setFormattingState(null);
+  }, [documentId]);
 
   // 加载本地草稿
   useEffect(() => {
@@ -226,7 +225,7 @@ export function useEditorSession<TDocument>(
     });
   }, [buildSourceDocument, document]);
 
-  // 乐观更新
+  // 乐观更新：仅在正文或素材变化时触发，格式化/选区变化不触发
   useEffect(() => {
     const currentDocument = documentRef.current;
     if (!currentDocument || !shouldPublishOptimisticDocument(state)) return;
@@ -234,7 +233,8 @@ export function useEditorSession<TDocument>(
     if (commitOptimisticRef.current) {
       void commitOptimisticRef.current(currentDocument).catch(() => undefined);
     }
-  }, [state]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.snapshot, state.mediaAssets, state.isDraftHydrated, state.documentId]);
 
   // 获取实时快照
   const getLiveSnapshot = useCallback((): EditorDocumentSnapshot => {
@@ -353,11 +353,11 @@ export function useEditorSession<TDocument>(
   }, []);
 
   const onSelectionChange = useCallback((text: string) => {
-    dispatch({ type: 'SELECTION_CHANGED', text });
+    selectionRef.current = text.trim();
   }, []);
 
-  const onFormattingStateChange = useCallback((formattingState: EditorFormattingState) => {
-    dispatch({ type: 'FORMATTING_CHANGED', formattingState });
+  const onFormattingStateChange = useCallback((nextState: EditorFormattingState) => {
+    setFormattingState(nextState);
   }, []);
 
   const onEditorReady = useCallback(() => {
@@ -423,7 +423,7 @@ export function useEditorSession<TDocument>(
     initialBodyHtml,
     shouldAutoFocus,
     mediaAssets: state.mediaAssets,
-    formattingState: state.formattingState,
+    formattingState,
     isDraftHydrated: state.isDraftHydrated,
     isEditorFocused,
     statusLabel,

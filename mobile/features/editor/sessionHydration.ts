@@ -20,7 +20,6 @@ import {
 import type {
   EditorDocumentSnapshot,
   EditorMediaAsset,
-  EditorPersistenceMode,
   EditorSaveState,
   EditorSessionBaseline,
   EditorSessionPhase,
@@ -174,7 +173,6 @@ export function resolveEditorSessionBaseline(options: {
   document: EditorSourceDocument;
   draftHtml: string | null;
   cachedBodyHtml: string | null;
-  persistenceMode: EditorPersistenceMode;
 }): EditorSessionBaseline {
   const hydrated = resolveHydratedEditorDocument({
     document: options.document,
@@ -188,7 +186,6 @@ export function resolveEditorSessionBaseline(options: {
     cached_baseline_html: options.cachedBodyHtml,
     local_draft_html: options.draftHtml,
     media_assets: options.document.media_assets ?? [],
-    persistence_mode: options.persistenceMode,
     save_state: options.document.legacy_save_state ?? hydrated.syncStatus,
   };
 }
@@ -221,7 +218,6 @@ export function reconcileHydration(state: EditorSessionState): EditorSessionStat
     document,
     draftHtml: state.source.local_draft_html,
     cachedBodyHtml: state.source.cached_baseline_html,
-    persistenceMode: state.persistenceMode,
   });
   const currentBaseline = state.baseline;
   const shouldInitialize = !currentBaseline || currentBaseline.document_id !== document.id;

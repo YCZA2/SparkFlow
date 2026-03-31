@@ -15,9 +15,7 @@ import {
 import { normalizeBodyHtml } from '@/features/editor/html';
 import type {
   EditorDocumentSnapshot,
-  EditorFormattingState,
   EditorMediaAsset,
-  EditorPersistenceMode,
   EditorSaveState,
   EditorSessionBaseline,
   EditorSessionPhase,
@@ -61,23 +59,18 @@ export interface EditorSessionState {
   isEditorReady: boolean;
   isDraftHydrated: boolean;
   hasConfirmedLocalEdit: boolean;
-  selectionText: string;
-  formattingState: EditorFormattingState | null;
   errorMessage: string | null;
   saveRequestId: number;
-  persistenceMode: EditorPersistenceMode;
   source: SessionSourceState;
 }
 
 export type EditorSessionEvent =
-  | { type: 'RESET_SESSION'; documentId: string | null; persistenceMode: EditorPersistenceMode }
+  | { type: 'RESET_SESSION'; documentId: string | null }
   | { type: 'LOCAL_DRAFT_HTML_LOADED'; html: string | null }
   | { type: 'CACHED_BASELINE_LOADED'; html: string | null }
   | { type: 'SOURCE_DOCUMENT_LOADED'; document: EditorSourceDocument | null }
   | { type: 'EDITOR_READY' }
   | { type: 'SNAPSHOT_CHANGED'; snapshot: EditorDocumentSnapshot }
-  | { type: 'SELECTION_CHANGED'; text: string }
-  | { type: 'FORMATTING_CHANGED'; formattingState: EditorFormattingState }
   | { type: 'IMAGE_UPLOADED'; asset: EditorMediaAsset }
   | { type: 'SAVE_REQUESTED' }
   | { type: 'SAVE_STARTED' }
@@ -90,8 +83,7 @@ export type EditorSessionEvent =
 
 /*为指定文档构造全新的编辑会话状态。 */
 export function createInitialEditorSessionState(
-  documentId: string | null,
-  persistenceMode: EditorPersistenceMode
+  documentId: string | null
 ): EditorSessionState {
   return {
     documentId,
@@ -104,11 +96,8 @@ export function createInitialEditorSessionState(
     isEditorReady: false,
     isDraftHydrated: false,
     hasConfirmedLocalEdit: false,
-    selectionText: '',
-    formattingState: null,
     errorMessage: null,
     saveRequestId: 0,
-    persistenceMode,
     source: {
       document: null,
       local_draft_html: null,
@@ -128,7 +117,7 @@ export function reduceEditorSession(
   event: EditorSessionEvent
 ): EditorSessionState {
   if (event.type === 'RESET_SESSION') {
-    return createInitialEditorSessionState(event.documentId, event.persistenceMode);
+    return createInitialEditorSessionState(event.documentId);
   }
 
   if (event.type === 'LOCAL_DRAFT_HTML_LOADED') {
@@ -176,7 +165,7 @@ export function reduceEditorSession(
   if (event.type === 'SNAPSHOT_CHANGED') {
     const hasMeaningfulChange =
       event.snapshot.body_html !== state.snapshot.body_html ||
-      event.snapshot.asset_ids.join(',') !== state.snapshot.asset_ids.join(',');
+      JSON.stringify(event.snapshot.asset_ids) !== JSON.stringify(state.snapshot.asset_ids);
     return {
       ...state,
       snapshot: event.snapshot,
@@ -190,20 +179,6 @@ export function reduceEditorSession(
         : state.syncStatus,
       errorMessage: null,
       phase: state.phase === 'saving' ? 'saving' : resolveSessionPhase(state),
-    };
-  }
-
-  if (event.type === 'SELECTION_CHANGED') {
-    return {
-      ...state,
-      selectionText: event.text.trim(),
-    };
-  }
-
-  if (event.type === 'FORMATTING_CHANGED') {
-    return {
-      ...state,
-      formattingState: event.formattingState,
     };
   }
 

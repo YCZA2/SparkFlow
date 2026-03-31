@@ -1,5 +1,3 @@
-export type EditorPersistenceMode = 'local-first';
-
 export type EditorSaveState = 'idle' | 'syncing' | 'synced' | 'unsynced';
 
 export type EditorSessionPhase =
@@ -52,7 +50,6 @@ export interface EditorSessionBaseline {
   cached_baseline_html: string | null;
   local_draft_html: string | null;
   media_assets: EditorMediaAsset[];
-  persistence_mode: EditorPersistenceMode;
   save_state: EditorSaveState;
 }
 
