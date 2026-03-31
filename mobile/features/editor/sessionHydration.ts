@@ -92,7 +92,11 @@ export function shouldRehydrateEditorSession({
   const mediaChanged = !areAssetIdsEqual(incomingAssetIds, currentAssetIds);
 
   if (!bodyChanged && !mediaChanged) return false;
+  // 远端正文更长，可能是服务端更新，允许刷新
   if (incomingSnapshot.plain_text.length > currentSnapshot.plain_text.length) return true;
+  // 本地正文更长，说明用户已扩展内容，不应回退到短版本
+  if (incomingSnapshot.plain_text.length < currentSnapshot.plain_text.length) return false;
+  // 素材增加时刷新以展示新图片
   if (mediaChanged && incomingAssetIds.length > currentAssetIds.length) return true;
   return bodyChanged;
 }
