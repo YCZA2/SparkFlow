@@ -715,14 +715,10 @@ function renderUsers(users) {
             <td style="color:var(--gray-500);white-space:nowrap">${fmtDate(u.created_at)}</td>
             <td>
                 <div class="td-actions">
-                    <button class="btn btn-ghost btn-sm" title="编辑"
-                        onclick="openEdit(${JSON.stringify(u)})">✏️</button>
-                    <button class="btn btn-ghost btn-sm" title="设备会话"
-                        onclick="openSessions('${u.id}','${escAttr(u.nickname||u.email||u.id)}')">📱</button>
-                    <button class="btn btn-ghost btn-sm" title="重置密码"
-                        onclick="openReset('${u.id}')">🔑</button>
-                    <button class="btn btn-ghost btn-sm" title="删除" style="color:var(--danger)"
-                        onclick="openDelete('${u.id}','${escAttr(u.nickname||u.email||u.id)}')">🗑️</button>
+                    <button class="btn btn-ghost btn-sm" data-user='${JSON.stringify(u)}' onclick="openEditFromButton(this)">编辑</button>
+                    <button class="btn btn-ghost btn-sm" onclick="openSessions('${u.id}','${escAttr(u.nickname||u.email||u.id)}')">会话</button>
+                    <button class="btn btn-ghost btn-sm" onclick="openReset('${u.id}')">重置</button>
+                    <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="openDelete('${u.id}','${escAttr(u.nickname||u.email||u.id)}')">删除</button>
                 </div>
             </td>
         </tr>
@@ -781,6 +777,10 @@ async function doBatch() {
 }
 
 // ── Edit User ──────────────────────────────────────────────────────
+function openEditFromButton(button) {
+    const userData = JSON.parse(button.getAttribute('data-user'));
+    openEdit(userData);
+}
 function openEdit(u) {
     document.getElementById('editUserId').value  = u.id;
     document.getElementById('editNickname').value = u.nickname || '';
