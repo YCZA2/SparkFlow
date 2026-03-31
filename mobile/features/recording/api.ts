@@ -20,7 +20,7 @@ export interface UploadAudioResponse {
 export async function uploadAudio(
   uri: string,
   folderId?: string,
-  localFragmentId?: string
+  localFragmentId: string
 ): Promise<UploadAudioResponse> {
   /*录音上传前先统一落到 staging，保证文件名、路径和重试语义稳定。 */
   const managedFile = await prepareManagedAudioFile(uri, uri.split('/').pop() || 'recording.m4a');
@@ -31,9 +31,7 @@ export async function uploadAudio(
   if (folderId) {
     formData.append('folder_id', folderId);
   }
-  if (localFragmentId) {
-    formData.append('local_fragment_id', localFragmentId);
-  }
+  formData.append('local_fragment_id', localFragmentId);
 
   return sendForm<UploadAudioResponse>(API_ENDPOINTS.TRANSCRIPTIONS, 'POST', formData);
 }

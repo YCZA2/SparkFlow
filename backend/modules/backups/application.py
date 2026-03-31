@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import ValidationError
 from domains.backups import repository as backup_repository
+from modules.shared.fragment_snapshots import _read_payload_dict, merge_fragment_snapshot_server_fields
 from modules.shared.ports import FileStorage, StoredFile
 from modules.shared.infrastructure.storage import LocalFileStorage, OssFileStorage, normalize_object_key, sanitize_filename
 from utils.time import ensure_aware_utc
@@ -80,6 +81,12 @@ class BackupUseCase:
                 ):
                     ignored_count += 1
                     continue
+            payload_value = item.payload
+            if item.entity_type == "fragment" and item.operation == "upsert":
+                payload_value = merge_fragment_snapshot_server_fields(
+                    existing_payload=_read_payload_dict(current.payload_json if current is not None else None),
+                    incoming_payload=item.payload or {},
+                )
             backup_repository.upsert_record(
                 db=db,
                 user_id=user_id,
@@ -87,7 +94,7 @@ class BackupUseCase:
                 entity_id=item.entity_id,
                 entity_version=item.entity_version,
                 operation=item.operation,
-                payload_json=json.dumps(item.payload, ensure_ascii=False) if item.payload is not None else None,
+                payload_json=json.dumps(payload_value, ensure_ascii=False) if payload_value is not None else None,
                 modified_at=_parse_datetime(item.modified_at),
                 last_modified_device_id=item.last_modified_device_id,
                 now=now,

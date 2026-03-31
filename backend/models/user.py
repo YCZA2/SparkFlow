@@ -29,9 +29,7 @@ class User(Base):
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
     # 关联关系
-    fragments = relationship("Fragment", back_populates="user", cascade="all, delete-orphan")
     fragment_folders = relationship("FragmentFolder", back_populates="user", cascade="all, delete-orphan")
-    fragment_tags = relationship("FragmentTag", back_populates="user", cascade="all, delete-orphan")
     scripts = relationship("Script", back_populates="user", cascade="all, delete-orphan")
     knowledge_docs = relationship("KnowledgeDoc", back_populates="user", cascade="all, delete-orphan")
     stable_core_profile = relationship("StableCoreProfile", back_populates="user", cascade="all, delete-orphan", uselist=False)

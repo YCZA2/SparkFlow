@@ -8,7 +8,7 @@ from models.database import Base, engine, SessionLocal, get_db, init_db
 from models.utils import generate_uuid
 from models.user import User, DeviceSession
 from models.backup import BackupRecord, BackupRestoreSession
-from models.fragment import Fragment, FragmentBlock, FragmentFolder, FragmentTag
+from models.fragment import FragmentFolder
 from models.script import Script
 from models.media import ContentMediaLink, KnowledgeDoc, MediaAsset
 from models.pipeline import PipelineRun, PipelineStepRun
@@ -30,10 +30,7 @@ __all__ = [
     "BackupRecord",
     "BackupRestoreSession",
     # 碎片
-    "Fragment",
-    "FragmentBlock",
     "FragmentFolder",
-    "FragmentTag",
     # 成稿
     "Script",
     # 媒体与知识库

@@ -1,30 +1,19 @@
 from __future__ import annotations
 
+from collections import Counter
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundError, ValidationError
-from models import Fragment
-
+from core.exceptions import NotFoundError
 from domains.fragment_folders import repository as fragment_folder_repository
-from domains.fragment_tags import repository as fragment_tag_repository
-from domains.fragments import repository as fragment_repository
-from domains.media_assets import repository as media_asset_repository
-from modules.shared.content.content_html import (
-    extract_plain_text_from_html,
-    normalize_body_html,
-)
 from modules.shared.fragment_snapshots import FragmentSnapshotReader
-from modules.shared.ports import FileStorage, StoredFile, TextGenerationProvider, VectorStore
+from modules.shared.media_asset_snapshots import MediaAssetSnapshotReader, map_media_asset_snapshot
+from modules.shared.ports import FileStorage, VectorStore
 
-from .asset_binding_service import FragmentAssetBindingService
-from .content_service import FragmentContentService
-from .derivative_service import FragmentDerivativeService
-from .mapper import map_fragment, map_fragment_snapshot
+from .mapper import map_fragment_snapshot
 from .schemas import (
     FragmentItem,
-    FragmentListResponse,
     FragmentTagItem,
     FragmentTagListResponse,
     FragmentVisualizationResponse,
@@ -33,184 +22,85 @@ from .schemas import (
 )
 from .visualization import build_fragment_visualization
 
-VALID_FRAGMENT_SOURCES = {"voice", "manual", "video_parse"}
-VALID_AUDIO_SOURCES = {"upload", "external_link"}
 _FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
+_MEDIA_ASSET_SNAPSHOT_READER = MediaAssetSnapshotReader()
+
+
+def _normalize_fragment_tags(tags: list[str] | None) -> list[str]:
+    """把单条 snapshot 上的标签规整为稳定去重列表。"""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in tags or []:
+        tag = str(raw or "").strip()
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        normalized.append(tag[:50])
+    return normalized
+
+
+def _match_rank(*, tag: str, query_text: str | None) -> int:
+    """保持旧接口的标签搜索排序：前缀优先，其次包含。"""
+    if not query_text:
+        return 0
+    lowered_tag = tag.lower()
+    lowered_query = query_text.lower()
+    if lowered_tag.startswith(lowered_query):
+        return 0
+    if lowered_query in lowered_tag:
+        return 1
+    return 2
 
 
 class FragmentCommandService:
-    """封装碎片写操作编排。"""
+    """封装 fragment snapshot 的只读详情能力，供导出链路复用。"""
 
-    def __init__(self, *, file_storage: FileStorage, vector_store: VectorStore, llm_provider: TextGenerationProvider) -> None:
-        """装配碎片写操作依赖与内部子服务。"""
+    def __init__(self, *, file_storage: FileStorage, **_: object) -> None:
+        """装配 snapshot 详情读取所需依赖。"""
         self.file_storage = file_storage
-        self.asset_binding_service = FragmentAssetBindingService()
-        self.content_service = FragmentContentService()
-        self.derivative_service = FragmentDerivativeService(vector_store=vector_store, llm_provider=llm_provider)
 
-    def create_fragment(
-        self,
-        *,
-        db: Session,
-        user_id: str,
-        transcript: Optional[str],
-        body_html: str | None,
-        source: str,
-        audio_source: Optional[str],
-        audio_file: StoredFile | None,
-        folder_id: Optional[str] = None,
-        media_asset_ids: list[str] | None = None,
-    ) -> Fragment:
-        """创建碎片，并按需初始化 HTML 正文和素材关联。"""
-        if source not in VALID_FRAGMENT_SOURCES:
-            raise ValidationError(
-                message="无效的 source 值",
-                field_errors={"source": f"必须是以下之一: {', '.join(sorted(VALID_FRAGMENT_SOURCES))}"},
-            )
-        if audio_source is not None and audio_source not in VALID_AUDIO_SOURCES:
-            raise ValidationError(
-                message="无效的 audio_source 值",
-                field_errors={"audio_source": f"必须是以下之一: {', '.join(sorted(VALID_AUDIO_SOURCES))}"},
-            )
-        self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
-        normalized_body_html = normalize_body_html(body_html)
-        plain_text_snapshot = extract_plain_text_from_html(normalized_body_html)
-        normalized_transcript = self._normalize_transcript(transcript=transcript, source=source)
-        fragment = fragment_repository.create(
+    def get_fragment_payload(self, *, db: Session, user_id: str, fragment_id: str) -> FragmentItem:
+        """读取单条 fragment snapshot，并补齐素材访问地址。"""
+        snapshot = _FRAGMENT_SNAPSHOT_READER.get_by_id(
             db=db,
             user_id=user_id,
-            transcript=normalized_transcript,
-            source=source,
-            audio_source=audio_source,
-            audio_storage_provider=audio_file.storage_provider if audio_file else None,
-            audio_bucket=audio_file.bucket if audio_file else None,
-            audio_object_key=audio_file.object_key if audio_file else None,
-            audio_access_level=audio_file.access_level if audio_file else None,
-            audio_original_filename=audio_file.original_filename if audio_file else None,
-            audio_mime_type=audio_file.mime_type if audio_file else None,
-            audio_file_size=audio_file.file_size if audio_file else None,
-            audio_checksum=audio_file.checksum if audio_file else None,
-            body_html=normalized_body_html,
-            plain_text_snapshot=plain_text_snapshot,
-            folder_id=folder_id,
-            tags=[],
+            fragment_id=fragment_id,
         )
-        merged_asset_ids = self._merge_media_asset_ids(
-            media_asset_ids=media_asset_ids,
-            document_asset_ids=self.content_service.collect_body_asset_ids(body_html=normalized_body_html),
-        )
-        if merged_asset_ids:
-            self.asset_binding_service.attach_media_assets(
-                db=db,
-                user_id=user_id,
-                content_type="fragment",
-                content_id=fragment.id,
-                media_asset_ids=merged_asset_ids,
-            )
-        self.content_service.create_initial_content(db=db, fragment=fragment, body_html=normalized_body_html)
-        return fragment
-
-    def get_fragment(self, *, db: Session, user_id: str, fragment_id: str) -> Fragment:
-        """读取单条碎片并在找不到时抛出统一异常。"""
-        fragment = fragment_repository.get_by_id(db=db, user_id=user_id, fragment_id=fragment_id)
-        if not fragment:
+        if snapshot is None:
             raise NotFoundError(
                 message="碎片笔记不存在或无权访问",
                 resource_type="fragment",
                 resource_id=fragment_id,
             )
-        return fragment
+        media_assets = [
+            map_media_asset_snapshot(item, file_storage=self.file_storage)
+            for item in _MEDIA_ASSET_SNAPSHOT_READER.list_by_fragment_id(
+                db=db,
+                user_id=user_id,
+                fragment_id=fragment_id,
+            )
+        ]
+        folder = None
+        if snapshot.folder_id:
+            folder_row = fragment_folder_repository.get_by_id(db=db, user_id=user_id, folder_id=snapshot.folder_id)
+            if folder_row is not None:
+                from .schemas import FragmentFolderInfo
 
-    def get_fragment_payload(self, *, db: Session, user_id: str, fragment_id: str) -> FragmentItem:
-        """读取带素材信息的碎片详情。"""
-        fragment = self.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)
-        media_assets = media_asset_repository.list_content_assets(
-            db=db,
-            user_id=user_id,
-            content_type="fragment",
-            content_id=fragment.id,
-        )
-        return map_fragment(fragment, media_assets=media_assets, file_storage=self.file_storage)
+                folder = FragmentFolderInfo(id=folder_row.id, name=folder_row.name)
+        return map_fragment_snapshot(snapshot, media_assets=media_assets, folder=folder)
 
     def export_fragment_markdown(self, *, db: Session, user_id: str, fragment_id: str) -> FragmentItem:
-        """导出前复用带完整内容层的详情载荷。"""
+        """导出前复用详情读取结果，避免多套 fragment 组装逻辑漂移。"""
         return self.get_fragment_payload(db=db, user_id=user_id, fragment_id=fragment_id)
-
-    @staticmethod
-    def _validate_folder_exists(db: Session, user_id: str, folder_id: Optional[str]) -> None:
-        """校验目标文件夹存在且属于当前用户。"""
-        if folder_id is None:
-            return
-        folder = fragment_folder_repository.get_by_id(db=db, user_id=user_id, folder_id=folder_id)
-        if not folder:
-            raise NotFoundError(
-                message="文件夹不存在或无权访问",
-                resource_type="fragment_folder",
-                resource_id=folder_id,
-            )
-
-    @staticmethod
-    def _normalize_transcript(*, transcript: Optional[str], source: str) -> str | None:
-        """根据来源约束是否保留转写原文。"""
-        normalized_transcript = (transcript or "").strip() or None
-        if source != "voice":
-            return None
-        return normalized_transcript
-
-    @staticmethod
-    def _merge_media_asset_ids(*, media_asset_ids: list[str] | None, document_asset_ids: list[str]) -> list[str]:
-        """把显式绑定素材和正文内嵌图片素材去重合并。"""
-        merged: list[str] = []
-        for asset_id in (media_asset_ids or []) + document_asset_ids:
-            normalized = str(asset_id or "").strip()
-            if normalized and normalized not in merged:
-                merged.append(normalized)
-        return merged
 
 
 class FragmentQueryService:
-    """封装碎片读操作。"""
+    """封装基于 snapshot 的 fragment 读操作。"""
 
     def __init__(self, *, vector_store: VectorStore, file_storage: FileStorage) -> None:
-        """装配碎片读操作依赖。"""
+        """装配读操作依赖；file_storage 保留给兼容构造函数与后续扩展。"""
         self.vector_store = vector_store
         self.file_storage = file_storage
-
-    def list_fragments(
-        self,
-        *,
-        db: Session,
-        user_id: str,
-        limit: int,
-        offset: int,
-        folder_id: Optional[str] = None,
-        tag: Optional[str] = None,
-    ) -> FragmentListResponse:
-        """分页返回碎片列表。"""
-        normalized_tag = str(tag or "").strip() or None
-        if folder_id is not None:
-            folder = fragment_folder_repository.get_by_id(db=db, user_id=user_id, folder_id=folder_id)
-            if not folder:
-                raise NotFoundError(
-                    message="文件夹不存在或无权访问",
-                    resource_type="fragment_folder",
-                    resource_id=folder_id,
-                )
-        items = fragment_repository.list_by_user(
-            db=db,
-            user_id=user_id,
-            limit=limit,
-            offset=offset,
-            folder_id=folder_id,
-            tag=normalized_tag,
-        )
-        total = fragment_repository.count_by_user(
-            db=db,
-            user_id=user_id,
-            folder_id=folder_id,
-            tag=normalized_tag,
-        )
-        return FragmentListResponse(items=[map_fragment(item, file_storage=self.file_storage) for item in items], total=total, limit=limit, offset=offset)
 
     def list_tags(
         self,
@@ -220,17 +110,22 @@ class FragmentQueryService:
         query_text: Optional[str],
         limit: int,
     ) -> FragmentTagListResponse:
-        """返回当前用户的标签聚合结果。"""
+        """扫描 fragment snapshot 标签并返回聚合统计。"""
         normalized_query = str(query_text or "").strip() or None
-        items = fragment_tag_repository.list_tag_stats(
-            db=db,
-            user_id=user_id,
-            query_text=normalized_query,
-            limit=limit,
-        )
+        counter: Counter[str] = Counter()
+        for payload in _FRAGMENT_SNAPSHOT_READER.list_raw_payloads(db=db, user_id=user_id):
+            unique_tags = _normalize_fragment_tags(payload.get("tags") if isinstance(payload.get("tags"), list) else [])
+            for tag in unique_tags:
+                if normalized_query and normalized_query.lower() not in tag.lower():
+                    continue
+                counter[tag] += 1
+        ordered_tags = sorted(
+            counter.items(),
+            key=lambda item: (_match_rank(tag=item[0], query_text=normalized_query), -item[1], item[0]),
+        )[:limit]
         return FragmentTagListResponse(
-            items=[FragmentTagItem.model_validate(item) for item in items],
-            total=len(items),
+            items=[FragmentTagItem(tag=tag, fragment_count=count) for tag, count in ordered_tags],
+            total=len(ordered_tags),
             query_text=normalized_query,
         )
 

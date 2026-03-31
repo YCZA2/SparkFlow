@@ -2,19 +2,21 @@
 
 SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Docker PostgreSQL + ChromaDB 联调；文件存储已统一走对象存储抽象，本地开发默认使用 `local` provider，线上可切阿里云 OSS。
 
-## 今日进展（2026-03-25）
+## 今日进展（2026-03-31）
 
 - 后端已经补齐 phase 1 local-first 所需的备份恢复能力：`/api/backups/batch`、`/api/backups/snapshot`、`/api/backups/restore`、`/api/backups/assets` 与 `/api/backups/assets/access`。
 - 正式认证链路已经升级为邮箱密码登录，JWT 继续携带 `device_id + session_version`；登录、刷新 token、备份、恢复和 AI / 转写相关请求都受单设备在线约束。
 - `transcriptions`、`external_media`、`scripts/generation` 现已支持客户端本地快照 / 本地 placeholder 驱动，不再把“先创建远端 fragment 业务记录”作为默认入口。
 - 后端已补齐通用 `fragment snapshot reader`：脚本生成上下文、相似检索、灵感云图和每日推盘都统一从 `backup_records` 读取已同步成功的 fragment snapshot，不再把 `fragments` 表当输入真值。
+- `fragments / fragment_tags / fragment_blocks` 旧投影表本轮已经下线：标签聚合、导出、文件夹计数和衍生回填统一改成 snapshot 读写。
+- `POST /api/transcriptions` 与 `POST /api/external-media/audio-imports` 现在都要求客户端显式传入 `local_fragment_id`；后端不再兜底创建远端 fragment 记录。
+- 服务器生成字段会直接补写回 fragment snapshot：`transcript`、`speaker_segments`、`summary`、`tags`、`audio_object_key` 与音频访问地址都会进入 `backup_records`，且客户端后续 flush 不会覆盖这些服务端字段。
 - `media_ingestion` 已调整为 transcript-first：主 pipeline 在转写落库后即可成功，`summary` / `tags` / vector 改为异步衍生回填，不再阻塞上传和抖音导入主链路。
 - Chroma 查询适配层已兼容当前 `list_collections()` 返回字符串列表的行为，`/api/fragments/similar`、向量文档列表和 namespace 统计不会再因版本差异误判为空。
 - `backups` 快照当前已扩展覆盖 `script` 实体，服务端会按和 fragment / folder / media 一致的 batch contract 接收与返回成稿快照。
 - scheduler 侧的 `daily push` 已切到“后端定时读取备份快照”模式：fragment 真值仍在客户端本地，但每日推盘输入只消费服务端已收到的 fragment backup snapshot，不再读取历史 `fragments` 业务表。
 - 脚本生成链路的 `稳定内核` 当前改为系统预置文案，不再在生成时按用户碎片和知识库动态生成。
 - `碎片方法论` 已从脚本生成主链路移出：生成时只读取已缓存条目；后台通过每日定时维护按“总量达标 / 增量达标”阈值静默刷新。
-- 仓库当前仍保留 `fragments / fragment_folders` 的历史业务表与少量兼容读取能力，但它们已不是移动端 fragments / folders 的主读取来源。
 - `script` 继续保留独立后端业务表与路由层；local-first 共享的是 backup/recovery 基础设施，不是把 fragment / script 合并为同一业务实体；后端 `scripts` 表当前只保存生成初稿与兼容查询投影，不再承担移动端编辑真值语义。
 
 当前第一阶段 local-first 改造已经落地几条基础约束：
@@ -159,8 +161,8 @@ cd backend
 ### Business modules
 
 - `modules/auth/`: 测试令牌签发、当前用户信息、刷新令牌。
-- `modules/fragment_folders/`: 碎片文件夹 CRUD 和文件夹统计。
-- `modules/fragments/`: 碎片列表、详情、移动、标签、相似检索、可视化。
+- `modules/fragment_folders/`: 碎片文件夹 CRUD 和基于 snapshot 的文件夹统计。
+- `modules/fragments/`: 当前只保留标签、相似检索、可视化和 fragment snapshot 详情 / 导出组装能力。
 - `modules/transcriptions/`: 音频上传与后台转写入口；主任务以 transcript 成功为准，摘要标签随后异步补齐。
 - `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接；请求入口只创建任务，解析链接、下载转 m4a、转写先在主流水线完成，摘要/标签/向量由后续衍生流水线回填。
 - `modules/scripts/`: 口播稿生成、脚本生成 pipeline 定义、上下文构建、结果回流、列表、详情、更新、删除、每日推盘；其中 daily push 现在通过备份快照 reader 聚合 fragment 真值。
@@ -185,11 +187,9 @@ cd backend
 
 当前 `modules/fragments/` 内部约定：
 
-- `application.py` 只保留碎片写操作编排与查询入口。
-- `mapper.py` 负责碎片与素材响应映射。
-- `content_service.py` 负责 Markdown 块写入和 effective text 读取。
-- `derivative_service.py` 负责摘要、标签和向量衍生同步。
-- `asset_binding_service.py` 负责媒体素材绑定关系维护。
+- `application.py` 只保留基于 fragment snapshot 的查询、标签聚合和导出详情组装。
+- `mapper.py` 负责 fragment snapshot 与素材响应映射。
+- `derivative_service.py` 负责摘要、标签和向量衍生同步，并把服务器生成字段直接补写回 snapshot。
 
 ### Persistence and providers
 
@@ -241,7 +241,7 @@ Current business modules include `auth`, `fragment_folders`, `fragments`, `trans
 内容字段约定：
 
 - `fragments` 与 `scripts` 对外接口统一暴露 `body_html` 作为正文真值；导出链路再统一转换 Markdown。
-- `fragments` 与 `scripts` 数据库层只保留 `body_html`，不再保留正文 Markdown 真值列。
+- fragment 正文、转写、标签与音频句柄的服务端持久化入口已经统一收口到 `backup_records`，不再保留 `fragments` 数据库投影表。
 - `knowledge` 对外接口仍接收和返回 `body_markdown`；数据库中的 `content` 仅保留为 Markdown 派生的纯文本索引载荷。
 - `knowledge_docs` 现在额外记录 `source_type / source_filename / source_mime_type / chunk_count / processing_error / updated_at`，用于上传来源、索引状态和未来索引迁移。
 - `POST /api/knowledge/search` 对外仍返回文档级结果，但内部已经改为 chunk 召回后聚合，并会附带 `matched_chunks` 供后续 citation 能力兼容。
@@ -295,6 +295,7 @@ bash scripts/postgres-local.sh stop
 任务态客户端约定：
 
 - `POST /api/transcriptions` 返回 `pipeline_run_id`、`pipeline_type`、以及按路径不同返回的 `fragment_id` 或 `local_fragment_id`
+- `POST /api/transcriptions` 与 `POST /api/external-media/audio-imports` 现在要求 `local_fragment_id` 必填，调用前必须先在客户端创建本地占位 fragment
 - `POST /api/external-media/audio-imports` 请求体支持 `share_url`、`platform` 和可选 `folder_id`，返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
 - `POST /api/scripts/generation` 返回 `pipeline_run_id`、`pipeline_type`、`status`
 - `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 返回 `pipeline_run_id`、`pipeline_type`、`status`

@@ -1,10 +1,10 @@
 # SparkFlow Architecture
 
-> 最后更新：2026-03-25
+> 最后更新：2026-03-31
 
 本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为 Docker 管理的 PostgreSQL。
 
-## 0. 今日进展（2026-03-25）
+## 0. 今日进展（2026-03-31）
 
 - `fragments / folders` 的 phase 1 local-first 主链路已经落地：移动端本地 SQLite + `body.html` 为真值，远端只承担自动备份与显式恢复。
 - 后端已经补齐 `backups` 模块、`device session` 单设备在线约束，以及面向本地快照的转写 / 外链导入 / 脚本生成请求入口。
@@ -13,6 +13,9 @@
 - 移动端已经补齐 backup queue、显式恢复、本地媒体缓存重建、音频 `object_key` 持久化与恢复链路。
 - `scripts` 本轮也切入 local-first：脚本生成成功后会立即落本地 SQLite + `body.html` 文件，后续详情编辑、回收站、恢复冲突副本与拍摄状态都以本地为真值；后端 `scripts` 表只保留生成初稿与兼容查询投影，不再反向覆盖本地正文。
 - `daily_push` 已切到“后端定时 + 备份快照输入”模式：调度器与手动补跑都从 `backup_records` 中读取 fragment snapshot，再交给 daily-push pipeline 生成脚本，不再把历史 `fragments` 表当作推盘输入真值。
+- 后端本轮已经正式下线 `fragments / fragment_tags / fragment_blocks` 旧投影表：标签聚合、导出、文件夹计数、录音导入和外链导入全部改为直接读写 `backup_records` 中的 fragment snapshot。
+- `transcriptions` 与 `external_media` 现在都要求客户端先创建本地 placeholder，并显式传入 `local_fragment_id`；后端不再兜底创建远端 fragment 业务记录。
+- 服务端生成字段现在直接补写回 fragment snapshot：`transcript`、`speaker_segments`、`summary`、`tags`、`audio_object_key` 及音频访问地址都会写入 `backup_records`，但不会覆盖客户端拥有的 `body_html / plain_text_snapshot / folder_id / content_state / is_filmed`。
 - `knowledge` 后端本轮补齐了文本型知识 ingestion：`txt/docx/pdf/xlsx` 统一走 `parsers -> chunking -> indexing -> application` 四层，默认仍写入 Chroma，但对上已通过独立知识索引接口解耦，后续可替换为 LightRAG 等底层引擎。
 - 脚本生成三层上下文本轮调整为“预置稳定内核 + 缓存方法论 + 实时相关素材召回”：稳定内核当前不再按用户素材动态生成，碎片方法论改由每日后台维护任务在阈值达标后静默刷新。
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
@@ -196,7 +199,7 @@ flowchart TD
 
 - 本地 SQLite + 文件系统：前端真值
 - `backup_records` snapshot：服务端读取前端真值的标准入口
-- `fragments` / `scripts` 等后端业务表：面向检索、派生任务、历史接口和执行流程的 projection / 派生视图，不应再默认承担移动端实体真值语义
+- `scripts` 等后端业务表：面向兼容查询、生成初稿和执行流程的 projection；`fragment` 已不再保留独立业务投影表
 
 ## 4. Backend Architecture
 

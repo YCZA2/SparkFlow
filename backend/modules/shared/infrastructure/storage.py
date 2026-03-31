@@ -108,6 +108,42 @@ def build_media_asset_object_key(*, user_id: str, asset_id: str, filename: str) 
     return normalize_object_key(f"media-assets/{user_id}/{asset_id}/{filename}")
 
 
+def build_stored_file_from_object_key(
+    *,
+    file_storage: FileStorage,
+    object_key: str,
+    original_filename: str | None = None,
+    mime_type: str | None = None,
+) -> StoredFile:
+    """按当前存储实现重建对象句柄，供 snapshot 读路径统一复用。"""
+    normalized_object_key = normalize_object_key(object_key)
+    resolved_name = original_filename or Path(normalized_object_key).name or "asset.bin"
+    resolved_mime_type = mime_type or mimetypes.guess_type(resolved_name)[0] or "application/octet-stream"
+    if isinstance(file_storage, LocalFileStorage):
+        return StoredFile(
+            storage_provider="local",
+            bucket="local",
+            object_key=normalized_object_key,
+            access_level="private",
+            original_filename=resolved_name,
+            mime_type=resolved_mime_type,
+            file_size=0,
+            checksum=None,
+        )
+    if isinstance(file_storage, OssFileStorage):
+        return StoredFile(
+            storage_provider="oss",
+            bucket=file_storage.bucket_name,
+            object_key=normalized_object_key,
+            access_level="private",
+            original_filename=resolved_name,
+            mime_type=resolved_mime_type,
+            file_size=0,
+            checksum=None,
+        )
+    raise RuntimeError("unsupported file storage implementation")
+
+
 class LocalFileStorage(FileStorage):
     """提供本地文件系统对象存储能力。"""
 

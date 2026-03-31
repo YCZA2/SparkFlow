@@ -3,14 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.exceptions import ServiceUnavailableError
-from domains.fragments import repository as fragment_repository
+from core.exceptions import ServiceUnavailableError, ValidationError
+from modules.shared.fragment_snapshots import FragmentSnapshotReader
 
 from modules.shared.media.media_ingestion_persistence import MediaIngestionPersistenceService
 from modules.shared.media.media_ingestion_steps import MediaIngestionStepExecutor
 from modules.shared.media.stored_file_payloads import stored_file_to_payload
 
 PIPELINE_TYPE_MEDIA_INGESTION = "media_ingestion"
+_FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 
 
 @dataclass
@@ -69,10 +70,19 @@ class AudioIngestionUseCase:
         """创建上传音频流水线并返回异步任务句柄。"""
         self.step_executor.validate_audio_source(request.audio_source)
         self.step_executor.validate_folder_exists(db=db, user_id=request.user_id, folder_id=request.folder_id)
-        # local_fragment_id 由移动端先行创建并传入，后端不再兜底建立 fragment 记录
-        fragment_id = request.fragment_id
-        resource_id = request.local_fragment_id or fragment_id
-        resource_type = "local_fragment" if request.local_fragment_id else "fragment"
+        normalized_local_fragment_id = str(request.local_fragment_id or "").strip()
+        if not normalized_local_fragment_id:
+            raise ValidationError(
+                message="缺少本地 fragment 标识",
+                field_errors={"local_fragment_id": "媒体导入前必须先创建本地占位 fragment"},
+            )
+        self._ensure_fragment_placeholder(
+            db=db,
+            user_id=request.user_id,
+            fragment_id=normalized_local_fragment_id,
+            folder_id=request.folder_id,
+            audio_source=request.audio_source,
+        )
         run = await self.pipeline_runner.create_run(
             run_id=None,
             user_id=request.user_id,
@@ -81,16 +91,16 @@ class AudioIngestionUseCase:
                 "source_kind": request.audio_source,
                 "audio_file": stored_file_to_payload(request.audio_file),
                 "folder_id": request.folder_id,
-                "fragment_id": fragment_id,
-                "local_fragment_id": request.local_fragment_id,
+                "fragment_id": None,
+                "local_fragment_id": normalized_local_fragment_id,
                 "source_context": request.source_context,
             },
-            resource_type=resource_type,
-            resource_id=resource_id,
+            resource_type="local_fragment",
+            resource_id=normalized_local_fragment_id,
         )
         return AudioIngestionResult(
             pipeline_run_id=run.id,
-            fragment_id=fragment_id,
+            fragment_id=None,
             audio_file=request.audio_file,
             source="voice",
             audio_source=request.audio_source,
@@ -108,46 +118,37 @@ class AudioIngestionUseCase:
     ) -> AudioIngestionResult:
         """创建外链导入流水线并返回异步任务句柄。"""
         self.step_executor.validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
-        # 中文注释：当移动端未先建本地占位 fragment 时，后端补一个远端 fragment，保证回写与向量化有稳定标识。
-        fragment = None
-        if local_fragment_id is None:
-            fragment = fragment_repository.create(
-                db=db,
-                user_id=user_id,
-                transcript=None,
-                source="voice",
-                audio_source="external_link",
-                audio_storage_provider=None,
-                audio_bucket=None,
-                audio_object_key=None,
-                audio_access_level=None,
-                audio_original_filename=None,
-                audio_mime_type=None,
-                audio_file_size=None,
-                audio_checksum=None,
-                body_html="",
-                plain_text_snapshot="",
-                folder_id=folder_id,
+        normalized_local_fragment_id = str(local_fragment_id or "").strip()
+        if not normalized_local_fragment_id:
+            raise ValidationError(
+                message="缺少本地 fragment 标识",
+                field_errors={"local_fragment_id": "外链导入前必须先创建本地占位 fragment"},
             )
-        fragment_id = fragment.id if fragment else None
+        self._ensure_fragment_placeholder(
+            db=db,
+            user_id=user_id,
+            fragment_id=normalized_local_fragment_id,
+            folder_id=folder_id,
+            audio_source="external_link",
+        )
         run = await self.pipeline_runner.create_run(
             run_id=None,
             user_id=user_id,
             pipeline_type=PIPELINE_TYPE_MEDIA_INGESTION,
             input_payload={
                 "source_kind": "external_link",
-                "fragment_id": fragment_id,
-                "local_fragment_id": local_fragment_id,
+                "fragment_id": None,
+                "local_fragment_id": normalized_local_fragment_id,
                 "folder_id": folder_id,
                 "share_url": share_url,
                 "platform": platform,
             },
-            resource_type="local_fragment" if local_fragment_id else "fragment",
-            resource_id=local_fragment_id or fragment_id,
+            resource_type="local_fragment",
+            resource_id=normalized_local_fragment_id,
         )
         return AudioIngestionResult(
             pipeline_run_id=run.id,
-            fragment_id=fragment_id,
+            fragment_id=None,
             audio_file=None,
             source="voice",
             audio_source="external_link",
@@ -156,6 +157,31 @@ class AudioIngestionUseCase:
     def build_pipeline_definitions(self):
         """透传媒体导入流水线的固定步骤定义。"""
         return self.step_executor.build_pipeline_definitions()
+
+    @staticmethod
+    def _ensure_fragment_placeholder(
+        *,
+        db,
+        user_id: str,
+        fragment_id: str,
+        folder_id: str | None,
+        audio_source: str | None,
+    ) -> None:
+        """为导入中的 fragment 预建最小快照，避免文件夹统计和删除漏算。"""
+        _FRAGMENT_SNAPSHOT_READER.merge_server_fields(
+            db=db,
+            user_id=user_id,
+            fragment_id=fragment_id,
+            source="voice",
+            audio_source=audio_source,
+            client_seed={
+                "folder_id": folder_id,
+                "body_html": "",
+                "plain_text_snapshot": "",
+                "content_state": "empty",
+            },
+            server_patch={},
+        )
 
 
 def build_media_ingestion_pipeline_service(container) -> AudioIngestionUseCase:

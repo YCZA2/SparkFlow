@@ -45,14 +45,22 @@ class FragmentSnapshot:
     id: str
     user_id: str
     source: str
+    audio_source: str | None
     created_at: datetime
     updated_at: datetime
     body_html: str
     plain_text_snapshot: str
     transcript: str | None
+    speaker_segments: list[dict[str, Any]] | None
     summary: str | None
     tags: list[str]
+    audio_object_key: str | None
+    audio_file_url: str | None
+    audio_file_expires_at: str | None
     folder_id: str | None
+    content_state: str | None
+    is_filmed: bool
+    filmed_at: str | None
     deleted_at: str | None
     entity_version: int
     backup_updated_at: datetime
@@ -88,18 +96,90 @@ def hydrate_fragment_snapshot(item: dict[str, Any], *, user_id: str) -> Fragment
         id=snapshot_id,
         user_id=str(item.get("user_id") or user_id),
         source=str(item.get("source") or "manual"),
+        audio_source=_read_string(item.get("audio_source")),
         created_at=_parse_snapshot_datetime(item.get("created_at")) or fallback_time,
         updated_at=_parse_snapshot_datetime(item.get("updated_at")) or fallback_time,
         body_html=str(item.get("body_html") or ""),
         plain_text_snapshot=str(item.get("plain_text_snapshot") or "").strip(),
         transcript=_read_string(item.get("transcript")),
+        speaker_segments=_read_speaker_segments(item.get("speaker_segments")),
         summary=_read_string(item.get("summary")),
         tags=_read_string_list(item.get("tags")),
+        audio_object_key=_read_string(item.get("audio_object_key")),
+        audio_file_url=_read_string(item.get("audio_file_url")),
+        audio_file_expires_at=_read_string(item.get("audio_file_expires_at")),
         folder_id=_read_string(item.get("folder_id")),
+        content_state=_read_string(item.get("content_state")),
+        is_filmed=bool(item.get("is_filmed")),
+        filmed_at=_read_string(item.get("filmed_at")),
         deleted_at=_read_string(item.get("deleted_at")),
         entity_version=int(item.get("entity_version") or 1),
         backup_updated_at=_parse_snapshot_datetime(item.get("backup_updated_at")) or fallback_time,
     )
+
+
+SERVER_MANAGED_FRAGMENT_FIELDS = {
+    "transcript",
+    "speaker_segments",
+    "summary",
+    "tags",
+    "audio_object_key",
+    "audio_file_url",
+    "audio_file_expires_at",
+}
+
+
+def _read_speaker_segments(value: Any) -> list[dict[str, Any]] | None:
+    """把说话人分段规整为稳定的字典列表。"""
+    if not isinstance(value, list):
+        return None
+    normalized: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, dict):
+            normalized.append(dict(item))
+    return normalized or None
+
+
+def _read_payload_dict(value: str | None) -> dict[str, Any]:
+    """把备份 payload JSON 安全反序列化为字典。"""
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _is_missing_server_value(value: Any) -> bool:
+    """判断客户端上送的服务器字段是否缺失，缺失时需保留旧值。"""
+    return value is None or value == "" or value == []
+
+
+def merge_fragment_snapshot_server_fields(
+    *,
+    existing_payload: dict[str, Any] | None,
+    incoming_payload: dict[str, Any] | None = None,
+    server_patch: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """合并 fragment snapshot，并保护服务器拥有字段不被客户端旧快照覆盖。"""
+    merged = dict(existing_payload or {})
+    next_payload = dict(incoming_payload or {})
+    merged.update(next_payload)
+
+    for field in SERVER_MANAGED_FRAGMENT_FIELDS:
+        if existing_payload and field in existing_payload and not _is_missing_server_value(existing_payload.get(field)):
+            merged[field] = existing_payload[field]
+            continue
+        if field in next_payload and not _is_missing_server_value(next_payload.get(field)):
+            continue
+
+    for field, value in (server_patch or {}).items():
+        if field not in SERVER_MANAGED_FRAGMENT_FIELDS:
+            continue
+        merged[field] = value
+
+    return merged
 
 
 class FragmentSnapshotReader:
@@ -121,7 +201,7 @@ class FragmentSnapshotReader:
         )
         if record is None:
             return None
-        return self._build_fragment_snapshot(record=record)
+        return self._build_fragment_snapshot(record=record, require_text=False)
 
     def get_by_ids(
         self,
@@ -139,7 +219,7 @@ class FragmentSnapshotReader:
         record_map = {record.entity_id: record for record in records}
         snapshots: list[FragmentSnapshot] = []
         for fragment_id in fragment_ids:
-            snapshot = self._build_fragment_snapshot(record=record_map.get(fragment_id))
+            snapshot = self._build_fragment_snapshot(record=record_map.get(fragment_id), require_text=False)
             if snapshot is not None:
                 snapshots.append(snapshot)
         return snapshots
@@ -163,6 +243,8 @@ class FragmentSnapshotReader:
             snapshot = self._build_fragment_snapshot(record=record)
             if snapshot is None:
                 continue
+            if not read_fragment_snapshot_text(snapshot):
+                continue
             if not (start_at <= snapshot.created_at < end_at):
                 continue
             snapshots.append(snapshot)
@@ -183,7 +265,7 @@ class FragmentSnapshotReader:
         )
         for record in records:
             snapshot = self._build_fragment_snapshot(record=record)
-            if snapshot is not None:
+            if snapshot is not None and read_fragment_snapshot_text(snapshot):
                 snapshots.append(snapshot)
         snapshots.sort(key=lambda item: (item.created_at, item.id))
         return snapshots
@@ -216,8 +298,8 @@ class FragmentSnapshotReader:
             if record.operation == "delete":
                 deleted_ids.append(record.entity_id)
                 continue
-            snapshot = self._build_fragment_snapshot(record=record)
-            if snapshot is not None:
+            snapshot = self._build_fragment_snapshot(record=record, require_text=False)
+            if snapshot is not None and read_fragment_snapshot_text(snapshot):
                 snapshots.append(snapshot)
             else:
                 # 区分 deleted_at 标记删除（需加入已删 ID）与正文为空（直接跳过）
@@ -255,15 +337,114 @@ class FragmentSnapshotReader:
                 deleted_ids.append(record.entity_id)
         return deleted_ids
 
-    def _build_fragment_snapshot(self, *, record) -> FragmentSnapshot | None:
+    def get_raw_payload_by_id(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        fragment_id: str,
+    ) -> dict[str, Any] | None:
+        """读取单条 fragment 的原始 snapshot payload。"""
+        record = backup_repository.get_record(
+            db=db,
+            user_id=user_id,
+            entity_type="fragment",
+            entity_id=fragment_id,
+        )
+        if record is None or record.operation != "upsert":
+            return None
+        payload = _read_payload_dict(record.payload_json)
+        if _read_string(payload.get("deleted_at")):
+            return None
+        return payload
+
+    def list_raw_payloads(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+    ) -> list[dict[str, Any]]:
+        """枚举当前用户全部未删除的 fragment snapshot 原始 payload。"""
+        payloads: list[dict[str, Any]] = []
+        records = backup_repository.list_records_by_entity_type(
+            db=db,
+            user_id=user_id,
+            entity_type="fragment",
+        )
+        for record in records:
+            if record.operation != "upsert":
+                continue
+            payload = _read_payload_dict(record.payload_json)
+            if _read_string(payload.get("deleted_at")):
+                continue
+            payloads.append(payload)
+        return payloads
+
+    def merge_server_fields(
+        self,
+        *,
+        db: Session,
+        user_id: str,
+        fragment_id: str,
+        server_patch: dict[str, Any],
+        source: str = "voice",
+        audio_source: str | None = None,
+        client_seed: dict[str, Any] | None = None,
+    ) -> None:
+        """把服务器生成字段合并补写到 fragment snapshot。"""
+        record = backup_repository.get_record(
+            db=db,
+            user_id=user_id,
+            entity_type="fragment",
+            entity_id=fragment_id,
+        )
+        existing_payload = _read_payload_dict(record.payload_json if record is not None else None)
+        seed_payload = dict(client_seed or {})
+        now = ensure_aware_utc()
+        base_payload = dict(existing_payload)
+        base_payload["id"] = fragment_id
+        base_payload["source"] = _read_string(base_payload.get("source")) or source
+        base_payload["audio_source"] = _read_string(base_payload.get("audio_source")) or audio_source
+        base_payload["created_at"] = (
+            base_payload.get("created_at")
+            or seed_payload.get("created_at")
+            or base_payload.get("updated_at")
+            or now.isoformat()
+        )
+        base_payload["updated_at"] = now.isoformat()
+        base_payload["body_html"] = str(base_payload.get("body_html") or seed_payload.get("body_html") or "")
+        base_payload["plain_text_snapshot"] = str(
+            base_payload.get("plain_text_snapshot") or seed_payload.get("plain_text_snapshot") or ""
+        )
+        base_payload["folder_id"] = base_payload.get("folder_id") or seed_payload.get("folder_id")
+        base_payload["content_state"] = base_payload.get("content_state") or seed_payload.get("content_state")
+        base_payload["is_filmed"] = bool(base_payload.get("is_filmed"))
+        base_payload["filmed_at"] = base_payload.get("filmed_at")
+        base_payload["deleted_at"] = base_payload.get("deleted_at")
+        merged_payload = merge_fragment_snapshot_server_fields(
+            existing_payload=base_payload,
+            server_patch=server_patch,
+        )
+        backup_repository.upsert_record(
+            db=db,
+            user_id=user_id,
+            entity_type="fragment",
+            entity_id=fragment_id,
+            entity_version=record.entity_version if record is not None else 1,
+            operation="upsert",
+            payload_json=json.dumps(merged_payload, ensure_ascii=False),
+            modified_at=ensure_aware_utc(record.modified_at) if record is not None and record.modified_at else None,
+            last_modified_device_id=record.last_modified_device_id if record is not None else None,
+            now=now,
+        )
+        db.commit()
+
+    def _build_fragment_snapshot(self, *, record, require_text: bool = True) -> FragmentSnapshot | None:
         """把备份记录规整为统一的 fragment 快照。"""
         if record is None or record.operation != "upsert" or not record.payload_json:
             return None
-        try:
-            payload = json.loads(record.payload_json)
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(payload, dict):
+        payload = _read_payload_dict(record.payload_json)
+        if not payload:
             return None
         deleted_at = _read_string(payload.get("deleted_at"))
         if deleted_at:
@@ -273,6 +454,7 @@ class FragmentSnapshotReader:
             id=record.entity_id,
             user_id=record.user_id,
             source=_read_string(payload.get("source")) or "manual",
+            audio_source=_read_string(payload.get("audio_source")),
             created_at=(
                 _parse_snapshot_datetime(payload.get("created_at"))
                 or _parse_snapshot_datetime(payload.get("updated_at"))
@@ -287,13 +469,20 @@ class FragmentSnapshotReader:
             body_html=body_html,
             plain_text_snapshot=_read_string(payload.get("plain_text_snapshot")) or "",
             transcript=_read_string(payload.get("transcript")),
+            speaker_segments=_read_speaker_segments(payload.get("speaker_segments")),
             summary=_read_string(payload.get("summary")),
             tags=_read_string_list(payload.get("tags")),
+            audio_object_key=_read_string(payload.get("audio_object_key")),
+            audio_file_url=_read_string(payload.get("audio_file_url")),
+            audio_file_expires_at=_read_string(payload.get("audio_file_expires_at")),
             folder_id=_read_string(payload.get("folder_id")),
+            content_state=_read_string(payload.get("content_state")),
+            is_filmed=bool(payload.get("is_filmed")),
+            filmed_at=_read_string(payload.get("filmed_at")),
             deleted_at=deleted_at,
             entity_version=record.entity_version,
             backup_updated_at=ensure_aware_utc(record.updated_at),
         )
-        if not read_fragment_snapshot_text(snapshot):
+        if require_text and not read_fragment_snapshot_text(snapshot):
             return None
         return snapshot

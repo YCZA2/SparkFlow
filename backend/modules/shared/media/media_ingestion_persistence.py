@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import json
-
-from domains.fragments import repository as fragment_repository
-
-from modules.shared.ports import FileStorage
+from modules.shared.fragment_snapshots import FragmentSnapshotReader
 from modules.shared.media.stored_file_payloads import stored_file_from_payload
+from modules.shared.ports import FileStorage
+
+_FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 
 
 class MediaIngestionPersistenceService:
@@ -18,22 +17,25 @@ class MediaIngestionPersistenceService:
         fragment_id: str,
         user_id: str,
         saved,
+        file_url: str | None = None,
+        expires_at: str | None = None,
+        audio_source: str | None = None,
     ) -> None:
-        """把保存后的音频元数据补写回碎片。"""
-        if not fragment_id:
+        """把保存后的音频元数据补写回 fragment snapshot。"""
+        normalized_fragment_id = str(fragment_id or "").strip()
+        if not normalized_fragment_id:
             return
-        fragment_repository.update_audio_file(
+        _FRAGMENT_SNAPSHOT_READER.merge_server_fields(
             db=db,
-            fragment_id=fragment_id,
             user_id=user_id,
-            audio_storage_provider=saved.storage_provider,
-            audio_bucket=saved.bucket,
-            audio_object_key=saved.object_key,
-            audio_access_level=saved.access_level,
-            audio_original_filename=saved.original_filename,
-            audio_mime_type=saved.mime_type,
-            audio_file_size=saved.file_size,
-            audio_checksum=saved.checksum,
+            fragment_id=normalized_fragment_id,
+            source="voice",
+            audio_source=audio_source,
+            server_patch={
+                "audio_object_key": saved.object_key,
+                "audio_file_url": file_url,
+                "audio_file_expires_at": expires_at,
+            },
         )
 
     def save_transcription_result(
@@ -47,17 +49,21 @@ class MediaIngestionPersistenceService:
         tags: list[str],
         speaker_segments: list[dict],
     ) -> None:
-        """把转写、摘要和说话人分段落库到碎片。"""
-        if not fragment_id:
+        """把转写、摘要和说话人分段补写到 fragment snapshot。"""
+        normalized_fragment_id = str(fragment_id or "").strip()
+        if not normalized_fragment_id:
             return
-        fragment_repository.save_transcription_result(
+        _FRAGMENT_SNAPSHOT_READER.merge_server_fields(
             db=db,
-            fragment_id=fragment_id,
             user_id=user_id,
-            transcript=transcript,
-            summary=summary,
-            tags_json=json.dumps(tags, ensure_ascii=False),
-            speaker_segments_json=json.dumps(speaker_segments, ensure_ascii=False),
+            fragment_id=normalized_fragment_id,
+            source="voice",
+            server_patch={
+                "transcript": transcript,
+                "summary": summary,
+                "tags": list(tags),
+                "speaker_segments": list(speaker_segments),
+            },
         )
 
     def build_finalize_payload(

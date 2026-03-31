@@ -115,13 +115,16 @@ class MediaIngestionStepExecutor:
             ) from exc
         finally:
             await self.cleanup_temp(resolved.get("local_audio_path"))
+        access = file_storage.create_download_url(saved)
         self.persistence_service.update_fragment_audio_file(
             db=context.db,
-            fragment_id=payload["fragment_id"],
+            fragment_id=payload.get("local_fragment_id") or payload.get("fragment_id"),
             user_id=context.run.user_id,
             saved=saved,
+            file_url=access.url,
+            expires_at=access.expires_at,
+            audio_source=str(payload.get("source_kind") or "external_link"),
         )
-        access = file_storage.create_download_url(saved)
         return {
             "audio_file": stored_file_to_payload(saved),
             "platform": resolved["platform"],
@@ -169,7 +172,7 @@ class MediaIngestionStepExecutor:
         audio_payload = context.get_step_output("download_media")
         self.persistence_service.save_transcription_result(
             db=context.db,
-            fragment_id=context.input_payload["fragment_id"],
+            fragment_id=context.input_payload.get("local_fragment_id") or context.input_payload.get("fragment_id"),
             user_id=context.run.user_id,
             transcript=transcript_payload.get("transcript") or "",
             summary=None,

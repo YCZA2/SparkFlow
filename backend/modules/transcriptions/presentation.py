@@ -26,12 +26,12 @@ def get_transcription_use_case(container: ServiceContainer = Depends(get_contain
     status_code=status.HTTP_200_OK,
     response_model=ResponseModel[AudioUploadResponse],
     summary="上传音频并启动转写",
-    description="上传音频文件后创建后台流水线；local-first 主路径可只绑定本地 placeholder，不要求先创建远端 fragment projection。",
+    description="上传音频文件后创建后台流水线；调用前必须先在本地创建占位 fragment，并传入 local_fragment_id。",
 )
 async def upload_audio(
     audio: UploadFile = File(..., description="音频文件"),
     folder_id: str | None = Form(None),
-    local_fragment_id: str | None = Form(None),
+    local_fragment_id: str = Form(..., description="本地占位 fragment ID"),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
     use_case: TranscriptionUseCase = Depends(get_transcription_use_case),

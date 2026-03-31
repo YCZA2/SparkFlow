@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import ContentMediaLink, Fragment, Script
+from models import ContentMediaLink, Script
 
 
 def list_by_user(db: Session, user_id: str, limit: int, offset: int) -> list[Script]:
@@ -106,16 +106,6 @@ def update(
     db.commit()
     db.refresh(script)
     return script
-
-
-def get_fragments_for_user(db: Session, user_id: str, fragment_ids: list[str]) -> list[Fragment]:
-    return (
-        db.query(Fragment)
-        .filter(Fragment.id.in_(fragment_ids), Fragment.user_id == user_id)
-        .all()
-    )
-
-
 def get_latest_daily_push_for_window(
     db: Session,
     user_id: str,

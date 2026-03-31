@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from domains.fragments import repository as fragment_repository
+from core.exceptions import ValidationError
+from modules.shared.fragment_snapshots import FragmentSnapshotReader
 from modules.shared.media.audio_ingestion import AudioIngestionRequest
 from modules.shared.media.audio_ingestion_use_case import AudioIngestionUseCase
 from modules.shared.infrastructure.storage import build_audio_object_key, sanitize_filename, validate_audio_upload
 from modules.shared.ports import FileStorage
 from .schemas import AudioUploadResponse
+
+_FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 
 
 class TranscriptionUseCase:
@@ -31,77 +32,66 @@ class TranscriptionUseCase:
         user_id: str,
         audio: UploadFile,
         folder_id: str | None = None,
-        local_fragment_id: str | None = None,
+        local_fragment_id: str,
     ) -> AudioUploadResponse:
         """上传录音文件、落库对象元数据并启动转写流水线。"""
+        normalized_local_fragment_id = str(local_fragment_id or "").strip()
+        if not normalized_local_fragment_id:
+            raise ValidationError(
+                message="缺少本地 fragment 标识",
+                field_errors={"local_fragment_id": "请先创建本地占位 fragment 再上传音频"},
+            )
         await self.ingestion_service.ensure_transcription_available()
         content = await audio.read()
         ext, mime_type = validate_audio_upload(audio, content)
-        fragment = None
-        if local_fragment_id is None:
-            fragment = fragment_repository.create(
-                db=db,
-                user_id=user_id,
-                transcript=None,
-                source="voice",
-                audio_source="upload",
-                audio_storage_provider=None,
-                audio_bucket=None,
-                audio_object_key=None,
-                audio_access_level=None,
-                audio_original_filename=None,
-                audio_mime_type=None,
-                audio_file_size=None,
-                audio_checksum=None,
-                body_html="",
-                plain_text_snapshot="",
-                folder_id=folder_id,
-            )
-        target_fragment_id = fragment.id if fragment else local_fragment_id
         if hasattr(audio.file, "seek"):
             audio.file.seek(0)
-        stem = sanitize_filename(Path(audio.filename or "recording").stem, "recording")
+        stem = sanitize_filename((audio.filename or "recording").rsplit(".", 1)[0], "recording")
         saved = await self.file_storage.save_upload(
             file=audio,
             object_key=build_audio_object_key(
                 user_id=user_id,
-                fragment_id=target_fragment_id or "local-fragment",
+                fragment_id=normalized_local_fragment_id,
                 filename=f"{stem}{ext}",
             ),
             original_filename=f"{stem}{ext}",
             mime_type=mime_type,
         )
-        if fragment is not None:
-            fragment_repository.update_audio_file(
-                db=db,
-                fragment_id=fragment.id,
-                user_id=user_id,
-                audio_storage_provider=saved.storage_provider,
-                audio_bucket=saved.bucket,
-                audio_object_key=saved.object_key,
-                audio_access_level=saved.access_level,
-                audio_original_filename=saved.original_filename,
-                audio_mime_type=saved.mime_type,
-                audio_file_size=saved.file_size,
-                audio_checksum=saved.checksum,
-            )
+        access = self.file_storage.create_download_url(saved)
+        _FRAGMENT_SNAPSHOT_READER.merge_server_fields(
+            db=db,
+            user_id=user_id,
+            fragment_id=normalized_local_fragment_id,
+            source="voice",
+            audio_source="upload",
+            client_seed={
+                "folder_id": folder_id,
+                "body_html": "",
+                "plain_text_snapshot": "",
+                "content_state": "empty",
+            },
+            server_patch={
+                "audio_object_key": saved.object_key,
+                "audio_file_url": access.url,
+                "audio_file_expires_at": access.expires_at,
+            },
+        )
         result = await self.ingestion_service.ingest_audio(
             db=db,
             request=AudioIngestionRequest(
                 user_id=user_id,
-                fragment_id=fragment.id if fragment else None,
-                local_fragment_id=local_fragment_id,
+                fragment_id=None,
+                local_fragment_id=normalized_local_fragment_id,
                 audio_file=saved,
                 folder_id=folder_id,
                 audio_source="upload",
             ),
         )
-        access = self.file_storage.create_download_url(saved)
         return AudioUploadResponse(
             pipeline_run_id=result.pipeline_run_id,
             pipeline_type="media_ingestion",
             fragment_id=result.fragment_id,
-            local_fragment_id=local_fragment_id,
+            local_fragment_id=normalized_local_fragment_id,
             audio_object_key=saved.object_key,
             audio_file_url=access.url,
             audio_file_expires_at=access.expires_at,

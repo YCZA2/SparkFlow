@@ -18,8 +18,11 @@ from modules.shared.content.content_markdown import (
     render_markdown_document,
     sanitize_export_stem,
 )
+from modules.shared.media_asset_snapshots import MediaAssetSnapshotReader, build_media_asset_snapshot_file
 from modules.shared.ports import FileStorage
 from .schemas import MarkdownBatchExportRequest
+
+_MEDIA_ASSET_SNAPSHOT_READER = MediaAssetSnapshotReader()
 
 
 class MarkdownExportUseCase:
@@ -46,9 +49,9 @@ class MarkdownExportUseCase:
             "tags": payload.tags or [],
             "folder_id": payload.folder_id,
         }
-        body = self._append_media_section(render_fragment_markdown(self.fragment_service.get_fragment(db=db, user_id=user_id, fragment_id=fragment_id)), payload.media_assets)
+        body = self._append_media_section(render_fragment_markdown(payload), payload.media_assets)
         filename = f"fragment-{sanitize_export_stem(payload.summary or payload.id, fallback=payload.id)}.md"
-        return MarkdownExportFile(filename=filename, content=render_markdown_document(metadata=metadata, body_markdown=body)), self._asset_files(payload.media_assets, db=db, user_id=user_id, content_type="fragment", content_id=fragment_id)
+        return MarkdownExportFile(filename=filename, content=render_markdown_document(metadata=metadata, body_markdown=body)), self._fragment_asset_files(db=db, user_id=user_id, fragment_id=fragment_id)
 
     def export_script(self, *, db: Session, user_id: str, script_id: str) -> tuple[MarkdownExportFile, list[tuple[str, bytes]]]:
         """导出单条脚本为 Markdown。"""
@@ -112,6 +115,16 @@ class MarkdownExportUseCase:
         files: list[tuple[str, bytes]] = []
         for asset in actual_assets:
             files.append((f"assets/{asset.id}-{asset.original_filename}", self.file_storage.read_bytes(build_media_asset_file(asset))))
+        return files
+
+    def _fragment_asset_files(self, *, db: Session, user_id: str, fragment_id: str) -> list[tuple[str, bytes]]:
+        """从 fragment snapshot 素材中解析 zip 所需的二进制文件。"""
+        files: list[tuple[str, bytes]] = []
+        for asset in _MEDIA_ASSET_SNAPSHOT_READER.list_by_fragment_id(db=db, user_id=user_id, fragment_id=fragment_id):
+            stored_file = build_media_asset_snapshot_file(file_storage=self.file_storage, asset=asset)
+            if stored_file is None:
+                continue
+            files.append((f"assets/{asset.id}-{asset.original_filename}", self.file_storage.read_bytes(stored_file)))
         return files
 
     @staticmethod

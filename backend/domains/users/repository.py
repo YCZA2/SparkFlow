@@ -8,7 +8,10 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import DeviceSession, Fragment, KnowledgeDoc, Script, User
+from models import DeviceSession, KnowledgeDoc, Script, User
+from modules.shared.fragment_snapshots import FragmentSnapshotReader
+
+_FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 
 
 # ---------------------------------------------------------------------------
@@ -143,8 +146,8 @@ def soft_delete_user(db: Session, *, user: User) -> None:
 # ---------------------------------------------------------------------------
 
 def count_fragments_by_user(db: Session, *, user_id: str) -> int:
-    """统计用户拥有的碎片总数。"""
-    return db.query(func.count(Fragment.id)).filter(Fragment.user_id == user_id).scalar() or 0
+    """统计用户拥有的 fragment snapshot 数量。"""
+    return len(_FRAGMENT_SNAPSHOT_READER.list_raw_payloads(db=db, user_id=user_id))
 
 
 def count_scripts_by_user(db: Session, *, user_id: str) -> int:

@@ -7,12 +7,14 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import ConflictError, NotFoundError, ValidationError
 from models import FragmentFolder
+from modules.shared.fragment_snapshots import FragmentSnapshotReader
 from utils.serialization import format_iso_datetime
 
 from domains.fragment_folders import repository as fragment_folder_repository
 from .schemas import FragmentFolderItem, FragmentFolderListResponse
 
 MAX_FOLDER_NAME_LENGTH = 50
+_FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 
 
 def map_fragment_folder(folder: FragmentFolder, *, fragment_count: int = 0) -> FragmentFolderItem:
@@ -39,8 +41,13 @@ def normalize_folder_name(name: str) -> str:
 
 class FragmentFolderQueryService:
     def list_folders(self, *, db: Session, user_id: str) -> FragmentFolderListResponse:
-        rows = fragment_folder_repository.list_by_user_with_counts(db=db, user_id=user_id)
-        items = [map_fragment_folder(folder, fragment_count=count) for folder, count in rows]
+        folders = fragment_folder_repository.list_by_user(db=db, user_id=user_id)
+        counts: dict[str, int] = {}
+        for payload in _FRAGMENT_SNAPSHOT_READER.list_raw_payloads(db=db, user_id=user_id):
+            folder_id = str(payload.get("folder_id") or "").strip()
+            if folder_id:
+                counts[folder_id] = counts.get(folder_id, 0) + 1
+        items = [map_fragment_folder(folder, fragment_count=counts.get(folder.id, 0)) for folder in folders]
         return FragmentFolderListResponse(items=items, total=len(items))
 
     def get_folder(self, *, db: Session, user_id: str, folder_id: str) -> FragmentFolder:
@@ -79,6 +86,7 @@ class FragmentFolderCommandService:
 
     def delete_folder(self, *, db: Session, user_id: str, folder_id: str) -> None:
         folder = FragmentFolderQueryService().get_folder(db=db, user_id=user_id, folder_id=folder_id)
-        if fragment_folder_repository.count_fragments(db=db, user_id=user_id, folder_id=folder_id) > 0:
+        folder_payloads = _FRAGMENT_SNAPSHOT_READER.list_raw_payloads(db=db, user_id=user_id)
+        if any(str(item.get("folder_id") or "").strip() == folder_id for item in folder_payloads):
             raise ConflictError(message="文件夹内仍有碎片，无法删除")
         fragment_folder_repository.delete(db=db, folder=folder)
