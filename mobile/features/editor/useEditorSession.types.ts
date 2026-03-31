@@ -14,7 +14,7 @@ export interface EditorSessionConfig<TDocument> {
   document: TDocument | null;
   buildSourceDocument: (doc: TDocument) => EditorSourceDocument;
   loadLocalDraft?: (id: string) => Promise<string | null>;
-  loadCache?: (id: string) => Promise<string | null>;
+  loadBaseline?: (id: string) => Promise<string | null>;
   saveLocally?: (id: string, snapshot: EditorDocumentSnapshot) => Promise<void>;
   commitOptimistic?: (doc: TDocument) => Promise<void>;
   supportsImages?: boolean;

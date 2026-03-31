@@ -33,15 +33,15 @@ function buildFragment(overrides: Partial<Fragment> = {}): Fragment {
   };
 }
 
-test('resolveHydratedBodySession prefers local draft and keeps cached baseline', () => {
+test('resolveHydratedBodySession prefers local draft and keeps baseline', () => {
   const result = resolveHydratedBodySession({
     fragment: buildFragment({ body_html: '服务端正文' }),
     draftHtml: '<p>本地草稿</p>',
-    cachedBodyHtml: '<p>缓存正文</p>',
+    baselineContentHtml: '<p>基线正文</p>',
   });
 
   assert.equal(result.snapshot.body_html, '<p>本地草稿</p>');
-  assert.equal(result.baselineBodyHtml, '<p>缓存正文</p>');
+  assert.equal(result.baselineBodyHtml, '<p>基线正文</p>');
   assert.equal(result.syncStatus, 'idle');
 });
 
@@ -49,7 +49,7 @@ test('resolveHydratedBodySession marks synced when no draft overrides remote bod
   const result = resolveHydratedBodySession({
     fragment: buildFragment({ body_html: '服务端正文' }),
     draftHtml: null,
-    cachedBodyHtml: null,
+    baselineContentHtml: null,
   });
 
   assert.equal(result.snapshot.body_html, '服务端正文');

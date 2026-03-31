@@ -45,7 +45,7 @@ interface SessionSourceState {
   document: EditorSourceDocument | null;
   local_draft_html: string | null;
   local_draft_loaded: boolean;
-  cached_baseline_html: string | null;
+  baseline_content_html: string | null;
 }
 
 export interface EditorSessionState {
@@ -67,7 +67,7 @@ export interface EditorSessionState {
 export type EditorSessionEvent =
   | { type: 'RESET_SESSION'; documentId: string | null }
   | { type: 'LOCAL_DRAFT_HTML_LOADED'; html: string | null }
-  | { type: 'CACHED_BASELINE_LOADED'; html: string | null }
+  | { type: 'BASELINE_CONTENT_LOADED'; html: string | null }
   | { type: 'SOURCE_DOCUMENT_LOADED'; document: EditorSourceDocument | null }
   | { type: 'EDITOR_READY' }
   | { type: 'SNAPSHOT_CHANGED'; snapshot: EditorDocumentSnapshot }
@@ -102,7 +102,7 @@ export function createInitialEditorSessionState(
       document: null,
       local_draft_html: null,
       local_draft_loaded: false,
-      cached_baseline_html: null,
+      baseline_content_html: null,
     },
   };
 }
@@ -131,12 +131,12 @@ export function reduceEditorSession(
     });
   }
 
-  if (event.type === 'CACHED_BASELINE_LOADED') {
+  if (event.type === 'BASELINE_CONTENT_LOADED') {
     return reconcileHydration({
       ...state,
       source: {
         ...state.source,
-        cached_baseline_html: event.html,
+        baseline_content_html: event.html,
       },
     });
   }

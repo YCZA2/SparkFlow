@@ -77,7 +77,7 @@ test('reconcileHydration 所有来源就绪后完成初始化并标记 isDraftHy
     document: buildDocument({ body_html: '<p>服务端正文</p>' }),
   });
   state = reduceEditorSession(state, {
-    type: 'CACHED_BASELINE_LOADED',
+    type: 'BASELINE_CONTENT_LOADED',
     html: '<p>服务端正文</p>',
   });
   state = reduceEditorSession(state, {

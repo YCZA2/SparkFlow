@@ -46,7 +46,7 @@ export function useEditorSession<TDocument>(
     document,
     buildSourceDocument,
     loadLocalDraft,
-    loadCache,
+    loadBaseline,
     saveLocally,
     commitOptimistic,
     supportsImages = false,
@@ -86,7 +86,7 @@ export function useEditorSession<TDocument>(
     document,
     buildSourceDocument,
     loadLocalDraft,
-    loadCache,
+    loadBaseline,
     dispatch,
     resetUiState: useCallback(() => {
       setIsEditorFocused(false);

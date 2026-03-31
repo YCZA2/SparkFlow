@@ -68,10 +68,10 @@ export function useFragmentBodySession({
     []
   );
 
-  const loadCache = useCallback(
+  const loadBaseline = useCallback(
     (id: string): Promise<string | null> => {
-      const cachedHtml = resolveCachedBodyHtml(id, fragment);
-      return Promise.resolve(cachedHtml);
+      const baselineHtml = resolveCachedBodyHtml(id, fragment);
+      return Promise.resolve(baselineHtml);
     },
     [fragment]
   );
@@ -114,7 +114,7 @@ export function useFragmentBodySession({
     document: fragment,
     buildSourceDocument: buildEditorDocumentFromFragment,
     loadLocalDraft,
-    loadCache,
+    loadBaseline,
     saveLocally,
     commitOptimistic: commitOptimisticFragment,
     supportsImages: true,

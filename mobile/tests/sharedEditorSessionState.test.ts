@@ -19,15 +19,15 @@ function buildDocument(overrides: Partial<EditorSourceDocument> = {}): EditorSou
   };
 }
 
-test('resolveEditorSessionBaseline prefers local draft over cache and remote', () => {
+test('resolveEditorSessionBaseline prefers local draft over baseline and remote', () => {
   const baseline = resolveEditorSessionBaseline({
     document: buildDocument({ body_html: '远端正文' }),
     draftHtml: '<p>本地草稿</p>',
-    cachedBodyHtml: '<p>缓存正文</p>',
+    baselineContentHtml: '<p>基线正文</p>',
   });
 
   assert.equal(baseline.snapshot.body_html, '<p>本地草稿</p>');
-  assert.equal(baseline.baseline_body_html, '<p>缓存正文</p>');
+  assert.equal(baseline.baseline_body_html, '<p>基线正文</p>');
   assert.equal(baseline.save_state, 'idle');
 });
 
@@ -38,8 +38,8 @@ test('shared session keeps local draft snapshot stable across remote refresh', (
     document: buildDocument({ body_html: '远端正文' }),
   });
   state = reduceEditorSession(state, {
-    type: 'CACHED_BASELINE_LOADED',
-    html: '<p>缓存正文</p>',
+    type: 'BASELINE_CONTENT_LOADED',
+    html: '<p>基线正文</p>',
   });
   state = reduceEditorSession(state, {
     type: 'LOCAL_DRAFT_HTML_LOADED',
@@ -63,7 +63,7 @@ test('shared session keeps hydrated baseline stable while typing locally', () =>
     document: buildDocument({ body_html: '<p>远端正文</p>' }),
   });
   state = reduceEditorSession(state, {
-    type: 'CACHED_BASELINE_LOADED',
+    type: 'BASELINE_CONTENT_LOADED',
     html: '<p>远端正文</p>',
   });
   state = reduceEditorSession(state, {
@@ -93,7 +93,7 @@ test('local-first save success keeps session in unsynced state until remote reco
     }),
   });
   state = reduceEditorSession(state, {
-    type: 'CACHED_BASELINE_LOADED',
+    type: 'BASELINE_CONTENT_LOADED',
     html: '<p>已同步正文</p>',
   });
   state = reduceEditorSession(state, {

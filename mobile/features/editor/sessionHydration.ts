@@ -41,11 +41,11 @@ export function buildEditorDocumentSnapshot(html: string): EditorDocumentSnapsho
 export function resolveHydratedEditorDocument({
   document,
   draftHtml,
-  cachedBodyHtml,
+  baselineContentHtml,
 }: {
   document: EditorSourceDocument;
   draftHtml: string | null;
-  cachedBodyHtml: string | null;
+  baselineContentHtml: string | null;
 }): {
   snapshot: EditorDocumentSnapshot;
   baselineBodyHtml: string;
@@ -54,7 +54,7 @@ export function resolveHydratedEditorDocument({
   const nextHtml = normalizeBodyHtml(draftHtml ?? document.body_html);
   const snapshot = buildEditorDocumentSnapshot(nextHtml);
   const baselineBodyHtml =
-    normalizeBodyHtml(cachedBodyHtml) ||
+    normalizeBodyHtml(baselineContentHtml) ||
     (draftHtml == null ? normalizeBodyHtml(document.body_html) : '');
   return {
     snapshot,
@@ -172,22 +172,22 @@ export function appendImageToSnapshot(
   return buildEditorDocumentSnapshot(nextHtml);
 }
 
-/*把草稿、缓存和来源文档解析为唯一初始化基线。 */
+/*把草稿、基线和来源文档解析为唯一初始化基线。 */
 export function resolveEditorSessionBaseline(options: {
   document: EditorSourceDocument;
   draftHtml: string | null;
-  cachedBodyHtml: string | null;
+  baselineContentHtml: string | null;
 }): EditorSessionBaseline {
   const hydrated = resolveHydratedEditorDocument({
     document: options.document,
     draftHtml: options.draftHtml,
-    cachedBodyHtml: options.cachedBodyHtml,
+    baselineContentHtml: options.baselineContentHtml,
   });
   return {
     document_id: options.document.id,
     snapshot: hydrated.snapshot,
     baseline_body_html: hydrated.baselineBodyHtml,
-    cached_baseline_html: options.cachedBodyHtml,
+    baseline_content_html: options.baselineContentHtml,
     local_draft_html: options.draftHtml,
     media_assets: options.document.media_assets ?? [],
     save_state: options.document.legacy_save_state ?? hydrated.syncStatus,
@@ -221,7 +221,7 @@ export function reconcileHydration(state: EditorSessionState): EditorSessionStat
   const baseline = resolveEditorSessionBaseline({
     document,
     draftHtml: state.source.local_draft_html,
-    cachedBodyHtml: state.source.cached_baseline_html,
+    baselineContentHtml: state.source.baseline_content_html,
   });
   const currentBaseline = state.baseline;
   const shouldInitialize = !currentBaseline || currentBaseline.document_id !== document.id;
@@ -262,7 +262,7 @@ export function reconcileHydration(state: EditorSessionState): EditorSessionStat
     ...state,
     baseline: {
       ...currentBaseline!,
-      cached_baseline_html: baseline.cached_baseline_html,
+      baseline_content_html: baseline.baseline_content_html,
       media_assets: document.media_assets ?? [],
       save_state: nextSyncStatus,
     },

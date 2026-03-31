@@ -9,7 +9,7 @@ export function useEditorSessionHydration<TDocument>(input: {
   document: TDocument | null;
   buildSourceDocument: (doc: TDocument) => EditorSourceDocument;
   loadLocalDraft?: (id: string) => Promise<string | null>;
-  loadCache?: (id: string) => Promise<string | null>;
+  loadBaseline?: (id: string) => Promise<string | null>;
   dispatch: React.Dispatch<EditorSessionEvent>;
   resetUiState: () => void;
 }) {
@@ -18,7 +18,7 @@ export function useEditorSessionHydration<TDocument>(input: {
     document,
     buildSourceDocument,
     loadLocalDraft,
-    loadCache,
+    loadBaseline,
     dispatch,
     resetUiState,
   } = input;
@@ -47,22 +47,22 @@ export function useEditorSessionHydration<TDocument>(input: {
   }, [dispatch, documentId, loadLocalDraft]);
 
   useEffect(() => {
-    if (!documentId || !loadCache) {
-      dispatch({ type: 'CACHED_BASELINE_LOADED', html: null });
+    if (!documentId || !loadBaseline) {
+      dispatch({ type: 'BASELINE_CONTENT_LOADED', html: null });
       return;
     }
 
     let cancelled = false;
     void (async () => {
-      const cachedHtml = await loadCache(documentId);
+      const baselineHtml = await loadBaseline(documentId);
       if (cancelled) return;
-      dispatch({ type: 'CACHED_BASELINE_LOADED', html: cachedHtml });
+      dispatch({ type: 'BASELINE_CONTENT_LOADED', html: baselineHtml });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [dispatch, documentId, loadCache]);
+  }, [dispatch, documentId, loadBaseline]);
 
   useEffect(() => {
     dispatch({

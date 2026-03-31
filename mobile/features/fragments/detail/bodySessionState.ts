@@ -20,13 +20,13 @@ export {
 export function resolveHydratedBodySession(input: {
   fragment: Fragment;
   draftHtml: string | null;
-  cachedBodyHtml: string | null;
+  baselineContentHtml: string | null;
 }) {
   /*碎片详情复用共享 hydrate 优先级逻辑。 */
   return resolveHydratedEditorDocument({
     document: input.fragment,
     draftHtml: input.draftHtml,
-    cachedBodyHtml: input.cachedBodyHtml,
+    baselineContentHtml: input.baselineContentHtml,
   });
 }
 

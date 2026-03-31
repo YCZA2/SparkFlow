@@ -47,7 +47,7 @@ export interface EditorSessionBaseline {
   document_id: string;
   snapshot: EditorDocumentSnapshot;
   baseline_body_html: string;
-  cached_baseline_html: string | null;
+  baseline_content_html: string | null;
   local_draft_html: string | null;
   media_assets: EditorMediaAsset[];
   save_state: EditorSaveState;
