@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from domains.pipelines import repository as pipeline_repository
-from models import Fragment, PipelineRun, PipelineStepRun
+from models import PipelineRun, PipelineStepRun
 from modules.shared.pipeline.pipeline_runtime import (
     PipelineDefinitionRegistry,
     PipelineDispatcher,

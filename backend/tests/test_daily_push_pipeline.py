@@ -7,8 +7,6 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from domains.fragments import repository as fragment_repository
-
 pytestmark = pytest.mark.integration
 
 async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
@@ -221,27 +219,41 @@ async def test_scheduler_daily_push_ignores_fragment_rows_without_backups(
     async_client,
     auth_headers_factory,
     app,
-    db_session_factory,
 ) -> None:
-    """仅存在旧 fragments 表数据时，scheduler 不应误生成每日推盘。"""
-    with db_session_factory() as db:
-        fragment_repository.create(
-            db=db,
-            user_id="test-user-001",
-            transcript=None,
-            source="manual",
-            audio_source=None,
-            audio_storage_provider=None,
-            audio_bucket=None,
-            audio_object_key=None,
-            audio_access_level=None,
-            audio_original_filename=None,
-            audio_mime_type=None,
-            audio_file_size=None,
-            audio_checksum=None,
-            body_html="<p>只有旧表，没有备份</p>",
-            plain_text_snapshot="只有旧表，没有备份",
-            tags=[],
-        )
+    """只有空 placeholder snapshot 时，scheduler 不应误生成每日推盘。"""
+    await _push_fragment_backups(
+        async_client,
+        auth_headers_factory,
+        [
+            {
+                "entity_type": "fragment",
+                "entity_id": "placeholder-fragment",
+                "entity_version": 1,
+                "operation": "upsert",
+                "modified_at": datetime.now(timezone.utc).isoformat(),
+                "payload": {
+                    "id": "placeholder-fragment",
+                    "folder_id": None,
+                    "source": "voice",
+                    "audio_source": "upload",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "summary": None,
+                    "tags": [],
+                    "transcript": None,
+                    "speaker_segments": None,
+                    "audio_object_key": "audio/original/test-user-001/placeholder-fragment/file.m4a",
+                    "audio_file_url": "https://example.com/audio.m4a",
+                    "audio_file_expires_at": "2026-03-31T02:00:00+00:00",
+                    "body_html": "",
+                    "plain_text_snapshot": "",
+                    "content_state": "empty",
+                    "is_filmed": False,
+                    "filmed_at": None,
+                    "deleted_at": None,
+                },
+            }
+        ],
+    )
     result = await app.state.scheduler_service.run_job()
     assert result["queued_runs"] == 0

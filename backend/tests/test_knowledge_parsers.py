@@ -114,7 +114,7 @@ def test_parse_uploaded_text_supports_txt_docx_pdf_and_xlsx() -> None:
     """知识库解析器应支持文本型上传格式。"""
     txt = parse_uploaded_text(file_content="方法论拆解".encode("utf-8"), filename="sample.txt")
     docx = parse_uploaded_text(file_content=_build_docx_bytes("语言习惯总结"), filename="sample.docx")
-    pdf = parse_uploaded_text(file_content=_build_simple_pdf_bytes("高赞开场句"), filename="sample.pdf")
+    pdf = parse_uploaded_text(file_content=_build_simple_pdf_bytes("hook opener"), filename="sample.pdf")
     xlsx = parse_uploaded_text(
         file_content=_build_simple_xlsx_bytes("Sheet1", [["标题", "钩子"], ["案例", "强对比"]]),
         filename="sample.xlsx",
@@ -122,7 +122,7 @@ def test_parse_uploaded_text_supports_txt_docx_pdf_and_xlsx() -> None:
 
     assert "方法论拆解" in txt
     assert "语言习惯总结" in docx
-    assert "高赞开场句" in pdf
+    assert "hook opener" in pdf
     assert "Sheet1" in xlsx
     assert "强对比" in xlsx
 

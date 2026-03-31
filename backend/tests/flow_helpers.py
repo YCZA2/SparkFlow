@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from uuid import uuid4
 
-import pytest
-from domains.fragments import repository as fragment_repository
-from domains.fragment_tags import repository as fragment_tag_repository
-from models import Fragment
+from domains.backups import repository as backup_repository
 from modules.auth.application import TEST_USER_ID
-from modules.fragments.mapper import map_fragment
-from modules.shared.content.content_html import convert_markdown_to_basic_html
+from modules.shared.content.content_html import convert_markdown_to_basic_html, extract_plain_text_from_html
 from modules.shared.content.fragment_body_markdown import convert_editor_document_to_body_markdown
+from modules.shared.fragment_snapshots import FragmentSnapshotReader
+
+_FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 
 
 def _editor_document(text: str) -> dict:
@@ -37,34 +39,76 @@ async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
     return await auth_headers_factory(async_client)
 
 
-async def _create_fragment(db_session_factory, payload: dict) -> dict:
-    """直接写入 fragment projection，并返回与旧接口兼容的映射载荷。"""
+def _build_fragment_payload(payload: dict, *, fragment_id: str | None = None) -> dict:
+    """把测试输入规整成 fragment snapshot 载荷。"""
     request_payload = dict(payload)
     if "editor_document" in request_payload:
         request_payload["body_html"] = convert_markdown_to_basic_html(
             convert_editor_document_to_body_markdown(request_payload.pop("editor_document"))
         )
+    body_html = str(request_payload.get("body_html") or "")
+    plain_text_snapshot = str(
+        request_payload.get("plain_text_snapshot")
+        or extract_plain_text_from_html(body_html)
+        or request_payload.get("transcript")
+        or ""
+    ).strip()
+    now = datetime.now(timezone.utc).isoformat()
+    resolved_id = str(fragment_id or request_payload.get("id") or uuid4())
+    return {
+        "id": resolved_id,
+        "folder_id": request_payload.get("folder_id"),
+        "source": request_payload.get("source") or "manual",
+        "audio_source": request_payload.get("audio_source"),
+        "created_at": str(request_payload.get("created_at") or now),
+        "updated_at": str(request_payload.get("updated_at") or now),
+        "summary": request_payload.get("summary"),
+        "tags": list(request_payload.get("tags") or []),
+        "transcript": request_payload.get("transcript"),
+        "speaker_segments": request_payload.get("speaker_segments"),
+        "audio_object_key": request_payload.get("audio_object_key"),
+        "audio_file_url": request_payload.get("audio_file_url"),
+        "audio_file_expires_at": request_payload.get("audio_file_expires_at"),
+        "body_html": body_html,
+        "plain_text_snapshot": plain_text_snapshot,
+        "content_state": request_payload.get("content_state") or ("body_present" if plain_text_snapshot else "empty"),
+        "is_filmed": bool(request_payload.get("is_filmed")),
+        "filmed_at": request_payload.get("filmed_at"),
+        "deleted_at": request_payload.get("deleted_at"),
+    }
+
+
+def _upsert_fragment_snapshot(db_session_factory, fragment: dict, *, operation: str = "upsert") -> None:
+    """直接写入 fragment snapshot，供测试模拟 local-first flush。"""
     with db_session_factory() as db:
-        fragment = fragment_repository.create(
+        record = backup_repository.get_record(
             db=db,
             user_id=TEST_USER_ID,
-            transcript=request_payload.get("transcript"),
-            source=request_payload.get("source") or "voice",
-            audio_source=request_payload.get("audio_source"),
-            audio_storage_provider=None,
-            audio_bucket=None,
-            audio_object_key=None,
-            audio_access_level=None,
-            audio_original_filename=None,
-            audio_mime_type=None,
-            audio_file_size=None,
-            audio_checksum=None,
-            body_html=request_payload.get("body_html"),
-            plain_text_snapshot=request_payload.get("plain_text_snapshot") or "",
-            folder_id=request_payload.get("folder_id"),
-            tags=[],
+            entity_type="fragment",
+            entity_id=fragment["id"],
         )
-        return map_fragment(fragment).model_dump()
+        entity_version = (record.entity_version + 1) if record is not None else 1
+        modified_at = datetime.fromisoformat(str(fragment["updated_at"]).replace("Z", "+00:00"))
+        backup_repository.upsert_record(
+            db=db,
+            user_id=TEST_USER_ID,
+            entity_type="fragment",
+            entity_id=fragment["id"],
+            entity_version=entity_version,
+            operation=operation,
+            payload_json=json.dumps(fragment, ensure_ascii=False),
+            modified_at=modified_at,
+            last_modified_device_id="device-test",
+            now=datetime.now(timezone.utc),
+        )
+        db.commit()
+
+
+async def _create_fragment(db_session_factory, payload: dict) -> dict:
+    """创建测试 fragment，并同步一条本地真值 snapshot。"""
+    fragment = _build_fragment_payload(payload)
+    _upsert_fragment_snapshot(db_session_factory, fragment)
+    return fragment
 
 
 async def _create_folder(async_client, auth_headers_factory, name: str) -> str:
@@ -79,7 +123,7 @@ async def _create_folder(async_client, auth_headers_factory, name: str) -> str:
 
 
 async def _backup_fragment(async_client, auth_headers_factory, fragment: dict) -> None:
-    """把 fragment 通过备份接口写入远端快照，模拟 local-first 同步完成。"""
+    """把 fragment 通过备份接口写入远端快照，模拟客户端主动 flush。"""
     response = await async_client.post(
         "/api/backups/batch",
         json={
@@ -90,27 +134,7 @@ async def _backup_fragment(async_client, auth_headers_factory, fragment: dict) -
                     "entity_version": 1,
                     "operation": "upsert",
                     "modified_at": fragment["updated_at"],
-                    "payload": {
-                        "id": fragment["id"],
-                        "folder_id": fragment.get("folder_id"),
-                        "source": fragment.get("source") or "manual",
-                        "audio_source": fragment.get("audio_source"),
-                        "created_at": fragment["created_at"],
-                        "updated_at": fragment["updated_at"],
-                        "summary": fragment.get("summary"),
-                        "tags": fragment.get("tags") or [],
-                        "transcript": fragment.get("transcript"),
-                        "speaker_segments": fragment.get("speaker_segments"),
-                        "audio_object_key": fragment.get("audio_object_key"),
-                        "audio_file_url": fragment.get("audio_file_url"),
-                        "audio_file_expires_at": fragment.get("audio_file_expires_at"),
-                        "body_html": fragment.get("body_html") or "",
-                        "plain_text_snapshot": fragment.get("plain_text_snapshot") or "",
-                        "content_state": fragment.get("content_state"),
-                        "is_filmed": fragment.get("is_filmed") or False,
-                        "filmed_at": fragment.get("filmed_at"),
-                        "deleted_at": fragment.get("deleted_at"),
-                    },
+                    "payload": fragment,
                 }
             ]
         },
@@ -132,13 +156,17 @@ async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, att
     raise AssertionError(f"pipeline {run_id} did not finish")
 
 
-async def _wait_fragment_derivatives(db_session_factory, fragment_id: str, *, attempts: int = 80) -> Fragment:
-    """轮询数据库直到摘要标签衍生字段补齐。"""
+async def _wait_fragment_derivatives(db_session_factory, fragment_id: str, *, attempts: int = 80):
+    """轮询 snapshot，直到摘要或标签等衍生字段补齐。"""
     for _ in range(attempts):
         with db_session_factory() as db:
-            fragment = db.query(Fragment).filter(Fragment.id == fragment_id).first()
-            if fragment is not None and (fragment.summary or fragment.tags not in (None, "[]")):
-                return fragment
+            snapshot = _FRAGMENT_SNAPSHOT_READER.get_by_id(
+                db=db,
+                user_id=TEST_USER_ID,
+                fragment_id=fragment_id,
+            )
+            if snapshot is not None and (snapshot.summary or snapshot.tags):
+                return snapshot
         await asyncio.sleep(0.05)
     raise AssertionError(f"fragment derivatives were not backfilled: {fragment_id}")
 
@@ -153,19 +181,37 @@ async def _wait_vector_doc(app, fragment_id: str, *, attempts: int = 80) -> dict
     raise AssertionError(f"vector doc was not backfilled: {fragment_id}")
 
 
-def _seed_fragment_tags(db_session_factory, fragment_id: str, tags: list[str]) -> None:
-    """直接写库补齐标签聚合测试所需数据。"""
+def _update_fragment_snapshot(db_session_factory, fragment_id: str, **changes) -> dict:
+    """按客户端语义更新一条 fragment snapshot。"""
     with db_session_factory() as db:
-        fragment = db.query(Fragment).filter(Fragment.id == fragment_id).first()
-        assert fragment is not None
-        fragment.tags = json.dumps(tags, ensure_ascii=False)
-        fragment_tag_repository.replace_for_fragment(
+        record = backup_repository.get_record(
             db=db,
             user_id=TEST_USER_ID,
-            fragment_id=fragment_id,
-            tags=tags,
+            entity_type="fragment",
+            entity_id=fragment_id,
         )
-        db.commit()
+        assert record is not None
+        payload = json.loads(record.payload_json or "{}")
+    payload.update(changes)
+    payload["id"] = fragment_id
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _upsert_fragment_snapshot(db_session_factory, payload)
+    return payload
+
+
+def _delete_fragment_snapshot(db_session_factory, fragment_id: str) -> None:
+    """把目标 fragment 标记删除，模拟本地 tombstone 已同步。"""
+    payload = _update_fragment_snapshot(
+        db_session_factory,
+        fragment_id,
+        deleted_at=datetime.now(timezone.utc).isoformat(),
+    )
+    _upsert_fragment_snapshot(db_session_factory, payload)
+
+
+def _seed_fragment_tags(db_session_factory, fragment_id: str, tags: list[str]) -> None:
+    """直接补写 snapshot 标签，供标签聚合测试复用。"""
+    _update_fragment_snapshot(db_session_factory, fragment_id, tags=tags)
 
 
 def _seed_fragment_vector(app, fragment_id: str, text: str, *, source: str = "manual") -> None:
@@ -178,3 +224,16 @@ def _seed_fragment_vector(app, fragment_id: str, text: str, *, source: str = "ma
         "summary": None,
         "tags": [],
     }
+
+
+def _read_fragment_snapshot(db_session_factory, fragment_id: str):
+    """读取单条 fragment snapshot，供流程断言复用。"""
+    with db_session_factory() as db:
+        snapshot = _FRAGMENT_SNAPSHOT_READER.get_by_id(
+            db=db,
+            user_id=TEST_USER_ID,
+            fragment_id=fragment_id,
+        )
+        if snapshot is None:
+            return None
+        return SimpleNamespace(**json.loads(json.dumps(snapshot, default=str)))

@@ -54,8 +54,8 @@ def _upsert_fragment_record(
     )
 
 
-def test_fragment_snapshot_reader_get_by_ids_preserves_order_and_filters_invalid_records(db_session_factory) -> None:
-    """批量读取应按输入顺序返回，并过滤空正文与删除记录。"""
+def test_fragment_snapshot_reader_get_by_ids_preserves_order_and_keeps_placeholder_snapshots(db_session_factory) -> None:
+    """批量读取应按输入顺序返回，并保留未删除的 placeholder snapshot。"""
     reader = FragmentSnapshotReader()
     with db_session_factory() as db:
         _upsert_fragment_record(db, entity_id="valid-1", body_html="<p>第一条</p>")
@@ -70,9 +70,10 @@ def test_fragment_snapshot_reader_get_by_ids_preserves_order_and_filters_invalid
             fragment_ids=["valid-2", "deleted", "valid-1", "missing", "empty"],
         )
 
-    assert [snapshot.id for snapshot in snapshots] == ["valid-2", "valid-1"]
+    assert [snapshot.id for snapshot in snapshots] == ["valid-2", "valid-1", "empty"]
     assert snapshots[0].plain_text_snapshot == "第二条正文"
     assert snapshots[1].body_html == "<p>第一条</p>"
+    assert snapshots[2].body_html == ""
 
 
 def test_fragment_snapshot_reader_lists_deleted_ids_from_tombstone_and_payload(db_session_factory) -> None:

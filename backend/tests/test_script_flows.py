@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from models import Fragment, FragmentTag
+
+from domains.backups import repository as backup_repository
+from modules.auth.application import TEST_USER_ID
 from modules.fragments.derivative_pipeline import PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL
 
 from tests.flow_helpers import (
     _auth_headers,
     _backup_fragment,
-    _create_fragment,
     _create_folder,
+    _create_fragment,
     _editor_document,
     _seed_fragment_vector,
     _wait_fragment_derivatives,
@@ -24,6 +27,19 @@ from tests.flow_helpers import (
 )
 
 pytestmark = pytest.mark.integration
+
+
+def _read_fragment_payload(db_session_factory, fragment_id: str) -> dict:
+    """读取原始 fragment snapshot payload，供上传链路断言复用。"""
+    with db_session_factory() as db:
+        record = backup_repository.get_record(
+            db=db,
+            user_id=TEST_USER_ID,
+            entity_type="fragment",
+            entity_id=fragment_id,
+        )
+        assert record is not None
+        return json.loads(record.payload_json or "{}")
 
 
 @pytest.mark.asyncio
@@ -91,17 +107,19 @@ async def test_update_script_rejects_invalid_status(async_client, auth_headers_f
 
 @pytest.mark.asyncio
 async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_client, auth_headers_factory, db_session_factory) -> None:
-    """上传音频后应通过后台流水线完成转写、摘要和标签写入。"""
+    """上传音频后应通过后台流水线完成转写、摘要和标签补写。"""
     folder_id = await _create_folder(async_client, auth_headers_factory, "录音箱")
     response = await async_client.post(
         "/api/transcriptions",
         headers=await _auth_headers(async_client, auth_headers_factory),
         files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
-        data={"folder_id": folder_id},
+        data={"folder_id": folder_id, "local_fragment_id": "upload-local-001"},
     )
     assert response.status_code == 200
     payload = response.json()["data"]
     assert payload["pipeline_type"] == "media_ingestion"
+    assert payload["fragment_id"] is None
+    assert payload["local_fragment_id"] == "upload-local-001"
     assert payload["audio_file_url"]
     assert "audio_path" not in payload
     assert "relative_path" not in payload
@@ -110,25 +128,21 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
     assert pipeline["output"]["summary"] is None
     assert pipeline["output"]["tags"] == []
 
-    enriched = await _wait_fragment_derivatives(db_session_factory, payload["fragment_id"])
+    enriched = await _wait_fragment_derivatives(db_session_factory, "upload-local-001")
     assert enriched.audio_source == "upload"
     assert enriched.summary
-    assert enriched.tags not in (None, "[]")
+    assert enriched.tags
 
-    with db_session_factory() as db:
-        fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
-        assert fragment is not None
-        assert fragment.audio_source == "upload"
-        assert fragment.transcript == "转写完成"
-        assert fragment.folder_id == folder_id
-        fragment_tags = db.query(FragmentTag).filter(FragmentTag.fragment_id == fragment.id).all()
-        assert len(fragment_tags) >= 1
-        assert payload["audio_file_url"]
+    snapshot_payload = _read_fragment_payload(db_session_factory, "upload-local-001")
+    assert snapshot_payload["audio_source"] == "upload"
+    assert snapshot_payload["transcript"] == "转写完成"
+    assert snapshot_payload["folder_id"] == folder_id
+    assert payload["audio_file_url"]
 
 
 @pytest.mark.asyncio
 async def test_upload_audio_with_local_fragment_id_succeeds_without_projection(async_client, auth_headers_factory, app, db_session_factory) -> None:
-    """local-first 主路径应仅依赖 pipeline 与逻辑 ID，不要求先建远端 projection。"""
+    """local-first 主路径应仅依赖 pipeline 与逻辑 ID，不要求旧 projection 行。"""
     response = await async_client.post(
         "/api/transcriptions",
         headers=await _auth_headers(async_client, auth_headers_factory),
@@ -152,9 +166,8 @@ async def test_upload_audio_with_local_fragment_id_succeeds_without_projection(a
     assert vector_doc["text"] == "转写完成"
     assert vector_doc["source"] == "voice"
 
-    with db_session_factory() as db:
-        fragment = db.query(Fragment).filter(Fragment.id == "local-fragment-001").first()
-        assert fragment is None
+    snapshot_payload = _read_fragment_payload(db_session_factory, "local-fragment-001")
+    assert snapshot_payload["transcript"] == "转写完成"
 
 
 @pytest.mark.asyncio
@@ -173,6 +186,7 @@ async def test_upload_audio_succeeds_when_derivative_enqueue_fails(async_client,
             "/api/transcriptions",
             headers=await _auth_headers(async_client, auth_headers_factory),
             files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
+            data={"local_fragment_id": "upload-local-derivative-fail"},
         )
         assert response.status_code == 200
         payload = response.json()["data"]
@@ -182,19 +196,17 @@ async def test_upload_audio_succeeds_when_derivative_enqueue_fails(async_client,
         assert pipeline["output"]["summary"] is None
         assert pipeline["output"]["tags"] == []
 
-        with db_session_factory() as db:
-            fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
-            assert fragment is not None
-            assert fragment.transcript == "转写完成"
-            assert fragment.summary is None
-            assert fragment.tags == "[]"
+        snapshot_payload = _read_fragment_payload(db_session_factory, "upload-local-derivative-fail")
+        assert snapshot_payload["transcript"] == "转写完成"
+        assert snapshot_payload.get("summary") is None
+        assert snapshot_payload.get("tags") == []
     finally:
         app.state.container.pipeline_runner.create_run = original_create_run
 
 
 @pytest.mark.asyncio
 async def test_upload_audio_marks_failed_when_stt_crashes(async_client, auth_headers_factory, app, db_session_factory) -> None:
-    """STT 异常时应让 pipeline 失败，并保留未完成碎片供排障。"""
+    """STT 异常时应让 pipeline 失败，并保留排障所需 placeholder snapshot。"""
     app.state.container.stt_provider = SimpleNamespace(
         transcribe=AsyncMock(side_effect=RuntimeError("stt boom")),
         health_check=AsyncMock(return_value=True),
@@ -203,6 +215,7 @@ async def test_upload_audio_marks_failed_when_stt_crashes(async_client, auth_hea
         "/api/transcriptions",
         headers=await _auth_headers(async_client, auth_headers_factory),
         files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
+        data={"local_fragment_id": "upload-local-stt-fail"},
     )
     payload = response.json()["data"]
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
@@ -215,10 +228,9 @@ async def test_upload_audio_marks_failed_when_stt_crashes(async_client, auth_hea
     assert steps["transcribe_audio"]["attempt_count"] == 3
     assert steps["transcribe_audio"]["status"] == "failed"
 
-    with db_session_factory() as db:
-        fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
-        assert fragment.audio_source == "upload"
-        assert fragment.transcript is None
+    snapshot_payload = _read_fragment_payload(db_session_factory, "upload-local-stt-fail")
+    assert snapshot_payload["audio_source"] == "upload"
+    assert snapshot_payload.get("transcript") is None
 
 
 @pytest.mark.asyncio
@@ -233,6 +245,7 @@ async def test_upload_audio_retries_transcription_and_then_succeeds(async_client
         "/api/transcriptions",
         headers=await _auth_headers(async_client, auth_headers_factory),
         files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
+        data={"local_fragment_id": "upload-local-stt-retry"},
     )
     payload = response.json()["data"]
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
@@ -250,6 +263,7 @@ async def test_upload_audio_retries_transcription_and_then_succeeds(async_client
 @pytest.mark.asyncio
 async def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(async_client, auth_headers_factory, app, db_session_factory) -> None:
     """异步衍生字段超时时应走 fallback，且不影响主转写成功。"""
+
     async def slow_generate(**kwargs):
         await asyncio.sleep(0.05)
         return "不会被用到"
@@ -261,6 +275,7 @@ async def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(async_
             "/api/transcriptions",
             headers=await _auth_headers(async_client, auth_headers_factory),
             files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
+            data={"local_fragment_id": "upload-local-llm-timeout"},
         )
     payload = response.json()["data"]
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
@@ -268,15 +283,13 @@ async def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(async_
     assert pipeline["output"]["summary"] is None
     assert pipeline["output"]["tags"] == []
 
-    enriched = await _wait_fragment_derivatives(db_session_factory, payload["fragment_id"])
+    enriched = await _wait_fragment_derivatives(db_session_factory, "upload-local-llm-timeout")
     assert enriched.summary
-    assert enriched.tags not in (None, "[]")
+    assert enriched.tags
 
-    with db_session_factory() as db:
-        fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
-        assert fragment is not None
-        assert fragment.summary
-        assert fragment.tags
+    snapshot_payload = _read_fragment_payload(db_session_factory, "upload-local-llm-timeout")
+    assert snapshot_payload["summary"]
+    assert snapshot_payload["tags"]
 
 
 @pytest.mark.asyncio
@@ -290,15 +303,14 @@ async def test_upload_audio_marks_failed_when_transcription_is_cancelled(async_c
         "/api/transcriptions",
         headers=await _auth_headers(async_client, auth_headers_factory),
         files={"audio": ("test.m4a", io.BytesIO(b"fake-audio"), "audio/m4a")},
+        data={"local_fragment_id": "upload-local-cancelled"},
     )
     payload = response.json()["data"]
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
     assert pipeline["status"] == "failed"
 
-    with db_session_factory() as db:
-        fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
-        assert fragment is not None
-        assert fragment.transcript is None
+    snapshot_payload = _read_fragment_payload(db_session_factory, "upload-local-cancelled")
+    assert snapshot_payload.get("transcript") is None
 
 
 @pytest.mark.asyncio
@@ -312,11 +324,7 @@ async def test_scripts_daily_push_trigger_get_force_trigger_and_idempotency(asyn
     ]
     for fragment in fragment_ids:
         await _backup_fragment(async_client, auth_headers_factory, fragment)
-    with db_session_factory() as db:
-        fragments = db.query(Fragment).filter(Fragment.id.in_([fragment["id"] for fragment in fragment_ids])).all()
-        for fragment in fragments:
-            _seed_fragment_vector(app, fragment.id, "同主题内容", source=fragment.source)
-        db.commit()
+        _seed_fragment_vector(app, fragment["id"], "同主题内容", source=fragment["source"])
 
     first_response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
     assert first_response.status_code == 200

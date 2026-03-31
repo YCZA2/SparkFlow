@@ -6,12 +6,16 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
-from domains.fragments import repository as fragment_repository
-from models import Fragment
 
+from modules.auth.application import TEST_USER_ID
+from modules.backups.application import BackupUseCase
+from modules.backups.schemas import BackupBatchRequest, BackupMutationItem
 from modules.fragments.derivative_pipeline import PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL
+from modules.shared.fragment_snapshots import FragmentSnapshotReader
 
 pytestmark = pytest.mark.integration
+
+_FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 
 
 async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
@@ -32,28 +36,57 @@ async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, att
     raise AssertionError(f"pipeline {run_id} did not finish")
 
 
-def _create_fragment(db_session_factory, body_html: str) -> str:
-    """直接写入 fragment projection，供异步回填流水线使用。"""
+def _seed_fragment_snapshot(db_session_factory, *, fragment_id: str, text: str) -> str:
+    """创建可向量化的 fragment snapshot，供异步回填流水线消费。"""
     with db_session_factory() as db:
-        fragment = fragment_repository.create(
+        BackupUseCase().push_batch(
             db=db,
-            user_id="test-user-001",
-            transcript=None,
-            source="manual",
-            audio_source=None,
-            audio_storage_provider=None,
-            audio_bucket=None,
-            audio_object_key=None,
-            audio_access_level=None,
-            audio_original_filename=None,
-            audio_mime_type=None,
-            audio_file_size=None,
-            audio_checksum=None,
-            body_html=body_html,
-            plain_text_snapshot="",
-            tags=[],
+            user_id=TEST_USER_ID,
+            payload=BackupBatchRequest(
+                items=[
+                    BackupMutationItem(
+                        entity_type="fragment",
+                        entity_id=fragment_id,
+                        entity_version=1,
+                        operation="upsert",
+                        modified_at="2026-03-31T00:00:00+00:00",
+                        last_modified_device_id="device-test",
+                        payload={
+                            "id": fragment_id,
+                            "folder_id": None,
+                            "source": "manual",
+                            "audio_source": None,
+                            "created_at": "2026-03-31T00:00:00+00:00",
+                            "updated_at": "2026-03-31T00:00:00+00:00",
+                            "summary": None,
+                            "tags": [],
+                            "transcript": None,
+                            "speaker_segments": None,
+                            "audio_object_key": None,
+                            "audio_file_url": None,
+                            "audio_file_expires_at": None,
+                            "body_html": f"<p>{text}</p>",
+                            "plain_text_snapshot": text,
+                            "content_state": "body_present",
+                            "is_filmed": False,
+                            "filmed_at": None,
+                            "deleted_at": None,
+                        },
+                    )
+                ]
+            ),
         )
-        return fragment.id
+    return fragment_id
+
+
+def _read_fragment_snapshot(db_session_factory, fragment_id: str):
+    """读取最新 snapshot，供断言摘要标签回填结果。"""
+    with db_session_factory() as db:
+        return _FRAGMENT_SNAPSHOT_READER.get_by_id(
+            db=db,
+            user_id=TEST_USER_ID,
+            fragment_id=fragment_id,
+        )
 
 
 @pytest.mark.asyncio
@@ -65,10 +98,10 @@ async def test_fragment_derivative_pipeline_backfills_summary_tags_and_vector(
     vector_store,
 ) -> None:
     """异步衍生字段流水线应回填摘要、标签并写入向量。"""
-    fragment_id = _create_fragment(db_session_factory, "<p>定位方法论测试文本</p>")
+    fragment_id = _seed_fragment_snapshot(db_session_factory, fragment_id="fragment-derivative-001", text="定位方法论测试文本")
     run = await app.state.container.pipeline_runner.create_run(
         run_id=None,
-        user_id="test-user-001",
+        user_id=TEST_USER_ID,
         pipeline_type=PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
         input_payload={"fragment_id": fragment_id, "effective_text": "定位方法论测试文本"},
         resource_type="fragment",
@@ -77,11 +110,10 @@ async def test_fragment_derivative_pipeline_backfills_summary_tags_and_vector(
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, run.id)
     assert pipeline["status"] == "succeeded"
 
-    with db_session_factory() as db:
-        fragment = db.query(Fragment).filter(Fragment.id == fragment_id).first()
-        assert fragment is not None
-        assert fragment.summary
-        assert fragment.tags
+    snapshot = _read_fragment_snapshot(db_session_factory, fragment_id)
+    assert snapshot is not None
+    assert snapshot.summary
+    assert snapshot.tags
     assert vector_store.fragment_docs[fragment_id]["text"] == "定位方法论测试文本"
 
 
@@ -93,6 +125,7 @@ async def test_fragment_derivative_pipeline_uses_fallback_when_llm_fails(
     db_session_factory,
 ) -> None:
     """LLM 失败时应走 fallback 而不是让异步回填失败。"""
+
     async def failing_generate(**kwargs):
         raise RuntimeError("llm boom")
 
@@ -105,10 +138,10 @@ async def test_fragment_derivative_pipeline_uses_fallback_when_llm_fails(
         health_check=llm_health_check,
     )
     try:
-        fragment_id = _create_fragment(db_session_factory, "<p>创业增长策略测试</p>")
+        fragment_id = _seed_fragment_snapshot(db_session_factory, fragment_id="fragment-derivative-002", text="创业增长策略测试")
         run = await app.state.container.pipeline_runner.create_run(
             run_id=None,
-            user_id="test-user-001",
+            user_id=TEST_USER_ID,
             pipeline_type=PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
             input_payload={"fragment_id": fragment_id, "effective_text": "创业增长策略测试"},
             resource_type="fragment",
@@ -117,11 +150,10 @@ async def test_fragment_derivative_pipeline_uses_fallback_when_llm_fails(
         pipeline = await _wait_pipeline(async_client, auth_headers_factory, run.id)
         assert pipeline["status"] == "succeeded"
 
-        with db_session_factory() as db:
-            fragment = db.query(Fragment).filter(Fragment.id == fragment_id).first()
-            assert fragment is not None
-            assert fragment.summary
-            assert fragment.tags
+        snapshot = _read_fragment_snapshot(db_session_factory, fragment_id)
+        assert snapshot is not None
+        assert snapshot.summary
+        assert snapshot.tags
     finally:
         app.state.container.llm_provider = original_llm_provider
 
@@ -141,10 +173,10 @@ async def test_fragment_derivative_pipeline_logs_vector_failure_without_failing_
 
     app.state.container.vector_store.upsert_fragment = failing_upsert_fragment
     try:
-        fragment_id = _create_fragment(db_session_factory, "<p>踏实成长测试文本</p>")
+        fragment_id = _seed_fragment_snapshot(db_session_factory, fragment_id="fragment-derivative-003", text="踏实成长测试文本")
         run = await app.state.container.pipeline_runner.create_run(
             run_id=None,
-            user_id="test-user-001",
+            user_id=TEST_USER_ID,
             pipeline_type=PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
             input_payload={"fragment_id": fragment_id, "effective_text": "踏实成长测试文本"},
             resource_type="fragment",
@@ -153,11 +185,10 @@ async def test_fragment_derivative_pipeline_logs_vector_failure_without_failing_
         pipeline = await _wait_pipeline(async_client, auth_headers_factory, run.id)
         assert pipeline["status"] == "succeeded"
 
-        with db_session_factory() as db:
-            fragment = db.query(Fragment).filter(Fragment.id == fragment_id).first()
-            assert fragment is not None
-            assert fragment.summary
-            assert fragment.tags
+        snapshot = _read_fragment_snapshot(db_session_factory, fragment_id)
+        assert snapshot is not None
+        assert snapshot.summary
+        assert snapshot.tags
     finally:
         app.state.container.vector_store.upsert_fragment = original_upsert
 
@@ -169,10 +200,10 @@ async def test_fragment_derivative_pipeline_succeeds_without_fragment_projection
     app,
     vector_store,
 ) -> None:
-    """缺少 Fragment ORM 行时，异步回填仍应基于逻辑 ID 完成向量同步。"""
+    """缺少旧 projection 行时，异步回填仍应基于逻辑 ID 完成向量同步。"""
     run = await app.state.container.pipeline_runner.create_run(
         run_id=None,
-        user_id="test-user-001",
+        user_id=TEST_USER_ID,
         pipeline_type=PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
         input_payload={
             "fragment_id": None,

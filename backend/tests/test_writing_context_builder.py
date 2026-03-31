@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -50,6 +51,28 @@ def _upsert_fragment_snapshot(db, fragment) -> None:
     )
 
 
+def _build_fragment_snapshot(*, fragment_id: str, text: str, offset_minutes: int = 0):
+    """构造写作上下文测试使用的 fragment snapshot 替身。"""
+    created_at = datetime.now(timezone.utc) + timedelta(minutes=offset_minutes)
+    return type(
+        "SnapshotSeed",
+        (),
+        {
+            "id": fragment_id,
+            "user_id": TEST_USER_ID,
+            "folder_id": None,
+            "source": "manual",
+            "audio_source": None,
+            "created_at": created_at,
+            "updated_at": created_at,
+            "summary": None,
+            "transcript": None,
+            "body_html": f"<p>{text}</p>",
+            "plain_text_snapshot": text,
+        },
+    )()
+
+
 @pytest.mark.asyncio
 async def test_writing_context_bundle_uses_preset_stable_core_and_cached_methodologies(app) -> None:
     """生成链路应使用预置稳定内核，并只读取已缓存的方法论。"""
@@ -57,28 +80,13 @@ async def test_writing_context_bundle_uses_preset_stable_core_and_cached_methodo
     vector_store = app.state.container.vector_store
     knowledge_index_store = app.state.container.knowledge_index_store
 
-    from domains.fragments import repository as fragment_repository
     from domains.scripts import repository as script_repository
     from domains.writing_context import repository as writing_context_repository
 
     with app.state.container.session_factory() as db:
-        fragment = fragment_repository.create(
-            db=db,
-            user_id=TEST_USER_ID,
-            transcript=None,
-            source="manual",
-            audio_source=None,
-            audio_storage_provider=None,
-            audio_bucket=None,
-            audio_object_key=None,
-            audio_access_level=None,
-            audio_original_filename=None,
-            audio_mime_type=None,
-            audio_file_size=None,
-            audio_checksum=None,
-            body_html="<p>我经常先用反常识开头，再给用户一个今天就能执行的动作。</p>",
-            plain_text_snapshot="我经常先用反常识开头，再给用户一个今天就能执行的动作。",
-            tags=[],
+        fragment = _build_fragment_snapshot(
+            fragment_id="writing-context-fragment-001",
+            text="我经常先用反常识开头，再给用户一个今天就能执行的动作。",
         )
         script_repository.create(
             db=db,
@@ -168,28 +176,14 @@ async def test_daily_writing_context_maintenance_refreshes_only_after_threshold(
     """每日维护任务应在碎片数量和增量达标后才静默刷新方法论。"""
     llm_provider = app.state.container.llm_provider
 
-    from domains.fragments import repository as fragment_repository
     from domains.writing_context import repository as writing_context_repository
 
     with app.state.container.session_factory() as db:
         for index in range(7):
-            fragment = fragment_repository.create(
-                db=db,
-                user_id=TEST_USER_ID,
-                transcript=None,
-                source="manual",
-                audio_source=None,
-                audio_storage_provider=None,
-                audio_bucket=None,
-                audio_object_key=None,
-                audio_access_level=None,
-                audio_original_filename=None,
-                audio_mime_type=None,
-                audio_file_size=None,
-                audio_checksum=None,
-                body_html=f"<p>首轮阈值碎片 {index}</p>",
-                plain_text_snapshot=f"首轮阈值碎片 {index}",
-                tags=[],
+            fragment = _build_fragment_snapshot(
+                fragment_id=f"writing-threshold-fragment-{index}",
+                text=f"首轮阈值碎片 {index}",
+                offset_minutes=index,
             )
             _upsert_fragment_snapshot(db, fragment)
 
@@ -203,23 +197,10 @@ async def test_daily_writing_context_maintenance_refreshes_only_after_threshold(
             source_type="fragment_distilled",
         )
 
-        fragment = fragment_repository.create(
-            db=db,
-            user_id=TEST_USER_ID,
-            transcript=None,
-            source="manual",
-            audio_source=None,
-            audio_storage_provider=None,
-            audio_bucket=None,
-            audio_object_key=None,
-            audio_access_level=None,
-            audio_original_filename=None,
-            audio_mime_type=None,
-            audio_file_size=None,
-            audio_checksum=None,
-            body_html="<p>第八条碎片，达到阈值</p>",
-            plain_text_snapshot="第八条碎片，达到阈值",
-            tags=[],
+        fragment = _build_fragment_snapshot(
+            fragment_id="writing-threshold-fragment-8",
+            text="第八条碎片，达到阈值",
+            offset_minutes=8,
         )
         _upsert_fragment_snapshot(db, fragment)
         llm_provider.queue_text('[{"title":"首轮方法论","content":"先抛问题，再给动作。"}]')
@@ -235,23 +216,10 @@ async def test_daily_writing_context_maintenance_refreshes_only_after_threshold(
         second_signature = second_entries[0].source_signature
 
         for index in range(2):
-            fragment = fragment_repository.create(
-                db=db,
-                user_id=TEST_USER_ID,
-                transcript=None,
-                source="manual",
-                audio_source=None,
-                audio_storage_provider=None,
-                audio_bucket=None,
-                audio_object_key=None,
-                audio_access_level=None,
-                audio_original_filename=None,
-                audio_mime_type=None,
-                audio_file_size=None,
-                audio_checksum=None,
-                body_html=f"<p>增量未达标 {index}</p>",
-                plain_text_snapshot=f"增量未达标 {index}",
-                tags=[],
+            fragment = _build_fragment_snapshot(
+                fragment_id=f"writing-threshold-fragment-extra-{index}",
+                text=f"增量未达标 {index}",
+                offset_minutes=10 + index,
             )
             _upsert_fragment_snapshot(db, fragment)
         third_result = await refresh_fragment_methodology_entries_for_all_users(

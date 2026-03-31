@@ -56,6 +56,9 @@ def _parse_pdf(file_content: bytes) -> str:
 
         reader = PdfReader(io.BytesIO(file_content))
         content = "\n".join((page.extract_text() or "") for page in reader.pages)
+        # pypdf 偶尔会返回大量替换字符，此时回退到简化提取能得到更稳定的测试与联调结果。
+        if _looks_like_broken_pdf_text(content):
+            return _ensure_non_empty(_extract_pdf_text_fallback(file_content))
         return _ensure_non_empty(content)
     except ImportError:
         logger.debug("pypdf_not_installed_falling_back_to_pdf_fallback_parser")
@@ -65,6 +68,15 @@ def _parse_pdf(file_content: bytes) -> str:
     except Exception:
         logger.debug("pdf_primary_parse_failed_falling_back", exc_info=True)
         return _ensure_non_empty(_extract_pdf_text_fallback(file_content))
+
+
+def _looks_like_broken_pdf_text(content: str) -> bool:
+    """识别明显损坏的 PDF 文本结果，避免把乱码当成有效正文。"""
+    normalized = str(content or "").strip()
+    if not normalized:
+        return False
+    replacement_count = normalized.count("\ufffd")
+    return replacement_count > 0 and replacement_count * 2 >= len(normalized)
 
 
 def _extract_pdf_text_fallback(file_content: bytes) -> str:

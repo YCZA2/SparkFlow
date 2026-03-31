@@ -7,9 +7,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
 from core.exceptions import ValidationError
-from domains.fragments import repository as fragment_repository
-from models import Fragment, FragmentFolder, FragmentTag
+from domains.backups import repository as backup_repository
+from models import FragmentFolder
 from modules.auth.application import TEST_USER_ID
 from modules.shared.ports import ExternalMediaResolvedAudio
 
@@ -18,14 +19,29 @@ from tests.flow_helpers import (
     _backup_fragment,
     _create_folder,
     _create_fragment,
+    _delete_fragment_snapshot,
     _editor_document,
     _seed_fragment_tags,
     _seed_fragment_vector,
+    _update_fragment_snapshot,
     _wait_fragment_derivatives,
     _wait_pipeline,
 )
 
 pytestmark = pytest.mark.integration
+
+
+def _read_fragment_payload(db_session_factory, fragment_id: str) -> dict:
+    """读取原始 fragment snapshot payload，便于断言 placeholder 与导入结果。"""
+    with db_session_factory() as db:
+        record = backup_repository.get_record(
+            db=db,
+            user_id=TEST_USER_ID,
+            entity_type="fragment",
+            entity_id=fragment_id,
+        )
+        assert record is not None
+        return json.loads(record.payload_json or "{}")
 
 
 @pytest.mark.asyncio
@@ -82,13 +98,13 @@ async def test_fragments_similarity_and_visualization(async_client, auth_headers
 
 @pytest.mark.asyncio
 async def test_import_external_audio_only_creates_pipeline_in_request_phase(async_client, auth_headers_factory, app, external_media_provider, db_session_factory) -> None:
-    """外链导入请求阶段只创建任务，不同步解析媒体。"""
+    """外链导入请求阶段只创建 local-first 任务，不同步解析媒体。"""
     await app.state.container.pipeline_dispatcher.stop()
     app.state.container.pipeline_runner.dispatcher.wake_up = lambda: None
 
     response = await async_client.post(
         "/api/external-media/audio-imports",
-        json={"share_url": "https://v.douyin.com/demo", "platform": "auto"},
+        json={"share_url": "https://v.douyin.com/demo", "platform": "auto", "local_fragment_id": "import-local-001"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 200
@@ -96,19 +112,17 @@ async def test_import_external_audio_only_creates_pipeline_in_request_phase(asyn
     assert payload == {
         "pipeline_run_id": payload["pipeline_run_id"],
         "pipeline_type": "media_ingestion",
-        "fragment_id": payload["fragment_id"],
-        "local_fragment_id": None,
+        "fragment_id": None,
+        "local_fragment_id": "import-local-001",
         "source": "voice",
         "audio_source": "external_link",
     }
     assert external_media_provider.calls == []
 
-    with db_session_factory() as db:
-        fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
-        assert fragment is not None
-        assert fragment.source == "voice"
-        assert fragment.audio_source == "external_link"
-        assert fragment.transcript is None
+    snapshot_payload = _read_fragment_payload(db_session_factory, "import-local-001")
+    assert snapshot_payload["source"] == "voice"
+    assert snapshot_payload["audio_source"] == "external_link"
+    assert snapshot_payload.get("transcript") is None
 
 
 @pytest.mark.asyncio
@@ -119,7 +133,7 @@ async def test_import_external_audio_assigns_fragment_to_requested_folder(
     external_media_provider,
     db_session_factory,
 ) -> None:
-    """外链导入在请求阶段应把预创建 fragment 放入指定文件夹。"""
+    """外链导入在请求阶段应把 placeholder snapshot 放入指定文件夹。"""
     await app.state.container.pipeline_dispatcher.stop()
     app.state.container.pipeline_runner.dispatcher.wake_up = lambda: None
     folder_id = await _create_folder(async_client, auth_headers_factory, "抖音导入")
@@ -130,18 +144,15 @@ async def test_import_external_audio_assigns_fragment_to_requested_folder(
             "share_url": "https://v.douyin.com/demo",
             "platform": "auto",
             "folder_id": folder_id,
+            "local_fragment_id": "import-folder-local-001",
         },
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 200
-    payload = response.json()["data"]
-    assert payload["fragment_id"]
     assert external_media_provider.calls == []
 
-    with db_session_factory() as db:
-        fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
-        assert fragment is not None
-        assert fragment.folder_id == folder_id
+    snapshot_payload = _read_fragment_payload(db_session_factory, "import-folder-local-001")
+    assert snapshot_payload["folder_id"] == folder_id
 
 
 @pytest.mark.asyncio
@@ -171,7 +182,7 @@ async def test_import_external_audio_runs_full_async_pipeline(
 
     response = await async_client.post(
         "/api/external-media/audio-imports",
-        json={"share_url": "https://v.douyin.com/demo", "platform": "auto"},
+        json={"share_url": "https://v.douyin.com/demo", "platform": "auto", "local_fragment_id": "external-local-001"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 200
@@ -179,9 +190,11 @@ async def test_import_external_audio_runs_full_async_pipeline(
     assert payload["pipeline_type"] == "media_ingestion"
     assert payload["source"] == "voice"
     assert payload["audio_source"] == "external_link"
+    assert payload["fragment_id"] is None
+    assert payload["local_fragment_id"] == "external-local-001"
     pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
     assert pipeline["status"] == "succeeded"
-    assert pipeline["resource"]["resource_id"] == payload["fragment_id"]
+    assert pipeline["resource"]["resource_id"] == "external-local-001"
     assert pipeline["output"]["platform"] == "douyin"
     assert pipeline["output"]["media_id"] == "7614713222814088953"
     assert pipeline["output"]["title"] == "别说了 拿大力胶吧"
@@ -203,17 +216,15 @@ async def test_import_external_audio_runs_full_async_pipeline(
     assert download_output["audio_file_url"]
     assert not temp_audio.exists()
 
-    enriched = await _wait_fragment_derivatives(db_session_factory, payload["fragment_id"])
+    enriched = await _wait_fragment_derivatives(db_session_factory, "external-local-001")
     assert enriched.summary
-    assert enriched.tags not in (None, "[]")
+    assert enriched.tags
 
-    with db_session_factory() as db:
-        fragment = db.query(Fragment).filter(Fragment.id == payload["fragment_id"]).first()
-        assert fragment is not None
-        assert fragment.source == "voice"
-        assert fragment.audio_source == "external_link"
-        assert fragment.transcript == "转写完成"
-    assert vector_store.fragment_docs[payload["fragment_id"]]["text"] == "转写完成"
+    snapshot_payload = _read_fragment_payload(db_session_factory, "external-local-001")
+    assert snapshot_payload["source"] == "voice"
+    assert snapshot_payload["audio_source"] == "external_link"
+    assert snapshot_payload["transcript"] == "转写完成"
+    assert vector_store.fragment_docs["external-local-001"]["text"] == "转写完成"
 
 
 @pytest.mark.asyncio
@@ -227,7 +238,7 @@ async def test_import_external_audio_marks_pipeline_failed_for_invalid_link(asyn
     )
     response = await async_client.post(
         "/api/external-media/audio-imports",
-        json={"share_url": "https://example.com/not-supported", "platform": "auto"},
+        json={"share_url": "https://example.com/not-supported", "platform": "auto", "local_fragment_id": "external-local-002"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 200
@@ -265,7 +276,7 @@ async def test_import_external_audio_retries_when_provider_temporarily_fails(asy
     )
     response = await async_client.post(
         "/api/external-media/audio-imports",
-        json={"share_url": "https://v.douyin.com/demo", "platform": "douyin"},
+        json={"share_url": "https://v.douyin.com/demo", "platform": "douyin", "local_fragment_id": "external-local-003"},
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 200
@@ -284,7 +295,7 @@ async def test_import_external_audio_retries_when_provider_temporarily_fails(asy
 
 @pytest.mark.asyncio
 async def test_fragment_folders_crud_filtering_and_moves(async_client, auth_headers_factory, db_session_factory) -> None:
-    """文件夹 CRUD、计数更新与批量移动应保持一致行为。"""
+    """文件夹 CRUD、计数更新与基于 snapshot 的移动应保持一致行为。"""
     folder_a_id = await _create_folder(async_client, auth_headers_factory, "选题箱")
     folder_b_id = await _create_folder(async_client, auth_headers_factory, "待整理")
 
@@ -297,14 +308,9 @@ async def test_fragment_folders_crud_filtering_and_moves(async_client, auth_head
     first_unfiled = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("未归类碎片 1"), "source": "manual"}))["id"]
     second_unfiled = (await _create_fragment(db_session_factory, {"editor_document": _editor_document("未归类碎片 2"), "source": "manual"}))["id"]
 
-    with db_session_factory() as db:
-        in_folder_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=in_folder["id"])
-        first_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=first_unfiled)
-        second_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=second_unfiled)
-        assert in_folder_fragment is not None and first_fragment is not None and second_fragment is not None
-        assert in_folder_fragment.folder_id == folder_a_id
-        fragment_repository.move_by_ids(db=db, fragments=[first_fragment, second_fragment], folder_id=folder_b_id)
-        fragment_repository.update_folder(db=db, fragment=first_fragment, folder_id=None)
+    _update_fragment_snapshot(db_session_factory, first_unfiled, folder_id=folder_b_id)
+    _update_fragment_snapshot(db_session_factory, second_unfiled, folder_id=folder_b_id)
+    _update_fragment_snapshot(db_session_factory, first_unfiled, folder_id=None)
 
     rename_response = await async_client.patch(
         f"/api/fragment-folders/{folder_b_id}",
@@ -316,10 +322,7 @@ async def test_fragment_folders_crud_filtering_and_moves(async_client, auth_head
     non_empty_delete = await async_client.delete(f"/api/fragment-folders/{folder_a_id}", headers=await _auth_headers(async_client, auth_headers_factory))
     assert non_empty_delete.status_code == 409
 
-    with db_session_factory() as db:
-        in_folder_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=in_folder["id"])
-        assert in_folder_fragment is not None
-        fragment_repository.update_folder(db=db, fragment=in_folder_fragment, folder_id=None)
+    _update_fragment_snapshot(db_session_factory, in_folder["id"], folder_id=None)
     empty_delete = await async_client.delete(f"/api/fragment-folders/{folder_a_id}", headers=await _auth_headers(async_client, auth_headers_factory))
     assert empty_delete.status_code == 200
     assert empty_delete.json()["data"] is None
@@ -384,13 +387,6 @@ async def test_fragment_tags_listing_filtering_and_delete_consistency(async_clie
     query_response = await async_client.get("/api/fragments/tags?query=ab", headers=await _auth_headers(async_client, auth_headers_factory))
     assert [item["tag"] for item in query_response.json()["data"]["items"]] == ["abc", "abd", "zabc"]
 
-    with db_session_factory() as db:
-        alpha_folder_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=alpha_in_folder)
-        alpha_free_fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=alpha_free)
-        fragment = fragment_repository.get_by_id(db=db, user_id=TEST_USER_ID, fragment_id=zabc_fragment)
-        assert alpha_folder_fragment is not None and alpha_free_fragment is not None and fragment is not None
-        assert json.loads(alpha_folder_fragment.tags) == ["apple", "abc"]
-        assert json.loads(alpha_free_fragment.tags) == ["apple", "abd"]
-        fragment_repository.delete(db=db, fragment=fragment)
+    _delete_fragment_snapshot(db_session_factory, zabc_fragment)
     after_delete_response = await async_client.get("/api/fragments/tags?query=ab", headers=await _auth_headers(async_client, auth_headers_factory))
     assert [item["tag"] for item in after_delete_response.json()["data"]["items"]] == ["abc", "abd"]
