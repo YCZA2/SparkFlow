@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-import logging
 import time
 from http import HTTPStatus
 from typing import Any, Optional
 
 import httpx
 
+from core.logging_config import get_logger
 from services.base import STTRecognitionError, TranscriptionResult
 
 from .payload_parser import DashScopePayloadParser
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DashScopeFileTranscriber:
@@ -46,7 +46,7 @@ class DashScopeFileTranscriber:
     def upload_temp_file_url(self, audio_path: str) -> str:
         """上传临时音频并记录上传耗时，便于判断是否慢在文件传输。"""
         upload_started_at = time.monotonic()
-        logger.info("[DashScope STT] upload temp file url, mode=%s", self.file_url_mode)
+        logger.info("dashscope_file_upload_started", file_url_mode=self.file_url_mode)
 
         if self.file_url_mode != "temp":
             raise STTRecognitionError(f"unsupported STT_FILE_URL_MODE: {self.file_url_mode}")
@@ -67,9 +67,9 @@ class DashScopeFileTranscriber:
 
         if isinstance(file_url, str) and (file_url.startswith("oss://") or file_url.startswith("http")):
             logger.info(
-                "[DashScope STT] temp URL upload succeeded: %s (elapsed_ms=%s)",
-                file_url,
-                self._elapsed_ms(upload_started_at),
+                "dashscope_file_upload_succeeded",
+                file_url=file_url,
+                elapsed_ms=self._elapsed_ms(upload_started_at),
             )
             return file_url
 
@@ -161,8 +161,8 @@ class DashScopeFileTranscriber:
         if not isinstance(payload, dict):
             raise STTRecognitionError(f"transcription result payload invalid: {payload!r}")
         logger.info(
-            "[DashScope STT] transcription result downloaded: elapsed_ms=%s",
-            self._elapsed_ms(download_started_at),
+            "dashscope_transcription_result_downloaded",
+            elapsed_ms=self._elapsed_ms(download_started_at),
         )
         return payload
 
@@ -175,7 +175,7 @@ class DashScopeFileTranscriber:
         }
 
         run_started_at = time.monotonic()
-        logger.info("[DashScope STT] submit file transcription, file_url=%s", file_url)
+        logger.info("dashscope_file_transcription_submitted", file_url=file_url)
         timeout = httpx.Timeout(connect=10.0, read=60.0, write=60.0, pool=60.0)
         with httpx.Client(timeout=timeout, verify=self.certifi_ca_file, follow_redirects=True) as client:
             submit_started_at = time.monotonic()
@@ -193,10 +193,10 @@ class DashScopeFileTranscriber:
                 raise STTRecognitionError(f"file transcription missing task_id: {submit_payload}")
 
             logger.info(
-                "[DashScope STT] task submitted: task_id=%s status=%s submit_elapsed_ms=%s",
-                task_id,
-                task_status,
-                self._elapsed_ms(submit_started_at),
+                "dashscope_file_transcription_task_submitted",
+                task_id=task_id,
+                task_status=task_status,
+                submit_elapsed_ms=self._elapsed_ms(submit_started_at),
             )
             deadline = time.monotonic() + 180
             poll_started_at = time.monotonic()
@@ -218,11 +218,11 @@ class DashScopeFileTranscriber:
                 if task_status == "SUCCEEDED":
                     result_url = self._extract_transcription_result_url(task_payload)
                     logger.info(
-                        "[DashScope STT] task succeeded: task_id=%s poll_count=%s poll_elapsed_ms=%s total_elapsed_ms=%s",
-                        task_id,
-                        poll_count,
-                        self._elapsed_ms(poll_started_at),
-                        self._elapsed_ms(run_started_at),
+                        "dashscope_file_transcription_task_succeeded",
+                        task_id=task_id,
+                        poll_count=poll_count,
+                        poll_elapsed_ms=self._elapsed_ms(poll_started_at),
+                        total_elapsed_ms=self._elapsed_ms(run_started_at),
                     )
                     return self._download_transcription_result(client, result_url)
                 if task_status in {"FAILED", "CANCELED", "UNKNOWN"}:
@@ -233,7 +233,12 @@ class DashScopeFileTranscriber:
                 if time.monotonic() >= deadline:
                     raise STTRecognitionError(f"file transcription timeout: task_id={task_id}, status={task_status}")
 
-                logger.info("[DashScope STT] polling task: task_id=%s status=%s", task_id, task_status)
+                logger.info(
+                    "dashscope_file_transcription_task_polling",
+                    task_id=task_id,
+                    task_status=task_status,
+                    poll_count=poll_count,
+                )
                 time.sleep(1)
 
     def transcribe_recorded_file(self, audio_path: str, language: str) -> TranscriptionResult:
@@ -244,10 +249,10 @@ class DashScopeFileTranscriber:
         segments = self.parser.normalize_and_merge_segments(self.parser.extract_segments(payload))
         transcript = self.parser.extract_text(payload) or "".join(segment.text for segment in segments)
         logger.info(
-            "[DashScope STT] file transcription completed: elapsed_ms=%s transcript_chars=%s speaker_segments=%s",
-            self._elapsed_ms(transcribe_started_at),
-            len(transcript),
-            len(segments),
+            "dashscope_file_transcription_completed",
+            elapsed_ms=self._elapsed_ms(transcribe_started_at),
+            transcript_chars=len(transcript),
+            speaker_segments=len(segments),
         )
 
         return TranscriptionResult(

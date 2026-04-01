@@ -1,7 +1,8 @@
 """SparkFlow backend application entrypoint."""
 import os
 from contextlib import asynccontextmanager
-from typing import Awaitable, Callable
+from time import perf_counter
+from typing import Any, Awaitable, Callable
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
@@ -12,10 +13,11 @@ from sqlalchemy import inspect
 import structlog
 
 from core import settings, AppException, success_response
+from core.auth import decode_token
 from core.exceptions import (
     AuthenticationError,
 )
-from core.logging_config import configure_logging, get_logger
+from core.logging_config import configure_logging, get_access_logger, get_logger
 from models import SessionLocal
 from modules.auth.application import AuthUseCase
 from modules.admin_users.presentation import router as admin_users_router
@@ -59,6 +61,7 @@ from modules.scheduler.application import SchedulerService, create_scheduler
 
 configure_logging()
 logger = get_logger(__name__)
+access_logger = get_access_logger()
 
 
 def ensure_local_test_user() -> None:
@@ -69,6 +72,41 @@ def ensure_local_test_user() -> None:
         if not inspect(db.bind).has_table("users"):
             return
         AuthUseCase().ensure_test_user(db=db)
+
+
+def _extract_request_user_id(request: Request) -> str | None:
+    """尽力从 Bearer token 提取用户标识，避免 access 日志缺少上下文。"""
+    authorization = request.headers.get("authorization") or ""
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    try:
+        payload = decode_token(token)
+    except AuthenticationError:
+        return None
+    user_id = payload.get("sub")
+    return str(user_id) if user_id else None
+
+
+def _build_request_log_fields(
+    *,
+    request: Request,
+    request_id: str,
+    duration_ms: int,
+    status_code: int,
+    user_id: str | None,
+) -> dict[str, Any]:
+    """统一生成访问日志字段，确保完成态与失败态格式一致。"""
+    payload: dict[str, Any] = {
+        "request_id": request_id,
+        "method": request.method,
+        "path": request.url.path,
+        "status_code": status_code,
+        "duration_ms": duration_ms,
+    }
+    if user_id:
+        payload["user_id"] = user_id
+    return payload
 
 
 def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
@@ -85,9 +123,16 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
             scheduler_service.start()
             if container.pipeline_dispatcher:
                 container.pipeline_dispatcher.start()
+        logger.info(
+            "app_startup",
+            runtime_side_effects_enabled=enable_runtime_side_effects,
+            scheduler_enabled=enable_runtime_side_effects,
+            pipeline_dispatcher_enabled=bool(container.pipeline_dispatcher),
+        )
         try:
             yield
         finally:
+            logger.info("app_shutdown")
             scheduler_service.stop()
             if container.pipeline_dispatcher:
                 await container.pipeline_dispatcher.stop()
@@ -106,15 +151,50 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
 
     @app.middleware("http")
     async def bind_request_context(request: Request, call_next):
-        """为每个请求绑定 request_id 和路径上下文。"""
+        """为每个请求绑定上下文并写入统一访问日志。"""
         request_id = request.headers.get("x-request-id") or uuid4().hex
+        user_id = _extract_request_user_id(request)
+        started_at = perf_counter()
         request.state.request_id = request_id
+        request.state.user_id = user_id
         structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(request_id=request_id, path=request.url.path)
+        context_fields: dict[str, Any] = {
+            "request_id": request_id,
+            "path": request.url.path,
+            "method": request.method,
+        }
+        if user_id:
+            context_fields["user_id"] = user_id
+        structlog.contextvars.bind_contextvars(**context_fields)
         try:
             response = await call_next(request)
+            duration_ms = int((perf_counter() - started_at) * 1000)
+            access_logger.info(
+                "http_request_completed",
+                **_build_request_log_fields(
+                    request=request,
+                    request_id=request_id,
+                    duration_ms=duration_ms,
+                    status_code=response.status_code,
+                    user_id=user_id,
+                ),
+            )
             response.headers["X-Request-Id"] = request_id
             return response
+        except Exception as exc:
+            duration_ms = int((perf_counter() - started_at) * 1000)
+            access_logger.error(
+                "http_request_failed",
+                error=str(exc),
+                **_build_request_log_fields(
+                    request=request,
+                    request_id=request_id,
+                    duration_ms=duration_ms,
+                    status_code=500,
+                    user_id=user_id,
+                ),
+            )
+            raise
         finally:
             structlog.contextvars.clear_contextvars()
 

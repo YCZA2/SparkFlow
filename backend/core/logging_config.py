@@ -5,13 +5,21 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from logging.handlers import TimedRotatingFileHandler
 from typing import Any
 
 import structlog
 
 from .config import settings
 
+ACCESS_LOGGER_NAME = "sparkflow.access"
 MOBILE_DEBUG_LOGGER_NAME = "sparkflow.mobile_debug"
+_NOISY_LOGGER_LEVELS = {
+    "httpx": logging.WARNING,
+    "httpcore": logging.WARNING,
+    "apscheduler": logging.WARNING,
+    "sqlalchemy.engine": logging.WARNING,
+}
 
 
 class _MaxLevelFilter(logging.Filter):
@@ -66,41 +74,31 @@ def _reset_logger_handlers(logger: logging.Logger) -> None:
     logger.handlers.clear()
 
 
-def _configure_mobile_debug_logger(shared_processors: list[structlog.types.Processor]) -> None:
-    """为移动端调试日志配置专用 JSON 文件输出。"""
-    log_path = os.path.abspath(settings.MOBILE_DEBUG_LOG_PATH)
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-
-    file_logger = logging.getLogger(MOBILE_DEBUG_LOGGER_NAME)
-    current_path = None
-    if len(file_logger.handlers) == 1 and isinstance(file_logger.handlers[0], logging.FileHandler):
-        current_path = os.path.abspath(file_logger.handlers[0].baseFilename)
-    if current_path == log_path and file_logger.propagate is False:
-        return
-
-    _reset_logger_handlers(file_logger)
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    file_handler.setFormatter(
-        _build_processor_formatter(
-            renderer=structlog.processors.JSONRenderer(),
-            shared_processors=shared_processors,
-        )
-    )
-    file_logger.addHandler(file_handler)
-    file_logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
-    file_logger.propagate = False
+def _resolve_logger_file_specs(logger: logging.Logger) -> list[tuple[str, int]]:
+    """读取 logger 当前绑定的文件路径和级别，供重复配置时做幂等判断。"""
+    file_specs: list[tuple[str, int]] = []
+    for handler in logger.handlers:
+        if isinstance(handler, logging.FileHandler):
+            file_specs.append((os.path.abspath(handler.baseFilename), handler.level))
+    return file_specs
 
 
-def _build_file_handler(
+def _build_rotating_file_handler(
     *,
     path: str,
     shared_processors: list[structlog.types.Processor],
     level: int,
     max_level: int | None = None,
-) -> logging.FileHandler:
-    """创建统一 JSON 文件日志 handler，可按级别范围分流。"""
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    file_handler = logging.FileHandler(os.path.abspath(path), encoding="utf-8")
+) -> TimedRotatingFileHandler:
+    """创建按天轮转的 JSON 文件日志 handler，可按级别范围分流。"""
+    absolute_path = os.path.abspath(path)
+    os.makedirs(os.path.dirname(absolute_path), exist_ok=True)
+    file_handler = TimedRotatingFileHandler(
+        absolute_path,
+        when="midnight",
+        backupCount=7,
+        encoding="utf-8",
+    )
     file_handler.setFormatter(
         _build_processor_formatter(
             renderer=structlog.processors.JSONRenderer(),
@@ -111,6 +109,78 @@ def _build_file_handler(
     if max_level is not None:
         file_handler.addFilter(_MaxLevelFilter(max_level))
     return file_handler
+
+
+def _configure_file_only_logger(
+    *,
+    logger_name: str,
+    shared_processors: list[structlog.types.Processor],
+    paths: list[tuple[str, int]],
+) -> None:
+    """配置只落盘、不向控制台传播的文件专用 logger。"""
+    logger = logging.getLogger(logger_name)
+    expected_specs = [(os.path.abspath(path), level) for path, level in paths]
+    if _resolve_logger_file_specs(logger) == expected_specs and logger.propagate is False:
+        return
+
+    _reset_logger_handlers(logger)
+    for path, level in paths:
+        logger.addHandler(
+            _build_rotating_file_handler(
+                path=path,
+                shared_processors=shared_processors,
+                level=level,
+            )
+        )
+    logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
+    logger.propagate = False
+
+
+def _configure_mobile_debug_logger(shared_processors: list[structlog.types.Processor]) -> None:
+    """为移动端调试日志配置专用 JSON 文件输出。"""
+    _configure_file_only_logger(
+        logger_name=MOBILE_DEBUG_LOGGER_NAME,
+        shared_processors=shared_processors,
+        paths=[
+            (
+                settings.MOBILE_DEBUG_LOG_PATH,
+                getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+            )
+        ],
+    )
+
+
+def _configure_access_logger(shared_processors: list[structlog.types.Processor]) -> None:
+    """为请求访问日志配置只落文件的结构化 logger。"""
+    _configure_file_only_logger(
+        logger_name=ACCESS_LOGGER_NAME,
+        shared_processors=shared_processors,
+        paths=[
+            (
+                settings.BACKEND_LOG_PATH,
+                getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+            ),
+            (settings.BACKEND_ERROR_LOG_PATH, logging.ERROR),
+        ],
+    )
+
+
+def _configure_external_loggers() -> None:
+    """统一压低第三方库噪音并关闭 uvicorn access 输出。"""
+    for logger_name, level in _NOISY_LOGGER_LEVELS.items():
+        noisy_logger = logging.getLogger(logger_name)
+        noisy_logger.setLevel(level)
+        noisy_logger.propagate = True
+
+    uvicorn_access_logger = logging.getLogger("uvicorn.access")
+    _reset_logger_handlers(uvicorn_access_logger)
+    uvicorn_access_logger.setLevel(logging.WARNING)
+    uvicorn_access_logger.propagate = False
+
+    uvicorn_error_logger = logging.getLogger("uvicorn.error")
+    _reset_logger_handlers(uvicorn_error_logger)
+    uvicorn_error_logger.setLevel(logging.ERROR)
+    uvicorn_error_logger.propagate = True
 
 
 def configure_logging() -> None:
@@ -128,18 +198,19 @@ def configure_logging() -> None:
     )
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setFormatter(formatter)
+    stdout_handler.setLevel(logging.WARNING)
     stdout_handler.addFilter(_MaxLevelFilter(logging.WARNING))
 
     stderr_handler = logging.StreamHandler(sys.stderr)
     stderr_handler.setFormatter(formatter)
     stderr_handler.setLevel(logging.ERROR)
 
-    all_file_handler = _build_file_handler(
+    all_file_handler = _build_rotating_file_handler(
         path=settings.BACKEND_LOG_PATH,
         shared_processors=shared_processors,
         level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
     )
-    error_file_handler = _build_file_handler(
+    error_file_handler = _build_rotating_file_handler(
         path=settings.BACKEND_ERROR_LOG_PATH,
         shared_processors=shared_processors,
         level=logging.ERROR,
@@ -162,12 +233,19 @@ def configure_logging() -> None:
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
+    _configure_external_loggers()
+    _configure_access_logger(shared_processors)
     _configure_mobile_debug_logger(shared_processors)
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     """获取带 module 字段的结构化 logger。"""
     return structlog.stdlib.get_logger(name).bind(module=name)
+
+
+def get_access_logger() -> structlog.stdlib.BoundLogger:
+    """获取只落盘、不输出到控制台的访问日志 logger。"""
+    return structlog.stdlib.get_logger(ACCESS_LOGGER_NAME).bind(module="http.access")
 
 
 def get_mobile_debug_logger() -> structlog.stdlib.BoundLogger:

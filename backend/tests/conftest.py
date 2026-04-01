@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 
 import pytest
 import pytest_asyncio
@@ -11,12 +12,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 DEFAULT_TEST_DATABASE_URL = "postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow_test"
+TEST_RUNTIME_LOG_DIR = tempfile.mkdtemp(prefix="sparkflow-pytest-runtime-logs-")
 
 os.environ.setdefault("DEBUG", "true")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("DASHSCOPE_API_KEY", "test-dashscope-key")
 os.environ.setdefault("ENABLE_TEST_AUTH", "true")
 os.environ.setdefault("DATABASE_URL", os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL))
+os.environ.setdefault("RUNTIME_LOG_DIR", TEST_RUNTIME_LOG_DIR)
+os.environ.setdefault("BACKEND_LOG_PATH", os.path.join(TEST_RUNTIME_LOG_DIR, "backend.log"))
+os.environ.setdefault("BACKEND_ERROR_LOG_PATH", os.path.join(TEST_RUNTIME_LOG_DIR, "backend-error.log"))
+os.environ.setdefault("MOBILE_DEBUG_LOG_PATH", os.path.join(TEST_RUNTIME_LOG_DIR, "mobile-debug.log"))
 
 from main import create_app
 from models import Base, User

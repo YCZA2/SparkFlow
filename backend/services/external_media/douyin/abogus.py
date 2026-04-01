@@ -21,7 +21,6 @@ from random import random
 from re import compile
 from time import time
 from urllib.parse import urlencode
-from urllib.parse import quote
 from gmssl import sm3, func
 
 __all__ = ["ABogus", ]
@@ -617,18 +616,3 @@ class ABogus:
         # return self.generate_result(
         #     string, "s4") + self.generate_result_end(string, "s4")
         return self.generate_result(string, "s4")
-
-
-if __name__ == "__main__":
-    bogus = ABogus()
-    USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36"
-    url_str = "https://www.douyin.com/aweme/v1/web/aweme/detail/?device_platform=webapp&aid=6383&channel=channel_pc_web&pc_client_type=1&version_code=190500&version_name=19.5.0&cookie_enabled=true&browser_language=zh-CN&browser_platform=Win32&browser_name=Firefox&browser_online=true&engine_name=Gecko&os_name=Windows&os_version=10&platform=PC&screen_width=1920&screen_height=1080&browser_version=124.0&engine_version=122.0.0.0&cpu_core_num=12&device_memory=8&aweme_id=7345492945006595379"
-    # Convert URL parameters to dictionary
-    url_params = dict([param.split("=")
-                      for param in url_str.split("?")[1].split("&")])
-    print(f"URL parameters: {url_params}")
-    a_bogus = bogus.get_value(url_params, )
-    # URL encode a_bogus
-    a_bogus = quote(a_bogus, safe='')
-    print(a_bogus)
-    print(USERAGENT)

@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import re
 from collections import Counter, defaultdict
 from typing import Any, Optional
 
+from core.logging_config import get_logger
 from modules.fragments.content import read_fragment_plain_text
 from utils.serialization import format_iso_datetime, parse_json_list
 
 from .visualization_math import cluster_embeddings, project_embeddings_to_coordinates
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 SUMMARY_SPLIT_RE = re.compile(r"[\s,，。.!！?？;；:：/\\\-\n\r\t]+")
 TOKEN_RE = re.compile(r"[A-Za-z0-9_]{2,}|[\u4e00-\u9fff]{2,}")
@@ -42,6 +42,7 @@ STOPWORDS = {
 
 
 def _empty_response() -> dict[str, Any]:
+    """构造空态可视化响应，保证前端消费字段稳定。"""
     return {
         "points": [],
         "clusters": [],
@@ -59,10 +60,12 @@ def _empty_response() -> dict[str, Any]:
 
 
 def _round_coordinate(value: float) -> float:
+    """统一坐标精度，避免浮点噪声导致前端频繁抖动。"""
     return round(value, 6)
 
 
 def _normalize_vector(values: list[float]) -> Optional[list[float]]:
+    """对向量做 L2 归一化，便于降级特征与真实向量保持量纲一致。"""
     total = sum(value * value for value in values)
     if total <= 1e-12:
         return None
@@ -71,6 +74,7 @@ def _normalize_vector(values: list[float]) -> Optional[list[float]]:
 
 
 def _summary_terms(summary: Optional[str]) -> list[str]:
+    """从摘要里提取候选关键词，供聚类命名与降级特征复用。"""
     if not summary:
         return []
     terms: list[str] = []
@@ -97,6 +101,7 @@ def _read_tags(fragment: Any) -> list[str]:
 
 
 def _cluster_keywords(fragments: list[Any]) -> list[str]:
+    """优先使用 tags，再回退摘要关键词，为簇生成稳定标签。"""
     tags_counter: Counter[str] = Counter()
     for fragment in fragments:
         for tag in _read_tags(fragment):
@@ -120,6 +125,7 @@ def _cluster_keywords(fragments: list[Any]) -> list[str]:
 
 
 def _cluster_label(cluster_id: int, fragments: list[Any]) -> tuple[str, list[str]]:
+    """为聚类结果生成展示标签和关键词列表。"""
     keywords = _cluster_keywords(fragments)
     if keywords:
         return keywords[0], keywords
@@ -127,11 +133,13 @@ def _cluster_label(cluster_id: int, fragments: list[Any]) -> tuple[str, list[str
 
 
 def _sort_key(fragment: Any) -> tuple[str, str]:
+    """按创建时间和 id 排序，保证可视化点位输出稳定。"""
     created_at = format_iso_datetime(fragment.created_at) or ""
     return (created_at, fragment.id)
 
 
 def build_text_feature_embedding(fragment: Any, dimensions: int = 24) -> list[float]:
+    """从 tags、摘要和正文提取轻量特征，作为无向量时的降级嵌入。"""
     weighted_terms: list[tuple[str, float]] = []
     for tag in _read_tags(fragment):
         normalized = tag.strip()
@@ -159,6 +167,7 @@ def build_text_feature_embedding(fragment: Any, dimensions: int = 24) -> list[fl
 
 
 def build_visualization_payload(items: list[tuple[Any, list[float]]], used_vector_source: str) -> dict[str, Any]:
+    """把 fragment 与 embedding 列表组装成前端可消费的可视化结构。"""
     payload = _empty_response()
     if not items:
         payload["meta"]["used_vector_source"] = used_vector_source
@@ -172,7 +181,7 @@ def build_visualization_payload(items: list[tuple[Any, list[float]]], used_vecto
     try:
         cluster_assignments = cluster_embeddings(embeddings)
     except Exception:
-        logger.exception("Fragment clustering failed, fallback to point-only visualization")
+        logger.exception("fragment_visualization_clustering_failed")
         cluster_assignments = None
 
     cluster_id_map: dict[int, int] = {}

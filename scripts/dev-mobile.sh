@@ -305,7 +305,7 @@ run_start_mode() {
   echo "[dev-mobile] starting backend..."
   (
     cd "${BACKEND_DIR}"
-    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
+    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload --no-access-log
   ) &
   BACKEND_PID=$!
 
@@ -366,7 +366,7 @@ run_web_mode() {
   echo "[dev-mobile] starting backend..."
   (
     cd "${BACKEND_DIR}"
-    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
+    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload --no-access-log
   ) &
   BACKEND_PID=$!
 
@@ -426,7 +426,7 @@ run_simulator_mode() {
   echo "[dev-mobile] starting backend..."
   (
     cd "${BACKEND_DIR}"
-    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
+    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload --no-access-log
   ) &
   BACKEND_PID=$!
 

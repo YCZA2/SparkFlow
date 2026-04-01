@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from core.logging_config import get_logger
 from modules.shared.fragment_snapshots import FragmentSnapshotReader, read_fragment_snapshot_text
 from modules.shared.ports import VectorStore
 
 from .visualization_math import cluster_embeddings, project_embeddings_to_coordinates
 from .visualization_payload import build_text_feature_embedding, build_visualization_payload
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 _FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 
 
@@ -22,6 +22,7 @@ async def _backfill_missing_fragment_vectors(
     vector_store: VectorStore,
     existing_vector_ids: set[str],
 ) -> int:
+    """补齐缺失的碎片向量，避免可视化首次进入时出现空洞。"""
     created_count = 0
     for snapshot in snapshots:
         effective_text = read_fragment_snapshot_text(snapshot)
@@ -41,10 +42,10 @@ async def _backfill_missing_fragment_vectors(
             created_count += 1
         except Exception as exc:
             logger.warning(
-                "Backfill vector skipped for user=%s fragment=%s: %s",
-                user_id,
-                snapshot.id,
-                str(exc),
+                "fragment_vector_backfill_skipped",
+                user_id=user_id,
+                fragment_id=snapshot.id,
+                error=str(exc),
             )
             break
     return created_count
@@ -56,6 +57,7 @@ async def build_fragment_visualization(
     user_id: str,
     vector_store: VectorStore,
 ) -> dict[str, Any]:
+    """组装碎片可视化载荷，并在必要时补齐向量与降级结果。"""
     # 单次扫描获取所有快照和已删 ID，避免多轮 DB 查询
     snapshots, deleted_id_list = _FRAGMENT_SNAPSHOT_READER.list_snapshots_and_deleted_ids(
         db=db, user_id=user_id
@@ -65,7 +67,12 @@ async def build_fragment_visualization(
         try:
             await vector_store.delete_fragment(user_id=user_id, fragment_id=fragment_id)
         except Exception as exc:
-            logger.warning("Delete stale vector skipped for user=%s fragment=%s: %s", user_id, fragment_id, str(exc))
+            logger.warning(
+                "fragment_stale_vector_delete_skipped",
+                user_id=user_id,
+                fragment_id=fragment_id,
+                error=str(exc),
+            )
 
     existing_vector_documents = await vector_store.list_fragment_documents(user_id=user_id, include_embeddings=False)
     existing_vector_ids = {document.id for document in existing_vector_documents if document.id not in deleted_ids}
@@ -98,7 +105,7 @@ async def build_fragment_visualization(
         if not fragment:
             continue
         if not getattr(document, "embedding", None):
-            logger.warning("Skipping fragment %s because embedding is missing", document.id)
+            logger.warning("fragment_embedding_missing_for_visualization", fragment_id=document.id)
             continue
         valid_items.append((fragment, [float(value) for value in document.embedding]))
 

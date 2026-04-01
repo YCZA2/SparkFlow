@@ -38,7 +38,7 @@ SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Doc
 ```bash
 APP_ENV=development bash ../scripts/postgres-local.sh start dev
 APP_ENV=development .venv/bin/alembic upgrade heads
-APP_ENV=development uvicorn main:app --reload
+APP_ENV=development uvicorn main:app --reload --no-access-log
 ```
 
 也可以拆开执行：
@@ -46,7 +46,7 @@ APP_ENV=development uvicorn main:app --reload
 ```bash
 bash ../scripts/postgres-local.sh start dev
 .venv/bin/alembic upgrade heads
-uvicorn main:app --reload
+uvicorn main:app --reload --no-access-log
 ```
 
 Default local address: `http://127.0.0.1:8000`
@@ -169,7 +169,7 @@ cd backend
    - 负责 `pipeline_runs` / `pipeline_step_runs` 查询、步骤详情与手动重跑。
 8. `core/logging_config.py`
    - 结构化日志装配层。
-   - 负责 `structlog` 配置、request-id 绑定，以及控制台输出和移动端调试日志文件输出。
+   - 负责 `structlog` 配置、request-id 绑定、访问日志分流、第三方 logger 降噪，以及控制台与按天轮转文件输出。
 
 ## Folder Guide
 
@@ -337,11 +337,12 @@ bash scripts/postgres-local.sh stop
 
 运行时日志现在会同时：
 
-- 后端结构化日志继续输出到控制台
+- 开发态控制台默认只显示应用 `WARNING+`，并关闭 Uvicorn 内建 access log
 - 后端全量业务日志写入 [`backend/runtime_logs/backend.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend.log)
 - 后端 `ERROR` 及以上日志额外写入 [`backend/runtime_logs/backend-error.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend-error.log)
 - 移动端上报的调试日志保存在 App 内错误日志页中
 - 移动端调试日志通过专用 file handler 写入 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
+- 三类日志文件都按本地午夜切分并默认保留最近 7 天
 
 后端接收接口：
 
@@ -367,6 +368,12 @@ tail -n 100 backend/runtime_logs/backend.log
 tail -n 100 backend/runtime_logs/backend-error.log
 tail -n 100 backend/runtime_logs/mobile-debug.log
 ```
+
+排查建议：
+
+- 先看 [`backend/runtime_logs/backend-error.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend-error.log) 找 5xx、未处理异常和 `http_request_failed`
+- 再看 [`backend/runtime_logs/backend.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend.log) 关联 `http_request_completed`、业务事件和 request-id
+- 移动端真机/模拟器异常最后看 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
 
 这样真机/模拟器上的 JS 异常、`console.error`、接口错误就不需要手动复制给 Codex。
 
