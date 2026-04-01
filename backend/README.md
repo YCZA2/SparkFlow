@@ -62,6 +62,7 @@ brew services start postgresql@16
 
 - 全新本地库可直接执行 `.venv/bin/alembic upgrade heads`
 - 若本地开发库曾跑过旧迁移链、手工修表或出现 schema 漂移，推荐直接清空 `public` schema 后重跑 baseline，而不是继续补增量迁移
+- 当前数据库结构清单可查看 `backend/docs/schema-inventory.md`
 
 Default local address: `http://127.0.0.1:8000`
 

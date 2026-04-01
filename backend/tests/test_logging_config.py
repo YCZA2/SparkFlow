@@ -6,6 +6,8 @@ import json
 import logging
 from logging.handlers import TimedRotatingFileHandler
 
+import pytest
+
 from core import settings
 from core.logging_config import (
     ACCESS_LOGGER_NAME,
@@ -128,3 +130,24 @@ def test_third_party_info_logs_are_quiet_on_console(tmp_path, monkeypatch, capsy
     assert "apscheduler_noise" not in captured.out + captured.err
     assert "app_warning_visible" in captured.out
     assert "app_error_visible" in captured.err
+
+
+def test_logger_exception_does_not_emit_pretty_exception_warning(tmp_path, monkeypatch, recwarn) -> None:
+    """开发态 console renderer 记录异常时不应再出现 structlog warning。"""
+    all_log_path = tmp_path / "backend.log"
+    error_log_path = tmp_path / "backend-error.log"
+    mobile_log_path = tmp_path / "mobile-debug.log"
+
+    monkeypatch.setattr(settings, "BACKEND_LOG_PATH", str(all_log_path))
+    monkeypatch.setattr(settings, "BACKEND_ERROR_LOG_PATH", str(error_log_path))
+    monkeypatch.setattr(settings, "MOBILE_DEBUG_LOG_PATH", str(mobile_log_path))
+    monkeypatch.setattr(settings, "LOG_JSON", False)
+
+    configure_logging()
+    logger = get_logger("tests.exception")
+    try:
+        raise RuntimeError("boom")
+    except RuntimeError:
+        logger.exception("exception_event")
+
+    assert not recwarn.list

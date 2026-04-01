@@ -44,15 +44,17 @@ def _rename_logger_key(_: Any, __: str, event_dict: structlog.types.EventDict) -
 def _build_shared_processors() -> list[structlog.types.Processor]:
     """构建控制台和文件日志共享的处理器链。"""
     timestamper = structlog.processors.TimeStamper(fmt="iso")
-    return [
+    processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
         _rename_logger_key,
         timestamper,
         structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
     ]
+    if settings.LOG_JSON:
+        processors.append(structlog.processors.format_exc_info)
+    return processors
 
 
 def _build_processor_formatter(
@@ -186,6 +188,10 @@ def _configure_external_loggers() -> None:
 def configure_logging() -> None:
     """初始化应用级结构化日志配置。"""
     shared_processors = _build_shared_processors()
+    file_shared_processors = [
+        *shared_processors,
+        *([] if settings.LOG_JSON else [structlog.processors.format_exc_info]),
+    ]
     renderer: structlog.types.Processor
     if settings.LOG_JSON:
         renderer = structlog.processors.JSONRenderer()
@@ -207,12 +213,12 @@ def configure_logging() -> None:
 
     all_file_handler = _build_rotating_file_handler(
         path=settings.BACKEND_LOG_PATH,
-        shared_processors=shared_processors,
+        shared_processors=file_shared_processors,
         level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
     )
     error_file_handler = _build_rotating_file_handler(
         path=settings.BACKEND_ERROR_LOG_PATH,
-        shared_processors=shared_processors,
+        shared_processors=file_shared_processors,
         level=logging.ERROR,
     )
 
@@ -234,8 +240,8 @@ def configure_logging() -> None:
         cache_logger_on_first_use=True,
     )
     _configure_external_loggers()
-    _configure_access_logger(shared_processors)
-    _configure_mobile_debug_logger(shared_processors)
+    _configure_access_logger(file_shared_processors)
+    _configure_mobile_debug_logger(file_shared_processors)
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
@@ -250,5 +256,10 @@ def get_access_logger() -> structlog.stdlib.BoundLogger:
 
 def get_mobile_debug_logger() -> structlog.stdlib.BoundLogger:
     """获取落盘到移动端调试日志文件的结构化 logger。"""
-    _configure_mobile_debug_logger(_build_shared_processors())
+    shared_processors = _build_shared_processors()
+    file_shared_processors = [
+        *shared_processors,
+        *([] if settings.LOG_JSON else [structlog.processors.format_exc_info]),
+    ]
+    _configure_mobile_debug_logger(file_shared_processors)
     return structlog.stdlib.get_logger(MOBILE_DEBUG_LOGGER_NAME).bind(module="modules.debug_logs.mobile")

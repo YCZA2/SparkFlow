@@ -7,12 +7,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
+from sqlalchemy import text
 
 from alembic import context
+from alembic.script import ScriptDirectory
 
 from core.config import settings
-# 导入我们的模型基类
-from models import Base
+from models.database import Base
+from models import backup, fragment, media, pipeline, script, user, writing_context  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -57,6 +59,45 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def bootstrap_single_baseline(connection) -> bool:
+    """在空库下为单一 baseline 显式建表并写入版本号。"""
+    script = ScriptDirectory.from_config(config)
+    heads = script.get_heads()
+    if len(heads) != 1:
+        return False
+
+    head_revision = script.get_revision(heads[0])
+    if head_revision is None or head_revision.down_revision is not None:
+        return False
+
+    version_table_exists = connection.execute(text("SELECT to_regclass('alembic_version')")).scalar_one()
+    if version_table_exists is not None:
+        version_rows = connection.execute(text("SELECT COUNT(*) FROM alembic_version")).scalar_one()
+        if version_rows > 0:
+            return False
+    else:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE alembic_version (
+                    version_num VARCHAR(32) NOT NULL,
+                    CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+                )
+                """
+            )
+        )
+
+    # 中文注释：单 baseline 场景直接按 metadata 建全表，再写入当前 revision，
+    # 这样空库初始化不依赖 Alembic 额外推断版本表状态。
+    Base.metadata.create_all(connection)
+    connection.execute(
+        text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+        {"revision": head_revision.revision},
+    )
+    connection.commit()
+    return True
+
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
@@ -71,6 +112,10 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # 中文注释：显式固定到 public，避免空库或本机数据库自定义 search_path 时找不到默认 schema。
+        connection.execute(text("SET search_path TO public"))
+        if bootstrap_single_baseline(connection):
+            return
         context.configure(
             connection=connection, target_metadata=target_metadata
         )
