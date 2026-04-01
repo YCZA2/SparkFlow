@@ -1,8 +1,8 @@
 # SparkFlow Architecture
 
-> 最后更新：2026-03-31
+> 最后更新：2026-04-01
 
-本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为 Docker 管理的 PostgreSQL。
+本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为本机 PostgreSQL 服务。
 
 ## 0. 今日进展（2026-03-31）
 
@@ -65,7 +65,7 @@ flowchart LR
 - `mobile/`: Expo 移动端，当前采用 stack 路由，不是 tab 路由。
 - `backend/`: FastAPI 后端，业务入口已经收敛到 `modules/*`。
 - `scripts/dev-mobile.sh`: 推荐本地联调入口，同时启动后端与 Expo。
-- `scripts/postgres-local.sh`: 本地 PostgreSQL Docker 管理脚本，默认负责拉起 `sparkflow` / `sparkflow_test`。
+- `scripts/postgres-local.sh`: 本机 PostgreSQL 服务检查与默认库初始化脚本，默认负责补齐 `sparkflow` / `sparkflow_test`。
 - `scripts/dify-local.sh`: 本地自托管 Dify 启停脚本，当前主要保留给实验性外挂工作流联调。
 - `memory-bank/`: 产品、架构、进度与实施记录。
 
@@ -302,7 +302,6 @@ flowchart TD
 - `backend/prompts/`: 后端 prompt 文本与模板目录；脚本生成、知识处理、标签增强和健康检查等提示词统一从这里读取。
 - `backend/alembic/`: 数据库迁移脚本。
 - `backend/tests/`: 后端自动化测试。
-- `docker-compose.postgres.yml`: 本地 PostgreSQL Docker Compose 编排文件。
 - `backend/uploads/`: `local` 文件存储 provider 的对象根目录（运行时生成，不纳入版本控制）。
 - `backend/chroma_data/`: 本地向量库持久化目录（运行时生成，不纳入版本控制）。
 - `backend/runtime_logs/`: 运行时日志目录，当前包含后端全量日志、错误日志和移动端错误日志落盘文件。
@@ -352,7 +351,7 @@ flowchart TD
 - `相关素材层` 负责召回与当前主题相关的历史脚本、碎片和知识文档。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 统一 `FileStorage` 端口；本地开发默认 `local` provider，线上默认私有阿里云 OSS，通过签名 URL 暴露文件访问。
-- Database: PostgreSQL（本地开发默认由 Docker 提供，默认库为 `sparkflow` / `sparkflow_test`）。
+- Database: PostgreSQL（本地开发默认使用本机服务，默认库为 `sparkflow` / `sparkflow_test`）。
 
 ### 4.7 Namespaces and Storage Conventions
 
@@ -632,7 +631,7 @@ sequenceDiagram
 - 移动端当前是“文件夹入口优先”的首页结构，不是 PRD 里最初设想的 tab 首页；碎片列表主视图仍是核心工作区，但入口已经下沉到文件夹页。
 - 知识库后端已可用，移动端入口仍是占位页。
 - 每日推盘后端已可运行并带有定时任务；当前输入源是服务端已收到的 fragment 备份快照，前端主入口仍需继续收口其消费体验。
-- 当前最稳定的本地开发方式是根目录执行 `bash scripts/dev-mobile.sh`，脚本会自动确保 Docker PostgreSQL、后端和 Expo 依次就绪。
+- 当前最稳定的本地开发方式是根目录执行 `bash scripts/dev-mobile.sh`，脚本会自动确保本机 PostgreSQL、后端和 Expo 依次就绪。
 
 ## 9. Frontend / Backend Collaboration
 

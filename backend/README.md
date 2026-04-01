@@ -1,6 +1,6 @@
 # SparkFlow Backend
 
-SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Docker PostgreSQL + ChromaDB 联调；文件存储已统一走对象存储抽象，本地开发默认使用 `local` provider，线上可切阿里云 OSS。
+SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以本机 PostgreSQL + ChromaDB 联调；文件存储已统一走对象存储抽象，本地开发默认使用 `local` provider，线上可切阿里云 OSS。
 
 ## 今日进展（2026-03-31）
 
@@ -31,7 +31,7 @@ SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Doc
 ## Quick Start
 
 1. Create venv and install dependencies.
-2. Start local PostgreSQL via Docker.
+2. Ensure local PostgreSQL is installed and running.
 3. Configure `.env` (see `.env.example`).
 4. Run migrations and start server:
 
@@ -48,6 +48,20 @@ bash ../scripts/postgres-local.sh start dev
 .venv/bin/alembic upgrade heads
 uvicorn main:app --reload --no-access-log
 ```
+
+首次在 macOS 上配置本机数据库时，推荐：
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+```
+
+`bash ../scripts/postgres-local.sh start dev` 会在数据库服务可达后，幂等确保默认开发库 `sparkflow` 已创建；`start test` / `start all` 同理会补齐 `sparkflow_test`。
+
+当前 Alembic 已收口为单一 baseline：
+
+- 全新本地库可直接执行 `.venv/bin/alembic upgrade heads`
+- 若本地开发库曾跑过旧迁移链、手工修表或出现 schema 漂移，推荐直接清空 `public` schema 后重跑 baseline，而不是继续补增量迁移
 
 Default local address: `http://127.0.0.1:8000`
 
@@ -233,7 +247,6 @@ cd backend
 - `alembic/`: 数据库迁移。
 - `tests/`: `pytest` + `Schemathesis` 测试。
 - `scripts/`: 后端本地辅助脚本。
-- `../docker-compose.postgres.yml`: 本地 PostgreSQL Docker 编排文件。
 - `uploads/`: `local` 文件存储 provider 的对象根目录，配置层会固定解析到 `backend/uploads/`，不依赖启动 cwd。
 - `chroma_data/`: 本地 ChromaDB 数据目录，相对路径同样固定解析到 `backend/chroma_data/`。
 - 当前 Chroma 版本的 `list_collections()` 可能直接返回集合名字符串；应用适配层已统一兼容字符串和旧对象结构，避免 namespace 存在性检查误判。
@@ -293,9 +306,9 @@ bash scripts/postgres-local.sh stop
 
 脚本行为约定：
 
-- `bash scripts/dev-mobile.sh` 会在 Alembic 之前自动确保本地 Docker PostgreSQL 可用
+- `bash scripts/dev-mobile.sh` 会在 Alembic 之前自动确保本机 PostgreSQL 可用并补齐默认开发库
 - `bash scripts/test-all.sh` 会在 pytest 之前自动确保 `sparkflow_test` 可用
-- 开发库是否跳过本地 Docker 由 `DATABASE_URL` 控制；测试库是否跳过本地 Docker 只由 `TEST_DATABASE_URL` 控制
+- 开发库是否跳过本机默认库初始化由 `DATABASE_URL` 控制；测试库是否跳过本机默认库初始化只由 `TEST_DATABASE_URL` 控制
 
 任务与工作流相关接口：
 

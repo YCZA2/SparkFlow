@@ -126,7 +126,7 @@ ensure_start_mode_deps() {
 }
 
 ensure_local_postgres() {
-  # 联调默认确保本地 Docker PostgreSQL 可用，除非数据库连接被显式覆盖。
+  # 联调默认确保本机 PostgreSQL 可用，除非数据库连接被显式覆盖。
   if [[ ! -f "${POSTGRES_SCRIPT}" ]]; then
     echo "[dev-mobile] postgres helper not found: ${POSTGRES_SCRIPT}"
     exit 1
