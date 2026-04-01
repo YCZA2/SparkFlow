@@ -1,9 +1,12 @@
 import React from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
+import { ScreenState } from '@/components/ScreenState';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { Text } from '@/components/Themed';
+import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { useDebugLogs } from '@/providers/DebugLogProvider';
 import { useAppTheme } from '@/theme/useAppTheme';
 
@@ -28,7 +31,26 @@ function formatContext(context: Record<string, unknown> | undefined): string {
 
 export default function DebugLogsScreen() {
   const theme = useAppTheme();
+  const router = useRouter();
+  const developerToolsEnabled = isDeveloperToolsEnabled();
   const { logs, clearLogs } = useDebugLogs();
+
+  if (!developerToolsEnabled) {
+    /*生产包不暴露调试日志页，防止误把开发诊断入口带进正式环境。 */
+    return (
+      <ScreenContainer>
+        <View style={[styles.gatedContainer, { backgroundColor: theme.colors.background }]}>
+          <ScreenState
+            icon="🔒"
+            title="当前环境不可用"
+            message="正式环境已隐藏调试日志入口。"
+            actionLabel="返回工作台"
+            onAction={() => router.replace('/profile')}
+          />
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer scrollable padded>
@@ -98,6 +120,9 @@ export default function DebugLogsScreen() {
 }
 
 const styles = StyleSheet.create({
+  gatedContainer: {
+    flex: 1,
+  },
   clearButton: {
     borderWidth: 1,
     borderRadius: 999,

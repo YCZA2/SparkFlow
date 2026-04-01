@@ -6,6 +6,12 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "build:dev:ios": "APP_ENV=development npx eas build --platform ios --profile development:device",
+    "build:dev:android": "APP_ENV=development npx eas build --platform android --profile development:device",
+    "build:prod:ios": "APP_ENV=production npx eas build --platform ios --profile production",
+    "build:prod:android": "APP_ENV=production npx eas build --platform android --profile production",
+    "submit:prod:ios": "APP_ENV=production npx eas submit --platform ios --profile production",
+    "submit:prod:android": "APP_ENV=production npx eas submit --platform android --profile production",
     "test:state": "node scripts/run-state-tests.mjs"
   },
   "dependencies": {

@@ -6,9 +6,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import * as Network from 'expo-network';
+import { getDefaultApiBaseUrl, isDeveloperToolsEnabled } from '@/constants/appConfig';
 
 const STORAGE_KEY = '@backend_url';
-const DEFAULT_PORT = '8000';
 
 // 常见的局域网 IP 段
 const COMMON_IP_PREFIXES = ['192.168.', '10.', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.'];
@@ -30,10 +30,18 @@ export async function getDeviceIpAddress(): Promise<string | null> {
  * 根据设备 IP 推断后端可能的地址
  */
 export async function inferBackendUrl(): Promise<string[]> {
+  /*生产包不再探测局域网地址，只保留 runtime config 提供的正式地址。 */
+  if (!isDeveloperToolsEnabled()) {
+    return [getDefaultApiBaseUrl()];
+  }
+
   const possibleUrls: string[] = [];
+  const defaultApiBaseUrl = getDefaultApiBaseUrl();
 
   // 添加默认开发地址
-  if (Platform.OS === 'ios') {
+  if (defaultApiBaseUrl) {
+    possibleUrls.push(defaultApiBaseUrl);
+  } else if (Platform.OS === 'ios') {
     // iOS 模拟器
     possibleUrls.push('http://localhost:8000');
   } else if (Platform.OS === 'android') {
@@ -56,10 +64,11 @@ export async function inferBackendUrl(): Promise<string[]> {
     }
   }
 
-  // 添加常用的局域网地址
-  possibleUrls.push('http://192.168.31.157:8000');
-  possibleUrls.push('http://192.168.1.100:8000');
-  possibleUrls.push('http://192.168.0.100:8000');
+  // 补几组常见局域网候选，便于真机首次联调快速命中。
+  for (const prefix of COMMON_IP_PREFIXES.slice(0, 3)) {
+    const normalizedPrefix = prefix.endsWith('.') ? prefix : `${prefix}.`;
+    possibleUrls.push(`http://${normalizedPrefix}100:8000`);
+  }
 
   return [...new Set(possibleUrls)]; // 去重
 }
@@ -93,6 +102,11 @@ export async function testBackendUrl(url: string): Promise<boolean> {
  * 自动发现可用的后端地址
  */
 export async function discoverBackendUrl(): Promise<string | null> {
+  /*生产包不允许自动发现开发环境地址，避免错误切到局域网后端。 */
+  if (!isDeveloperToolsEnabled()) {
+    return getDefaultApiBaseUrl();
+  }
+
   const possibleUrls = await inferBackendUrl();
 
   for (const url of possibleUrls) {
@@ -111,6 +125,14 @@ export async function discoverBackendUrl(): Promise<string | null> {
  * 获取当前配置的后端地址
  */
 export async function getBackendUrl(): Promise<string> {
+  const defaultApiBaseUrl = getDefaultApiBaseUrl();
+
+  if (!isDeveloperToolsEnabled()) {
+    /*正式环境忽略历史手工覆盖值，并清掉旧开发配置残留。 */
+    await AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined);
+    return defaultApiBaseUrl;
+  }
+
   try {
     // 先从本地存储读取
     const storedUrl = await AsyncStorage.getItem(STORAGE_KEY);
@@ -122,13 +144,18 @@ export async function getBackendUrl(): Promise<string> {
   }
 
   // 默认地址
-  return 'http://192.168.31.157:8000';
+  return defaultApiBaseUrl;
 }
 
 /**
  * 设置后端地址
  */
 export async function setBackendUrl(url: string): Promise<void> {
+  if (!isDeveloperToolsEnabled()) {
+    /*正式环境不允许写入手工覆盖地址，统一回到运行包声明的默认 API。 */
+    await AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined);
+    return;
+  }
   try {
     await AsyncStorage.setItem(STORAGE_KEY, url);
   } catch (error) {

@@ -6,9 +6,9 @@
 
 import os
 from functools import lru_cache
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,47 @@ TRUTHY_DEBUG_VALUES = {"1", "true", "on", "yes", "debug", "dev", "development"}
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BACKEND_ENV_FILE = os.path.join(BACKEND_DIR, ".env")
 DEFAULT_POSTGRES_URL = "postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow"
+SUPPORTED_APP_ENVS = {"development", "production"}
+
+
+def _read_env_value_from_file(path: str, key: str) -> str | None:
+    """从 .env 文件中读取单个键值，供 APP_ENV 预解析复用。"""
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                name, value = line.split("=", 1)
+                if name.strip() != key:
+                    continue
+                return value.strip().strip('"').strip("'")
+    except OSError:
+        return None
+    return None
+
+
+def _resolve_app_env_name() -> str:
+    """优先从环境变量解析 APP_ENV，缺失时再回退到基础 .env。"""
+    raw_value = os.environ.get("APP_ENV") or _read_env_value_from_file(BACKEND_ENV_FILE, "APP_ENV") or "development"
+    normalized = str(raw_value).strip().lower()
+    return normalized if normalized in SUPPORTED_APP_ENVS else "development"
+
+
+def _resolve_env_files() -> tuple[str, ...]:
+    """按基础 .env + 环境覆盖文件顺序返回配置源列表。"""
+    files = [BACKEND_ENV_FILE]
+    app_env = _resolve_app_env_name()
+    env_specific_file = os.path.join(BACKEND_DIR, f".env.{app_env}")
+    if os.path.exists(env_specific_file):
+        files.append(env_specific_file)
+    return tuple(files)
+
+
+BACKEND_ENV_FILES = _resolve_env_files()
+DEFAULT_SECRET_KEY = "change-this-in-production"
 
 
 class Settings(BaseSettings):
@@ -29,6 +70,7 @@ class Settings(BaseSettings):
     # 应用程序配置
     APP_NAME: str = Field(default="SparkFlow API", description="应用名称")
     APP_VERSION: str = Field(default="0.1.0", description="应用版本")
+    APP_ENV: Literal["development", "production"] = Field(default=_resolve_app_env_name(), description="应用环境")
     DEBUG: bool = Field(default=False, description="调试模式")
     APP_TIMEZONE: str = Field(default="Asia/Shanghai", description="应用业务时区")
     LOG_LEVEL: str = Field(default="INFO", description="日志级别")
@@ -64,7 +106,7 @@ class Settings(BaseSettings):
 
     # 安全配置
     SECRET_KEY: str = Field(
-        default="change-this-in-production",
+        default=DEFAULT_SECRET_KEY,
         description="JWT 签名密钥"
     )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
@@ -210,7 +252,7 @@ class Settings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
-        env_file=BACKEND_ENV_FILE,
+        env_file=BACKEND_ENV_FILES,
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
@@ -258,6 +300,21 @@ class Settings(BaseSettings):
                 return normalized
             return os.path.abspath(os.path.join(BACKEND_DIR, normalized))
         return value
+
+    @model_validator(mode="after")
+    def validate_production_guards(self) -> "Settings":
+        """正式环境下对危险开发配置做 fail-fast 校验。"""
+        if self.APP_ENV != "production":
+            return self
+        if self.SECRET_KEY == DEFAULT_SECRET_KEY:
+            raise ValueError("production 环境禁止使用默认 SECRET_KEY")
+        if self.ENABLE_TEST_AUTH:
+            raise ValueError("production 环境禁止启用 ENABLE_TEST_AUTH")
+        if self.DEBUG:
+            raise ValueError("production 环境禁止启用 DEBUG")
+        if str(self.LOG_LEVEL).strip().upper() == "DEBUG":
+            raise ValueError("production 环境禁止使用 DEBUG 日志级别")
+        return self
 
     def ensure_directories(self):
         """确保所需目录存在"""

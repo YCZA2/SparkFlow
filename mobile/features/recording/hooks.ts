@@ -12,6 +12,7 @@ import { CameraType, CameraView } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 
 import { getOrCreateDeviceId } from '@/features/auth/device';
+import { assertTaskScopeActive, captureRequiredTaskExecutionScope, TaskScopeMismatchError } from '@/features/auth/taskScope';
 import { ApiError } from '@/features/core/api/client';
 import {
   createLocalFragmentEntity,
@@ -227,6 +228,7 @@ export function useAudioUpload() {
       setStatus('loading');
       setError(null);
       setResult(null);
+      const scope = captureRequiredTaskExecutionScope();
       const deviceId = await getOrCreateDeviceId();
       const localFragment = await createLocalFragmentEntity({
         folderId,
@@ -236,6 +238,7 @@ export function useAudioUpload() {
         deviceId,
       });
       const response = await uploadAudio(uri, folderId, localFragment.id);
+      assertTaskScopeActive(scope);
       await updateLocalFragmentEntity(localFragment.id, {
         audio_object_key: response.audio_object_key ?? undefined,
         audio_file_url: response.audio_file_url,
@@ -253,9 +256,9 @@ export function useAudioUpload() {
       markFragmentsStale();
       setResult(nextResult);
       setStatus('success');
-      void waitForPipelineTerminal(response.pipeline_run_id, { timeoutMs: 180_000 })
+      void waitForPipelineTerminal(response.pipeline_run_id, { timeoutMs: 180_000, scope })
         .then(async (pipeline) => {
-          const restoredFragment = await syncMediaIngestionPipelineState(localFragment.id, pipeline);
+          const restoredFragment = await syncMediaIngestionPipelineState(localFragment.id, pipeline, { scope });
           if (!restoredFragment || !isMountedRef.current || pipeline.status !== 'succeeded') {
             return;
           }
@@ -270,10 +273,15 @@ export function useAudioUpload() {
           );
         })
         .catch((pipelineError) => {
-          console.warn('录音转写后台回写失败:', pipelineError);
+          if (!(pipelineError instanceof TaskScopeMismatchError)) {
+            console.warn('录音转写后台回写失败:', pipelineError);
+          }
         });
       return nextResult;
     } catch (err) {
+      if (err instanceof TaskScopeMismatchError) {
+        return null;
+      }
       const message =
         err instanceof ApiError && err.code === 'NETWORK_ERROR'
           ? '网络不可用，请检查网络连接后重试'

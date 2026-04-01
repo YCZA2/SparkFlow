@@ -3,16 +3,14 @@
  * 包含 API 地址、应用配置等常量
  */
 
-import { Platform } from 'react-native';
+import { getDefaultApiBaseUrl } from '@/constants/appConfig';
 import { getBackendUrl, discoverBackendUrl, setBackendUrl } from '@/utils/networkConfig';
 
 // 导出动态获取后端地址的函数
 export { getBackendUrl, discoverBackendUrl, setBackendUrl };
 
 // 默认后端地址（用于初始化）
-export const DEFAULT_API_BASE_URL = Platform.OS === 'ios'
-  ? 'http://localhost:8000'  // iOS 模拟器
-  : 'http://10.0.2.2:8000';  // Android 模拟器
+export const DEFAULT_API_BASE_URL = getDefaultApiBaseUrl();
 
 // AsyncStorage 键名
 export const STORAGE_KEYS = {

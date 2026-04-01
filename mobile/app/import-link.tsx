@@ -14,6 +14,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Text } from '@/components/Themed';
 import { getOrCreateDeviceId } from '@/features/auth/device';
+import { assertTaskScopeActive, captureRequiredTaskExecutionScope, TaskScopeMismatchError } from '@/features/auth/taskScope';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { createLocalFragmentEntity, updateLocalFragmentEntity } from '@/features/fragments/store';
 import { importExternalAudio } from '@/features/imports/api';
@@ -44,6 +45,7 @@ export default function ImportLinkScreen() {
 
     try {
       setIsSubmitting(true);
+      const scope = captureRequiredTaskExecutionScope();
       const deviceId = await getOrCreateDeviceId();
       const localFragment = await createLocalFragmentEntity({
         folderId: params.folderId,
@@ -53,6 +55,7 @@ export default function ImportLinkScreen() {
         deviceId,
       });
       const task = await importExternalAudio(trimmedShareUrl, params.folderId, localFragment.id);
+      assertTaskScopeActive(scope);
       await updateLocalFragmentEntity(localFragment.id, {
         media_pipeline_run_id: task.pipeline_run_id,
         media_pipeline_status: 'queued',
@@ -60,10 +63,11 @@ export default function ImportLinkScreen() {
       });
       const pipeline = await waitForPipelineTerminal(task.pipeline_run_id, {
         timeoutMs: 180_000,
+        scope,
       });
       const fragmentId = resolveImportedFragmentId(task.local_fragment_id ?? task.fragment_id, pipeline);
 
-      await syncMediaIngestionPipelineState(localFragment.id, pipeline);
+      await syncMediaIngestionPipelineState(localFragment.id, pipeline, { scope });
 
       if (pipeline.status !== 'succeeded' || !fragmentId) {
         throw new Error(pipeline.error_message || '导入失败，请稍后重试');
@@ -72,6 +76,10 @@ export default function ImportLinkScreen() {
       markFragmentsStale();
       router.replace(`/fragment/${fragmentId}`);
     } catch (err) {
+      if (err instanceof TaskScopeMismatchError) {
+        setIsSubmitting(false);
+        return;
+      }
       setIsSubmitting(false);
       Alert.alert('导入失败', getErrorMessage(err, '导入失败，请重试'));
     }

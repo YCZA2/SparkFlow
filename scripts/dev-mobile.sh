@@ -11,6 +11,9 @@ BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 EXPO_PORT="${EXPO_PORT:-8081}"
 IOS_PLATFORM="${IOS_PLATFORM:-ios}"
+APP_ENV="${APP_ENV:-development}"
+IOS_DEV_BUNDLE_ID="${IOS_DEV_BUNDLE_ID:-com.sparkflow.mobile.dev}"
+IOS_DEV_SCHEME="${IOS_DEV_SCHEME:-sparkflowmobiledev}"
 
 MODE="${1:-start}"
 BACKEND_PID=""
@@ -191,8 +194,8 @@ install_dev_client_to_booted_simulator() {
 
 open_expo_in_simulator() {
   # 手动打开 dev client，并对 deep link 做重试，规避 Expo CLI 偶发超时。
-  local bundle_id="com.sparkflow.mobile"
-  local deep_link="exp+sparkflow-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A${EXPO_PORT}"
+  local bundle_id="${IOS_DEV_BUNDLE_ID}"
+  local deep_link="exp+${IOS_DEV_SCHEME}://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A${EXPO_PORT}"
   local simulator_name=""
 
   if ! xcrun simctl listapps booted | grep -q "\"${bundle_id}\""; then
@@ -290,6 +293,7 @@ run_start_mode() {
   local_ip="$(get_local_ip)"
   public_backend_url="http://${local_ip}:${BACKEND_PORT}"
   local_backend_health_url="http://127.0.0.1:${BACKEND_PORT}/health"
+  export APP_DEFAULT_API_BASE_URL="${public_backend_url}"
 
   echo "[dev-mobile] mode1: starting backend + expo..."
   free_port "${BACKEND_PORT}" "backend"
@@ -301,7 +305,7 @@ run_start_mode() {
   echo "[dev-mobile] starting backend..."
   (
     cd "${BACKEND_DIR}"
-    exec "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
+    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
   ) &
   BACKEND_PID=$!
 
@@ -323,7 +327,7 @@ run_start_mode() {
   echo "[dev-mobile] starting expo (LAN mode)..."
   (
     cd "${MOBILE_DIR}"
-    exec npx expo start --lan --port "${EXPO_PORT}"
+    exec env APP_ENV="${APP_ENV}" APP_DEFAULT_API_BASE_URL="${APP_DEFAULT_API_BASE_URL}" npx expo start --lan --port "${EXPO_PORT}"
   ) &
   EXPO_PID=$!
 
@@ -350,6 +354,7 @@ run_web_mode() {
 
   local_backend_url="http://127.0.0.1:${BACKEND_PORT}"
   local_backend_health_url="http://127.0.0.1:${BACKEND_PORT}/health"
+  export APP_DEFAULT_API_BASE_URL="${local_backend_url}"
 
   echo "[dev-mobile] mode4: starting backend + expo web..."
   free_port "${BACKEND_PORT}" "backend"
@@ -361,7 +366,7 @@ run_web_mode() {
   echo "[dev-mobile] starting backend..."
   (
     cd "${BACKEND_DIR}"
-    exec "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
+    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
   ) &
   BACKEND_PID=$!
 
@@ -383,7 +388,7 @@ run_web_mode() {
   echo "[dev-mobile] starting expo (Web mode)..."
   (
     cd "${MOBILE_DIR}"
-    exec npx expo start --web --port "${EXPO_PORT}"
+    exec env APP_ENV="${APP_ENV}" APP_DEFAULT_API_BASE_URL="${APP_DEFAULT_API_BASE_URL}" npx expo start --web --port "${EXPO_PORT}"
   ) &
   EXPO_PID=$!
 
@@ -409,6 +414,7 @@ run_simulator_mode() {
   local_ip="127.0.0.1"
   public_backend_url="http://${local_ip}:${BACKEND_PORT}"
   local_backend_health_url="http://127.0.0.1:${BACKEND_PORT}/health"
+  export APP_DEFAULT_API_BASE_URL="${public_backend_url}"
 
   echo "[dev-mobile] mode3: starting backend + expo (iOS Simulator)..."
   free_port "${BACKEND_PORT}" "backend"
@@ -420,7 +426,7 @@ run_simulator_mode() {
   echo "[dev-mobile] starting backend..."
   (
     cd "${BACKEND_DIR}"
-    exec "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
+    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload
   ) &
   BACKEND_PID=$!
 
@@ -444,7 +450,7 @@ run_simulator_mode() {
   echo "[dev-mobile] starting expo (iOS Simulator)..."
   (
     cd "${MOBILE_DIR}"
-    exec npx expo start --localhost --dev-client --port "${EXPO_PORT}"
+    exec env APP_ENV="${APP_ENV}" APP_DEFAULT_API_BASE_URL="${APP_DEFAULT_API_BASE_URL}" npx expo start --localhost --dev-client --port "${EXPO_PORT}"
   ) &
   EXPO_PID=$!
 
@@ -482,13 +488,13 @@ run_build_mode() {
   npm install
 
   echo "[dev-mobile] step 2/4: expo prebuild --platform ${IOS_PLATFORM} --clean"
-  npx expo prebuild --platform "${IOS_PLATFORM}" --clean
+  APP_ENV="${APP_ENV}" npx expo prebuild --platform "${IOS_PLATFORM}" --clean
 
   echo "[dev-mobile] step 3/4: pod-install ios"
   npx pod-install ios
 
   echo "[dev-mobile] step 4/4: expo run:ios --device"
-  npx expo run:ios --device
+  APP_ENV="${APP_ENV}" npx expo run:ios --device
 
   echo
   echo "========================================"

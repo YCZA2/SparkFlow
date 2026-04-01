@@ -5,7 +5,9 @@ import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { Text } from '@/components/Themed';
+import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { useAuth } from '@/features/auth/hooks';
+import { captureTaskExecutionScope } from '@/features/auth/taskScope';
 import { restoreFromBackup } from '@/features/backups/restore';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { getErrorMessage } from '@/utils/error';
@@ -58,6 +60,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, isAuthenticated, error, logout } = useAuth();
   const theme = useAppTheme();
+  const developerToolsEnabled = isDeveloperToolsEnabled();
   const [isRestoring, setIsRestoring] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -75,7 +78,8 @@ export default function ProfileScreen() {
             void (async () => {
               try {
                 setIsRestoring(true);
-                const result = await restoreFromBackup('manual_profile_restore');
+                const scope = captureTaskExecutionScope();
+                const result = await restoreFromBackup('manual_profile_restore', { scope });
                 Alert.alert(
                   '恢复完成',
                   `已恢复 ${result.fragmentCount} 条碎片、${result.folderCount} 个文件夹。`
@@ -172,13 +176,6 @@ export default function ProfileScreen() {
             ]}
           >
             <MenuItem
-              icon="🌐"
-              title="网络设置"
-              subtitle="配置后端服务地址"
-              onPress={() => router.push('/network-settings')}
-              tone={theme}
-            />
-            <MenuItem
               icon="🚪"
               title="退出登录"
               subtitle={
@@ -202,23 +199,44 @@ export default function ProfileScreen() {
               disabled={isRestoring || isLoggingOut}
               tone={theme}
             />
-            <MenuItem
-              icon="🔧"
-              title="API 测试"
-              subtitle="测试后端连接"
-              onPress={() => router.push('/test-api')}
-              disabled={isRestoring || isLoggingOut}
-              tone={theme}
-            />
-            <MenuItem
-              icon="🧯"
-              title="错误日志"
-              subtitle="查看前端运行时错误和接口异常"
-              onPress={() => router.push('/debug-logs')}
-              hideBorder
-              disabled={isRestoring || isLoggingOut}
-              tone={theme}
-            />
+            {developerToolsEnabled ? (
+              <>
+                <MenuItem
+                  icon="🌐"
+                  title="网络设置"
+                  subtitle="配置后端服务地址"
+                  onPress={() => router.push('/network-settings')}
+                  tone={theme}
+                />
+                <MenuItem
+                  icon="🔧"
+                  title="API 测试"
+                  subtitle="测试后端连接"
+                  onPress={() => router.push('/test-api')}
+                  disabled={isRestoring || isLoggingOut}
+                  tone={theme}
+                />
+                <MenuItem
+                  icon="🧯"
+                  title="错误日志"
+                  subtitle="查看前端运行时错误和接口异常"
+                  onPress={() => router.push('/debug-logs')}
+                  hideBorder
+                  disabled={isRestoring || isLoggingOut}
+                  tone={theme}
+                />
+              </>
+            ) : (
+              <MenuItem
+                icon="ℹ️"
+                title="正式环境"
+                subtitle="网络设置、API 测试和错误日志仅在开发包开放"
+                onPress={() => {}}
+                hideBorder
+                disabled
+                tone={theme}
+              />
+            )}
           </View>
 
           <View

@@ -4,10 +4,12 @@ import { AppState } from 'react-native';
 import { initApiBaseUrl } from '@/constants/config';
 import { getOrCreateDeviceId } from '@/features/auth/device';
 import { subscribeAuthSessionLost } from '@/features/auth/sessionEvents';
+import { captureTaskExecutionScope } from '@/features/auth/taskScope';
 import { useAuthStore } from '@/features/auth/authStore';
 import { flushBackupQueue } from '@/features/backups/queue';
 import { ensureFragmentStoreReady } from '@/features/fragments/store';
 import { ensureScriptStoreReady } from '@/features/scripts/store';
+import { recoverWorkspaceTaskState } from '@/features/tasks/workspaceRecovery';
 
 /**
  * App Session Provider
@@ -55,9 +57,14 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
       if (!isAuthenticated || !user?.user_id) {
         return;
       }
+      const scope = captureTaskExecutionScope();
+      if (!scope) {
+        return;
+      }
       await ensureFragmentStoreReady();
       await ensureScriptStoreReady();
-      await flushBackupQueue().catch(() => undefined);
+      await flushBackupQueue({ scope }).catch(() => undefined);
+      await recoverWorkspaceTaskState(scope).catch(() => undefined);
     };
     void prepareWorkspace();
   }, [isAuthenticated, user?.user_id]);
@@ -67,7 +74,10 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
     const subscription = AppState.addEventListener('change', (nextState) => {
       /*仅在 background 和 active 状态时唤醒，减少冗余调用*/
       if (isAuthenticated && (nextState === 'background' || nextState === 'active')) {
-        void flushBackupQueue().catch(() => undefined);
+        const scope = captureTaskExecutionScope();
+        if (scope) {
+          void flushBackupQueue({ scope }).catch(() => undefined);
+        }
       }
     });
     return () => {
@@ -79,7 +89,10 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
     /*在前台长时间使用时定期重试 failed 条目，补充前后台切换事件的覆盖盲区。*/
     const intervalId = setInterval(() => {
       if (isAuthenticated) {
-        void flushBackupQueue().catch(() => undefined);
+        const scope = captureTaskExecutionScope();
+        if (scope) {
+          void flushBackupQueue({ scope }).catch(() => undefined);
+        }
       }
     }, 5 * 60 * 1000);
     return () => clearInterval(intervalId);

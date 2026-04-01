@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from domains.pipelines import repository as pipeline_repository
 from models import User
 from main import ensure_local_test_user
 from modules.auth.application import TEST_USER_ID
@@ -10,6 +11,16 @@ from modules.auth.application import TEST_USER_ID
 from tests.flow_helpers import _auth_headers
 
 pytestmark = pytest.mark.integration
+
+
+async def _register_user(async_client, *, email: str, device_id: str) -> dict:
+    """为鉴权隔离测试创建一个独立账号并返回登录载荷。"""
+    response = await async_client.post(
+        "/api/auth/register",
+        json={"email": email, "password": "testpass123", "device_id": device_id},
+    )
+    assert response.status_code == 200
+    return response.json()["data"]
 
 
 @pytest.mark.asyncio
@@ -113,6 +124,54 @@ async def test_auth_token_recreates_missing_test_user(async_client, db_session_f
         assert test_user is not None
         assert test_user.nickname == "测试博主"
         assert test_user.role == "user"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_detail_is_scoped_to_current_user(async_client, db_session_factory) -> None:
+    """用户只能读取自己的 pipeline_run，不能跨账号查看任务状态。"""
+    owner = await _register_user(async_client, email="owner@example.com", device_id="owner-device")
+    viewer = await _register_user(async_client, email="viewer@example.com", device_id="viewer-device")
+
+    with db_session_factory() as db:
+        run = pipeline_repository.create_run(
+            db=db,
+            run_id="pipeline-run-owner-only",
+            user_id=owner["user"]["user_id"],
+            pipeline_type="media_ingestion",
+            input_payload={"source": "test"},
+            resource_type="local_fragment",
+            resource_id="fragment-owner",
+            steps=[{"step_name": "transcribe", "input_payload": {"source": "test"}}],
+        )
+
+    response = await async_client.get(
+        f"/api/pipelines/{run.id}",
+        headers={"Authorization": f"Bearer {viewer['access_token']}"},
+    )
+    assert response.status_code == 404
+    assert "无权访问" in response.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_backup_asset_access_rejects_other_users_object_key(async_client) -> None:
+    """备份素材访问地址只能刷新当前用户自己的 object_key。"""
+    owner = await _register_user(async_client, email="backup-owner@example.com", device_id="backup-owner-device")
+    viewer = await _register_user(async_client, email="backup-viewer@example.com", device_id="backup-viewer-device")
+    owner_user_id = owner["user"]["user_id"]
+
+    response = await async_client.post(
+        "/api/backups/assets/access",
+        headers={"Authorization": f"Bearer {viewer['access_token']}"},
+        json={
+            "items": [
+                {
+                    "object_key": f"backups/assets/{owner_user_id}/fragment/fragment-1/audio.m4a",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 422
+    assert "备份对象不属于当前用户" in response.json()["error"]["message"]
 
 
 def test_startup_hook_recreates_missing_test_user(db_session_factory, monkeypatch) -> None:

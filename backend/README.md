@@ -4,6 +4,7 @@ SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Doc
 
 ## 今日进展（2026-03-31）
 
+- 后端配置现已支持 `APP_ENV=development|production` 两层装配：按 `.env` + `.env.<env>` 顺序加载，并在 production 下对危险开发配置执行 fail-fast 校验。
 - 后端已经补齐 phase 1 local-first 所需的备份恢复能力：`/api/backups/batch`、`/api/backups/snapshot`、`/api/backups/restore`、`/api/backups/assets` 与 `/api/backups/assets/access`。
 - 正式认证链路已经升级为邮箱密码登录，JWT 继续携带 `device_id + session_version`；登录、刷新 token、备份、恢复和 AI / 转写相关请求都受单设备在线约束。
 - `transcriptions`、`external_media`、`scripts/generation` 现已支持客户端本地快照 / 本地 placeholder 驱动，不再把“先创建远端 fragment 业务记录”作为默认入口。
@@ -35,12 +36,33 @@ SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以 Doc
 4. Run migrations and start server:
 
 ```bash
+APP_ENV=development bash ../scripts/postgres-local.sh start dev
+APP_ENV=development .venv/bin/alembic upgrade heads
+APP_ENV=development uvicorn main:app --reload
+```
+
+也可以拆开执行：
+
+```bash
 bash ../scripts/postgres-local.sh start dev
 .venv/bin/alembic upgrade heads
 uvicorn main:app --reload
 ```
 
 Default local address: `http://127.0.0.1:8000`
+
+生产环境约束：
+
+- `APP_ENV=production` 时必须替换默认 `SECRET_KEY`
+- `APP_ENV=production` 时禁止 `ENABLE_TEST_AUTH=true`
+- `APP_ENV=production` 时禁止 `DEBUG=true` 或 `LOG_LEVEL=DEBUG`
+- 若存在 `backend/.env.production`，会在基础 `.env` 之后覆盖加载
+
+移动端出包约定：
+
+- 根目录使用 `bash scripts/mobile-release.sh build dev|prod ios|android`
+- App Store / Play 提交使用 `bash scripts/mobile-release.sh submit prod ios|android`
+- 上述脚本会和 `mobile/eas.json` 保持同一套 `APP_ENV` 映射，避免 profile 与运行时环境不一致
 
 默认数据库：
 

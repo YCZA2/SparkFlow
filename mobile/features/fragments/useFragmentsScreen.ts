@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { useFragmentListScreenState } from './useFragmentListScreenState';
 
 export interface FragmentsScreenState {
@@ -23,6 +24,7 @@ export interface FragmentsScreenState {
 export function useFragmentsScreen(): FragmentsScreenState {
   /*首页碎片入口统一转发列表 view-model 和页面级导航动作。 */
   const router = useRouter();
+  const developerToolsEnabled = isDeveloperToolsEnabled();
   const list = useFragmentListScreenState({ enableRefreshParam: true });
 
   return {
@@ -38,7 +40,11 @@ export function useFragmentsScreen(): FragmentsScreenState {
     openRecorder: () => router.push('/record-audio'),
     openTextNote: () => router.push('/text-note'),
     openKnowledgePlaceholder: () => router.push('/knowledge'),
-    openNetworkSettings: () => router.push('/network-settings'),
+    openNetworkSettings: () => {
+      if (developerToolsEnabled) {
+        router.push('/network-settings');
+      }
+    },
     refresh: list.refresh,
     reload: list.reload,
     onFragmentPress: list.onFragmentPress,

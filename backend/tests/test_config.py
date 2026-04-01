@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from core.config import BACKEND_DIR, Settings
 
 
@@ -43,3 +45,32 @@ def test_backend_log_paths_are_resolved_from_backend_dir(monkeypatch) -> None:
     settings = Settings()
     assert settings.BACKEND_LOG_PATH == f"{BACKEND_DIR}/runtime_logs/backend.log"
     assert settings.BACKEND_ERROR_LOG_PATH == f"{BACKEND_DIR}/runtime_logs/backend-error.log"
+
+
+def test_app_env_defaults_to_development(monkeypatch) -> None:
+    """未显式声明 APP_ENV 时，后端默认按 development 装配。"""
+    monkeypatch.delenv("APP_ENV", raising=False)
+    settings = Settings()
+    assert settings.APP_ENV == "development"
+
+
+def test_production_rejects_default_secret_key(monkeypatch) -> None:
+    """production 环境必须替换默认 JWT 密钥。"""
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "change-this-in-production")
+    monkeypatch.setenv("ENABLE_TEST_AUTH", "false")
+    monkeypatch.setenv("DEBUG", "false")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    with pytest.raises(ValueError, match="SECRET_KEY"):
+        Settings()
+
+
+def test_production_rejects_test_auth(monkeypatch) -> None:
+    """production 环境禁止打开测试登录入口。"""
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "prod-secret-key")
+    monkeypatch.setenv("ENABLE_TEST_AUTH", "true")
+    monkeypatch.setenv("DEBUG", "false")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    with pytest.raises(ValueError, match="ENABLE_TEST_AUTH"):
+        Settings()

@@ -1,69 +1,91 @@
 import React from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 
+import { ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
+import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { TestResultCard } from '@/components/TestResultCard';
 import { useApiTestSuite } from '@/hooks/useApiTestSuite';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 export default function ApiTestScreen() {
   const theme = useAppTheme();
+  const router = useRouter();
+  const developerToolsEnabled = isDeveloperToolsEnabled();
   const { backendUrl, tests, isRunningAll, runAllTests, actions } = useApiTestSuite();
+
+  if (!developerToolsEnabled) {
+    /*正式包即使直接命中调试页，也只展示拒绝态而不暴露测试动作。 */
+    return (
+      <>
+        <Stack.Screen options={{ title: 'API 测试' }} />
+        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+          <ScreenState
+            icon="🔒"
+            title="当前环境不可用"
+            message="正式环境已移除 API 测试入口。"
+            actionLabel="返回工作台"
+            onAction={() => router.replace('/profile')}
+          />
+        </View>
+      </>
+    );
+  }
 
   return (
     <>
       <Stack.Screen options={{ title: 'API 测试' }} />
       <ScrollView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={styles.content}
-    >
-      <Text style={[styles.title, { color: theme.colors.text }]}>API 服务测试</Text>
-      <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-        验证 `services/` 模块所有 API
-      </Text>
-
-      <View style={[styles.infoBox, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.infoLabel, { color: theme.colors.textMuted }]}>后端地址:</Text>
-        <Text style={[styles.infoValue, { color: theme.colors.text }]}>
-          {backendUrl || '加载中...'}
-        </Text>
-      </View>
-
-      <TouchableOpacity
-        style={[
-          styles.runAllButton,
-          { backgroundColor: isRunningAll ? theme.colors.textSubtle : theme.colors.primary },
-        ]}
-        onPress={runAllTests}
-        disabled={isRunningAll}
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+        contentContainerStyle={styles.content}
       >
-        {isRunningAll ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.runAllButtonText}>运行全部测试</Text>
-        )}
-      </TouchableOpacity>
+        <Text style={[styles.title, { color: theme.colors.text }]}>API 服务测试</Text>
+        <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
+          验证 `services/` 模块所有 API
+        </Text>
 
-      <View style={styles.testList}>
-        {tests.map((test) => (
-          <TestResultCard key={test.name} test={test} />
-        ))}
-      </View>
+        <View style={[styles.infoBox, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.infoLabel, { color: theme.colors.textMuted }]}>后端地址:</Text>
+          <Text style={[styles.infoValue, { color: theme.colors.text }]}>
+            {backendUrl || '加载中...'}
+          </Text>
+        </View>
 
-      <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>单项测试</Text>
-      <View style={styles.singleTestButtons}>
-        {actions.map((action) => (
-          <TouchableOpacity
-            key={action.label}
-            style={[styles.singleTestBtn, { backgroundColor: theme.colors.success }]}
-            onPress={action.run}
-          >
-            <Text style={styles.singleTestBtnText}>{action.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </ScrollView>
+        <TouchableOpacity
+          style={[
+            styles.runAllButton,
+            { backgroundColor: isRunningAll ? theme.colors.textSubtle : theme.colors.primary },
+          ]}
+          onPress={runAllTests}
+          disabled={isRunningAll}
+        >
+          {isRunningAll ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.runAllButtonText}>运行全部测试</Text>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.testList}>
+          {tests.map((test) => (
+            <TestResultCard key={test.name} test={test} />
+          ))}
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>单项测试</Text>
+        <View style={styles.singleTestButtons}>
+          {actions.map((action) => (
+            <TouchableOpacity
+              key={action.label}
+              style={[styles.singleTestBtn, { backgroundColor: theme.colors.success }]}
+              onPress={action.run}
+            >
+              <Text style={styles.singleTestBtnText}>{action.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
     </>
   );
 }
