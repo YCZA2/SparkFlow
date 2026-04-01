@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Themed';
 import { TeleprompterOverlay } from '@/components/TeleprompterOverlay';
@@ -26,6 +27,7 @@ const FALLBACK_TEXT =
 export default function ShootScreen() {
   const router = useRouter();
   const theme = useAppTheme();
+  const insets = useSafeAreaInsets();
   const { script_id, fragment_id, body_html } = useLocalSearchParams<{
     script_id?: string;
     fragment_id?: string;
@@ -63,19 +65,24 @@ export default function ShootScreen() {
     });
   }, [recorder, router]);
 
+  /* 权限检查中 */
   if (!permission) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
-        <Text style={styles.loadingText}>正在检查相机权限...</Text>
+      <View style={[styles.permissionContainer, { backgroundColor: theme.colors.background }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.permissionDesc, { color: theme.colors.textSubtle }]}>
+          正在检查相机权限...
+        </Text>
       </View>
     );
   }
 
+  /* 权限未授权：和列表页统一的 Hero 风格 */
   if (!permission.granted) {
     return (
-      <View style={[styles.permissionContainer, { backgroundColor: theme.colors.surface }]}>
-        <Stack.Screen options={{ title: '相机权限' }} />
+      <View style={[styles.permissionContainer, { backgroundColor: theme.colors.background }]}>
+        <Stack.Screen options={{ headerShown: false }} />
         <Text style={[styles.permissionTitle, { color: theme.colors.text }]}>需要相机权限</Text>
         <Text style={[styles.permissionDesc, { color: theme.colors.textSubtle }]}>
           为了使用拍摄功能，请授权访问您的相机。
@@ -86,8 +93,8 @@ export default function ShootScreen() {
         >
           <Text style={styles.permissionButtonText}>授权相机访问</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-          <Text style={[styles.closeButtonText, { color: theme.colors.textSubtle }]}>返回</Text>
+        <TouchableOpacity style={styles.backButton} onPress={handleClose}>
+          <Text style={[styles.backButtonText, { color: theme.colors.textSubtle }]}>返回</Text>
         </TouchableOpacity>
       </View>
     );
@@ -98,7 +105,7 @@ export default function ShootScreen() {
     : FALLBACK_TEXT;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.cameraContainer}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <CameraView
@@ -112,25 +119,27 @@ export default function ShootScreen() {
           <TeleprompterOverlay text={teleprompterText} />
         </View>
 
-        <View style={styles.topControls}>
+        {/* 顶部控制栏：圆形按钮，半透明暗底 */}
+        <View style={[styles.topControls, { paddingTop: insets.top + 12 }]}>
           <TouchableOpacity
-            style={[styles.iconButton, recorder.isRecording && styles.iconButtonDisabled]}
+            style={[styles.cameraCircleButton, recorder.isRecording && styles.buttonDisabled]}
             onPress={handleClose}
             disabled={recorder.isRecording}
           >
-            <Text style={styles.iconButtonText}>✕</Text>
+            <Text style={styles.cameraButtonText}>✕</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.iconButton, recorder.isRecording && styles.iconButtonDisabled]}
+            style={[styles.cameraCircleButton, recorder.isRecording && styles.buttonDisabled]}
             onPress={recorder.toggleCameraFacing}
             disabled={recorder.isRecording}
           >
-            <Text style={styles.iconButtonText}>↻</Text>
+            <Text style={styles.cameraButtonText}>↻</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.bottomControls}>
+        {/* 底部控制栏 */}
+        <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 20 }]}>
           {recorder.isRecording ? (
             <View style={styles.recordingIndicator}>
               <View style={styles.recordingDot} />
@@ -161,21 +170,7 @@ export default function ShootScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#000000',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-  },
+  /* —— 权限页：和列表页统一的背景和排版 —— */
   permissionContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -184,14 +179,16 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   permissionTitle: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -0.9,
     textAlign: 'center',
   },
   permissionDesc: {
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: '500',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 20,
   },
   permissionButton: {
     paddingHorizontal: 32,
@@ -204,11 +201,16 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
   },
-  closeButton: {
+  backButton: {
     paddingVertical: 12,
   },
-  closeButtonText: {
+  backButtonText: {
     fontSize: 16,
+  },
+  /* —— 相机界面：保持沉浸式暗色 —— */
+  cameraContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
   },
   camera: {
     flex: 1,
@@ -229,10 +231,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 50,
     paddingBottom: 10,
   },
-  iconButton: {
+  cameraCircleButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -240,10 +241,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  iconButtonDisabled: {
+  buttonDisabled: {
     opacity: 0.5,
   },
-  iconButtonText: {
+  cameraButtonText: {
     color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '600',
@@ -254,7 +255,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
-    paddingBottom: 50,
     paddingTop: 20,
   },
   recordingIndicator: {

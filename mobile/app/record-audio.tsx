@@ -4,6 +4,7 @@ import {
   Alert,
   Pressable,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -21,7 +22,37 @@ function formatTodayLabel() {
   return `${today.getMonth() + 1}月${today.getDate()}日`;
 }
 
-function IconButton({
+/** 顶部圆形按钮，和首页/列表页 headerButton 保持同一视觉语言 */
+function HeaderCircleButton({
+  symbol,
+  onPress,
+  tintColor,
+}: {
+  symbol: React.ComponentProps<typeof SymbolView>['name'];
+  onPress: () => void;
+  tintColor: string;
+}) {
+  const theme = useAppTheme();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      hitSlop={8}
+      style={[
+        styles.headerButton,
+        {
+          backgroundColor:
+            theme.name === 'dark' ? theme.colors.surfaceMuted : 'rgba(255,255,255,0.9)',
+          borderColor: theme.colors.border,
+        },
+      ]}
+    >
+      <SymbolView name={symbol} size={20} tintColor={tintColor} />
+    </TouchableOpacity>
+  );
+}
+
+/** 主操作区域的圆形按钮（暂停/播放/标记） */
+function ActionButton({
   symbol,
   onPress,
   size = 56,
@@ -38,7 +69,7 @@ function IconButton({
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
-        styles.iconButton,
+        styles.actionButton,
         {
           width: size,
           height: size,
@@ -53,6 +84,7 @@ function IconButton({
   );
 }
 
+/** 底部辅助操作胶囊按钮 */
 function SecondaryPill({
   label,
   symbol,
@@ -91,10 +123,7 @@ export default function RecordAudioScreen() {
   const hasAutoStartedRef = useRef(false);
 
   useEffect(() => {
-    if (hasAutoStartedRef.current) {
-      return;
-    }
-
+    if (hasAutoStartedRef.current) return;
     hasAutoStartedRef.current = true;
     if (
       session.status !== 'recording' &&
@@ -119,20 +148,14 @@ export default function RecordAudioScreen() {
 
   const handleCancel = async () => {
     await session.cancel();
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/');
-    }
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
   };
 
   const handleStop = async () => {
     await session.stopAndUpload(folderId);
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/');
-    }
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
   };
 
   const handlePauseToggle = () => {
@@ -140,9 +163,7 @@ export default function RecordAudioScreen() {
       session.resume();
       return;
     }
-    if (session.status === 'recording') {
-      session.pause();
-    }
+    if (session.status === 'recording') session.pause();
   };
 
   const handleOpenTextNote = () => {
@@ -160,8 +181,8 @@ export default function RecordAudioScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
 
-      {/* 顶部导航栏 */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
+      {/* 浮动顶栏：和首页/列表页统一的圆形按钮风格 */}
+      <View style={[styles.floatingHeader, { top: insets.top + 12 }]}>
         <View style={styles.recRow}>
           {session.status === 'recording' && (
             <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.recDot} />
@@ -171,40 +192,46 @@ export default function RecordAudioScreen() {
           </Text>
         </View>
 
-        <View style={styles.topActions}>
-          <SecondaryPill
-            label="中英"
+        <View style={styles.headerRightActions}>
+          <HeaderCircleButton
             symbol="globe"
             onPress={() => showPlaceholderAlert('语言选择即将接入')}
+            tintColor={theme.colors.text}
           />
-          <IconButton
+          <HeaderCircleButton
             symbol="xmark"
             onPress={() => void handleCancel()}
-            size={44}
-            color={theme.colors.text}
-            backgroundColor={theme.colors.surface}
+            tintColor={theme.colors.text}
           />
         </View>
       </View>
 
-      {/* 日期 */}
-      <View style={styles.dateBlock}>
-        <Text style={[styles.dateLabel, { color: theme.colors.text }]}>{formatTodayLabel()}</Text>
+      {/* 页面标题区域：和列表页 Hero 块统一 */}
+      <View style={[styles.heroBlock, { paddingTop: insets.top + 66 }]}>
+        <Text style={[styles.heroTitle, { color: theme.colors.text }]}>{formatTodayLabel()}</Text>
+        <Text style={[styles.heroSubtitle, { color: theme.colors.textSubtle }]}>
+          {session.status === 'paused' ? '录音已暂停' : '正在聆听你的想法'}
+        </Text>
       </View>
 
       {/* 计时器 */}
       <View style={styles.timerWrap}>
-        <View style={[styles.timerCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.timerText, { color: theme.colors.text }]}>{session.durationLabel}</Text>
-          <Text style={[styles.timerHint, { color: theme.colors.textSubtle }]}>
-            {session.status === 'paused' ? '已暂停，点击继续' : '正在聆听你的想法'}
+        <View
+          style={[
+            styles.timerCard,
+            theme.shadow.card,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          <Text style={[styles.timerText, { color: theme.colors.text }]}>
+            {session.durationLabel}
           </Text>
         </View>
       </View>
 
       {/* 主要操作按钮 */}
       <View style={styles.primaryActions}>
-        <IconButton
+        <ActionButton
           symbol={session.status === 'paused' ? 'play.fill' : 'pause.fill'}
           onPress={handlePauseToggle}
           size={64}
@@ -231,7 +258,7 @@ export default function RecordAudioScreen() {
           )}
         </Pressable>
 
-        <IconButton
+        <ActionButton
           symbol="flag.fill"
           onPress={() => showPlaceholderAlert('标记功能即将接入')}
           size={64}
@@ -242,11 +269,7 @@ export default function RecordAudioScreen() {
 
       {/* 底部操作栏 */}
       <View style={[styles.bottomActions, { paddingBottom: insets.bottom + 20 }]}>
-        <SecondaryPill
-          label="笔记"
-          symbol="square.and.pencil"
-          onPress={handleOpenTextNote}
-        />
+        <SecondaryPill label="笔记" symbol="square.and.pencil" onPress={handleOpenTextNote} />
         <SecondaryPill
           label="相机"
           symbol="camera.fill"
@@ -260,13 +283,16 @@ export default function RecordAudioScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 16,
   },
-  topBar: {
+  /* —— 浮动顶栏 —— */
+  floatingHeader: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 10,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 12,
+    justifyContent: 'space-between',
   },
   recRow: {
     flexDirection: 'row',
@@ -284,31 +310,54 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  topActions: {
+  headerRightActions: {
     flexDirection: 'row',
+    gap: 10,
+  },
+  headerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  dateBlock: {
-    marginTop: 16,
-    alignItems: 'flex-start',
+  /* —— Hero 区域 —— */
+  heroBlock: {
+    paddingHorizontal: 16,
+    marginBottom: 4,
   },
-  dateLabel: {
-    fontSize: 28,
-    fontWeight: '700',
+  heroTitle: {
+    fontSize: 32,
+    lineHeight: 36,
+    fontWeight: '800',
+    letterSpacing: -0.9,
   },
+  heroSubtitle: {
+    marginTop: 3,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  /* —— 计时器 —— */
   timerWrap: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 16,
   },
   timerCard: {
     minWidth: 220,
-    borderRadius: 24,
+    borderRadius: 18,
     paddingHorizontal: 32,
     paddingVertical: 28,
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   timerText: {
     fontSize: 56,
@@ -316,18 +365,14 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     fontVariant: ['tabular-nums'],
   },
-  timerHint: {
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: '500',
-  },
+  /* —— 主操作 —— */
   primaryActions: {
     flexDirection: 'row',
     justifyContent: 'space-evenly',
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  iconButton: {
+  actionButton: {
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -346,8 +391,10 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#FFFFFF',
   },
+  /* —— 底部操作 —— */
   bottomActions: {
     marginTop: 32,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -361,7 +408,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   secondaryPillText: {
     fontSize: 15,
