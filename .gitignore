@@ -65,3 +65,6 @@ chroma_data/
 
 # .superpowers
 .superpowers/
+
+# 日志
+runtime_logs/
