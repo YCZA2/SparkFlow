@@ -57,7 +57,7 @@ bash scripts/test-all.sh
 
 正式产品登录当前走：
 
-- `POST /api/auth/verification-codes`
+- `POST /api/auth/register`
 - `POST /api/auth/login`
 - `GET /api/auth/me`
 - `POST /api/auth/refresh`
@@ -135,13 +135,13 @@ cd backend
 6. `modules/shared` + `services`
    - 外部能力抽象与适配层。
    - 负责 LLM、STT、Embedding、VectorStore、FileStorage、WorkflowProvider 等端口与实现。
-   - `modules/shared/container.py` 只负责 `ServiceContainer` 和默认依赖装配。
+   - `backend/modules/shared/infrastructure/container.py` 只负责 `ServiceContainer` 和默认依赖装配。
    - `backend/prompts/` 是当前后端 prompt 文本与模板的统一存放位置；代码层只负责读取与填充变量，不再直接内嵌长 prompt 文本。
-   - `modules/shared/infrastructure.py` 只保留兼容导出，真实实现拆到 `storage.py`、`vector_store.py`、`providers.py`。
-   - `modules/shared/audio_ingestion_use_case.py` 负责媒体导入入口编排，`media_ingestion_steps.py` 负责 transcript-first 步骤执行，`media_ingestion_persistence.py` 负责落库与终态输出。
-   - `modules/shared/audio_ingestion.py` 保留统一入口导出，供现有依赖平滑迁移。
-   - `modules/shared/pipeline_runtime.py` 提供持久化后台流水线运行时、worker 抢占、重试与恢复。
-   - `modules/fragments/derivative_pipeline.py` 负责 fragment 摘要、标签与向量的异步回填流水线。
+   - `backend/modules/shared/infrastructure/infrastructure.py` 只保留兼容导出，真实实现拆到 `storage.py`、`vector_store.py`、`providers.py`。
+   - `backend/modules/shared/media/audio_ingestion_use_case.py` 负责媒体导入入口编排，`backend/modules/shared/media/media_ingestion_steps.py` 负责 transcript-first 步骤执行，`backend/modules/shared/media/media_ingestion_persistence.py` 负责落库与终态输出。
+   - `backend/modules/shared/media/audio_ingestion.py` 保留统一入口导出，供现有依赖平滑迁移。
+   - `backend/modules/shared/pipeline/pipeline_runtime.py` 提供持久化后台流水线运行时、worker 抢占、重试与恢复。
+   - `backend/modules/fragments/derivative_pipeline.py` 负责 fragment 摘要、标签与向量的异步回填流水线。
 7. `modules/pipelines`
    - 后台任务流水线层。
    - 负责 `pipeline_runs` / `pipeline_step_runs` 查询、步骤详情与手动重跑。
@@ -160,7 +160,9 @@ cd backend
 
 ### Business modules
 
-- `modules/auth/`: 测试令牌签发、当前用户信息、刷新令牌。
+- `modules/admin_users/`: 管理员账号管理。
+- `modules/auth/`: 邮箱密码注册与登录、测试令牌签发、当前用户信息、刷新令牌。
+- `modules/backups/`: 自动备份批量写入、快照读取、恢复会话、素材上传和访问地址刷新。
 - `modules/fragment_folders/`: 碎片文件夹 CRUD 和基于 snapshot 的文件夹统计。
 - `modules/fragments/`: 当前只保留标签、相似检索、可视化和 fragment snapshot 详情 / 导出组装能力。
 - `modules/transcriptions/`: 音频上传与后台转写入口；主任务以 transcript 成功为准，摘要标签随后异步补齐。
@@ -236,7 +238,7 @@ cd backend
 
 当前仓库的前后端并行开发约定见 [`memory-bank/frontend-backend-collaboration.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/frontend-backend-collaboration.md)。如果接口字段、状态枚举或返回结构发生变化，后端需要在更新 `schemas.py` 的同时同步这份协作规范涉及的联调约定。
 
-Current business modules include `auth`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `media_assets`, `exports`, `pipelines`, `debug_logs`, and `scheduler`.
+Current business modules include `admin_users`, `auth`, `backups`, `fragment_folders`, `fragments`, `transcriptions`, `external_media`, `scripts`, `knowledge`, `media_assets`, `exports`, `pipelines`, `debug_logs`, and `scheduler`.
 
 内容字段约定：
 

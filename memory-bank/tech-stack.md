@@ -16,7 +16,7 @@
 | Camera | expo-camera | 提词拍摄页 |
 | Media | expo-media-library | 视频保存到系统相册 |
 | Network | fetch + 自建 API client | 统一 token、错误处理 |
-| Local persistence | AsyncStorage | token / user / backend base URL / fragment cache / local drafts |
+| Local persistence | SQLite + file system + AsyncStorage | fragments / folders / scripts 本地真值；AsyncStorage 仅保留 token / user / backend base URL / device_id / 少量轻量配置 |
 | Backend | FastAPI 0.135 + Uvicorn 0.41 | 模块化单体 |
 | ORM | SQLAlchemy 2.0 + Alembic | PostgreSQL migrations |
 | Scheduling | APScheduler 3.11 | 每日推盘 cron |
@@ -54,9 +54,9 @@
 - `expo-camera`: 拍摄页预览与视频录制。
 - `expo-media-library`: 视频写入系统相册。
 - `expo-document-picker`: 当前主要用于正文图片与文件选择，后续也可复用到知识库移动端上传入口。
-- **SQLite (expo-sqlite + drizzle-orm)**：fragments 本地镜像索引、媒体资源索引、同步状态和本地草稿，作为后端数据的镜像缓存
-- **expo-file-system**：fragment 正文文件（HTML）、待上传图片、音频文件
-- **AsyncStorage**：token、用户信息、后端地址等轻量配置，不再承载 fragment 主流程缓存
+- **SQLite (expo-sqlite + drizzle-orm)**：fragments / folders / media_assets / scripts 的本地真值、备份状态和实体版本
+- **expo-file-system**：fragment / script 正文文件（HTML）、待上传图片、音频文件
+- **AsyncStorage**：token、用户信息、后端地址、`device_id` 与少量轻量配置，不再承载主流程内容缓存
 
 ### 2.3 Current frontend architecture choice
 
@@ -102,7 +102,7 @@
 - `modules/*/presentation.py`: Router
 - `modules/*/application.py`: Use case / orchestration
 - `modules/shared/*`: container、ports、共享增强逻辑
-- `modules/shared/pipeline_runtime.py`: 持久化任务运行时、worker、恢复与重跑
+- `backend/modules/shared/pipeline/pipeline_runtime.py`: 持久化任务运行时、worker、恢复与重跑
 - `domains/*/repository.py`: 数据访问
 - `services/*`: 外部 provider 与工厂
 
@@ -244,7 +244,7 @@ http://<your-lan-ip>:8000
 
 ## 8. Practical Notes
 
-- 当前项目采用**缓存优先架构 + 本地优先用户体验**：后端 PostgreSQL 为数据真值来源，移动端 SQLite 作为镜像缓存实现快速响应，编辑采用乐观更新策略，后台异步同步到远端。
+- 当前项目采用**local-first 真值 + 后端备份/恢复**：fragments / folders / scripts 的内容真值在移动端 SQLite + 文件系统，后端 PostgreSQL 负责账户、任务、知识库和备份快照，不再作为这些内容的主读写源。
 - Expo Dev Client 已接入，因此原生能力变更需要区分”只改 JS/TS”与”需要重建”两类流程。
 - 移动端首页已偏向“碎片管理与创作入口”，不是最初的单一录音主页。
 - 知识库后端已可用，但移动端仍是占位入口；不要把它当成完整的已交付前端模块。

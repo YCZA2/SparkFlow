@@ -58,8 +58,8 @@
 
 ### 当前实现位置
 
-- Vector adapter: [`backend/modules/shared/vector_store.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/vector_store.py)
-- Container entry: [`backend/modules/shared/container.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/container.py)
+- Vector adapter: [`backend/modules/shared/infrastructure/vector_store.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/infrastructure/vector_store.py)
+- Container entry: [`backend/modules/shared/infrastructure/container.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/shared/infrastructure/container.py)
 - Fragment query/use case: [`backend/modules/fragments/application.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/application.py)
 - Visualization: [`backend/modules/fragments/visualization.py`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/modules/fragments/visualization.py)
 - Chroma provider: `backend/services/chroma_vector_db.py`

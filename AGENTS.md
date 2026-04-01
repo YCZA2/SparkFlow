@@ -48,7 +48,7 @@ If the change also updates repository conventions, development workflow, or agen
 - `backend/main.py`: FastAPI app entry
 - `backend/modules/*`: feature modules, route layer and application orchestration
 - `backend/modules/pipelines/`: persistent pipeline status, step query, and retry APIs
-- `backend/modules/shared/pipeline_runtime.py`: DB-backed pipeline dispatcher / worker runtime
+- `backend/modules/shared/pipeline/pipeline_runtime.py`: DB-backed pipeline dispatcher / worker runtime
 - `backend/domains/*`: domain repositories and persistence logic
 - `backend/services/*`: provider integrations and service implementations
 - `backend/models/`: SQLAlchemy models and DB session setup
