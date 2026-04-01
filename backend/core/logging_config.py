@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 import os
 import sys
@@ -11,6 +12,7 @@ from typing import Any
 import structlog
 
 from .config import settings
+from utils.time import get_app_timezone
 
 ACCESS_LOGGER_NAME = "sparkflow.access"
 MOBILE_DEBUG_LOGGER_NAME = "sparkflow.mobile_debug"
@@ -41,15 +43,29 @@ def _rename_logger_key(_: Any, __: str, event_dict: structlog.types.EventDict) -
     return event_dict
 
 
+def _build_timestamp_processor() -> structlog.types.Processor:
+    """按应用时区写入 ISO 时间戳，便于本地联调直接按北京时间排障。"""
+    timezone = get_app_timezone()
+
+    def _add_timestamp(
+        _: Any,
+        __: str,
+        event_dict: structlog.types.EventDict,
+    ) -> structlog.types.EventDict:
+        event_dict["timestamp"] = datetime.now(timezone).isoformat()
+        return event_dict
+
+    return _add_timestamp
+
+
 def _build_shared_processors() -> list[structlog.types.Processor]:
     """构建控制台和文件日志共享的处理器链。"""
-    timestamper = structlog.processors.TimeStamper(fmt="iso")
     processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
         _rename_logger_key,
-        timestamper,
+        _build_timestamp_processor(),
         structlog.processors.StackInfoRenderer(),
     ]
     if settings.LOG_JSON:

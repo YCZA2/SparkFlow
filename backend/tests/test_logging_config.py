@@ -59,6 +59,7 @@ def test_backend_logs_are_written_to_split_files(tmp_path, monkeypatch) -> None:
     ]
     assert [record["event"] for record in error_records] == ["backend_error_event"]
     assert error_records[0]["level"] == "error"
+    assert all(record["timestamp"].endswith("+08:00") for record in all_records)
 
     root_file_handlers = [
         handler
@@ -151,3 +152,22 @@ def test_logger_exception_does_not_emit_pretty_exception_warning(tmp_path, monke
         logger.exception("exception_event")
 
     assert not recwarn.list
+
+
+def test_log_timestamp_uses_app_timezone(tmp_path, monkeypatch) -> None:
+    """日志时间戳应跟随应用时区输出偏移量。"""
+    all_log_path = tmp_path / "backend.log"
+    error_log_path = tmp_path / "backend-error.log"
+    mobile_log_path = tmp_path / "mobile-debug.log"
+
+    monkeypatch.setattr(settings, "BACKEND_LOG_PATH", str(all_log_path))
+    monkeypatch.setattr(settings, "BACKEND_ERROR_LOG_PATH", str(error_log_path))
+    monkeypatch.setattr(settings, "MOBILE_DEBUG_LOG_PATH", str(mobile_log_path))
+    monkeypatch.setattr(settings, "APP_TIMEZONE", "UTC")
+
+    configure_logging()
+    get_logger("tests.timezone").info("timezone_event")
+    _flush_logger_handlers("")
+
+    record = json.loads(all_log_path.read_text(encoding="utf-8").strip().splitlines()[-1])
+    assert record["timestamp"].endswith("+00:00")
