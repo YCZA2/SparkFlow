@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
 import { InputDialog } from '@/components/InputDialog';
@@ -27,6 +28,7 @@ export default function FoldersScreen() {
   const theme = useAppTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const developerToolsEnabled = isDeveloperToolsEnabled();
   const { toggle } = useDrawer();
   const {
     folders,
@@ -97,8 +99,8 @@ export default function FoldersScreen() {
           message={error}
           actionLabel="点击重试"
           onAction={fetchFolders}
-          secondaryActionLabel="网络设置"
-          onSecondaryAction={() => router.push('/network-settings')}
+          secondaryActionLabel={developerToolsEnabled ? '网络设置' : undefined}
+          onSecondaryAction={developerToolsEnabled ? () => router.push('/network-settings') : undefined}
         />
       </NotesScreenStateView>
     );

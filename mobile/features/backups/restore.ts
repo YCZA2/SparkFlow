@@ -1,3 +1,4 @@
+import { assertTaskScopeActive, type TaskExecutionScope } from '@/features/auth/taskScope';
 import { fragmentFoldersTable, fragmentsTable, mediaAssetsTable } from '@/features/core/db/schema';
 import { getLocalDatabase } from '@/features/core/db/database';
 import {
@@ -199,11 +200,20 @@ async function mergeRestoredScripts(plan: BackupRestorePlan): Promise<void> {
 }
 
 /*用远端备份快照覆盖本地 SQLite 与正文文件，显式完成一次恢复流程。 */
-export async function restoreFromBackup(reason?: string): Promise<BackupRestoreResult> {
+export async function restoreFromBackup(
+  reason?: string,
+  options?: { scope?: TaskExecutionScope | null }
+): Promise<BackupRestoreResult> {
+  if (options?.scope) {
+    assertTaskScopeActive(options.scope);
+  }
   await ensureFragmentStoreReady();
 
   const restoreSession = await createRestoreSession(reason);
   const snapshot = await fetchBackupSnapshot();
+  if (options?.scope) {
+    assertTaskScopeActive(options.scope);
+  }
   const plan = buildBackupRestorePlan(snapshot);
   const database = await getLocalDatabase();
 
@@ -211,6 +221,9 @@ export async function restoreFromBackup(reason?: string): Promise<BackupRestoreR
   await refreshFragmentAudioAccess(plan);
   await refreshBackupMediaAssetUrls(plan);
   await hydrateBackupFileCache(plan);
+  if (options?.scope) {
+    assertTaskScopeActive(options.scope);
+  }
 
   // 用事务原子替换本地数据：DELETE 和 INSERT 要么全成功，要么全回滚，避免崩溃后数据为空。
   await database.transaction(async (tx) => {
@@ -265,6 +278,9 @@ export async function restoreFromBackup(reason?: string): Promise<BackupRestoreR
     if (fragment.deletedAt || !fragment.bodyHtml.trim()) {
       continue;
     }
+    if (options?.scope) {
+      assertTaskScopeActive(options.scope);
+    }
     await persistBodyHtml(fragment.id, fragment.bodyHtml);
   }
 
@@ -274,6 +290,9 @@ export async function restoreFromBackup(reason?: string): Promise<BackupRestoreR
   );
   await cleanupStaleFragmentDirectories(liveFragmentIds);
 
+  if (options?.scope) {
+    assertTaskScopeActive(options.scope);
+  }
   await mergeRestoredScripts(plan);
 
   useFragmentStore.getState().clearCache();

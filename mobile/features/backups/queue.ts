@@ -1,6 +1,7 @@
 import { and, eq, isNull, or } from 'drizzle-orm';
 
 import { getOrCreateDeviceId } from '@/features/auth/device';
+import { assertTaskScopeActive, captureTaskExecutionScope, isTaskScopeActive, type TaskExecutionScope } from '@/features/auth/taskScope';
 import { getDatabaseWorkspaceUserId, getLocalDatabase } from '@/features/core/db/database';
 import { fragmentFoldersTable, fragmentsTable, mediaAssetsTable, scriptsTable } from '@/features/core/db/schema';
 import { readFragmentBodyFile, readScriptBodyFile } from '@/features/core/files/runtime';
@@ -17,7 +18,7 @@ import {
   type BackupMutationItem,
 } from './api';
 
-let flushPromise: Promise<void> | null = null;
+const flushPromises = new Map<string, Promise<void>>();
 
 async function buildFragmentItems(deviceId: string): Promise<BackupMutationItem[]> {
   const database = await getLocalDatabase();
@@ -248,12 +249,22 @@ async function markBackupsFailed(): Promise<void> {
     .where(eq(scriptsTable.backupStatus, 'pending'));
 }
 
-export async function flushBackupQueue(): Promise<void> {
-  if (!getDatabaseWorkspaceUserId()) {
+export async function flushBackupQueue(options?: { scope?: TaskExecutionScope | null }): Promise<void> {
+  const scope = options?.scope ?? captureTaskExecutionScope();
+  const workspaceUserId = scope?.userId ?? getDatabaseWorkspaceUserId();
+  if (!workspaceUserId) {
     return;
   }
-  if (!flushPromise) {
-    flushPromise = (async () => {
+  const existingPromise = flushPromises.get(workspaceUserId);
+  if (existingPromise) {
+    await existingPromise;
+    return;
+  }
+
+  const nextPromise = (async () => {
+      if (scope) {
+        assertTaskScopeActive(scope);
+      }
       const deviceId = await getOrCreateDeviceId();
       const items = [
         ...(await buildFolderItems(deviceId)),
@@ -266,14 +277,21 @@ export async function flushBackupQueue(): Promise<void> {
       }
       try {
         const response = await pushBackupBatch(items);
+        if (scope && !isTaskScopeActive(scope)) {
+          return;
+        }
         await markBackupsSynced(items, response.server_generated_at);
       } catch (error) {
+        if (scope && !isTaskScopeActive(scope)) {
+          return;
+        }
         await markBackupsFailed();
         throw error;
       }
     })().finally(() => {
-      flushPromise = null;
+      flushPromises.delete(workspaceUserId);
     });
-  }
-  await flushPromise;
+
+  flushPromises.set(workspaceUserId, nextPromise);
+  await nextPromise;
 }

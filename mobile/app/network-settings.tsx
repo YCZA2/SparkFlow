@@ -10,15 +10,16 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 
+import { ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
+import { getDefaultApiBaseUrl, isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { useNetworkSettings } from '@/features/network/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
-
-const DEFAULT_URL = 'http://192.168.31.157:8000';
 
 export default function NetworkSettingsScreen() {
   const router = useRouter();
   const theme = useAppTheme();
+  const developerToolsEnabled = isDeveloperToolsEnabled();
   const {
     currentUrl,
     inputUrl,
@@ -33,6 +34,24 @@ export default function NetworkSettingsScreen() {
     autoDiscover,
     resetToDefault,
   } = useNetworkSettings();
+
+  if (!developerToolsEnabled) {
+    /*生产包命中调试路由时直接拒绝进入，避免深链绕过入口裁剪。 */
+    return (
+      <>
+        <Stack.Screen options={{ title: '网络设置' }} />
+        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+          <ScreenState
+            icon="🔒"
+            title="当前环境不可用"
+            message="正式环境已禁用网络设置，请返回工作区继续使用。"
+            actionLabel="返回工作台"
+            onAction={() => router.replace('/profile')}
+          />
+        </View>
+      </>
+    );
+  }
 
   const handleTest = async () => {
     const result = await testCurrentUrl();
@@ -61,7 +80,7 @@ export default function NetworkSettingsScreen() {
   };
 
   const handleReset = async () => {
-    await resetToDefault(DEFAULT_URL);
+    await resetToDefault(getDefaultApiBaseUrl());
     Alert.alert('重置成功', '已恢复默认地址');
   };
 

@@ -4,6 +4,7 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-rou
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ScriptCard } from '@/components/ScriptCard';
+import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { BackButton } from '@/components/layout/BackButton';
 import { NotesListHero } from '@/components/layout/NotesListHero';
 import { NotesListScreenShell } from '@/components/layout/NotesListScreenShell';
@@ -17,6 +18,7 @@ import type { Script } from '@/types/script';
 export default function ScriptsScreen() {
   /*成稿列表复用统一列表壳层，继续保持轻量的圆形返回 + hero 结构。 */
   const router = useRouter();
+  const developerToolsEnabled = isDeveloperToolsEnabled();
   const pushOnce = useSingleFlightRouterPush();
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
@@ -78,8 +80,8 @@ export default function ScriptsScreen() {
           message={error}
           actionLabel="点击重试"
           onAction={reload}
-          secondaryActionLabel="网络设置"
-          onSecondaryAction={() => router.push('/network-settings')}
+          secondaryActionLabel={developerToolsEnabled ? '网络设置' : undefined}
+          onSecondaryAction={developerToolsEnabled ? () => router.push('/network-settings') : undefined}
         />
       </NotesScreenStateView>
     );

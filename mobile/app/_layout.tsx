@@ -20,6 +20,7 @@ import { DrawerProvider, useDrawer } from '@/providers/DrawerProvider';
 import { ImportActionSheetProvider } from '@/providers/ImportActionSheetProvider';
 import { QuickActionBarProvider } from '@/providers/QuickActionBarProvider';
 import { QuickActionBar } from '@/components/QuickActionBar';
+import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -85,6 +86,7 @@ function RootLayoutNav() {
   const session = useAppSession();
   const { isOpen, close } = useDrawer();
   const router = useRouter();
+  const developerToolsEnabled = isDeveloperToolsEnabled();
 
   /*session 就绪后，未登录则强制跳转到登录页（冷启动和会话失效均覆盖）。*/
   useEffect(() => {
@@ -165,27 +167,33 @@ function RootLayoutNav() {
           />
           <Stack.Screen name="import-link" options={{ title: '导入链接', headerShown: true }} />
           <Stack.Screen name="knowledge" options={{ title: '知识库', headerShown: true }} />
-          <Stack.Screen
-            name="debug-logs"
-            options={{
-              title: '错误日志',
-              headerShown: true,
-            }}
-          />
-          <Stack.Screen
-            name="network-settings"
-            options={{
-              title: '网络设置',
-              headerShown: true,
-            }}
-          />
-          <Stack.Screen
-            name="test-api"
-            options={{
-              title: 'API 测试',
-              headerShown: true,
-            }}
-          />
+          {developerToolsEnabled ? (
+            <Stack.Screen
+              name="debug-logs"
+              options={{
+                title: '错误日志',
+                headerShown: true,
+              }}
+            />
+          ) : null}
+          {developerToolsEnabled ? (
+            <Stack.Screen
+              name="network-settings"
+              options={{
+                title: '网络设置',
+                headerShown: true,
+              }}
+            />
+          ) : null}
+          {developerToolsEnabled ? (
+            <Stack.Screen
+              name="test-api"
+              options={{
+                title: 'API 测试',
+                headerShown: true,
+              }}
+            />
+          ) : null}
         </Stack>
         {/* 底部快捷操作栏 - 悬浮在页面之上 */}
         <QuickActionBar />

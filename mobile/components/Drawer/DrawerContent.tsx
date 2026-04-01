@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 
 import { Text } from '@/components/Themed';
+import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { useAuth } from '@/features/auth/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 
@@ -58,6 +59,7 @@ export function DrawerContent({ closeDrawer }: DrawerContentProps) {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
   const theme = useAppTheme();
+  const developerToolsEnabled = isDeveloperToolsEnabled();
 
   // 导航处理：先关闭抽屉，再跳转
   const handleNavigation = (route: string) => {
@@ -114,24 +116,25 @@ export function DrawerContent({ closeDrawer }: DrawerContentProps) {
         />
       </View>
 
-      {/* 菜单区块 2 */}
-      <View style={[styles.menuSection, { borderRadius: 16 }]}>
-        <MenuItem
-          icon="🌐"
-          title="网络设置"
-          subtitle="配置后端服务地址"
-          onPress={() => handleNavigation('/network-settings')}
-          tone={theme}
-        />
-        <MenuItem
-          icon="🔧"
-          title="API 测试"
-          subtitle="测试后端连接"
-          onPress={() => handleNavigation('/test-api')}
-          hideBorder
-          tone={theme}
-        />
-      </View>
+      {developerToolsEnabled ? (
+        <View style={[styles.menuSection, { borderRadius: 16 }]}>
+          <MenuItem
+            icon="🌐"
+            title="网络设置"
+            subtitle="配置后端服务地址"
+            onPress={() => handleNavigation('/network-settings')}
+            tone={theme}
+          />
+          <MenuItem
+            icon="🔧"
+            title="API 测试"
+            subtitle="测试后端连接"
+            onPress={() => handleNavigation('/test-api')}
+            hideBorder
+            tone={theme}
+          />
+        </View>
+      ) : null}
 
       {/* 菜单区块 3 */}
       <View style={[styles.menuSection, { borderRadius: 16 }]}>

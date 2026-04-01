@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
+import { assertTaskScopeActive, captureRequiredTaskExecutionScope, type TaskExecutionScope } from '@/features/auth/taskScope';
 import { flushBackupQueue } from '@/features/backups/queue';
 import { waitForPipelineTerminal } from '@/features/pipelines/api';
 import {
@@ -10,7 +11,8 @@ import {
   triggerDailyPush,
 } from '@/features/scripts/api';
 import { consumeScriptsStale, markScriptsStale } from '@/features/scripts/refreshSignal';
-import { listLocalScriptEntities, readLocalScriptEntity, upsertLocalScriptEntity } from '@/features/scripts/store';
+import { forgetPendingScriptPipelineTask, rememberPendingScriptPipelineTask, type PendingScriptTaskKind } from '@/features/scripts/pendingTasks';
+import { listLocalScriptEntities, upsertLocalScriptEntity } from '@/features/scripts/store';
 import { useScriptList, useScriptStore } from '@/features/scripts/store/scriptStore';
 import { syncRemoteScriptDetailToLocal, syncRemoteScriptsToLocal } from '@/features/scripts/sync';
 import type { Script } from '@/types/script';
@@ -18,19 +20,24 @@ import { getErrorMessage } from '@/utils/error';
 
 async function resolveScriptFromPipelineTask(
   pipelineRunId: string,
-  fallbackMessage: string
+  fallbackMessage: string,
+  options: { scope: TaskExecutionScope }
 ): Promise<Script> {
   /*统一消费任务态脚本结果，并在成功后落本地真值。 */
-  const pipeline = await waitForPipelineTerminal(pipelineRunId);
+  const pipeline = await waitForPipelineTerminal(pipelineRunId, { scope: options.scope });
   const scriptId =
     pipeline.status === 'succeeded' && pipeline.resource.resource_type === 'script'
       ? pipeline.resource.resource_id
       : null;
   if (!scriptId) {
+    assertTaskScopeActive(options.scope);
+    await forgetPendingScriptPipelineTask(options.scope.userId, pipelineRunId);
     throw new Error(pipeline.error_message || fallbackMessage);
   }
-  const script = await syncRemoteScriptDetailToLocal(scriptId);
+  assertTaskScopeActive(options.scope);
+  const script = await syncRemoteScriptDetailToLocal(scriptId, { scope: options.scope });
   markScriptsStale();
+  await forgetPendingScriptPipelineTask(options.scope.userId, pipelineRunId);
   return script;
 }
 
@@ -48,14 +55,20 @@ export function useGenerateScript() {
     try {
       setStatus('loading');
       setError(null);
-      await flushBackupQueue().catch((error) => {
+      const scope = captureRequiredTaskExecutionScope();
+      await flushBackupQueue({ scope }).catch((error) => {
         throw new Error(getErrorMessage(error, '本地内容尚未同步，无法保证生成基于最新正文'));
       });
       const task = await generateScript({
         topic,
         fragment_ids: fragmentIds,
       });
-      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, '生成失败');
+      await rememberPendingScriptPipelineTask(scope.userId, {
+        pipelineRunId: task.pipeline_run_id,
+        kind: 'manual',
+        createdAt: new Date().toISOString(),
+      });
+      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, '生成失败', { scope });
       setStatus('success');
       return script.id;
     } catch (err) {
@@ -98,7 +111,8 @@ export function useScripts(options?: { sourceFragmentId?: string | null }) {
 
         if (mode !== 'silent' || nextItems.length === 0) {
           try {
-            await syncRemoteScriptsToLocal();
+            const scope = captureRequiredTaskExecutionScope();
+            await syncRemoteScriptsToLocal({ scope });
             const refreshedItems = await listLocalScriptEntities({ sourceFragmentId: options?.sourceFragmentId });
             useScriptStore.getState().setList(cacheKey, refreshedItems);
           } catch (syncError) {
@@ -202,7 +216,8 @@ export function useTodayDailyPush() {
 
 function useDailyPushTriggerBase(
   apiFn: () => Promise<{ pipeline_run_id: string }>,
-  errorMessage: string
+  errorMessage: string,
+  kind: PendingScriptTaskKind
 ) {
   /* 推盘触发钩子公共逻辑：管理 loading/error 状态，等待 pipeline 完成后返回脚本。*/
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -212,8 +227,14 @@ function useDailyPushTriggerBase(
     try {
       setStatus('loading');
       setError(null);
+      const scope = captureRequiredTaskExecutionScope();
       const task = await apiFn();
-      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, errorMessage);
+      await rememberPendingScriptPipelineTask(scope.userId, {
+        pipelineRunId: task.pipeline_run_id,
+        kind,
+        createdAt: new Date().toISOString(),
+      });
+      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, errorMessage, { scope });
       setStatus('success');
       return script;
     } catch (err) {
@@ -222,17 +243,17 @@ function useDailyPushTriggerBase(
       throw err;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [apiFn, errorMessage, kind]);
 
   return { status, error, run };
 }
 
 export function useDailyPushTrigger() {
   /* 触发一次今日推盘生成。*/
-  return useDailyPushTriggerBase(triggerDailyPush, '生成灵感卡片失败');
+  return useDailyPushTriggerBase(triggerDailyPush, '生成灵感卡片失败', 'daily_push');
 }
 
 export function useForceDailyPushTrigger() {
   /* 强制触发今日推盘生成（跳过碎片数量校验）。*/
-  return useDailyPushTriggerBase(forceTriggerDailyPush, '强制生成灵感卡片失败');
+  return useDailyPushTriggerBase(forceTriggerDailyPush, '强制生成灵感卡片失败', 'daily_push');
 }

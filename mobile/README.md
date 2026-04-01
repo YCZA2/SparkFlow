@@ -4,9 +4,12 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 ## 今日进展（2026-03-31）
 
+- 移动端配置已收口到 Expo runtime config：当前只区分 `development` 与 `production`，通过 `mobile/app.config.ts` 下发 `appEnv`、`defaultApiBaseUrl` 与 `enableDeveloperTools`。
+- 正式包现在会默认移除 `网络设置`、`API 测试` 和 `错误日志` 等开发入口；即使深链命中也会显示拒绝态，不再允许手工覆盖后端地址。
 - `fragments / folders` 的 local-first phase 1 已经落地完成：列表、详情、编辑、删除都以本地 SQLite + 文件系统为真值，远端只负责备份与恢复。
 - 移动端正式入口已经切到”登录后工作区”：未登录只显示登录页；登录成功后才挂载本地 SQLite、正文文件和备份队列。
 - 本地 SQLite、fragment/script 正文文件、音频缓存与 staging 目录都已按 `user_id` 工作区隔离；切换账号会切换整套本地工作区。
+- 录音上传、抖音导入、脚本生成、备份冲刷与恢复流程现在都绑定 `user_id + session_version + workspace_epoch` 任务作用域；切号、登出或设备会话失效后，旧任务只会保留在原工作区等待恢复，不会继续回写当前账号。
 - 录音转写、抖音链接导入、脚本生成都已经切到“客户端上传本地快照或本地媒体”驱动，不再默认依赖服务端 fragment 业务表作为输入真值。
 - 录音上传与抖音链接导入现在都要求客户端**先创建本地 fragment placeholder**，并把 `local_fragment_id` 显式传给后端；服务端不再兜底创建远端 fragment 记录。
 - 服务端返回的 `transcript / summary / tags / audio_object_key` 会直接补写进 fragment backup snapshot；客户端后续 backup flush 不会把这些服务器字段冲掉。
@@ -110,6 +113,11 @@ bash scripts/dev-mobile.sh start
 - 后端 FastAPI（`8000`）
 - Expo / Metro（`8081`）
 
+脚本会自动注入：
+
+- `APP_ENV=development`
+- `APP_DEFAULT_API_BASE_URL=http://<你的局域网 IP>:8000`（LAN 模式）或 `http://127.0.0.1:8000`（simulator/web）
+
 也可以用 npm 别名：
 
 ```bash
@@ -175,6 +183,33 @@ npx expo run:ios --device
 ```
 
 完成后脚本会提示你回到模式1。
+
+## 发布命令
+
+现在推荐统一走根目录发布脚本，不再手动记忆 EAS profile：
+
+```bash
+npm run release:mobile:dev:ios
+npm run release:mobile:dev:android
+npm run release:mobile:prod:ios
+npm run release:mobile:prod:android
+npm run release:mobile:submit:ios
+npm run release:mobile:submit:android
+```
+
+等价底层脚本：
+
+```bash
+bash scripts/mobile-release.sh build dev ios
+bash scripts/mobile-release.sh build prod android --non-interactive
+bash scripts/mobile-release.sh submit prod ios --latest
+```
+
+约定：
+
+- `dev` 固定映射到 `development:device` profile，并注入 `APP_ENV=development`
+- `prod` 固定映射到 `production` profile，并注入 `APP_ENV=production`
+- `submit` 只允许 `prod`，避免误把开发包提审
 
 ## 三、真机联调约定
 

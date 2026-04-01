@@ -1,3 +1,4 @@
+import { assertTaskScopeActive, type TaskExecutionScope } from '@/features/auth/taskScope';
 import { retryPipelineRun, waitForPipelineTerminal } from '@/features/pipelines/api';
 import {
   extractMediaIngestionOutput,
@@ -11,9 +12,13 @@ export { isFailedMediaIngestionFragment, isProcessingMediaIngestionFragment } fr
 
 export async function syncMediaIngestionPipelineState(
   fallbackFragmentId: string,
-  pipeline: Pick<PipelineRun, 'id' | 'status' | 'resource' | 'output' | 'error_message'>
+  pipeline: Pick<PipelineRun, 'id' | 'status' | 'resource' | 'output' | 'error_message'>,
+  options?: { scope?: TaskExecutionScope | null }
 ): Promise<Fragment | null> {
   /*统一把媒体 pipeline 终态回写到本地 fragment，成功时补正文，失败时保留错误态。 */
+  if (options?.scope) {
+    assertTaskScopeActive(options.scope);
+  }
   const fragmentId =
     (pipeline.status === 'succeeded' &&
     (pipeline.resource?.resource_type === 'local_fragment' ||
@@ -27,6 +32,9 @@ export async function syncMediaIngestionPipelineState(
   }
 
   if (pipeline.status !== 'succeeded') {
+    if (options?.scope) {
+      assertTaskScopeActive(options.scope);
+    }
     const nextFragment = await updateLocalFragmentEntity(fragmentId, {
       media_pipeline_run_id: pipeline.id,
       media_pipeline_status: pipeline.status,
@@ -36,6 +44,9 @@ export async function syncMediaIngestionPipelineState(
     return nextFragment;
   }
 
+  if (options?.scope) {
+    assertTaskScopeActive(options.scope);
+  }
   const current = await readLocalFragmentEntity(fragmentId);
   const output = extractMediaIngestionOutput(pipeline);
   const patch = resolveMediaIngestionFragmentPatch({ current, output });

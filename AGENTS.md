@@ -39,6 +39,7 @@ If the change also updates repository conventions, development workflow, or agen
 - `backend/`: FastAPI backend
 - `mobile/`: Expo mobile app
 - `scripts/dev-mobile.sh`: recommended local dev entrypoint
+- `scripts/mobile-release.sh`: recommended mobile EAS build / submit entrypoint
 - `scripts/postgres-local.sh`: 本地 PostgreSQL Docker 管理入口
 - `memory-bank/`: product and architecture context
 - `CLAUDE.md`: existing Claude-oriented project instructions
@@ -64,6 +65,7 @@ If the change also updates repository conventions, development workflow, or agen
 - `mobile/constants/`, `mobile/types/`, `mobile/utils/`, `mobile/theme/`: shared client utilities
 - `mobile/app/import-link.tsx`: 抖音分享链接导入页
 - `mobile/features/imports/`: 外部链接导入请求、载荷与任务态辅助逻辑
+- `mobile/app.config.ts`: Expo runtime config 入口；dev/prod 包标识、默认 API 地址和开发工具开关都从这里下发
 
 ## Development Workflow
 
@@ -175,6 +177,8 @@ http://<your-lan-ip>:8000
 - Do not reintroduce fragment-level task state compatibility fields or `agent_runs`; task progress must stay on `pipeline_runs` / `pipeline_step_runs`
 - 新增需要远端持久化的移动端实体时，优先接入 `/api/backups/*` 和本地 `entity_version / backup_status`，不要再把“先建远端业务记录”当默认路径
 - Reuse existing scripts and utilities before adding new entrypoints
+- 移动端出包/提审优先复用 `scripts/mobile-release.sh` 和既有 npm alias，不要在文档或脚本里重新散落 profile 名、平台参数和 `APP_ENV` 映射
+- 环境配置当前只允许按 `development / production` 两层演进：后端通过 `APP_ENV + .env/.env.<env>`，移动端通过 Expo runtime config；不要再把固定 LAN 地址、测试入口或手工网络设置暴露到正式环境
 - 后端测试需要分层：不依赖数据库或启动副作用的 smoke / contract 测试默认不要连接 PostgreSQL，依赖 `db_session_factory`、`app`、`async_client` 或真实 lifespan 的测试统一标记为 `integration`
 - Keep comments concise. For every new or modified function, add a brief Chinese comment describing its responsibility or intent; for non-obvious or project-specific logic, also explain the key constraint or reason, but avoid line-by-line restatement of the code
 - Avoid broad refactors unless they are required for the task
@@ -185,6 +189,7 @@ http://<your-lan-ip>:8000
 - 当前首页与文件夹页底部 `+` 的产品语义是“打开导入抽屉”；新增外部导入能力时优先扩展该抽屉，而不是把 `+` 改回直接跳页
 - `mobile/features` 下的状态 helper 以 TypeScript 源码为单一事实源，不要再提交 `.js` / `.d.ts` 编译产物；纯状态测试统一放在 `mobile/tests/*.test.ts`，通过 `mobile/scripts/run-state-tests.mjs` 运行
 - 当前正式产品形态已切到**登录后工作区**：未登录不能进入业务页面；移动端本地 SQLite、正文文件、音频缓存、图片 staging 与 backup queue 都必须按 `user_id` 工作区隔离，禁止再把不同账号的数据落到同一份本地库/目录中
+- 任何会回写本地 SQLite / 文件系统的异步任务都必须绑定当前 `user_id + session_version + workspace_epoch` 作用域；切号、登出或会话失效后，旧任务只能冻结在原工作区，不能继续回写当前账号
 - `POST /api/auth/token` 只允许作为本地开发联调入口；正式登录已改为邮箱密码认证，涉及认证流程时不要再恢复”自动使用测试用户进入主流程”的实现
 
 ## When Updating Docs

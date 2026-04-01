@@ -6,6 +6,8 @@
 
 ## 0. 今日进展（2026-03-31）
 
+- 仓库本轮补齐了 `development / production` 双层配置入口：后端通过 `APP_ENV + .env/.env.<env>` 装配，移动端通过 Expo runtime config 下发 `appEnv / defaultApiBaseUrl / enableDeveloperTools`。
+- 正式移动包现在默认移除 `网络设置 / API 测试 / 错误日志` 等开发入口；即使深链直达调试页，也只会显示拒绝态而不会暴露调试动作。
 - `fragments / folders` 的 phase 1 local-first 主链路已经落地：移动端本地 SQLite + `body.html` 为真值，远端只承担自动备份与显式恢复。
 - 后端已经补齐 `backups` 模块、`device session` 单设备在线约束，以及面向本地快照的转写 / 外链导入 / 脚本生成请求入口。
 - `media_ingestion` 已改成 transcript-first：上传录音和外链导入都会在 transcript 落库后立刻结束主 pipeline，摘要 / 标签 / 向量由单独的 fragment derivative pipeline 异步回填。
@@ -158,6 +160,8 @@ flowchart TD
 - `fragment` 与 `script` 都可以进入拍摄页；拍摄完成后只记录本地 `is_filmed / filmed_at`，列表默认不展示徽标，更多用于详情和筛选
 - `script.source_fragment_ids` 只表示首次生成来源，script 不会重新进入 fragment 检索、聚类、每日推盘选材或下一轮脚本生成输入
 - 移动端在收到“设备会话已失效”后会停止自动补 token，转入本地只读态，并要求用户在 `profile.tsx` 显式重新连接当前设备
+- 录音上传、外链导入、脚本生成、备份队列冲刷和显式恢复现在都绑定统一 `TaskExecutionScope(user_id + session_version + workspace_epoch)`；一旦账号切换、登出或会话失效，飞行中的旧任务会停止回写当前工作区，并留在原工作区等待下次恢复
+- `scripts` 额外维护了按工作区隔离的 pending pipeline 注册表；App 启动并挂载工作区后，会先恢复本地 `pending|failed` 备份，再根据保存的 `pipeline_run_id` 重查媒体任务和脚本生成终态
 
 ### 3.5 Backup Snapshot And File Sync
 

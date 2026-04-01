@@ -1,4 +1,5 @@
 import { API_ENDPOINTS } from '@/constants/config';
+import { assertTaskScopeActive, type TaskExecutionScope } from '@/features/auth/taskScope';
 import { get, post } from '@/features/core/api/client';
 import type {
   PipelineRun,
@@ -46,7 +47,7 @@ export function isPipelineTerminal(status: string): boolean {
  */
 export async function waitForPipelineTerminal(
   runId: string,
-  options: { intervalMs?: number; timeoutMs?: number } = {}
+  options: { intervalMs?: number; timeoutMs?: number; scope?: TaskExecutionScope | null } = {}
 ): Promise<PipelineRun> {
   const intervalMs = options.intervalMs ?? 800;
   // 中文注释：默认与后端 Dify 轮询超时对齐，避免服务端仍在执行时前端先误报超时。
@@ -54,7 +55,13 @@ export async function waitForPipelineTerminal(
   const startedAt = Date.now();
 
   while (Date.now() - startedAt <= timeoutMs) {
+    if (options.scope) {
+      assertTaskScopeActive(options.scope);
+    }
     const run = await fetchPipelineRun(runId);
+    if (options.scope) {
+      assertTaskScopeActive(options.scope);
+    }
     if (isPipelineTerminal(run.status)) {
       return run;
     }

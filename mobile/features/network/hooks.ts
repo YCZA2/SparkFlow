@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { getDefaultApiBaseUrl } from '@/constants/appConfig';
 import {
   discoverBackendUrl,
   getBackendUrl,
@@ -113,9 +114,10 @@ export function useNetworkSettings() {
   };
 
   const resetToDefault = async (defaultUrl: string) => {
-    setInputUrl(defaultUrl);
-    await setBackendUrl(defaultUrl);
-    setCurrentUrl(defaultUrl);
+    const resolvedDefaultUrl = defaultUrl || getDefaultApiBaseUrl();
+    setInputUrl(resolvedDefaultUrl);
+    await setBackendUrl(resolvedDefaultUrl);
+    setCurrentUrl(resolvedDefaultUrl);
   };
 
   return {
