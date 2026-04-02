@@ -8,6 +8,7 @@
     "dev:mobile:web": "bash scripts/dev-mobile.sh web",
     "dev:mobile:simulator": "bash scripts/dev-mobile.sh simulator",
     "dev:mobile:build": "bash scripts/dev-mobile.sh build",
+    "dev:mobile:install": "bash scripts/dev-mobile.sh install",
     "release:mobile:dev:ios": "bash scripts/mobile-release.sh build dev ios",
     "release:mobile:dev:android": "bash scripts/mobile-release.sh build dev android",
     "release:mobile:prod:ios": "bash scripts/mobile-release.sh build prod ios",

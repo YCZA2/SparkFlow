@@ -122,6 +122,12 @@ If you changed native config, Expo plugins, `mobile/app.config.ts`, or files und
 bash scripts/dev-mobile.sh build
 ```
 
+If build already succeeded but device installation failed, retry install without rebuilding:
+
+```bash
+bash scripts/dev-mobile.sh install
+```
+
 Then return to normal dev mode:
 
 ```bash
@@ -195,8 +201,9 @@ http://<your-lan-ip>:8000
 - Reuse existing scripts and utilities before adding new entrypoints
 - Reuse `scripts/mobile-release.sh` and the existing npm aliases for mobile build / submission flows instead of duplicating EAS profile names, platform flags, or `APP_ENV` mappings in new docs or scripts
 - Environment configuration is intentionally limited to `development` and `production`: the backend uses `APP_ENV + .env/.env.<env>`, and the mobile app uses Expo runtime config; do not leak fixed LAN addresses, debug-only entrypoints, or manual network overrides into production behavior
+- If a change alters product behavior, user-facing flows, API contracts, operational steps, or development workflow, you must update the corresponding documentation in the same pass. Before editing docs, scan the existing Markdown files in the relevant area such as root docs, `memory-bank/`, and feature-level `README.md` files so the change lands in the right source of truth instead of creating drift or duplicate guidance
 - Backend tests must stay layered: smoke / contract tests that do not need DB access or startup side effects should avoid PostgreSQL by default, while tests that depend on `db_session_factory`, `app`, `async_client`, or real lifespan behavior must be marked `integration`
-- Keep comments concise. For every new or modified function, add a brief Chinese comment describing its responsibility or intent; for non-obvious or project-specific logic, also explain the key constraint or reason, but avoid line-by-line restatement
+- Keep comments concise. Every function must have a brief Chinese comment describing its responsibility or intent; for non-obvious or project-specific logic, also explain the key constraint or reason, but avoid line-by-line restatement
 - Avoid broad refactors unless they are required for the task
 - Do not introduce structural drift: follow the existing module boundaries, routing shape, and layering instead of bypassing them for convenience
 - Do not let files grow into monoliths; when logic, state, or UI keeps expanding, split it into focused modules, components, or hooks before it becomes a large single file
@@ -212,6 +219,7 @@ http://<your-lan-ip>:8000
 
 Update documentation when you change:
 
+- behavior, user flows, feature scope, or API semantics
 - startup or build commands
 - architecture or module boundaries
 - major user flows
@@ -219,4 +227,4 @@ Update documentation when you change:
 - environment assumptions for local development
 - repository conventions or agent workflow constraints
 
-After any structural change, update the corresponding implementation-facing docs in the same pass, including the relevant README, the matching file under `memory-bank/`, and `AGENTS.md` when conventions or collaboration rules changed.
+Before updating docs, scan the existing Markdown files in the affected area and prefer updating the current source-of-truth document instead of adding a new disconnected note. After any structural or functional change, update the corresponding implementation-facing docs in the same pass, including the relevant README, the matching file under `memory-bank/`, and `AGENTS.md` when conventions or collaboration rules changed.

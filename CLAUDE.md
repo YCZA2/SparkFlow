@@ -42,9 +42,10 @@ FastAPI Backend (Python)
 bash scripts/dev-mobile.sh           # Start PostgreSQL + FastAPI + Expo (LAN mode)
 bash scripts/dev-mobile.sh simulator # Use iOS Simulator instead of device
 bash scripts/dev-mobile.sh build     # Rebuild iOS native (after native config changes)
+bash scripts/dev-mobile.sh install   # Retry device install with existing .app only
 ```
 
-Equivalent npm aliases: `npm run dev:mobile`, `npm run dev:mobile:simulator`.
+Equivalent npm aliases: `npm run dev:mobile`, `npm run dev:mobile:simulator`, `npm run dev:mobile:install`.
 
 ### Backend Only
 

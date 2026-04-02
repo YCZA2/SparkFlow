@@ -85,7 +85,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 ## 一、推荐用法：统一走 `scripts/dev-mobile.sh`
 
-以后你只需要记住两个模式：
+以后你只需要记住三个模式：
 
 ### 模式1：不需要 Build 的修改
 
@@ -171,6 +171,28 @@ npm run dev:mobile:build
 bash scripts/dev-mobile.sh
 ```
 
+### 模式5：install-only（只重试安装）
+
+适用场景：
+
+- 你已经执行过 `build`，但卡在“连接设备/安装 app”阶段失败
+- 不想再走一遍 `prebuild --clean` + `pod-install`
+
+执行命令：
+
+```bash
+bash scripts/dev-mobile.sh install
+```
+
+也可以用 npm 别名：
+
+```bash
+npm run dev:mobile:install
+```
+
+这个模式会自动复用 DerivedData 里最近一次构建的 `SparkFlowDev.app`，
+仅执行安装到设备，不会重新构建。
+
 ## 二、模式2 实际会做什么
 
 `build` 模式会依次执行：
@@ -242,13 +264,19 @@ bash scripts/mobile-release.sh submit prod ios --latest
 bash scripts/dev-mobile.sh build
 ```
 
-2. 再执行模式1：
+2. 如果构建已成功但安装失败，先执行模式5重试安装：
+
+```bash
+bash scripts/dev-mobile.sh install
+```
+
+3. 再执行模式1：
 
 ```bash
 bash scripts/dev-mobile.sh
 ```
 
-3. 用手机扫描 Expo 终端里的二维码打开项目
+4. 用手机扫描 Expo 终端里的二维码打开项目
 
 不要直接依赖手机桌面上一次残留的开发包状态。
 
@@ -339,13 +367,19 @@ http://192.168.31.157:8000
 
 处理步骤：
 
-1. 执行模式2重新安装开发包：
+1. 先执行模式5仅重试安装：
+
+```bash
+bash scripts/dev-mobile.sh install
+```
+
+2. 如果提示找不到已有 `.app`，再执行模式2完整重建：
 
 ```bash
 bash scripts/dev-mobile.sh build
 ```
 
-2. 再执行模式1启动联调：
+3. 再执行模式1启动联调：
 
 ```bash
 bash scripts/dev-mobile.sh
@@ -451,6 +485,7 @@ bash scripts/test-all.sh
 
 - 模式1 ≈ 启动后端 + `npx expo start --lan`
 - 模式2 ≈ `npm install` + `expo prebuild` + `pod-install` + `expo run:ios --device`
+- 模式5 ≈ 复用已有 `.app` + `expo run:ios --device --binary <path>`
 
 ## 六、后端数据库迁移（本项目联调时常用）
 

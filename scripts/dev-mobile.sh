@@ -28,6 +28,7 @@ print_usage() {
   bash scripts/dev-mobile.sh web       # 模式4：启动前后端联调（Expo Web）
   bash scripts/dev-mobile.sh simulator # 模式3：启动前后端联调（iOS Simulator）
   bash scripts/dev-mobile.sh build     # 模式2：执行 iOS 重建，不启动前后端
+  bash scripts/dev-mobile.sh install   # 模式5：仅安装已有 iOS .app 到设备
   bash scripts/dev-mobile.sh help      # 查看帮助
 
 说明：
@@ -35,7 +36,8 @@ print_usage() {
   模式3 适合：只改 JS / TS / 样式 / 页面逻辑，使用本地 iOS Simulator 调试。
   模式4 适合：调试 Web 端页面或浏览器交互，使用 Expo Web 本地开发。
   模式2 适合：改了原生配置、插件、Pod、Info.plist、AppDelegate 后，需要重新 Build。
-  执行完模式2后，再执行模式1、模式3或模式4即可开始联调。
+  模式5 适合：build 已成功但安装真机失败时，复用已有 .app 仅重试安装。
+  执行完模式2或模式5后，再执行模式1、模式3或模式4即可开始联调。
 USAGE
 }
 
@@ -247,6 +249,24 @@ run_backend_migrations() {
 ensure_build_mode_deps() {
   ensure_workspace
   ensure_node_tools
+}
+
+find_latest_ios_app_binary() {
+  # 从 DerivedData 中挑选最近一次构建的 SparkFlowDev.app，供 install-only 模式复用。
+  local app_candidates=()
+  local latest_app=""
+
+  shopt -s nullglob
+  app_candidates=("${HOME}"/Library/Developer/Xcode/DerivedData/SparkFlowDev-*/Build/Products/Debug-iphoneos/SparkFlowDev.app)
+  shopt -u nullglob
+
+  if [[ "${#app_candidates[@]}" -eq 0 ]]; then
+    echo ""
+    return
+  fi
+
+  latest_app="$(ls -td "${app_candidates[@]}" 2>/dev/null | head -n 1 || true)"
+  echo "${latest_app}"
 }
 
 free_port() {
@@ -504,6 +524,47 @@ run_build_mode() {
   echo "========================================"
 }
 
+run_install_mode() {
+  # install-only 仅重试设备安装，不触发 prebuild/pod-install，避免重复重建。
+  local app_binary="${IOS_APP_BINARY:-}"
+
+  echo "[dev-mobile] mode5: installing existing iOS app only..."
+  echo "[dev-mobile] this mode does not rebuild native project."
+
+  cd "${MOBILE_DIR}"
+
+  if [[ -z "${app_binary}" ]]; then
+    app_binary="$(find_latest_ios_app_binary)"
+  fi
+
+  if [[ -z "${app_binary}" ]]; then
+    echo "[dev-mobile] no existing SparkFlowDev.app found in DerivedData."
+    echo "[dev-mobile] run 'bash scripts/dev-mobile.sh build' first, then retry install mode."
+    exit 1
+  fi
+
+  if [[ ! -d "${app_binary}" ]]; then
+    echo "[dev-mobile] app binary path does not exist: ${app_binary}"
+    echo "[dev-mobile] set IOS_APP_BINARY to a valid .app path or rerun build mode."
+    exit 1
+  fi
+
+  echo "[dev-mobile] using binary: ${app_binary}"
+  if [[ -n "${IOS_DEVICE:-}" ]]; then
+    echo "[dev-mobile] target device: ${IOS_DEVICE}"
+    APP_ENV="${APP_ENV}" npx expo run:ios --device "${IOS_DEVICE}" --binary "${app_binary}"
+  else
+    APP_ENV="${APP_ENV}" npx expo run:ios --device --binary "${app_binary}"
+  fi
+
+  echo
+  echo "========================================"
+  echo "Mode5 install finished."
+  echo "Next step: run 'bash scripts/dev-mobile.sh'"
+  echo "That will start backend + expo for daily development."
+  echo "========================================"
+}
+
 case "${MODE}" in
   start)
     ensure_start_mode_deps
@@ -520,6 +581,10 @@ case "${MODE}" in
   build)
     ensure_build_mode_deps
     run_build_mode
+    ;;
+  install)
+    ensure_build_mode_deps
+    run_install_mode
     ;;
   help|-h|--help)
     ensure_workspace
