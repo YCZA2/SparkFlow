@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "preinstall": "node scripts/guard-root-install.mjs",
     "dev:mobile": "bash scripts/dev-mobile.sh",
     "dev:mobile:start": "bash scripts/dev-mobile.sh start",
     "dev:mobile:web": "bash scripts/dev-mobile.sh web",

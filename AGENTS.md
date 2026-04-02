@@ -99,6 +99,12 @@ npm run dev:mobile
 npm run dev:mobile:start
 ```
 
+Important install guard:
+
+- Do not run `npm install` or `npm ci` at the repository root. Root `package.json` only exists to expose helper scripts.
+- Install mobile dependencies only inside `mobile/`: `cd mobile && npm install`
+- The repository root now has a `preinstall` guard and will fail fast unless `ALLOW_ROOT_NPM_INSTALL=1` is explicitly set.
+
 Additional local modes:
 
 ```bash

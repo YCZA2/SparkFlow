@@ -125,6 +125,12 @@ bash scripts/dev-mobile.sh start
 npm run dev:mobile
 ```
 
+补充约定：
+
+- 不要在仓库根目录执行 `npm install` 或 `npm ci`；根目录只保留联调 / 发布脚本入口。
+- 需要安装移动端依赖时，请进入 `mobile/` 执行：`cd mobile && npm install`
+- 仓库根目录现在带有安装保护；如误在根目录执行安装，会直接失败并提示正确路径。
+
 如果你要用 iOS 模拟器而不是真机，请执行：
 
 ```bash
@@ -486,6 +492,7 @@ bash scripts/test-all.sh
 - 模式1 ≈ 启动后端 + `npx expo start --lan`
 - 模式2 ≈ `npm install` + `expo prebuild` + `pod-install` + `expo run:ios --device`
 - 模式5 ≈ 复用已有 `.app` + `expo run:ios --device --binary <path>`
+- 根目录 `npm install` 会被保护脚本拦住；只有 `cd mobile && npm install` 才是正确安装路径
 
 ## 六、后端数据库迁移（本项目联调时常用）
 
