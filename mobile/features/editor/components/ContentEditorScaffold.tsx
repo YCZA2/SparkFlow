@@ -159,12 +159,6 @@ export function ContentEditorScaffold({
       <BackButton onPress={onBack} variant="circle" showText={false} />
 
       <View style={styles.headerActions}>
-        <HeaderCircleButton
-          symbol="arrow.uturn.backward"
-          dark={isDark}
-          disabled={options?.disableActions || !formattingState?.can_undo}
-          onPress={() => runEditorCommand(editorRef, 'undo')}
-        />
         {hasHeaderPill ? (
           <View
             style={[
