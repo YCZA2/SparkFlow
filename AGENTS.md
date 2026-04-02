@@ -100,7 +100,7 @@ bash scripts/postgres-local.sh logs
 
 ### When native iOS changes are involved
 
-If you changed native config, Expo plugins, `app.json`, or files under `mobile/ios`, rebuild first:
+If you changed native config, Expo plugins, `mobile/app.config.ts`, or files under `mobile/ios`, rebuild first:
 
 ```bash
 bash scripts/dev-mobile.sh build

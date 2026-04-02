@@ -146,7 +146,7 @@ npm run dev:db:status
 适用场景：
 
 - 新增/删除 Expo 原生模块
-- 修改 `app.json`
+- 修改 `mobile/app.config.ts`
 - 修改 `ios/` 目录下原生工程文件
 - 修改 `Info.plist`、`AppDelegate.swift`
 - 修改 Pod 或其他 iOS 原生配置

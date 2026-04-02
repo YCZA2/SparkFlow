@@ -188,7 +188,7 @@ npm run dev:mobile:start
 
 ### 6.2 When native build is required
 
-如果改了 `mobile/ios`、原生配置、Expo 插件或 `app.json`：
+如果改了 `mobile/ios`、原生配置、Expo 插件或 `mobile/app.config.ts`：
 
 ```bash
 bash scripts/dev-mobile.sh build
