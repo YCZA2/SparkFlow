@@ -19,7 +19,8 @@ export const STORAGE_KEYS = {
   BACKEND_URL: '@backend_url',
   DEBUG_LOGS: '@debug_logs',
   DEVICE_ID: '@device_id',
-  DEVICE_SESSION_INVALID: '@device_session_invalid',
+  // SecureStore key 只能包含字母数字、.、-、_，不能包含 @。
+  DEVICE_SESSION_INVALID: 'device_session_invalid',
 } as const;
 
 // API 端点
