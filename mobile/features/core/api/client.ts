@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 import { API_ENDPOINTS, STORAGE_KEYS, getBackendUrl } from '@/constants/config';
 import { clearDeviceSessionInvalid } from '@/features/auth/deviceSession';
@@ -41,15 +41,18 @@ async function getCurrentBaseUrl(): Promise<string> {
 }
 
 export async function setToken(token: string): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
+  /*将访问令牌写入系统安全存储，避免明文落地。 */
+  await SecureStore.setItemAsync(STORAGE_KEYS.TOKEN, token);
 }
 
 export async function getToken(): Promise<string | null> {
-  return await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+  /*统一从系统安全存储读取访问令牌。 */
+  return await SecureStore.getItemAsync(STORAGE_KEYS.TOKEN);
 }
 
 export async function clearToken(): Promise<void> {
-  await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
+  /*退出登录或会话失效时清理安全存储中的访问令牌。 */
+  await SecureStore.deleteItemAsync(STORAGE_KEYS.TOKEN);
 }
 
 async function ensureToken(): Promise<string> {

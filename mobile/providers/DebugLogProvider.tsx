@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { STORAGE_KEYS, getBackendUrl } from '@/constants/config';
@@ -22,10 +23,11 @@ const DEBUG_LOG_ENDPOINT = '/api/debug/mobile-logs';
 const DebugLogContext = createContext<DebugLogContextValue | null>(null);
 
 async function syncDebugLogToBackend(entry: DebugLogEntry): Promise<void> {
+  /*日志上报请求读取安全存储中的 token，避免依赖明文缓存。 */
   try {
     const [baseUrl, token] = await Promise.all([
       getBackendUrl(),
-      AsyncStorage.getItem(STORAGE_KEYS.TOKEN),
+      SecureStore.getItemAsync(STORAGE_KEYS.TOKEN),
     ]);
     if (!token) {
       return;

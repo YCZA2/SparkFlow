@@ -12,7 +12,7 @@ export { getBackendUrl, discoverBackendUrl, setBackendUrl };
 // 默认后端地址（用于初始化）
 export const DEFAULT_API_BASE_URL = getDefaultApiBaseUrl();
 
-// AsyncStorage 键名
+// 本地存储键名（包含 AsyncStorage 与 SecureStore）
 export const STORAGE_KEYS = {
   TOKEN: 'auth_token',
   USER: 'user_info',

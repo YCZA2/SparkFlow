@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 import { API_ENDPOINTS, STORAGE_KEYS } from '@/constants/config';
 import { getOrCreateDeviceId } from '@/features/auth/device';
@@ -28,11 +28,13 @@ interface LoginResponsePayload {
 }
 
 export async function saveUserInfo(user: UserInfo): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+  /*用户资料属于登录态敏感信息，统一写入系统安全存储。 */
+  await SecureStore.setItemAsync(STORAGE_KEYS.USER, JSON.stringify(user));
 }
 
 export async function getUserInfo(): Promise<UserInfo | null> {
-  const userJson = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+  /*读取当前登录用户信息，缺失时返回未登录状态。 */
+  const userJson = await SecureStore.getItemAsync(STORAGE_KEYS.USER);
   if (!userJson) {
     return null;
   }
@@ -40,7 +42,8 @@ export async function getUserInfo(): Promise<UserInfo | null> {
 }
 
 export async function clearUserInfo(): Promise<void> {
-  await AsyncStorage.removeItem(STORAGE_KEYS.USER);
+  /*清理本地安全存储中的用户信息，避免账号残留。 */
+  await SecureStore.deleteItemAsync(STORAGE_KEYS.USER);
 }
 
 export function parseUserFromToken(token: string): UserInfo {

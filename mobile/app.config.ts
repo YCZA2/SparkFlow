@@ -91,6 +91,7 @@ export default (): ExpoConfig => {
       './plugins/withTsinghuaPodsource.js',
       'expo-audio',
       'expo-sqlite',
+      'expo-secure-store',
     ],
     experiments: {
       typedRoutes: true,
