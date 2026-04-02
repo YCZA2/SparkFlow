@@ -16,6 +16,8 @@ import {
   ensureFirstLineIsTitle,
   extractAssetIdsFromHtml,
   extractPlainTextFromHtml,
+  extractPreviewSkippingTitle,
+  extractTitleFromFirstLine,
   unwrapHtmlFromNativeEditor,
   wrapHtmlForNativeEditor,
 } from '../features/editor/html';
@@ -144,6 +146,30 @@ test('extractPlainTextFromHtml 将图片替换为空格而非删除', () => {
 test('extractPlainTextFromHtml 对空输入返回空字符串', () => {
   assert.equal(extractPlainTextFromHtml(''), '');
   assert.equal(extractPlainTextFromHtml(null), '');
+});
+
+// ============================================================================
+// extractTitleFromFirstLine / extractPreviewSkippingTitle
+// ============================================================================
+
+test('extractTitleFromFirstLine 仅提取正文开头的 h1（支持多行）', () => {
+  const html = ' \n<h1>第一行\n标题</h1>\n<p>正文段落</p><h1>后续标题</h1>';
+  assert.equal(extractTitleFromFirstLine(html), '第一行 标题');
+});
+
+test('extractTitleFromFirstLine 不会把中间 h1 误识别为首行标题', () => {
+  const html = '<blockquote>引言</blockquote><h1>中间标题</h1><p>正文</p>';
+  assert.equal(extractTitleFromFirstLine(html), '引言 中间标题 正文');
+});
+
+test('extractPreviewSkippingTitle 移除开头多行 h1 并保留正文预览', () => {
+  const html = '<h1>主标题\n副标题</h1>\n<p>第一段正文</p><p>第二段正文</p>';
+  assert.equal(extractPreviewSkippingTitle(html), '第一段正文 第二段正文');
+});
+
+test('extractPreviewSkippingTitle 不会移除中间出现的 h1', () => {
+  const html = '<p>开场白</p><h1>中间标题</h1><p>正文</p>';
+  assert.equal(extractPreviewSkippingTitle(html), '中间标题 正文');
 });
 
 // ============================================================================

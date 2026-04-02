@@ -67,6 +67,18 @@ export function extractPlainTextFromHtml(html: string | null | undefined): strin
     .trim();
 }
 
+function matchLeadingBlock(html: string, tagName: 'h1' | 'p'): RegExpMatchArray | null {
+  /*仅匹配正文开头的首个块元素，避免跨段正则误命中中间节点。 */
+  const pattern = new RegExp(`^\\s*<${tagName}\\b([^>]*)>([\\s\\S]*?)<\\/${tagName}>`, 'i');
+  return html.match(pattern);
+}
+
+function stripLeadingBlock(html: string, tagName: 'h1' | 'p'): string {
+  /*移除正文开头块，用于生成"去标题"预览文本。 */
+  const pattern = new RegExp(`^\\s*<${tagName}\\b[^>]*>[\\s\\S]*?<\\/${tagName}>\\s*`, 'i');
+  return html.replace(pattern, '');
+}
+
 /**
  * 从 HTML 首行提取标题文本。
  * 优先识别第一个 h1 元素；若无则取第一个 p 元素内容的前 50 字。
@@ -76,17 +88,17 @@ export function extractTitleFromFirstLine(html: string | null | undefined, maxTi
   const normalized = normalizeBodyHtml(html);
   if (!normalized) return '';
 
-  // 尝试匹配第一个 h1 元素
-  const h1Match = normalized.match(/<h1[^>]*>(.*?)<\/h1>/i);
-  if (h1Match && h1Match[1]) {
-    const title = extractPlainTextFromHtml(h1Match[1]).trim();
+  // 仅识别正文开头的 h1
+  const leadingH1 = matchLeadingBlock(normalized, 'h1');
+  if (leadingH1 && leadingH1[2]) {
+    const title = extractPlainTextFromHtml(leadingH1[2]).trim();
     if (title) return title.slice(0, maxTitleLength);
   }
 
-  // 尝试匹配第一个 p 元素
-  const pMatch = normalized.match(/<p[^>]*>(.*?)<\/p>/i);
-  if (pMatch && pMatch[1]) {
-    const title = extractPlainTextFromHtml(pMatch[1]).trim();
+  // h1 不存在时回退到正文开头段落
+  const leadingParagraph = matchLeadingBlock(normalized, 'p');
+  if (leadingParagraph && leadingParagraph[2]) {
+    const title = extractPlainTextFromHtml(leadingParagraph[2]).trim();
     if (title) return title.slice(0, maxTitleLength);
   }
 
@@ -110,15 +122,11 @@ export function extractPreviewSkippingTitle(html: string | null | undefined, max
   let previewHtml = normalized;
 
   // 如果首行是 h1，移除它
-  const h1Match = previewHtml.match(/<h1[^>]*>.*?<\/h1>/i);
-  if (h1Match) {
-    previewHtml = previewHtml.replace(h1Match[0], '');
-  } else {
-    // 否则移除第一个 p 元素
-    const pMatch = previewHtml.match(/<p[^>]*>.*?<\/p>/i);
-    if (pMatch) {
-      previewHtml = previewHtml.replace(pMatch[0], '');
-    }
+  if (matchLeadingBlock(previewHtml, 'h1')) {
+    previewHtml = stripLeadingBlock(previewHtml, 'h1');
+  } else if (matchLeadingBlock(previewHtml, 'p')) {
+    // 否则移除首段正文
+    previewHtml = stripLeadingBlock(previewHtml, 'p');
   }
 
   const previewText = extractPlainTextFromHtml(previewHtml).trim();

@@ -39,6 +39,11 @@ interface ContentRichEditorProps {
   onFormattingStateChange: (state: EditorFormattingState) => void;
 }
 
+type RichEditorWithOptionalHistory = EnrichedTextInputInstance & {
+  undo?: () => void;
+  redo?: () => void;
+};
+
 async function readSnapshotFromNativeEditor(
   editor: EnrichedTextInputInstance | null,
   mediaAssets: EditorMediaAsset[]
@@ -103,6 +108,37 @@ function buildFormattingState(event: OnChangeStateEvent): EditorFormattingState 
     can_redo: false,
   };
 }
+
+const COMMAND_HANDLERS: Record<
+  Exclude<EditorCommand, 'paragraph'>,
+  (editor: EnrichedTextInputInstance) => void
+> = {
+  heading: (editor) => {
+    editor.toggleH1();
+  },
+  blockquote: (editor) => {
+    editor.toggleBlockQuote();
+  },
+  bulletList: (editor) => {
+    editor.toggleUnorderedList();
+  },
+  orderedList: (editor) => {
+    editor.toggleOrderedList();
+  },
+  bold: (editor) => {
+    editor.toggleBold();
+  },
+  italic: (editor) => {
+    editor.toggleItalic();
+  },
+  undo: (editor) => {
+    /*不同版本桥接层不一定暴露 undo/redo，需做可选调用。 */
+    (editor as RichEditorWithOptionalHistory).undo?.();
+  },
+  redo: (editor) => {
+    (editor as RichEditorWithOptionalHistory).redo?.();
+  },
+};
 
 export function ContentRichEditor({
   editorKey,
@@ -318,7 +354,7 @@ function runCommand(
   formattingState: EditorFormattingState | null,
   command: EditorCommand
 ) {
-  /*把页面层命令映射到 react-native-enriched 的原生方法。 */
+  /*把页面层命令统一分发到原生编辑器能力。 */
   if (!editor) return;
   if (command === 'paragraph') {
     if (formattingState?.block_type === 'heading') editor.toggleH1();
@@ -327,29 +363,8 @@ function runCommand(
     else if (formattingState?.ordered_list) editor.toggleOrderedList();
     return;
   }
-  if (command === 'heading') {
-    editor.toggleH1();
-    return;
-  }
-  if (command === 'blockquote') {
-    editor.toggleBlockQuote();
-    return;
-  }
-  if (command === 'bulletList') {
-    editor.toggleUnorderedList();
-    return;
-  }
-  if (command === 'orderedList') {
-    editor.toggleOrderedList();
-    return;
-  }
-  if (command === 'bold') {
-    editor.toggleBold();
-    return;
-  }
-  if (command === 'italic') {
-    editor.toggleItalic();
-  }
+  const handler = COMMAND_HANDLERS[command as Exclude<EditorCommand, 'paragraph'>];
+  handler?.(editor);
 }
 
 const styles = StyleSheet.create({
