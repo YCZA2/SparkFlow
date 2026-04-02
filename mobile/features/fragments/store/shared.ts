@@ -187,6 +187,10 @@ export async function stagePendingImage(
 /*读取兼容快照列表时统一构造文件夹筛选条件，避免多模块复制判断。 */
 export function buildFragmentListCondition(folderId?: string | null) {
   const normalizedFolderId = String(folderId ?? '').trim();
+  // "全部"文件夹是虚拟系统文件夹，查询所有非删除碎片
+  if (normalizedFolderId === '__all__') {
+    return isNull(fragmentsTable.deletedAt);
+  }
   if (normalizedFolderId) {
     return and(
       isNull(fragmentsTable.deletedAt),
