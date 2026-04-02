@@ -16,7 +16,7 @@ function readRuntimeConfig(): SparkFlowRuntimeConfig {
     typeof extra.defaultApiBaseUrl === 'string' && extra.defaultApiBaseUrl.trim()
       ? extra.defaultApiBaseUrl.trim()
       : appEnv === 'production'
-        ? 'https://api.sparkflow.app'
+        ? 'https://www.onepercent.ltd'
         : 'http://127.0.0.1:8000';
 
   return {

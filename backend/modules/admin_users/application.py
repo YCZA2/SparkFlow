@@ -17,6 +17,7 @@ from .schemas import (
     DeviceSessionItem,
     DeviceSessionListResponse,
     SystemStatsResponse,
+    UserCreateRequest,
     UserDetailResponse,
     UserListResponse,
     UserStatsItem,
@@ -122,7 +123,39 @@ class AdminUserQueryService:
 
 
 class AdminUserCommandService:
-    """封装管理员用户写操作：修改、删除、密码重置和批量操作。"""
+    """封装管理员用户写操作：创建、修改、删除、密码重置和批量操作。"""
+
+    def create_user(
+        self,
+        *,
+        db: Session,
+        payload: UserCreateRequest,
+    ) -> UserDetailResponse:
+        """管理员手动创建用户，用于付费场景替代开放注册。"""
+        email = payload.email.strip().lower()
+        if not _EMAIL_PATTERN.match(email):
+            raise ValidationError("请输入有效的邮箱地址", {"email": "invalid"})
+
+        # 检查邮箱唯一性
+        existing = db.query(User).filter(User.email == email).first()
+        if existing:
+            raise ValidationError("该邮箱已被注册", {"email": "already_exists"})
+
+        # 创建新用户
+        user = User(
+            role=payload.role,
+            nickname=payload.nickname or f"用户{email.split('@')[0][:8]}",
+            email=email,
+            password_hash=hash_password(payload.password),
+            status="active",
+            storage_quota=payload.storage_quota or 0,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        # 复用查询服务获取完整详情
+        return AdminUserQueryService().get_user_detail(db=db, user_id=user.id)
 
     def update_user(
         self,

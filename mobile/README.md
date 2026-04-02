@@ -2,9 +2,10 @@
 
 SparkFlow 的 Expo / React Native 移动端工程。
 
-## 今日进展（2026-03-31）
+## 今日进展（2026-04-01）
 
 - 移动端配置已收口到 Expo runtime config：当前只区分 `development` 与 `production`，通过 `mobile/app.config.ts` 下发 `appEnv`、`defaultApiBaseUrl` 与 `enableDeveloperTools`。
+- 正式包默认 API 基地址现已切到 `https://www.onepercent.ltd`；如未显式覆写 `APP_DEFAULT_API_BASE_URL`，production 构建会直接连当前阿里云线上入口。
 - 正式包现在会默认移除 `网络设置`、`API 测试` 和 `错误日志` 等开发入口；即使深链命中也会显示拒绝态，不再允许手工覆盖后端地址。
 - `fragments / folders` 的 local-first phase 1 已经落地完成：列表、详情、编辑、删除都以本地 SQLite + 文件系统为真值，远端只负责备份与恢复。
 - 移动端正式入口已经切到”登录后工作区”：未登录只显示登录页；登录成功后才挂载本地 SQLite、正文文件和备份队列。

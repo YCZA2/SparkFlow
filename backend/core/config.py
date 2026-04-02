@@ -117,6 +117,10 @@ class Settings(BaseSettings):
         default=False,
         description="是否启用仅本地开发使用的测试令牌入口"
     )
+    ENABLE_PUBLIC_REGISTRATION: bool = Field(
+        default=True,
+        description="是否允许开放注册；生产环境建议关闭，改为管理员手动创建"
+    )
     # 数据库配置
     DATABASE_URL: str = Field(
         default=DEFAULT_POSTGRES_URL,
@@ -310,6 +314,8 @@ class Settings(BaseSettings):
             raise ValueError("production 环境禁止使用默认 SECRET_KEY")
         if self.ENABLE_TEST_AUTH:
             raise ValueError("production 环境禁止启用 ENABLE_TEST_AUTH")
+        if self.ENABLE_PUBLIC_REGISTRATION:
+            raise ValueError("production 环境禁止启用 ENABLE_PUBLIC_REGISTRATION（付费场景应使用管理员创建用户）")
         if self.DEBUG:
             raise ValueError("production 环境禁止启用 DEBUG")
         if str(self.LOG_LEVEL).strip().upper() == "DEBUG":

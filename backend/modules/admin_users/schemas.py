@@ -23,6 +23,15 @@ class UserListQuery(BaseModel):
     created_before: Optional[datetime] = None
 
 
+class UserCreateRequest(BaseModel):
+    """管理员创建用户的请求体，付费场景下替代开放注册。"""
+    email: str = Field(..., description="邮箱地址")
+    password: str = Field(..., min_length=8, description="初始登录密码")
+    nickname: Optional[str] = Field(None, description="用户昵称")
+    role: Literal["user", "creator", "admin"] = Field(default="user", description="用户角色")
+    storage_quota: Optional[int] = Field(None, ge=0, description="存储配额（字节）")
+
+
 class UserUpdateRequest(BaseModel):
     """更新用户信息的请求体，所有字段均可选。"""
     nickname: Optional[str] = None

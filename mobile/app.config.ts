@@ -21,7 +21,7 @@ function resolveDefaultApiBaseUrl(appEnv: AppEnvironment): string {
   if (fromEnv) {
     return fromEnv;
   }
-  return appEnv === 'production' ? 'https://api.sparkflow.app' : 'http://127.0.0.1:8000';
+  return appEnv === 'production' ? 'https://www.onepercent.ltd' : 'http://127.0.0.1:8000';
 }
 
 function resolveIdentity(appEnv: AppEnvironment): AppIdentity {

@@ -326,8 +326,8 @@
         <p>管理后台 — 请使用管理员账号登录</p>
 
         <div class="form-group">
-            <label class="form-label">后端地址</label>
-            <input class="form-control" id="apiBase" value="http://localhost:8000">
+            <label class="form-label">后端地址（留空使用当前域名）</label>
+            <input class="form-control" id="apiBase" value="" placeholder="https://www.onepercent.ltd">
         </div>
         <div class="form-group">
             <label class="form-label">邮箱</label>
@@ -378,6 +378,7 @@
             <div class="card-header">
                 <div class="card-title">用户列表</div>
                 <div class="toolbar">
+                    <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ 创建用户</button>
                     <input type="text" id="searchInput" placeholder="搜索邮箱 / 昵称…" oninput="debouncedLoad()">
                     <select id="roleFilter" onchange="resetAndLoad()">
                         <option value="">全部角色</option>
@@ -438,6 +439,46 @@
 </div>
 
 <!-- ════════════════════ Modals ════════════════════════ -->
+
+<!-- Create User -->
+<div class="modal-overlay" id="createModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">创建用户</div>
+            <button class="modal-close" onclick="closeModal('createModal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">邮箱 *</label>
+                <input class="form-control" id="createEmail" type="email" placeholder="user@example.com">
+            </div>
+            <div class="form-group">
+                <label class="form-label">初始密码 *（至少8位）</label>
+                <input class="form-control" id="createPassword" type="password" placeholder="••••••••">
+            </div>
+            <div class="form-group">
+                <label class="form-label">昵称</label>
+                <input class="form-control" id="createNickname" placeholder="用户昵称">
+            </div>
+            <div class="form-group">
+                <label class="form-label">角色</label>
+                <select class="form-control" id="createRole">
+                    <option value="user">user</option>
+                    <option value="creator">creator</option>
+                    <option value="admin">admin</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">存储配额（字节，可选）</label>
+                <input class="form-control" id="createQuota" type="number" min="0" placeholder="0">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('createModal')">取消</button>
+            <button class="btn btn-primary" onclick="createUser()">创建</button>
+        </div>
+    </div>
+</div>
 
 <!-- Edit User -->
 <div class="modal-overlay" id="editModal">
@@ -567,7 +608,8 @@
 <script>
 // ── State ──────────────────────────────────────────────────────────
 let token       = localStorage.getItem('sf_admin_token') || '';
-let apiBase     = localStorage.getItem('sf_admin_api')   || 'http://localhost:8000';
+// 默认使用当前域名（空字符串表示自动检测）
+let apiBase     = localStorage.getItem('sf_admin_api')   || '';
 let currentPage = 0;
 const PAGE_SIZE = 20;
 let selectedIds      = new Set();
@@ -575,8 +617,17 @@ let deleteTargetId   = null;
 let sessionsTargetId = null;
 
 // ── API helper ─────────────────────────────────────────────────────
+function getApiBase() {
+    // 优先使用输入框的值，其次使用 localStorage，最后使用当前域名
+    const inputVal = document.getElementById('apiBase')?.value.trim();
+    if (inputVal) return inputVal.replace(/\/$/, '');
+    if (apiBase) return apiBase.replace(/\/$/, '');
+    // 自动检测当前域名（支持 http/https）
+    return `${window.location.protocol}//${window.location.host}`;
+}
+
 async function api(method, path, body) {
-    const base = document.getElementById('apiBase')?.value.replace(/\/$/, '') || apiBase;
+    const base = getApiBase();
     const res  = await fetch(base + path, {
         method,
         headers: {
@@ -606,7 +657,7 @@ function getDeviceId() {
 async function doLogin() {
     const email    = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
-    const base     = document.getElementById('apiBase').value.trim().replace(/\/$/, '');
+    const base     = getApiBase();
     const btn      = document.getElementById('loginBtn');
     const errEl    = document.getElementById('loginError');
 
@@ -771,6 +822,42 @@ async function doBatch() {
         });
         toast(`已${labels[action]} ${d.affected} 个用户`, 'success');
         clearSelection();
+        loadStats();
+        loadUsers();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Create User ─────────────────────────────────────────────────────
+function openCreateModal() {
+    document.getElementById('createEmail').value = '';
+    document.getElementById('createPassword').value = '';
+    document.getElementById('createNickname').value = '';
+    document.getElementById('createRole').value = 'user';
+    document.getElementById('createQuota').value = '';
+    openModal('createModal');
+}
+
+async function createUser() {
+    const email = document.getElementById('createEmail').value.trim();
+    const password = document.getElementById('createPassword').value;
+    const nickname = document.getElementById('createNickname').value.trim() || null;
+    const role = document.getElementById('createRole').value;
+    const quota = parseInt(document.getElementById('createQuota').value) || null;
+
+    if (!email || !password) {
+        toast('邮箱和密码为必填项', 'error');
+        return;
+    }
+    if (password.length < 8) {
+        toast('密码至少需要8位', 'error');
+        return;
+    }
+
+    const body = { email, password, nickname, role, storage_quota: quota };
+    try {
+        await api('POST', '/api/admin/users', body);
+        toast('用户创建成功', 'success');
+        closeModal('createModal');
         loadStats();
         loadUsers();
     } catch (e) { toast(e.message, 'error'); }

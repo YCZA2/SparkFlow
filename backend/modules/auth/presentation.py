@@ -3,8 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from core import ResponseModel, success_response
+from core import ResponseModel, settings, success_response
 from core.auth import get_current_user
+from core.exceptions import PermissionDeniedError
 from modules.shared.infrastructure.container import get_db_session
 
 from .application import AuthUseCase
@@ -31,6 +32,9 @@ async def register(
     payload: EmailRegisterRequest,
     db: Session = Depends(get_db_session),
 ):
+    # 付费场景下关闭开放注册，仅允许管理员手动创建用户
+    if not settings.ENABLE_PUBLIC_REGISTRATION:
+        raise PermissionDeniedError("开放注册已关闭，请联系管理员获取账号")
     return success_response(
         data=use_case.register_with_email(
             db=db,

@@ -17,6 +17,7 @@ from .schemas import (
     DeviceSessionListResponse,
     PasswordResetRequest,
     SystemStatsResponse,
+    UserCreateRequest,
     UserDetailResponse,
     UserListResponse,
     UserUpdateRequest,
@@ -52,6 +53,24 @@ async def get_system_stats(
     return success_response(
         data=_query_service.get_system_stats(db=db),
         message="统计数据获取成功",
+    )
+
+
+@router.post(
+    "/users",
+    response_model=ResponseModel[UserDetailResponse],
+    summary="创建用户",
+    description="管理员手动创建用户，用于付费场景替代开放注册。",
+)
+async def create_user(
+    payload: UserCreateRequest,
+    current_user: AdminUser,
+    db: Session = Depends(get_db_session),
+):
+    """创建新用户（管理员入口）。"""
+    return success_response(
+        data=_command_service.create_user(db=db, payload=payload),
+        message="用户创建成功",
     )
 
 

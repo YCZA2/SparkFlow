@@ -2,8 +2,9 @@
 
 SparkFlow 的 FastAPI 后端，当前采用模块化单体结构，默认以本机 PostgreSQL + ChromaDB 联调；文件存储已统一走对象存储抽象，本地开发默认使用 `local` provider，线上可切阿里云 OSS。
 
-## 今日进展（2026-03-31）
+## 今日进展（2026-04-01）
 
+- 后端单机生产部署链路现已验证过一轮：阿里云 ECS 上按 `systemd + nginx + PostgreSQL + 本地 Chroma/uploads` 运行，`/api/*` 与 `/uploads/*` 通过同域名反代暴露。
 - 后端配置现已支持 `APP_ENV=development|production` 两层装配：按 `.env` + `.env.<env>` 顺序加载，并在 production 下对危险开发配置执行 fail-fast 校验。
 - 后端已经补齐 phase 1 local-first 所需的备份恢复能力：`/api/backups/batch`、`/api/backups/snapshot`、`/api/backups/restore`、`/api/backups/assets` 与 `/api/backups/assets/access`。
 - 正式认证链路已经升级为邮箱密码登录，JWT 继续携带 `device_id + session_version`；登录、刷新 token、备份、恢复和 AI / 转写相关请求都受单设备在线约束。
@@ -71,7 +72,22 @@ Default local address: `http://127.0.0.1:8000`
 - `APP_ENV=production` 时必须替换默认 `SECRET_KEY`
 - `APP_ENV=production` 时禁止 `ENABLE_TEST_AUTH=true`
 - `APP_ENV=production` 时禁止 `DEBUG=true` 或 `LOG_LEVEL=DEBUG`
-- 若存在 `backend/.env.production`，会在基础 `.env` 之后覆盖加载
+- 由于 `.env.<env>` 的装配取决于 `APP_ENV` 预解析，生产环境执行 `uvicorn`、`alembic`、一次性脚本和 `systemd` 时都必须显式带上 `APP_ENV=production`
+- 线上推荐把密钥与数据库连接串放到外置 env 文件，再由 `systemd EnvironmentFile` 和迁移命令显式加载；不要在远端项目目录保留 `backend/.env`
+
+## Aliyun Deployment
+
+阿里云单机部署文档见 [`backend/docs/aliyun-single-node-deploy.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/docs/aliyun-single-node-deploy.md)。
+
+当前生产口径：
+
+- 通过 `bash scripts/deploy-backend-aliyun.sh deploy` 复用 `ssh aliyun` + `rsync` 发布后端
+- 以 `systemd` 启动单个 `uvicorn` 进程：`--workers 1`
+- 远端环境变量默认放在 `/home/ycza/.config/sparkflow/backend.env`
+- 远端用户可直接执行 `sparkflow-backend-restart` 或 `sfrestart` 重启服务并查看状态
+- `nginx` 在同域名下转发 `/api/*` 与 `/uploads/*`
+- PostgreSQL、Chroma 和本地上传目录都与应用同机部署
+- 因为应用启动时会自动拉起 APScheduler 和 pipeline dispatcher，当前不允许额外再开第二个 API worker
 
 移动端出包约定：
 
