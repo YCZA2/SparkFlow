@@ -261,6 +261,12 @@ export function ContentRichEditor({
   const handleHtmlChange = React.useCallback(
     (nextHtml: string) => {
       latestSnapshotRef.current = buildSnapshotFromHtml(nextHtml, mediaAssets);
+      // 内容被清空后自动恢复 H1，保证"首行即标题"
+      const unwrapped = unwrapHtmlFromNativeEditor(nextHtml);
+      const plainText = extractPlainTextFromHtml(unwrapped).trim();
+      if (!plainText && !/<h1[\s>]/i.test(unwrapped)) {
+        nativeRef.current?.toggleH1();
+      }
       if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
       snapshotTimerRef.current = setTimeout(() => {
         snapshotTimerRef.current = null;
