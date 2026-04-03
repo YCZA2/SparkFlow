@@ -1,0 +1,133 @@
+import { StyleSheet } from 'react-native';
+
+/*集中维护录音页样式，避免 route 文件继续堆积大量静态样式定义。 */
+export const recordAudioStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  floatingHeader: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  recRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 60,
+  },
+  recDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FF3B30',
+  },
+  recText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  headerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  heroBlock: {
+    paddingHorizontal: 16,
+    marginBottom: 4,
+  },
+  heroTitle: {
+    fontSize: 32,
+    lineHeight: 36,
+    fontWeight: '800',
+    letterSpacing: -0.9,
+  },
+  heroSubtitle: {
+    marginTop: 3,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  timerWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  timerCard: {
+    minWidth: 220,
+    borderRadius: 18,
+    paddingHorizontal: 32,
+    paddingVertical: 28,
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  timerText: {
+    fontSize: 56,
+    fontWeight: '800',
+    letterSpacing: -1,
+    fontVariant: ['tabular-nums'],
+  },
+  primaryActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  actionButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stopButton: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  stopSquare: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  bottomActions: {
+    marginTop: 32,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  secondaryPill: {
+    flex: 1,
+    height: 52,
+    borderRadius: 999,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  secondaryPillText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+});

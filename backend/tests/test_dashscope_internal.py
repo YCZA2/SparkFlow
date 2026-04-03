@@ -165,7 +165,10 @@ def test_file_transcriber_logs_stage_timings(parser: DashScopePayloadParser, cap
                         transcriber.run_file_transcription(file_url="oss://demo/audio.wav", language="zh")
 
     messages = "\n".join(record.getMessage() for record in caplog.records)
-    assert "submit_elapsed_ms=" in messages
-    assert "poll_elapsed_ms=" in messages
-    assert "total_elapsed_ms=" in messages
-    assert "transcription result downloaded: elapsed_ms=" in messages
+    assert "dashscope_file_transcription_task_submitted" in messages
+    assert "dashscope_file_transcription_task_succeeded" in messages
+    assert "dashscope_transcription_result_downloaded" in messages
+    assert "submit_elapsed_ms" in messages
+    assert "poll_elapsed_ms" in messages
+    assert "total_elapsed_ms" in messages
+    assert "elapsed_ms" in messages

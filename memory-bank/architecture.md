@@ -129,12 +129,14 @@ flowchart TD
 - `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
 - `features/editor/*` 提供共享正文编辑底座：HTML helper、session reducer、富文本桥接、toolbar 和页面 scaffold；fragment 与 script 详情统一复用这套协议，但不合并成统一业务实体。
+- `features/recording/components/*` 负责录音页的 UI 壳层、按钮组与样式，路由文件只保留参数接入与页面装配。
 - `features/editor/useEditorSession.ts` 当前只负责组装共享正文会话协议；hydration、保存生命周期、图片插入和运行时 ref 同步已经拆到内部 helper / 子 hook，避免 fragment 与 script 两端继续往主 hook 堆副作用。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
 - `features/fragments/store/*` 现在承接 fragment 的 **local-first 真值**：列表、详情、编辑和删除统一读写本地 SQLite / 文件系统；主链路集中在 `localEntityStore` 与 `runtime`，`legacyMigration*` 相关文件只在升级时负责接住旧缓存与旧正文草稿。
 - `features/core/db/schema.ts` 仍映射旧 SQLite 物理列名，但 Drizzle 属性名已经显式标成 `legacy*` 语义，避免在实现层误把云端绑定字段当成本地真值。
+- `features/core/files/*` 当前已把工作区路径约束与文件读写/staging helper 拆开，避免单个 runtime 文件继续膨胀。
 - `features/fragments/detail/*` 保留 `resource / 编辑会话 / sheet / screen actions` 四层，但资源层已经改成优先读取本地实体，不再把远端详情当作首屏真值。
-- `features/fragments/components/detailSheet/*` 现在承接碎片更多抽屉的 section 组合与只读展示逻辑；`detail/fragmentDetailSheetState.ts` 负责 related scripts 计数和抽屉载荷组装，避免 `useFragmentDetailScreen` 同时维护 UI 拼装与页面动作。
+- `features/fragments/components/detailSheet/*` 现在承接碎片更多抽屉的 section 组合与只读展示逻辑；内部已进一步拆成 primitives / section blocks / styles，`detail/fragmentDetailSheetState.ts` 负责 related scripts 计数和抽屉载荷组装，避免 `useFragmentDetailScreen` 同时维护 UI 拼装与页面动作。
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
 - `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用；其中 `features/scripts/store/*` 现在承接 script 的 **local-first 真值**，`detail/*` 通过共享 editor 底座实现本地正文编辑、来源碎片抽屉与拍摄跳转。
 - `components/layout/*` 当前补齐了 `NotesListScreenShell / NotesListHero / NotesScreenStateView`，首页、文件夹页、成稿页统一复用同一层 notes 风格列表壳层；页面本身只保留各自的数据源、交互和导航逻辑。
@@ -221,7 +223,7 @@ flowchart TD
     PRE["modules/*/presentation.py<br/>FastAPI Router"]
     APP["modules/*/application.py<br/>use case / orchestration"]
     SHARED["modules/shared/*<br/>container / storage / vector_store / providers / prompts / audio_ingestion"]
-    REPO["domains/*/repository.py<br/>SQLAlchemy access"]
+    REPO["domains/*/repository.py + shared snapshot readers<br/>SQLAlchemy access"]
     MODEL["models/*<br/>ORM + session factory"]
     PROVIDER["services/*<br/>provider adapters / factory"]
     DB[("PostgreSQL")]
@@ -245,7 +247,8 @@ flowchart TD
 - `backend/modules/*/presentation.py`: 对外 HTTP 入口。
 - `backend/modules/*/schemas.py`: 当前模块自有的 API request/response DTO，避免跨目录重复定义 contract。
 - `backend/modules/*/application.py`: 业务编排与用例。
-- `backend/domains/*/repository.py`: 仓储层，只负责 SQLAlchemy 数据访问。
+- `backend/domains/*/repository.py`: 针对 PostgreSQL 聚合的仓储层，只负责 SQLAlchemy 数据访问。
+- `backend/modules/shared/fragment_snapshots.py` / `backend/modules/shared/media_asset_snapshots.py`: 基于 `backup_records` 的 snapshot 读取入口，负责把服务端已同步快照还原成可消费 DTO。
 - `backend/models/*`: ORM 模型、数据库 engine、session 工厂。
 
 当前约定：
@@ -275,18 +278,19 @@ flowchart TD
 
 当前 `fragments` 模块内部进一步拆分为：
 
-- `application.py`: 碎片写操作编排和查询入口。
+- `application.py`: 基于 snapshot 的查询、标签聚合和详情导出入口。
 - `mapper.py`: 碎片与媒体资源响应映射。
-- `content_service.py`: Markdown 正文校验、替换、纯文本快照提取和内嵌素材收集。
+- `content.py`: fragment 正文 HTML / Markdown / 纯文本快照 helper。
 - `derivative_service.py`: 摘要 / 标签刷新和向量同步。
-- `asset_binding_service.py`: 碎片与媒体素材绑定关系维护。
+- `visualization.py`: 碎片云图布局和相似度可视化结果组装。
 
 当前 `scripts` 模块内部进一步拆分为：
 
 - `application.py`: 脚本查询、写操作与每日推盘编排入口。
-- `pipeline.py`: `script_generation` 流水线步骤定义与协调。
+- `rag_pipeline.py`: `rag_script_generation` 流水线步骤定义与协调。
 - `daily_push_pipeline.py`: `daily_push_generation` 流水线步骤定义与结果回流。
-- `context_builder.py`: fragment 校验、query 构造、knowledge/web hits 聚合。
+- `writing_context_builder.py`: 三层写作上下文构建与方法论缓存维护。
+- `rag_context_builder.py`: 最终生成提示词拼装。
 - `persistence.py`: workflow 输出解析、失败消息提取、脚本幂等落库。
 - `daily_push.py`: 每日推盘的碎片文本拼接与相似度筛选规则。
 
@@ -297,7 +301,7 @@ flowchart TD
 - `backend/utils/`: 时间、序列化等通用工具。
 - `backend/modules/`: 当前后端主业务入口，按业务模块拆分。
 - `backend/modules/shared/`: 多模块共享端口、容器和公共能力，不单独对外暴露业务路由。
-- `backend/domains/`: 仓储目录，按业务实体或聚合划分查询与写入逻辑。
+- `backend/domains/`: 仅保留当前仍在使用的仓储目录；历史空壳 package 已移除，避免误导为仍有对应 repository。
 - `backend/models/`: SQLAlchemy ORM 模型和数据库初始化。
 - `backend/services/`: 外部 provider 的适配实现和实例工厂。
 - `backend/prompts/`: 后端 prompt 文本与模板目录；脚本生成、知识处理、标签增强和健康检查等提示词统一从这里读取。
@@ -357,10 +361,11 @@ flowchart TD
 ### 4.7 Namespaces and Storage Conventions
 
 - 碎片文件夹表：`fragment_folders`
-- 碎片归一化标签表：`fragment_tags`
-- `fragments.folder_id` 指向真实文件夹；“全部”只是前端系统视图，不落库。
-- `fragments.audio_source` 用于区分音频来源；当前取值为 `upload` / `external_link` / `null`
-- `fragments.transcript` 保存机器转写原文，`fragments.body_html` 保存唯一正式正文的 HTML，`fragments.plain_text_snapshot` 保存派生纯文本快照
+- fragment 服务端真值快照：`backup_records(entity_type='fragment')`
+- fragment 标签不再落独立 `fragment_tags` 表，而是保存在 fragment snapshot 的 `tags` 字段中。
+- fragment snapshot 内的 `folder_id` 指向真实文件夹；“全部”只是前端系统视图，不落库。
+- fragment snapshot 的 `audio_source` 用于区分音频来源；当前取值为 `upload` / `external_link` / `null`
+- fragment snapshot 的 `transcript` 保存机器转写原文，`body_html` 保存唯一正式正文的 HTML，`plain_text_snapshot` 保存派生纯文本快照
 - 非语音碎片必须直接写入 `body_html`，不再把 `transcript` 当作正式正文来源
 - 移动端碎片详情正文改为 `react-native-enriched` 原生富文本输入；前端运行时与本地草稿统一消费 HTML 快照，AI patch 本期停用
 - 移动端碎片详情采用**local-first 分层缓存策略**：`features/fragments/store/*` 统一管理本地实体与少量 legacy 兼容缓存；detail resource 负责组合这些本地数据为当前展示态，远端仅承担备份与恢复
@@ -408,14 +413,14 @@ sequenceDiagram
     App->>API: POST audio (+ optional folder_id)
     API->>FS: save file
     API->>API: audio_ingestion.ingest_audio(upload)
-    API->>DB: create fragment(syncing) + pipeline_runs + pipeline_step_runs
+    API->>DB: seed fragment snapshot + pipeline_runs + pipeline_step_runs
     API-->>App: pipeline_run_id + fragment_id
     PIPE->>STT: transcribe(audio)
     PIPE->>DB: persist transcript + speaker_segments
     PIPE->>DB: mark media_ingestion succeeded
     PIPE->>DB: enqueue fragment_derivative_backfill(best effort)
     DERIV->>LLM: generate summary/tags
-    DERIV->>DB: sync fragment_tags + persist summary/tags
+    DERIV->>DB: patch fragment snapshot(summary/tags)
     DERIV->>VDB: upsert fragment embedding
 ```
 
@@ -423,7 +428,7 @@ sequenceDiagram
 
 - 上传接口立即返回，转写在后台继续执行。
 - `media_ingestion` 现在以 transcript 落库为唯一成功条件；主任务成功时 `summary` / `tags` 可以暂时为空。
-- transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` 流水线，异步补齐 `summary`、`tags`、`fragment_tags` 与向量。
+- transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` 流水线，异步补齐 `summary`、`tags` 与向量。
 - derivative 或向量写入失败不会回滚主转写结果。
 
 ### 5.2 External Media Audio Import
@@ -439,7 +444,7 @@ sequenceDiagram
     participant FS as uploads/external_media
 
     App->>API: POST share_url + platform (+ optional folder_id)
-    API->>DB: create fragment(source=voice, audio_source=external_link)
+    API->>DB: seed local fragment snapshot(source=voice, audio_source=external_link)
     API->>API: audio_ingestion.ingest_external_media(external_link)
     API->>DB: create pipeline_runs + pipeline_step_runs
     API-->>App: pipeline_run_id + fragment_id
@@ -454,7 +459,7 @@ sequenceDiagram
 
 关键点：
 
-- 当前接口只创建 fragment 和后台任务，外链解析、下载转码与 transcript 落库在 `media_ingestion` pipeline 中异步执行，摘要/标签/向量随后异步补齐。
+- 当前接口只创建本地 fragment 对应的服务端快照和后台任务，外链解析、下载转码与 transcript 落库在 `media_ingestion` pipeline 中异步执行，摘要/标签/向量随后异步补齐。
 - `folder_id` 为可选字段；若从某个文件夹页发起导入，预创建 fragment 会直接归入该文件夹。
 - 对外接口按多平台抽象设计，但 v1 只有抖音 provider。
 - 导入文件统一保存到对象存储 `audio/imported/...` 命名空间，输出格式固定为 `m4a`。
@@ -618,8 +623,8 @@ sequenceDiagram
 - Fragment folders module: `backend/modules/fragment_folders/presentation.py`
 - Transcriptions module: `backend/modules/transcriptions/application.py`
 - Scripts application: `backend/modules/scripts/application.py`
-- Scripts pipeline: `backend/modules/scripts/pipeline.py`
-- Scripts context builder: `backend/modules/scripts/context_builder.py`
+- Scripts pipeline: `backend/modules/scripts/rag_pipeline.py`
+- Scripts context builder: `backend/modules/scripts/rag_context_builder.py`
 - Knowledge module: `backend/modules/knowledge/application.py`
 - Scheduler module: `backend/modules/scheduler/application.py`
 
@@ -628,7 +633,7 @@ sequenceDiagram
 - 代码已经从早期的 `routers + service` 形态迁移到 `modules/*` 主入口，但仓库里仍保留一部分 provider 与兼容性 service 文件，不应再把它们当成新的业务层规范。
 - 碎片管理现在分为“真实文件夹 + 全部系统视图”两层：文件夹模块负责容器管理；fragment 主写链路已切到客户端 local-first，后端 `fragments` 模块当前主要保留标签聚合和基于 snapshot 的检索/可视化能力。
 - `GET /api/fragments/tags` 提供热门 Tag 与模糊建议能力；碎片列表筛选主路径已回到移动端本地 SQLite，不再依赖后端 `GET /api/fragments`。
-- Tag 对外仍通过 `fragments.tags` 返回，后端使用 `fragment_tags` 作为 Tag 聚合、建议与过滤的查询主表。
+- Tag 对外仍通过 fragment snapshot 的 `tags` 返回，后端聚合、建议与过滤统一基于 `FragmentSnapshotReader` 扫描已同步快照。
 - 移动端当前是“文件夹入口优先”的首页结构，不是 PRD 里最初设想的 tab 首页；碎片列表主视图仍是核心工作区，但入口已经下沉到文件夹页。
 - 知识库后端已可用，移动端入口仍是占位页。
 - 每日推盘后端已可运行并带有定时任务；当前输入源是服务端已收到的 fragment 备份快照，前端主入口仍需继续收口其消费体验。

@@ -1,1 +1,0 @@
-"""Fragment tag domain package."""

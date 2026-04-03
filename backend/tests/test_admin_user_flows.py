@@ -89,6 +89,26 @@ async def test_admin_can_list_users(async_client: AsyncClient, admin_headers, ot
 
 
 @pytest.mark.asyncio
+async def test_admin_can_create_user(async_client: AsyncClient, admin_headers):
+    """管理员可手动创建用户。"""
+    response = await async_client.post(
+        "/api/admin/users",
+        json={
+            "email": "created@sparkflow.dev",
+            "password": "createdpass123",
+            "nickname": "新建用户",
+            "role": "user",
+        },
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["email"] == "created@sparkflow.dev"
+    assert data["nickname"] == "新建用户"
+    assert data["role"] == "user"
+
+
+@pytest.mark.asyncio
 async def test_admin_can_filter_users_by_role(async_client: AsyncClient, admin_headers, other_user):
     """管理员可按 role 过滤用户列表。"""
     response = await async_client.get("/api/admin/users?role=admin", headers=admin_headers)

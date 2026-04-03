@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -126,9 +127,17 @@ async def test_derivative_service_throttles_duplicate_vector_sync_warnings(monke
     service = FragmentDerivativeService(vector_store=ExplodingVectorStore(), llm_provider=FakeLLMProvider())
     stub_logger = StubLogger()
     monotonic_values = iter([100.0, 100.0, 110.0, 110.0])
+    real_monotonic = time.monotonic
+
+    def _fake_monotonic() -> float:
+        """优先返回编排时间点，耗尽后回退真实时钟，避免影响 asyncio 清理。"""
+        try:
+            return next(monotonic_values)
+        except StopIteration:
+            return real_monotonic()
 
     monkeypatch.setattr("modules.fragments.derivative_service.logger", stub_logger)
-    monkeypatch.setattr("modules.fragments.derivative_service.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr("modules.fragments.derivative_service.time.monotonic", _fake_monotonic)
     monkeypatch.setattr("modules.fragments.derivative_service._vector_sync_throttle._last_seen", {})
 
     await service.refresh_fragment_derivatives(

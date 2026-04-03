@@ -248,13 +248,15 @@ cd backend
 
 ### Persistence and providers
 
-- `domains/`: 各业务领域仓储，按聚合拆分 repository。
+- `domains/`: 当前仍在使用的 PostgreSQL 聚合仓储，按聚合拆分 `repository.py`。
 - `models/`: SQLAlchemy ORM 模型和数据库 session 工厂。
 - `services/`: 外部 provider 适配器与工厂，当前包含 LLM / STT / Embedding，以及保留给实验性外挂工作流的 `DifyWorkflowProvider`。
 - `prompts/`: Prompt 模板文件。
 
 当前职责边界：
 
+- `domains/` 只保留当前仍被业务模块直接消费的仓储包；已经下线的 `fragments / fragment_tags / fragment_blocks` 旧投影不再保留空壳 package。
+- `modules/shared/fragment_snapshots.py` 与 `modules/shared/media_asset_snapshots.py` 是 snapshot-backed 读取入口，负责从 `backup_records` 还原服务端已同步真值；这类读取不再伪装成 `domains/fragments/repository.py`。
 - `llm_provider` 承担碎片摘要/标签增强，以及当前脚本生成和每日推盘所需的文本生成能力。
 - `workflow_provider` 当前不在主脚本生成链路上，主要保留给实验性外挂工作流接入。
 - `knowledge_index_store` 是知识库索引的独立抽象；默认实现仍由 `AppVectorStore` 适配 Chroma，未来若切到 LightRAG 之类底层引擎，应优先替换这一层，而不是改 `knowledge`/`scripts` 业务模块。
