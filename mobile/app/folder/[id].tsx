@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshControl, SectionList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FragmentCard } from '@/components/FragmentCard';
+import { SwipeableFragmentCard } from '@/components/SwipeableFragmentCard';
 import { BackButton } from '@/components/layout/BackButton';
 import { NotesListHero } from '@/components/layout/NotesListHero';
 import { NotesListScreenShell } from '@/components/layout/NotesListScreenShell';
@@ -44,6 +44,9 @@ export default function FolderDetailScreen() {
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
   const screen = useFolderFragments(id, name);
   const { setVisible } = useQuickActionBar();
+  /*closeKey 每次变化时通知所有已打开的滑动卡片关闭，保证同时只有一张卡片处于滑开状态。*/
+  const [closeKey, setCloseKey] = useState(0);
+  const openFragmentIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setVisible(!screen.selection.isSelectionMode);
@@ -52,6 +55,14 @@ export default function FolderDetailScreen() {
   const handleBack = useCallback(() => {
     router.back();
   }, [router]);
+
+  /*某张卡片滑开时，递增 closeKey 以关闭上一张，再记录当前打开的卡片。*/
+  const handleSwipeOpen = useCallback((fragmentId: string) => {
+    if (openFragmentIdRef.current !== fragmentId) {
+      setCloseKey((k) => k + 1);
+    }
+    openFragmentIdRef.current = fragmentId;
+  }, []);
 
   if (screen.isLoading && screen.fragments.length === 0) {
     return (
@@ -134,13 +145,15 @@ export default function FolderDetailScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item, index, section }) => (
           <AnimatedFragmentListItem isRemoving={screen.removingFragmentIds.has(item.id)}>
-            <FragmentCard
+            <SwipeableFragmentCard
               fragment={item}
               onPress={screen.onFragmentPress}
               selectable={screen.selection.isSelectionMode}
               selected={screen.selection.selectedSet.has(item.id)}
               isFirstInSection={index === 0}
               isLastInSection={index === section.data.length - 1}
+              onSwipeOpen={handleSwipeOpen}
+              closeKey={closeKey}
             />
           </AnimatedFragmentListItem>
         )}
