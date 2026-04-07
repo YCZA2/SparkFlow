@@ -1,45 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
-import { assertTaskScopeActive, captureRequiredTaskExecutionScope, type TaskExecutionScope } from '@/features/auth/taskScope';
+import { captureRequiredTaskExecutionScope } from '@/features/auth/taskScope';
 import { flushBackupQueue } from '@/features/backups/queue';
-import { waitForPipelineTerminal } from '@/features/pipelines/api';
 import {
   fetchDailyPush,
   forceTriggerDailyPush,
   generateScript,
   triggerDailyPush,
 } from '@/features/scripts/api';
-import { consumeScriptsStale, markScriptsStale } from '@/features/scripts/refreshSignal';
-import { forgetPendingScriptPipelineTask, rememberPendingScriptPipelineTask, type PendingScriptTaskKind } from '@/features/scripts/pendingTasks';
+import { consumeScriptsStale } from '@/features/scripts/refreshSignal';
+import { rememberPendingScriptPipelineTask, type PendingScriptTaskKind } from '@/features/scripts/pendingTasks';
 import { listLocalScriptEntities, upsertLocalScriptEntity } from '@/features/scripts/store';
 import { useScriptList, useScriptStore } from '@/features/scripts/store/scriptStore';
-import { syncRemoteScriptDetailToLocal, syncRemoteScriptsToLocal } from '@/features/scripts/sync';
+import { syncRemoteScriptsToLocal } from '@/features/scripts/sync';
+import { resolveScriptFromPipelineTask } from '@/features/scripts/scriptPipelineTask';
 import type { Script } from '@/types/script';
 import { getErrorMessage } from '@/utils/error';
-
-async function resolveScriptFromPipelineTask(
-  pipelineRunId: string,
-  fallbackMessage: string,
-  options: { scope: TaskExecutionScope }
-): Promise<Script> {
-  /*统一消费任务态脚本结果，并在成功后落本地真值。 */
-  const pipeline = await waitForPipelineTerminal(pipelineRunId, { scope: options.scope });
-  const scriptId =
-    pipeline.status === 'succeeded' && pipeline.resource.resource_type === 'script'
-      ? pipeline.resource.resource_id
-      : null;
-  if (!scriptId) {
-    assertTaskScopeActive(options.scope);
-    await forgetPendingScriptPipelineTask(options.scope.userId, pipelineRunId);
-    throw new Error(pipeline.error_message || fallbackMessage);
-  }
-  assertTaskScopeActive(options.scope);
-  const script = await syncRemoteScriptDetailToLocal(scriptId, { scope: options.scope });
-  markScriptsStale();
-  await forgetPendingScriptPipelineTask(options.scope.userId, pipelineRunId);
-  return script;
-}
 
 export function useGenerateScript() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');

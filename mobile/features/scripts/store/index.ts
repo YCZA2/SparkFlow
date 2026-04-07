@@ -11,7 +11,7 @@ export {
   updateLocalScriptEntity,
   upsertLocalScriptEntity,
 } from './localEntityStore';
-export { ensureScriptStoreReady } from './runtime';
+export { ensureScriptStoreReady, resetScriptStoreRuntime } from './runtime';
 export { markScriptsStale } from '../refreshSignal';
 export { deserializeSourceFragmentIds } from './shared';
 

@@ -7,7 +7,7 @@ export {
   stageLocalFragmentPendingImage,
   updateLocalFragmentEntity,
 } from './localEntityStore';
-export { ensureFragmentStoreReady } from './runtime';
+export { ensureFragmentStoreReady, resetFragmentStoreRuntime } from './runtime';
 export { persistBodyHtml, deserializeSpeakerSegments, deserializeTags } from './shared';
 export { markFragmentsStale } from '../refreshSignal';
 

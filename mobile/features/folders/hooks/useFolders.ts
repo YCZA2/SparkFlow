@@ -7,7 +7,7 @@ import {
   listLocalFolders,
   updateLocalFolder,
 } from '@/features/folders/localStore';
-import { listLocalFragmentEntities } from '@/features/fragments/store/localEntityStore';
+import { listLocalFragmentEntities } from '@/features/fragments/store';
 import { countLocalScriptEntities } from '@/features/scripts/store';
 import type { FragmentFolder } from '@/types/folder';
 import { getErrorMessage } from '@/utils/error';
@@ -27,7 +27,7 @@ export interface UseFoldersReturn {
   total: number;
   /** 全部碎片数量（用于"全部"虚拟文件夹） */
   allFragmentsCount: number;
-  /** 全部成稿数量（用于系统“成稿”入口） */
+  /** 全部成稿数量（用于系统"成稿"入口） */
   allScriptsCount: number;
   /** 获取文件夹列表 */
   fetchFolders: () => Promise<void>;
@@ -39,6 +39,24 @@ export interface UseFoldersReturn {
   renameFolder: (id: string, name: string) => Promise<void>;
   /** 删除文件夹 */
   removeFolder: (id: string) => Promise<void>;
+}
+
+async function fetchFoldersData(): Promise<{
+  folders: FragmentFolder[];
+  allFragmentsCount: number;
+  allScriptsCount: number;
+}> {
+  /*并发查询文件夹列表、碎片数量和成稿数量，供 fetchFolders/refreshFolders 共用。 */
+  const [localFolders, localFragments, localScriptsCount] = await Promise.all([
+    listLocalFolders(),
+    listLocalFragmentEntities(),
+    countLocalScriptEntities(),
+  ]);
+  return {
+    folders: localFolders,
+    allFragmentsCount: localFragments.length,
+    allScriptsCount: localScriptsCount,
+  };
 }
 
 /**
@@ -55,44 +73,39 @@ export function useFolders(): UseFoldersReturn {
   const [allFragmentsCount, setAllFragmentsCount] = useState(0);
   const [allScriptsCount, setAllScriptsCount] = useState(0);
 
+  const applyFoldersData = useCallback(
+    (data: { folders: FragmentFolder[]; allFragmentsCount: number; allScriptsCount: number }) => {
+      /*将查询结果统一写入 state，避免 fetch/refresh 两条路径各自维护。 */
+      setFolders(data.folders);
+      setTotal(data.folders.length);
+      setAllFragmentsCount(data.allFragmentsCount);
+      setAllScriptsCount(data.allScriptsCount);
+    },
+    []
+  );
+
   const fetchFolders = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [localFolders, localFragments, localScriptsCount] = await Promise.all([
-        listLocalFolders(),
-        listLocalFragmentEntities(),
-        countLocalScriptEntities(),
-      ]);
-      setFolders(localFolders);
-      setTotal(localFolders.length);
-      setAllFragmentsCount(localFragments.length);
-      setAllScriptsCount(localScriptsCount);
+      applyFoldersData(await fetchFoldersData());
     } catch (err) {
       setError(getErrorMessage(err, '获取文件夹列表失败'));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [applyFoldersData]);
 
   const refreshFolders = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [localFolders, localFragments, localScriptsCount] = await Promise.all([
-        listLocalFolders(),
-        listLocalFragmentEntities(),
-        countLocalScriptEntities(),
-      ]);
-      setFolders(localFolders);
-      setTotal(localFolders.length);
-      setAllFragmentsCount(localFragments.length);
-      setAllScriptsCount(localScriptsCount);
+      applyFoldersData(await fetchFoldersData());
     } catch (err) {
       setError(getErrorMessage(err, '刷新文件夹列表失败'));
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [applyFoldersData]);
 
   /**
    * 创建新文件夹
