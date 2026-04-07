@@ -13,8 +13,8 @@ SparkFlow（灵感编导 AI）- A mobile-first app for knowledge content creator
 | **Mobile** | Expo 54 + React Native 0.81 + TypeScript + expo-router 6 |
 | **Mobile State** | Zustand 5; local truth via expo-sqlite + drizzle-orm |
 | **Backend** | FastAPI + SQLAlchemy 2.0 + Alembic + APScheduler + structlog |
-| **Database** | PostgreSQL (default, Docker-provided) + ChromaDB (vector DB) |
-| **External APIs** | DashScope/Qwen (LLM / STT / Embeddings), Dify (current workflow provider) |
+| **Database** | PostgreSQL (local Homebrew service) + ChromaDB (vector DB) |
+| **External APIs** | DashScope/Qwen (LLM / STT / Embeddings) |
 
 ## Architecture
 
@@ -28,7 +28,7 @@ FastAPI Backend (Python)
   ├─ modules/*/presentation.py  ← HTTP routers
   ├─ modules/*/application.py   ← orchestration / use cases
   ├─ domains/*/repository.py    ← data access
-  ├─ services/*                 ← provider adapters (Dify, DashScope, Qwen, ChromaDB)
+  ├─ services/*                 ← provider adapters (DashScope, Qwen, ChromaDB)
   └─ pipeline_runs tables       ← async task source of truth (not Celery/Redis)
 ```
 
@@ -49,30 +49,33 @@ Equivalent npm aliases: `npm run dev:mobile`, `npm run dev:mobile:simulator`, `n
 
 ### Backend Only
 
+First-time setup:
+```bash
+cp backend/.env.example backend/.env   # fill in DASHSCOPE_API_KEY at minimum
+```
+
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+bash ../scripts/postgres-local.sh start dev   # start local PostgreSQL (Homebrew-managed)
 .venv/bin/alembic upgrade heads
 .venv/bin/uvicorn main:app --reload   # http://localhost:8000
-```
-
-Start PostgreSQL separately if needed:
-```bash
-bash scripts/postgres-local.sh start dev
 ```
 
 ### Tests
 
 ```bash
 # Full suite (backend + mobile)
-bash scripts/test-all.sh       # auto-starts Docker test DB unless TEST_DATABASE_URL is set
+bash scripts/test-all.sh       # auto-starts local PostgreSQL test DB unless TEST_DATABASE_URL is set
 npm run test:all
 
 # Backend only
 cd backend
-.venv/bin/pytest                         # all tests
-.venv/bin/pytest -m "not integration"    # smoke/contract only (no PostgreSQL needed)
+.venv/bin/pytest                              # all tests
+.venv/bin/pytest -m "not integration"         # smoke/contract only (no PostgreSQL needed)
+.venv/bin/pytest tests/path/to/test_file.py   # single file
+.venv/bin/pytest -k "test_name_keyword"       # by name
 
 # Mobile state tests only (Node/TypeScript, no Expo)
 node mobile/scripts/run-state-tests.mjs
@@ -140,6 +143,7 @@ Full schema in `memory-bank/tech-stack.md`.
 
 - **Before structural/feature changes**: read `memory-bank/architecture.md` and `memory-bank/PRD.md`
 - **After major structural changes**: update `memory-bank/architecture.md`, relevant README, and `AGENTS.md`
+- **Doc sync after any feature change**: whenever any behavior, API, or user-visible flow is added, modified, or removed — even if not "major" — scan `memory-bank/*.md`, `AGENTS.md`, `backend/README.md`, and `mobile/README.md` for references to the affected area and update them; do not rely on memory to know which docs are affected, scan first
 - **Layering**: keep presentation / application / domain / service responsibilities separated; no bypassing for convenience
 - **Local-first naming**: use `legacy*` / `compat*` for old cloud-binding fields; never introduce new `remote*` / `server*` / `localDraft*` business names
 - **Async tasks**: `pipeline_runs` / `pipeline_step_runs` are the only task state; do not reintroduce `agent_runs` or fragment-level task fields
@@ -150,7 +154,7 @@ Full schema in `memory-bank/tech-stack.md`.
 - **Backend storage**: PostgreSQL only; no SQLite fallback branches
 - **File storage**: use unified object storage abstraction; do not expose disk paths or `storage_path` / `audio_path` as external contracts
 - **Mobile state code**: TypeScript source is the single source of truth in `mobile/features/`; do not commit compiled `.js` / `.d.ts` artifacts
-- **Comments**: add a brief Chinese comment to every new/modified function describing its responsibility; for non-obvious constraints, also explain the reason (not line-by-line restatement)
+- **Comments**: every function — without exception — must have a brief Chinese comment describing its responsibility; this applies to new functions, modified functions, and helper functions that seem obvious; for non-obvious constraints or side-effects, also explain the reason (not line-by-line restatement)
 - **Modularization**: split expanding logic into focused files before it becomes a monolith
 - **`+` button semantics**: opens the import drawer; extend the drawer for new import sources rather than changing the button to a direct navigation
 

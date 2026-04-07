@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Alert,
   Modal,
   Pressable,
   StyleSheet,
@@ -65,10 +64,14 @@ export function ImportActionSheet() {
   const insets = useSafeAreaInsets();
   const { isOpen, folderId, close } = useImportActionSheet();
 
+  /*关闭抽屉后跳转到音频文件导入页，传递当前文件夹 id。*/
   const handleImportFile = React.useCallback(() => {
     close();
-    Alert.alert('导入文件', '这个入口会在下一版接入，当前先保留位置。');
-  }, [close]);
+    const href = folderId
+      ? ({ pathname: '/import-audio', params: { folderId } } as never)
+      : ('/import-audio' as never);
+    router.push(href);
+  }, [close, folderId, router]);
 
   const handleImportLink = React.useCallback(() => {
     close();
@@ -106,7 +109,7 @@ export function ImportActionSheet() {
             <ActionCard
               icon="doc.badge.plus"
               title="导入文件"
-              subtitle="保留入口，本次先不接入真实上传"
+              subtitle="从手机文件系统选取音频文件"
               onPress={handleImportFile}
             />
             <ActionCard
