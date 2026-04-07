@@ -5,8 +5,8 @@ import { assertTaskScopeActive, captureTaskExecutionScope, isTaskScopeActive, ty
 import { getDatabaseWorkspaceUserId, getLocalDatabase } from '@/features/core/db/database';
 import { fragmentFoldersTable, fragmentsTable, mediaAssetsTable, scriptsTable } from '@/features/core/db/schema';
 import { readFragmentBodyFile, readScriptBodyFile } from '@/features/core/files/runtime';
-import { deserializeSpeakerSegments, deserializeTags } from '@/features/fragments/store/shared';
-import { deserializeSourceFragmentIds } from '@/features/scripts/store/shared';
+import { deserializeSpeakerSegments, deserializeTags } from '@/features/fragments/store';
+import { deserializeSourceFragmentIds } from '@/features/scripts/store';
 
 import {
   pushBackupBatch,

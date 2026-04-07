@@ -1,10 +1,26 @@
 import * as SecureStore from 'expo-secure-store';
 
 import { API_ENDPOINTS, STORAGE_KEYS, getBackendUrl } from '@/constants/config';
-import { clearDeviceSessionInvalid } from '@/features/auth/deviceSession';
-import { emitAuthSessionLost } from '@/features/auth/sessionEvents';
-import { clearPersistedAuthState } from '@/features/auth/sessionPersistence';
 import { createDebugLogEntry, emitDebugLog, serializeForLog } from '@/features/debug-log/store';
+
+/** token 刷新成功后的回调，用于清理设备会话失效标记 */
+type TokenRefreshedHandler = () => Promise<void>;
+/** 会话彻底失效（401 无法恢复）时的回调，用于清理登录态并通知 UI */
+type SessionLostHandler = (reason: string) => Promise<void>;
+
+let _onTokenRefreshed: TokenRefreshedHandler | null = null;
+let _onSessionLost: SessionLostHandler | null = null;
+
+export function initApiClientAuth(callbacks: {
+  /** token 刷新成功后调用，通知业务层清理失效标记 */
+  onTokenRefreshed: TokenRefreshedHandler;
+  /** 会话彻底失效时调用，通知业务层清理登录态 */
+  onSessionLost: SessionLostHandler;
+}): void {
+  /*在 AppSessionProvider 初始化时注入，确保 core 层不直接依赖 auth 业务模块。 */
+  _onTokenRefreshed = callbacks.onTokenRefreshed;
+  _onSessionLost = callbacks.onSessionLost;
+}
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -77,7 +93,7 @@ export async function refreshAccessToken(currentToken: string): Promise<string> 
     throw new ApiError(data.error?.code || 'AUTH_REFRESH_FAILED', data.error?.message || '登录已失效，请重新登录');
   }
   await setToken(data.data.access_token);
-  await clearDeviceSessionInvalid();
+  await _onTokenRefreshed?.();
   return data.data.access_token;
 }
 
@@ -179,11 +195,9 @@ async function executeRequest<T>(
     if (response.status === 401) {
       const apiError = await readApiErrorPayload(response);
       if (isDeviceSessionInvalidError(apiError)) {
-        await clearPersistedAuthState({
-          invalidReason: apiError?.message || '当前设备会话已失效，请重新登录',
-        });
-        emitAuthSessionLost(apiError?.message || '当前设备会话已失效，请重新登录');
-        throw new ApiError('DEVICE_SESSION_INVALID', apiError?.message || '当前设备会话已失效，请重新登录');
+        const invalidMsg = apiError?.message || '当前设备会话已失效，请重新登录';
+        await _onSessionLost?.(invalidMsg);
+        throw new ApiError('DEVICE_SESSION_INVALID', invalidMsg);
       }
       const currentToken = await getToken();
       if (!currentToken) {
@@ -196,8 +210,7 @@ async function executeRequest<T>(
         return await parseApiResponse<T>(retryResponse, retryConfig as RequestConfig);
       } catch (refreshError) {
         const reason = refreshError instanceof ApiError ? refreshError.message : '登录已失效，请重新登录';
-        await clearPersistedAuthState({ invalidReason: reason });
-        emitAuthSessionLost(reason);
+        await _onSessionLost?.(reason);
         throw refreshError;
       }
     }

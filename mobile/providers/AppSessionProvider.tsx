@@ -3,9 +3,12 @@ import { AppState } from 'react-native';
 
 import { initApiBaseUrl } from '@/constants/config';
 import { getOrCreateDeviceId } from '@/features/auth/device';
-import { subscribeAuthSessionLost } from '@/features/auth/sessionEvents';
+import { clearDeviceSessionInvalid } from '@/features/auth/deviceSession';
+import { emitAuthSessionLost, subscribeAuthSessionLost } from '@/features/auth/sessionEvents';
+import { clearPersistedAuthState } from '@/features/auth/sessionPersistence';
 import { captureTaskExecutionScope } from '@/features/auth/taskScope';
 import { useAuthStore } from '@/features/auth/authStore';
+import { initApiClientAuth } from '@/features/core/api/client';
 import { flushBackupQueue } from '@/features/backups/queue';
 import { ensureFragmentStoreReady } from '@/features/fragments/store';
 import { ensureScriptStoreReady } from '@/features/scripts/store';
@@ -32,6 +35,16 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
     const init = async () => {
       await getOrCreateDeviceId();
       await initApiBaseUrl();
+      /*在首次 API 调用前注入会话回调，使 core/api/client 不直接依赖 auth 模块。 */
+      initApiClientAuth({
+        onTokenRefreshed: async () => {
+          await clearDeviceSessionInvalid();
+        },
+        onSessionLost: async (reason) => {
+          await clearPersistedAuthState({ invalidReason: reason });
+          emitAuthSessionLost(reason);
+        },
+      });
       await bootstrap();
     };
 
