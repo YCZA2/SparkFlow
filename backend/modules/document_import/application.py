@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from core.exceptions import ValidationError
+from core.exceptions import NotFoundError, ValidationError
+from domains.fragment_folders import repository as fragment_folder_repository
 from modules.shared.fragment_snapshots import FragmentSnapshotReader
 from modules.shared.infrastructure.storage import (
     build_document_object_key,
@@ -45,6 +46,7 @@ class DocumentImportUseCase:
                     "local_fragment_id": "请先创建本地占位 fragment 再导入文档"
                 },
             )
+        self._validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
         content = await file.read()
         ext, mime_type = validate_document_upload(file, content)
         if hasattr(file.file, "seek"):
@@ -97,6 +99,25 @@ class DocumentImportUseCase:
             source_filename=file.filename or filename,
             file_size=saved.file_size,
         )
+
+    @staticmethod
+    def _validate_folder_exists(
+        *, db: Session, user_id: str, folder_id: str | None
+    ) -> None:
+        """校验目标文件夹存在且属于当前用户。"""
+        if folder_id is None:
+            return
+        folder = fragment_folder_repository.get_by_id(
+            db=db,
+            user_id=user_id,
+            folder_id=folder_id,
+        )
+        if folder is None:
+            raise NotFoundError(
+                message="文件夹不存在或无权访问",
+                resource_type="fragment_folder",
+                resource_id=folder_id,
+            )
 
 
 def build_document_import_use_case(container) -> DocumentImportUseCase:

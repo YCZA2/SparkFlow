@@ -88,7 +88,6 @@ class DocumentImportStepExecutor:
         plain_text = str(parse_output.get("plain_text") or "")
         if not plain_text:
             raise PipelineExecutionError("文档解析结果为空", retryable=False)
-        source_filename = str(payload.get("source_filename") or "")
         body_html = convert_markdown_to_basic_html(plain_text)
         plain_text_snapshot = extract_plain_text_from_html(body_html)
         fragment_id = str(
@@ -101,7 +100,8 @@ class DocumentImportStepExecutor:
             user_id=context.run.user_id,
             fragment_id=fragment_id,
             source="document_import",
-            server_patch={
+            server_patch={},
+            snapshot_patch={
                 "body_html": body_html,
                 "plain_text_snapshot": plain_text_snapshot,
                 "content_state": "body_present",

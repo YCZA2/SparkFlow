@@ -387,6 +387,7 @@ class FragmentSnapshotReader:
         user_id: str,
         fragment_id: str,
         server_patch: dict[str, Any],
+        snapshot_patch: dict[str, Any] | None = None,
         source: str = "voice",
         audio_source: str | None = None,
         client_seed: dict[str, Any] | None = None,
@@ -425,6 +426,9 @@ class FragmentSnapshotReader:
             existing_payload=base_payload,
             server_patch=server_patch,
         )
+        # 中文注释：部分服务端链路需要补写正文/状态等结构字段，它们不属于受保护的服务器拥有字段。
+        if snapshot_patch:
+            merged_payload.update(snapshot_patch)
         backup_repository.upsert_record(
             db=db,
             user_id=user_id,
