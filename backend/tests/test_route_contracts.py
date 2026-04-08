@@ -34,6 +34,7 @@ def test_public_api_routes_are_stable() -> None:
         ("/api/backups/assets/access", frozenset({"POST"})),
         ("/api/debug/mobile-logs", frozenset({"POST"})),
         ("/api/external-media/audio-imports", frozenset({"POST"})),
+        ("/api/imports/document", frozenset({"POST"})),
         ("/api/exports/markdown/{content_type}/{content_id}", frozenset({"GET"})),
         ("/api/exports/markdown/batch", frozenset({"POST"})),
         ("/api/fragment-folders", frozenset({"GET"})),
@@ -78,7 +79,12 @@ def test_public_api_routes_are_stable() -> None:
     }
 
     normalized_routes = {
-        (path, frozenset(method for method in methods if method not in {"HEAD", "OPTIONS"}))
+        (
+            path,
+            frozenset(
+                method for method in methods if method not in {"HEAD", "OPTIONS"}
+            ),
+        )
         for path, methods in routes
     }
     normalized_routes = {item for item in normalized_routes if item[1]}

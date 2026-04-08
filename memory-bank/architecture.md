@@ -1,6 +1,6 @@
 # SparkFlow Architecture
 
-> 最后更新：2026-04-01
+> 最后更新：2026-04-09
 
 本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为本机 PostgreSQL 服务。
 
@@ -20,6 +20,7 @@
 - `transcriptions` 与 `external_media` 现在都要求客户端先创建本地 placeholder，并显式传入 `local_fragment_id`；后端不再兜底创建远端 fragment 业务记录。
 - 服务端生成字段现在直接补写回 fragment snapshot：`transcript`、`speaker_segments`、`summary`、`tags`、`audio_object_key` 及音频访问地址都会写入 `backup_records`，但不会覆盖客户端拥有的 `body_html / plain_text_snapshot / folder_id / content_state / is_filmed`。
 - `knowledge` 后端本轮补齐了文本型知识 ingestion：`txt/docx/pdf/xlsx` 统一走 `parsers -> chunking -> indexing -> application` 四层，默认仍写入 Chroma，但对上已通过独立知识索引接口解耦，后续可替换为 LightRAG 等底层引擎。
+- `document_import` 后端新增文档导入碎片能力：`txt/md/docx/pdf/xlsx` 文件上传后通过 `document_import` pipeline 异步解析为纯文本，转为 HTML 写入 fragment snapshot 的 `body_html`，随后自动触发 `fragment_derivative_backfill` 补齐摘要、标签和向量。文档解析逻辑已从知识库 `parsers.py` 提升为共享模块 `modules/shared/content/document_parsers.py`，供知识库与文档导入复用。
 - 脚本生成三层上下文本轮调整为“预置稳定内核 + 缓存方法论 + 实时相关素材召回”：稳定内核当前不再按用户素材动态生成，碎片方法论改由每日后台维护任务在阈值达标后静默刷新。
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
 - 仓库本轮也完成了一次大规模命名清理：旧的 remote-first / local-draft 兼容层统一下沉为 `legacy*` 语义；凡仍映射旧库或旧协议的字段，都明确标记为 legacy cloud-binding / legacy snapshot，而不再伪装成当前领域真值。
@@ -273,7 +274,7 @@ flowchart TD
 - `backend/modules/shared/pipeline/pipeline_runtime.py`: 持久化后台流水线运行时，负责步骤定义、worker 抢占、自动重试与恢复。
 - `backend/modules/shared/pipeline/pipeline_types.py`: pipeline 步骤类型定义。
 - `backend/modules/fragments/derivative_pipeline.py`: fragment 摘要、标签和向量异步回填流水线。
-- `backend/modules/shared/content/`: 正文处理子目录，包含 `content_html.py`、`content_markdown.py`、`content_schemas.py`、`editor_document.py`、`fragment_body_markdown.py`。
+- `backend/modules/shared/content/`: 正文处理子目录，包含 `content_html.py`、`content_markdown.py`、`content_schemas.py`、`editor_document.py`、`fragment_body_markdown.py`、`document_parsers.py`（共享文档解析器，支持 txt/md/docx/pdf/xlsx）。
 - `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，而不是继续扩散到 legacy service 文件。
 
 当前 `fragments` 模块内部进一步拆分为：
@@ -325,7 +326,8 @@ flowchart TD
 - `transcriptions`: 音频上传入口；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录，主状态入口统一收敛到 `pipelines`。
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接；local-first 请求会直接绑定客户端 placeholder fragment，解析链接、下载转 m4a、主转写在 `media_ingestion` 中执行，摘要/标签/向量由后续 derivative pipeline 异步补齐。
 - `scripts`: 合稿、脚本生成 pipeline 定义、三层写作上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。脚本生成主链路里的 fragment 背景、方法论维护和相关碎片召回都已经切到共享 fragment snapshot reader。
-- `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷；模块内部已拆成 `parsers.py`、`chunking.py`、`indexing.py`、`application.py`。
+- `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷；模块内部已拆成 `parsers.py`、`chunking.py`、`indexing.py`、`application.py`；`parsers.py` 已改为从共享模块 `modules/shared/content/document_parsers.py` 导入。
+- `document_import`: 文档导入碎片入口；支持 `.txt/.md/.docx/.pdf/.xlsx` 文件上传，通过 `document_import` pipeline 异步解析文档为纯文本并转为 HTML 写入 fragment snapshot，随后自动触发 `fragment_derivative_backfill` 补齐摘要、标签和向量。调用前客户端需先创建本地占位 fragment 并传入 `local_fragment_id`。
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
 - `exports`: 单条 Markdown 导出与批量 zip 导出。
 - `pipelines`: 后台流水线详情、步骤查询与手动重跑入口。
@@ -365,6 +367,7 @@ flowchart TD
 - fragment 标签不再落独立 `fragment_tags` 表，而是保存在 fragment snapshot 的 `tags` 字段中。
 - fragment snapshot 内的 `folder_id` 指向真实文件夹；“全部”只是前端系统视图，不落库。
 - fragment snapshot 的 `audio_source` 用于区分音频来源；当前取值为 `upload` / `external_link` / `null`
+- fragment snapshot 的 `source` 用于区分碎片来源；当前取值为 `voice` / `manual` / `video_parse` / `document_import`
 - fragment snapshot 的 `transcript` 保存机器转写原文，`body_html` 保存唯一正式正文的 HTML，`plain_text_snapshot` 保存派生纯文本快照
 - 非语音碎片必须直接写入 `body_html`，不再把 `transcript` 当作正式正文来源
 - 移动端碎片详情正文改为 `react-native-enriched` 原生富文本输入；前端运行时与本地草稿统一消费 HTML 快照，AI patch 本期停用
@@ -463,6 +466,47 @@ sequenceDiagram
 - `folder_id` 为可选字段；若从某个文件夹页发起导入，预创建 fragment 会直接归入该文件夹。
 - 对外接口按多平台抽象设计，但 v1 只有抖音 provider。
 - 导入文件统一保存到对象存储 `audio/imported/...` 命名空间，输出格式固定为 `m4a`。
+
+### 5.3 Document Import
+
+```mermaid
+sequenceDiagram
+    participant App as Mobile
+    participant API as /api/imports/document
+    participant FS as File Storage
+    participant DB as PostgreSQL
+    participant PIPE as Pipeline Worker
+    participant PARSER as document_parsers
+    participant DERIV as Derivative Pipeline
+    participant LLM as Summary/Tags
+    participant VDB as ChromaDB
+
+    App->>API: POST file + local_fragment_id (+ optional folder_id)
+    API->>FS: save document file
+    API->>DB: seed fragment snapshot(source=document_import, content_state=empty)
+    API->>DB: create pipeline_runs + pipeline_step_runs
+    API-->>App: pipeline_run_id + file_size
+    PIPE->>FS: read_bytes(document file)
+    PIPE->>PARSER: parse_uploaded_text(txt/md/docx/pdf/xlsx)
+    PARSER-->>PIPE: plain_text
+    PIPE->>PIPE: convert_markdown_to_basic_html(plain_text)
+    PIPE->>DB: patch fragment snapshot(body_html + plain_text_snapshot + content_state=body_present)
+    PIPE->>DB: mark document_import succeeded
+    PIPE->>DB: enqueue fragment_derivative_backfill(best effort)
+    DERIV->>LLM: generate summary/tags
+    DERIV->>DB: patch fragment snapshot(summary/tags)
+    DERIV->>VDB: upsert fragment embedding
+```
+
+关键点：
+
+- 文档导入前，客户端必须先创建本地占位 fragment（`content_state=empty`），并传入 `local_fragment_id`。
+- 支持格式：`.txt`、`.md`、`.docx`、`.pdf`、`.xlsx`；文件大小上限 20MB。
+- 文档文件保存到对象存储 `documents/{user_id}/{fragment_id}/{filename}` 命名空间。
+- `document_import` pipeline 包含 3 个步骤：`parse_document`（解析文件为纯文本）、`write_fragment_body`（纯文本转 HTML 写入 snapshot）、`finalize_import`（触发衍生回填）。
+- Markdown 文件的原始文本通过 `convert_markdown_to_basic_html()` 保留标题、列表、引用等结构；其他格式的纯文本按段落包裹 `<p>` 标签。
+- 解析完成后自动触发 `fragment_derivative_backfill`，异步补齐摘要、标签和向量，与音频导入链路的回填行为一致。
+- 文档解析逻辑位于 `modules/shared/content/document_parsers.py`，与知识库模块共享；知识库模块的 `parsers.py` 已改为从此共享模块导入。
 ### 5.3 Script Generation Pipeline
 
 ```mermaid
@@ -588,6 +632,7 @@ sequenceDiagram
 - `PATCH /api/fragment-folders/{folder_id}`
 - `DELETE /api/fragment-folders/{folder_id}`
 - `POST /api/transcriptions`
+- `POST /api/imports/document`
 - `POST /api/scripts/generation`
 - `GET /api/scripts`
 - `GET /api/scripts/daily-push`
@@ -626,6 +671,8 @@ sequenceDiagram
 - Scripts pipeline: `backend/modules/scripts/rag_pipeline.py`
 - Scripts context builder: `backend/modules/scripts/rag_context_builder.py`
 - Knowledge module: `backend/modules/knowledge/application.py`
+- Document import module: `backend/modules/document_import/application.py`
+- Shared document parsers: `backend/modules/shared/content/document_parsers.py`
 - Scheduler module: `backend/modules/scheduler/application.py`
 
 ## 8. Current Architectural Notes

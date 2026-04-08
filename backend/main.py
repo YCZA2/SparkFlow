@@ -1,4 +1,5 @@
 """SparkFlow backend application entrypoint."""
+
 import os
 from contextlib import asynccontextmanager
 from time import perf_counter
@@ -44,10 +45,23 @@ from modules.knowledge.rag_processing_pipeline import (
     build_reference_script_processing_pipeline_service,
     PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING,
 )
-from modules.scripts.rag_pipeline import build_rag_script_pipeline_service, PIPELINE_TYPE_RAG_SCRIPT_GENERATION
+from modules.scripts.rag_pipeline import (
+    build_rag_script_pipeline_service,
+    PIPELINE_TYPE_RAG_SCRIPT_GENERATION,
+)
 from modules.scripts.presentation import router as scripts_router
-from modules.scripts.writing_context_builder import refresh_fragment_methodology_entries_for_all_users
-from modules.shared.media.audio_ingestion import build_media_ingestion_pipeline_service, PIPELINE_TYPE_MEDIA_INGESTION
+from modules.scripts.writing_context_builder import (
+    refresh_fragment_methodology_entries_for_all_users,
+)
+from modules.document_import.pipeline_steps import (
+    DocumentImportStepExecutor,
+    PIPELINE_TYPE_DOCUMENT_IMPORT,
+)
+from modules.document_import.presentation import router as document_import_router
+from modules.shared.media.audio_ingestion import (
+    build_media_ingestion_pipeline_service,
+    PIPELINE_TYPE_MEDIA_INGESTION,
+)
 from modules.shared.infrastructure.container import ServiceContainer, build_container
 from modules.shared.pipeline.pipeline_runtime import (
     PipelineDefinitionRegistry,
@@ -206,7 +220,9 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
         allow_headers=["*"],
     )
     if settings.FILE_STORAGE_PROVIDER == "local":
-        app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+        app.mount(
+            "/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads"
+        )
     # 挂载管理后台静态文件目录
     _static_dir = os.path.join(os.path.dirname(__file__), "static")
     if os.path.isdir(_static_dir):
@@ -219,6 +235,7 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
 
 def register_exception_handlers(app: FastAPI) -> None:
     """注册统一异常处理器。"""
+
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):
         return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
@@ -263,6 +280,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 def register_routes(app: FastAPI) -> None:
     """注册应用公开路由。"""
+
     @app.get("/admin", include_in_schema=False)
     async def admin_ui():
         """提供管理后台 HTML 页面。"""
@@ -287,21 +305,38 @@ def register_routes(app: FastAPI) -> None:
             "vector_db": "unknown",
         }
 
-        async def _check_service_status(name: str, enabled: bool, health_check_factory: Callable[[], Awaitable[bool]]) -> None:
+        async def _check_service_status(
+            name: str,
+            enabled: bool,
+            health_check_factory: Callable[[], Awaitable[bool]],
+        ) -> None:
             if not enabled:
                 services_status[name] = "disabled"
                 return
             try:
-                services_status[name] = "available" if await health_check_factory() else "unavailable"
+                services_status[name] = (
+                    "available" if await health_check_factory() else "unavailable"
+                )
             except Exception as exc:
                 services_status[name] = f"error: {str(exc)}"
 
-        await _check_service_status("llm", True, lambda: container.llm_provider.health_check())
-        await _check_service_status("stt", True, lambda: container.stt_provider.health_check())
-        await _check_service_status("vector_db", True, lambda: container.vector_store.health_check())
+        await _check_service_status(
+            "llm", True, lambda: container.llm_provider.health_check()
+        )
+        await _check_service_status(
+            "stt", True, lambda: container.stt_provider.health_check()
+        )
+        await _check_service_status(
+            "vector_db", True, lambda: container.vector_store.health_check()
+        )
 
         return success_response(
-            data={"status": "ok", "version": settings.APP_VERSION, "debug": settings.DEBUG, "services": services_status}
+            data={
+                "status": "ok",
+                "version": settings.APP_VERSION,
+                "debug": settings.DEBUG,
+                "services": services_status,
+            }
         )
 
     @app.head("/health")
@@ -312,6 +347,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(auth_router)
     app.include_router(backups_router)
     app.include_router(debug_logs_router)
+    app.include_router(document_import_router)
     app.include_router(external_media_router)
     app.include_router(exports_router)
     app.include_router(fragment_folders_router)
@@ -373,31 +409,47 @@ def _configure_pipeline_runtime(container: ServiceContainer) -> None:
         definition_registry=definition_registry,
         executor_registry=executor_registry,
         pipeline_type=PIPELINE_TYPE_MEDIA_INGESTION,
-        definitions=build_media_ingestion_pipeline_service(container).build_pipeline_definitions(),
+        definitions=build_media_ingestion_pipeline_service(
+            container
+        ).build_pipeline_definitions(),
     )
     _register_pipeline(
         definition_registry=definition_registry,
         executor_registry=executor_registry,
         pipeline_type=PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
-        definitions=build_fragment_derivative_pipeline_service(container).build_pipeline_definitions(),
+        definitions=build_fragment_derivative_pipeline_service(
+            container
+        ).build_pipeline_definitions(),
     )
     _register_pipeline(
         definition_registry=definition_registry,
         executor_registry=executor_registry,
         pipeline_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
-        definitions=build_daily_push_pipeline_service(container).build_pipeline_definitions(),
+        definitions=build_daily_push_pipeline_service(
+            container
+        ).build_pipeline_definitions(),
     )
     _register_pipeline(
         definition_registry=definition_registry,
         executor_registry=executor_registry,
         pipeline_type=PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING,
-        definitions=build_reference_script_processing_pipeline_service(container).build_pipeline_definitions(),
+        definitions=build_reference_script_processing_pipeline_service(
+            container
+        ).build_pipeline_definitions(),
     )
     _register_pipeline(
         definition_registry=definition_registry,
         executor_registry=executor_registry,
         pipeline_type=PIPELINE_TYPE_RAG_SCRIPT_GENERATION,
-        definitions=build_rag_script_pipeline_service(container).build_pipeline_definitions(),
+        definitions=build_rag_script_pipeline_service(
+            container
+        ).build_pipeline_definitions(),
+    )
+    _register_pipeline(
+        definition_registry=definition_registry,
+        executor_registry=executor_registry,
+        pipeline_type=PIPELINE_TYPE_DOCUMENT_IMPORT,
+        definitions=DocumentImportStepExecutor().build_pipeline_definitions(),
     )
 
 

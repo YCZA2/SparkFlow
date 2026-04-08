@@ -75,52 +75,79 @@ def _build_simple_xlsx_bytes(sheet_name: str, rows: list[list[str]]) -> bytes:
     for value in shared_strings:
         shared_strings_xml.append(f"<si><t>{value}</t></si>")
     shared_strings_xml.append("</sst>")
-    worksheet_rows = ['<?xml version="1.0" encoding="UTF-8"?>', '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>']
+    worksheet_rows = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>',
+    ]
     string_index = 0
     for row_index, row in enumerate(rows, start=1):
         worksheet_rows.append(f'<row r="{row_index}">')
         for col_index, _ in enumerate(row, start=1):
             column = chr(ord("A") + col_index - 1)
-            worksheet_rows.append(f'<c r="{column}{row_index}" t="s"><v>{string_index}</v></c>')
+            worksheet_rows.append(
+                f'<c r="{column}{row_index}" t="s"><v>{string_index}</v></c>'
+            )
             string_index += 1
         worksheet_rows.append("</row>")
     worksheet_rows.append("</sheetData></worksheet>")
 
     buffer = BytesIO()
     with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
-        archive.writestr("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8"?>
+        archive.writestr(
+            "[Content_Types].xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
   <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
-</Types>""")
-        archive.writestr("_rels/.rels", """<?xml version="1.0" encoding="UTF-8"?>
+</Types>""",
+        )
+        archive.writestr(
+            "_rels/.rels",
+            """<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>""")
+</Relationships>""",
+        )
         archive.writestr("xl/workbook.xml", workbook_xml)
         archive.writestr("xl/sharedStrings.xml", "\n".join(shared_strings_xml))
-        archive.writestr("xl/_rels/workbook.xml.rels", """<?xml version="1.0" encoding="UTF-8"?>
+        archive.writestr(
+            "xl/_rels/workbook.xml.rels",
+            """<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-</Relationships>""")
+</Relationships>""",
+        )
         archive.writestr("xl/worksheets/sheet1.xml", "\n".join(worksheet_rows))
     return buffer.getvalue()
 
 
 def test_parse_uploaded_text_supports_txt_docx_pdf_and_xlsx() -> None:
     """知识库解析器应支持文本型上传格式。"""
-    txt = parse_uploaded_text(file_content="方法论拆解".encode("utf-8"), filename="sample.txt")
-    docx = parse_uploaded_text(file_content=_build_docx_bytes("语言习惯总结"), filename="sample.docx")
-    pdf = parse_uploaded_text(file_content=_build_simple_pdf_bytes("hook opener"), filename="sample.pdf")
+    txt = parse_uploaded_text(
+        file_content="方法论拆解".encode("utf-8"), filename="sample.txt"
+    )
+    md = parse_uploaded_text(
+        file_content="# 标题\n\n段落内容".encode("utf-8"), filename="sample.md"
+    )
+    docx = parse_uploaded_text(
+        file_content=_build_docx_bytes("语言习惯总结"), filename="sample.docx"
+    )
+    pdf = parse_uploaded_text(
+        file_content=_build_simple_pdf_bytes("hook opener"), filename="sample.pdf"
+    )
     xlsx = parse_uploaded_text(
-        file_content=_build_simple_xlsx_bytes("Sheet1", [["标题", "钩子"], ["案例", "强对比"]]),
+        file_content=_build_simple_xlsx_bytes(
+            "Sheet1", [["标题", "钩子"], ["案例", "强对比"]]
+        ),
         filename="sample.xlsx",
     )
 
     assert "方法论拆解" in txt
+    assert "标题" in md
+    assert "段落内容" in md
     assert "语言习惯总结" in docx
     assert "hook opener" in pdf
     assert "Sheet1" in xlsx
