@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, SectionList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
@@ -44,9 +44,8 @@ export default function FolderDetailScreen() {
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
   const screen = useFolderFragments(id, name);
   const { setVisible } = useQuickActionBar();
-  /*closeKey 每次变化时通知所有已打开的滑动卡片关闭，保证同时只有一张卡片处于滑开状态。*/
-  const [closeKey, setCloseKey] = useState(0);
-  const openFragmentIdRef = useRef<string | null>(null);
+  /*当前已滑开的碎片 ID，用于关闭其他卡片。*/
+  const [openFragmentId, setOpenFragmentId] = useState<string | null>(null);
 
   useEffect(() => {
     setVisible(!screen.selection.isSelectionMode);
@@ -56,12 +55,9 @@ export default function FolderDetailScreen() {
     router.back();
   }, [router]);
 
-  /*某张卡片滑开时，递增 closeKey 以关闭上一张，再记录当前打开的卡片。*/
+  /*某张卡片滑开时，记录其 ID，其他卡片通过 shouldClose 判断关闭。*/
   const handleSwipeOpen = useCallback((fragmentId: string) => {
-    if (openFragmentIdRef.current !== fragmentId) {
-      setCloseKey((k) => k + 1);
-    }
-    openFragmentIdRef.current = fragmentId;
+    setOpenFragmentId(fragmentId);
   }, []);
 
   if (screen.isLoading && screen.fragments.length === 0) {
@@ -153,7 +149,7 @@ export default function FolderDetailScreen() {
               isFirstInSection={index === 0}
               isLastInSection={index === section.data.length - 1}
               onSwipeOpen={handleSwipeOpen}
-              closeKey={closeKey}
+              shouldClose={openFragmentId !== null && openFragmentId !== item.id}
             />
           </AnimatedFragmentListItem>
         )}

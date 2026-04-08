@@ -5,6 +5,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { PaperProvider } from 'react-native-paper';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StyleSheet } from 'react-native';
 
 import { LoadingState } from '@/components/ScreenState';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -124,21 +126,22 @@ function RootLayoutNav() {
   }
 
   return (
-    <PaperProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack
-          screenOptions={{
-            headerBackTitle: '返回',
-            headerLeft: () => <BackButton />,
-          }}
-        >
-          <Stack.Screen
-            name="index"
-            options={{
-              headerShown: false,
-              title: '返回',
+    <GestureHandlerRootView style={styles.gestureRoot}>
+      <PaperProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack
+            screenOptions={{
+              headerBackTitle: '返回',
+              headerLeft: () => <BackButton />,
             }}
-          />
+          >
+            <Stack.Screen
+              name="index"
+              options={{
+                headerShown: false,
+                title: '返回',
+              }}
+            />
           <Stack.Screen
             name="profile"
             options={{
@@ -204,5 +207,12 @@ function RootLayoutNav() {
         {isOpen && <Drawer />}
       </ThemeProvider>
     </PaperProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
+});
