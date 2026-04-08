@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, SectionList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Pressable, RefreshControl, SectionList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { SymbolView } from 'expo-symbols';
@@ -46,10 +46,30 @@ export default function FolderDetailScreen() {
   const { setVisible } = useQuickActionBar();
   /*当前已滑开的碎片 ID，用于关闭其他卡片。*/
   const [openFragmentId, setOpenFragmentId] = useState<string | null>(null);
+  /*父层每次请求收起所有卡片时递增，驱动子卡片执行一次 close。 */
+  const [closeRequestVersion, setCloseRequestVersion] = useState(0);
 
   useEffect(() => {
     setVisible(!screen.selection.isSelectionMode);
   }, [screen.selection.isSelectionMode, setVisible]);
+
+  useEffect(() => {
+    if (!screen.selection.isSelectionMode || openFragmentId === null) {
+      return;
+    }
+    setCloseRequestVersion((prev) => prev + 1);
+    setOpenFragmentId(null);
+  }, [openFragmentId, screen.selection.isSelectionMode]);
+
+  useEffect(() => {
+    if (openFragmentId === null) {
+      return;
+    }
+    if (screen.fragments.some((fragment) => fragment.id === openFragmentId)) {
+      return;
+    }
+    setOpenFragmentId(null);
+  }, [openFragmentId, screen.fragments]);
 
   const handleBack = useCallback(() => {
     router.back();
@@ -59,6 +79,36 @@ export default function FolderDetailScreen() {
   const handleSwipeOpen = useCallback((fragmentId: string) => {
     setOpenFragmentId(fragmentId);
   }, []);
+
+  /*卡片滑回关闭后同步清理页面级 open 状态，避免后续点击误判为仍在滑开。 */
+  const handleSwipeClose = useCallback((fragmentId: string) => {
+    setOpenFragmentId((current) => (current === fragmentId ? null : current));
+  }, []);
+
+  /*统一处理"关闭当前滑开卡片"动作，供空白点击、滚动和其他卡片点击复用。 */
+  const requestCloseOpenCard = useCallback(() => {
+    if (openFragmentId === null) {
+      return false;
+    }
+    setCloseRequestVersion((prev) => prev + 1);
+    return true;
+  }, [openFragmentId]);
+
+  /*有卡片滑开时，优先收起侧滑操作，不直接进入详情。 */
+  const handleFragmentPress = useCallback(
+    (fragment: Parameters<typeof screen.onFragmentPress>[0]) => {
+      if (requestCloseOpenCard()) {
+        return;
+      }
+      screen.onFragmentPress(fragment);
+    },
+    [requestCloseOpenCard, screen]
+  );
+
+  /*点击非卡片内容或开始滚动时，如果有滑开的卡片则先关闭。 */
+  const handleDismissOpenSwipe = useCallback(() => {
+    requestCloseOpenCard();
+  }, [requestCloseOpenCard]);
 
   if (screen.isLoading && screen.fragments.length === 0) {
     return (
@@ -143,32 +193,49 @@ export default function FolderDetailScreen() {
           <AnimatedFragmentListItem isRemoving={screen.removingFragmentIds.has(item.id)}>
             <SwipeableFragmentCard
               fragment={item}
-              onPress={screen.onFragmentPress}
+              onPress={handleFragmentPress}
               selectable={screen.selection.isSelectionMode}
               selected={screen.selection.selectedSet.has(item.id)}
               isFirstInSection={index === 0}
               isLastInSection={index === section.data.length - 1}
               onSwipeOpen={handleSwipeOpen}
+              onSwipeClose={handleSwipeClose}
               shouldClose={openFragmentId !== null && openFragmentId !== item.id}
+              closeRequestVersion={closeRequestVersion}
             />
           </AnimatedFragmentListItem>
         )}
         renderSectionHeader={({ section }) => (
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{section.title}</Text>
+          <Pressable disabled={openFragmentId === null} onPress={handleDismissOpenSwipe}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{section.title}</Text>
+          </Pressable>
         )}
         ListHeaderComponent={
-          <View style={[styles.headerBlock, { paddingTop: insets.top + 66 }]}>
+          <Pressable
+            style={[styles.headerBlock, { paddingTop: insets.top + 66 }]}
+            disabled={openFragmentId === null}
+            onPress={handleDismissOpenSwipe}
+          >
             <NotesListHero
               title={name || '文件夹'}
               subtitle={screen.totalLabel}
               titleLines={2}
             />
-          </View>
+          </Pressable>
         }
         ListEmptyComponent={
-          <ScreenState icon="📝" title="还没有灵感碎片" message="去录一条或记一条吧" />
+          <Pressable disabled={openFragmentId === null} onPress={handleDismissOpenSwipe}>
+            <ScreenState icon="📝" title="还没有灵感碎片" message="去录一条或记一条吧" />
+          </Pressable>
         }
-        contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
+        ListFooterComponent={
+          <Pressable
+            style={styles.listFooterDismissArea}
+            disabled={openFragmentId === null}
+            onPress={handleDismissOpenSwipe}
+          />
+        }
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom + 110 }}
         refreshControl={
           <RefreshControl
             refreshing={screen.isRefreshing}
@@ -176,6 +243,8 @@ export default function FolderDetailScreen() {
             tintColor={theme.colors.primary}
           />
         }
+        onTouchEnd={handleDismissOpenSwipe}
+        onScrollBeginDrag={handleDismissOpenSwipe}
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
       />
@@ -250,5 +319,9 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.92)',
     fontSize: 12,
     lineHeight: 16,
+  },
+  listFooterDismissArea: {
+    flex: 1,
+    minHeight: 120,
   },
 });

@@ -38,8 +38,12 @@ interface SwipeableFragmentCardProps {
   isLastInSection?: boolean;
   /** 当本卡片滑开时通知父组件，用于关闭其他已打开的卡片 */
   onSwipeOpen?: (fragmentId: string) => void;
+  /** 当前卡片彻底关闭后通知父组件，同步页面级滑开状态。 */
+  onSwipeClose?: (fragmentId: string) => void;
   /** 当前是否有其他卡片已滑开，用于强制关闭 */
   shouldClose?: boolean;
+  /** 父组件发起"关闭当前所有滑开卡片"时递增，用于响应空白点击等关闭动作。 */
+  closeRequestVersion?: number;
 }
 
 /**
@@ -55,9 +59,12 @@ export function SwipeableFragmentCard({
   isFirstInSection = false,
   isLastInSection = false,
   onSwipeOpen,
+  onSwipeClose,
   shouldClose,
+  closeRequestVersion = 0,
 }: SwipeableFragmentCardProps) {
   const swipeableRef = useRef<Swipeable>(null);
+  const isSwipeOpenRef = useRef(false);
   const [moveFolderVisible, setMoveFolderVisible] = useState(false);
 
   /*shouldClose 为 true 时关闭本卡片（其他卡片滑开时触发）。*/
@@ -66,6 +73,13 @@ export function SwipeableFragmentCard({
       swipeableRef.current?.close();
     }
   }, [shouldClose]);
+
+  /*响应父层的全局关闭请求，处理点击空白处等非卡片手势关闭场景。 */
+  useEffect(() => {
+    if (closeRequestVersion > 0 && isSwipeOpenRef.current) {
+      swipeableRef.current?.close();
+    }
+  }, [closeRequestVersion]);
 
   /*共享：把碎片标题和摘要/正文纯文本分享到系统分享面板。*/
   const handleShare = useCallback(async () => {
@@ -197,8 +211,18 @@ export function SwipeableFragmentCard({
 
   /*处理滑开事件，通知父组件关闭其他卡片。*/
   const handleSwipeableOpen = useCallback(() => {
+    isSwipeOpenRef.current = true;
     onSwipeOpen?.(fragment.id);
   }, [fragment.id, onSwipeOpen]);
+
+  /*处理滑回关闭事件，避免父层残留旧的滑开状态。 */
+  const handleSwipeableClose = useCallback(() => {
+    if (!isSwipeOpenRef.current) {
+      return;
+    }
+    isSwipeOpenRef.current = false;
+    onSwipeClose?.(fragment.id);
+  }, [fragment.id, onSwipeClose]);
 
   /*选择模式下直接渲染普通卡片，不附加滑动手势。*/
   if (selectable) {
@@ -223,6 +247,7 @@ export function SwipeableFragmentCard({
         rightThreshold={40}
         overshootRight={false}
         onSwipeableOpen={handleSwipeableOpen}
+        onSwipeableClose={handleSwipeableClose}
         renderRightActions={renderRightActions}
         containerStyle={styles.swipeableContainer}
       >
