@@ -184,6 +184,42 @@ async def test_dispatcher_retries_retryable_step_and_then_succeeds(db_session_fa
         await dispatcher.stop()
 
 
+@pytest.mark.asyncio
+async def test_handle_step_success_rolls_back_succeeded_state_when_run_finalize_fails(db_session_factory, monkeypatch) -> None:
+    """成功回写阶段异常时不应留下 step 已成功但 run 未推进的裂缝。"""
+
+    async def _success_executor(context) -> dict:
+        return {"done": True}
+
+    dispatcher = _build_dispatcher(db_session_factory, _success_executor)
+    _create_test_run(db_session_factory)
+    step_id = _claim_test_step(db_session_factory)
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("finalize failed")
+
+    monkeypatch.setattr(pipeline_repository, "mark_run_succeeded", _boom)
+
+    try:
+        with pytest.raises(RuntimeError, match="finalize failed"):
+            await dispatcher._handle_step_success(
+                step_id=step_id,
+                output={"done": True},
+                trigger_followup_wake=False,
+            )
+
+        with db_session_factory() as db:
+            step = db.query(PipelineStepRun).filter_by(id=step_id).first()
+            run = db.query(PipelineRun).filter_by(id="test-run-001").first()
+            assert step is not None
+            assert run is not None
+            assert step.status == "running"
+            assert run.status == "running"
+            assert run.current_step == step.step_name
+    finally:
+        await dispatcher.stop()
+
+
 def test_recover_stale_steps_restores_waiting_retry_state(db_session_factory) -> None:
     """陈旧锁应被回收为 waiting_retry，并恢复 run 到可继续执行状态。"""
     _create_test_run(db_session_factory, max_attempts=2)
@@ -203,6 +239,42 @@ def test_recover_stale_steps_restores_waiting_retry_state(db_session_factory) ->
         assert step.status == "waiting_retry"
         assert run.status == "queued"
         assert run.current_step == step.step_name
+
+
+@pytest.mark.asyncio
+async def test_handle_step_error_keeps_succeeded_step_unchanged(db_session_factory) -> None:
+    """错误收敛阶段不应把已成功步骤降级。"""
+
+    async def _success_executor(context) -> dict:
+        return {"done": True}
+
+    dispatcher = _build_dispatcher(db_session_factory, _success_executor)
+    _create_test_run(db_session_factory)
+    step_id = _claim_test_step(db_session_factory)
+
+    try:
+        with db_session_factory() as db:
+            step = db.query(PipelineStepRun).filter_by(id=step_id).first()
+            assert step is not None
+            step.status = "succeeded"
+            db.commit()
+
+        await dispatcher._handle_step_error(
+            step_id=step_id,
+            message="should be ignored",
+            retryable=True,
+            trigger_followup_wake=False,
+        )
+
+        with db_session_factory() as db:
+            step = db.query(PipelineStepRun).filter_by(id=step_id).first()
+            run = db.query(PipelineRun).filter_by(id="test-run-001").first()
+            assert step is not None
+            assert run is not None
+            assert step.status == "succeeded"
+            assert run.status == "running"
+    finally:
+        await dispatcher.stop()
 
 
 def test_retry_run_supports_from_failed_step_and_from_start(db_session_factory) -> None:
@@ -241,6 +313,7 @@ def test_retry_run_supports_from_failed_step_and_from_start(db_session_factory) 
         assert steps[1].status == "pending"
         assert steps[1].output_payload_json is None
         assert steps[1].attempt_count == 0
+
 
 @pytest.mark.asyncio
 async def test_dispatcher_stop_handles_shutdown_cancellation(db_session_factory) -> None:

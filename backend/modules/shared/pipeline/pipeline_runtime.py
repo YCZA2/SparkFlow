@@ -316,30 +316,38 @@ class PipelineDispatcher:
     ) -> None:
         """处理步骤成功后的持久化和推进。"""
         with self.session_factory() as db:
-            step = pipeline_repository.mark_step_succeeded(
-                db=db,
-                step_id=step_id,
-                output_payload=output,
-                external_ref=output.get("external_ref") if isinstance(output.get("external_ref"), dict) else None,
-            )
-            run = db.query(PipelineRun).filter(PipelineRun.id == step.pipeline_run_id).first()
-            if run is None:
-                return
-            steps = pipeline_repository.list_steps(db=db, run_id=run.id)
-            next_step = next((item for item in steps if item.step_order > step.step_order), None)
-            if next_step is None:
-                pipeline_repository.mark_run_succeeded(
+            try:
+                step = pipeline_repository.mark_step_succeeded(
                     db=db,
-                    run_id=run.id,
-                    output_payload=output.get("run_output") if isinstance(output.get("run_output"), dict) else output,
-                    resource_type=output.get("resource_type"),
-                    resource_id=output.get("resource_id"),
+                    step_id=step_id,
+                    output_payload=output,
+                    external_ref=output.get("external_ref") if isinstance(output.get("external_ref"), dict) else None,
+                    auto_commit=False,
                 )
-                return
-            run.current_step = next_step.step_name
-            run.status = "queued"
-            run.error_message = None
-            db.commit()
+                run = db.query(PipelineRun).filter(PipelineRun.id == step.pipeline_run_id).first()
+                if run is None:
+                    db.commit()
+                    return
+                steps = pipeline_repository.list_steps(db=db, run_id=run.id)
+                next_step = next((item for item in steps if item.step_order > step.step_order), None)
+                if next_step is None:
+                    pipeline_repository.mark_run_succeeded(
+                        db=db,
+                        run_id=run.id,
+                        output_payload=output.get("run_output") if isinstance(output.get("run_output"), dict) else output,
+                        resource_type=output.get("resource_type"),
+                        resource_id=output.get("resource_id"),
+                        auto_commit=False,
+                    )
+                else:
+                    run.current_step = next_step.step_name
+                    run.status = "queued"
+                    run.error_message = None
+                    db.flush()
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
         if trigger_followup_wake:
             self.wake_up()
 
@@ -355,6 +363,8 @@ class PipelineDispatcher:
         with self.session_factory() as db:
             step = db.query(PipelineStepRun).filter(PipelineStepRun.id == step_id).first()
             if step is None:
+                return
+            if step.status == "succeeded":
                 return
             if retryable and pipeline_repository.step_has_remaining_attempts(step):
                 retry_delay = max(1, (2 ** step.attempt_count) - 1)

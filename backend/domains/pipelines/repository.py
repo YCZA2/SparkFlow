@@ -207,8 +207,9 @@ def mark_step_succeeded(
     step_id: str,
     output_payload: dict[str, Any] | None,
     external_ref: dict[str, Any] | None = None,
+    auto_commit: bool = True,
 ) -> PipelineStepRun:
-    """标记步骤成功并写入结果。"""
+    """标记步骤成功并写入结果，必要时允许调用方延迟提交事务。"""
     step = db.query(PipelineStepRun).filter(PipelineStepRun.id == step_id).with_for_update().first()
     if step is None:
         raise RuntimeError(f"pipeline step not found: {step_id}")
@@ -218,8 +219,11 @@ def mark_step_succeeded(
     step.finished_at = _utc_now()
     step.lock_token = None
     step.locked_at = None
-    db.commit()
-    db.refresh(step)
+    if auto_commit:
+        db.commit()
+        db.refresh(step)
+    else:
+        db.flush()
     return step
 
 
@@ -279,8 +283,9 @@ def mark_run_succeeded(
     output_payload: dict[str, Any] | None = None,
     resource_type: str | None = None,
     resource_id: str | None = None,
+    auto_commit: bool = True,
 ) -> PipelineRun:
-    """标记流水线成功完成。"""
+    """标记流水线成功完成，必要时允许调用方延迟提交事务。"""
     run = db.query(PipelineRun).filter(PipelineRun.id == run_id).with_for_update().first()
     if run is None:
         raise RuntimeError(f"pipeline run not found: {run_id}")
@@ -295,8 +300,11 @@ def mark_run_succeeded(
         run.resource_type = resource_type
     if resource_id is not None:
         run.resource_id = resource_id
-    db.commit()
-    db.refresh(run)
+    if auto_commit:
+        db.commit()
+        db.refresh(run)
+    else:
+        db.flush()
     return run
 
 
@@ -307,8 +315,9 @@ def update_run_resource(
     resource_type: str | None,
     resource_id: str | None,
     output_payload: dict[str, Any] | None = None,
+    auto_commit: bool = True,
 ) -> PipelineRun:
-    """更新流水线当前资源引用。"""
+    """更新流水线当前资源引用，必要时允许调用方延迟提交事务。"""
     run = db.query(PipelineRun).filter(PipelineRun.id == run_id).with_for_update().first()
     if run is None:
         raise RuntimeError(f"pipeline run not found: {run_id}")
@@ -316,8 +325,11 @@ def update_run_resource(
     run.resource_id = resource_id
     if output_payload is not None:
         run.output_payload_json = _dump_json(output_payload)
-    db.commit()
-    db.refresh(run)
+    if auto_commit:
+        db.commit()
+        db.refresh(run)
+    else:
+        db.flush()
     return run
 
 

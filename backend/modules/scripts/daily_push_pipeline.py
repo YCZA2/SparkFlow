@@ -86,24 +86,32 @@ class DailyPushPersistenceService:
 
         local_date = input_payload["target_date"]
         resolved_title = title or f"{input_payload['title_prefix']}灵感推盘 · {local_date}"
-        script = script_repository.create(
-            db=db,
-            user_id=run.user_id,
-            body_html=convert_markdown_to_basic_html(draft),
-            mode="mode_daily_push",
-            source_fragment_ids=json.dumps(input_payload["fragment_ids"], ensure_ascii=False),
-            title=resolved_title,
-            status="ready",
-            is_daily_push=True,
-        )
-        pipeline_repository.update_run_resource(
-            db=db,
-            run_id=run.id,
-            resource_type="script",
-            resource_id=script.id,
-            output_payload={"script_id": script.id, "target_date": local_date, "is_daily_push": True},
-        )
-        return {"script_id": script.id}
+        try:
+            script = script_repository.create(
+                db=db,
+                user_id=run.user_id,
+                body_html=convert_markdown_to_basic_html(draft),
+                mode="mode_daily_push",
+                source_fragment_ids=json.dumps(input_payload["fragment_ids"], ensure_ascii=False),
+                title=resolved_title,
+                status="ready",
+                is_daily_push=True,
+                auto_commit=False,
+            )
+            pipeline_repository.update_run_resource(
+                db=db,
+                run_id=run.id,
+                resource_type="script",
+                resource_id=script.id,
+                output_payload={"script_id": script.id, "target_date": local_date, "is_daily_push": True},
+                auto_commit=False,
+            )
+            db.commit()
+            db.refresh(script)
+            return {"script_id": script.id}
+        except Exception:
+            db.rollback()
+            raise
 
     @staticmethod
     def _get_existing_script_for_target_date(*, db: Session, user_id: str, target_date: str):

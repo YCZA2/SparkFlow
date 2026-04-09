@@ -60,7 +60,9 @@ def create(
     title: Optional[str] = None,
     status: str = "draft",
     is_daily_push: bool = False,
+    auto_commit: bool = True,
 ) -> Script:
+    """创建一篇稿件，必要时允许调用方延迟提交事务。"""
     script = Script(
         user_id=user_id,
         title=title,
@@ -71,8 +73,11 @@ def create(
         is_daily_push=is_daily_push,
     )
     db.add(script)
-    db.commit()
-    db.refresh(script)
+    if auto_commit:
+        db.commit()
+        db.refresh(script)
+    else:
+        db.flush()
     return script
 
 
@@ -94,7 +99,9 @@ def update(
     title: Optional[str],
     body_html: Optional[str] = None,
     source_fragment_ids: Optional[str] = None,
+    auto_commit: bool = True,
 ) -> Script:
+    """更新稿件字段，必要时允许调用方延迟提交事务。"""
     if status_value is not None:
         script.status = status_value
     if title is not None:
@@ -103,9 +110,14 @@ def update(
         script.body_html = body_html
     if source_fragment_ids is not None:
         script.source_fragment_ids = source_fragment_ids
-    db.commit()
-    db.refresh(script)
+    if auto_commit:
+        db.commit()
+        db.refresh(script)
+    else:
+        db.flush()
     return script
+
+
 def get_latest_daily_push_for_window(
     db: Session,
     user_id: str,

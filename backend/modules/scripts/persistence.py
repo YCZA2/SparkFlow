@@ -63,44 +63,65 @@ class ScriptGenerationPersistenceService:
             or [item.get("id") for item in input_payload.get("fragment_snapshots") or []],
             ensure_ascii=False,
         )
-        existing = script_repository.get_by_id(db=db, user_id=run.user_id, script_id=run.resource_id or "")
-        if existing:
-            script_repository.update(
+        try:
+            existing = script_repository.get_by_id(db=db, user_id=run.user_id, script_id=run.resource_id or "")
+            if existing:
+                script_repository.update(
+                    db=db,
+                    script=existing,
+                    status_value=None,
+                    title=parsed_result.get("title"),
+                    body_html=draft_html,
+                    source_fragment_ids=source_fragment_ids,
+                    auto_commit=False,
+                )
+                run_output = self.build_run_output(
+                    script_id=existing.id,
+                    parsed_result=parsed_result,
+                    mode=input_payload["mode"],
+                    provider_metadata=provider_metadata,
+                )
+                if run.resource_type != "script" or run.resource_id != existing.id:
+                    pipeline_repository.update_run_resource(
+                        db=db,
+                        run_id=run.id,
+                        resource_type="script",
+                        resource_id=existing.id,
+                        output_payload=run_output,
+                        auto_commit=False,
+                    )
+                db.commit()
+                db.refresh(existing)
+                return run_output
+            script = script_repository.create(
                 db=db,
-                script=existing,
-                status_value=None,
-                title=parsed_result.get("title"),
+                user_id=run.user_id,
                 body_html=draft_html,
+                mode=input_payload["mode"],
                 source_fragment_ids=source_fragment_ids,
+                title=parsed_result.get("title"),
+                auto_commit=False,
             )
-            return self.build_run_output(
-                script_id=existing.id,
+            run_output = self.build_run_output(
+                script_id=script.id,
                 parsed_result=parsed_result,
                 mode=input_payload["mode"],
                 provider_metadata=provider_metadata,
             )
-        script = script_repository.create(
-            db=db,
-            user_id=run.user_id,
-            body_html=draft_html,
-            mode=input_payload["mode"],
-            source_fragment_ids=source_fragment_ids,
-            title=parsed_result.get("title"),
-        )
-        run_output = self.build_run_output(
-            script_id=script.id,
-            parsed_result=parsed_result,
-            mode=input_payload["mode"],
-            provider_metadata=provider_metadata,
-        )
-        pipeline_repository.update_run_resource(
-            db=db,
-            run_id=run.id,
-            resource_type="script",
-            resource_id=script.id,
-            output_payload=run_output,
-        )
-        return run_output
+            pipeline_repository.update_run_resource(
+                db=db,
+                run_id=run.id,
+                resource_type="script",
+                resource_id=script.id,
+                output_payload=run_output,
+                auto_commit=False,
+            )
+            db.commit()
+            db.refresh(script)
+            return run_output
+        except Exception:
+            db.rollback()
+            raise
 
     @staticmethod
     def build_run_output(
