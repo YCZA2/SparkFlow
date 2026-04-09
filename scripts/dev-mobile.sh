@@ -136,6 +136,19 @@ ensure_local_postgres() {
   bash "${POSTGRES_SCRIPT}" start dev
 }
 
+find_first_available_simulator() {
+  # 优先读取当前机器上第一个可用 iOS 模拟器名称，避免写死某个设备型号。
+  xcrun simctl list devices available | awk '
+    /^[[:space:]]+[^-].*\([0-9A-F-]+\) \((Shutdown|Booted)\)[[:space:]]*$/ {
+      line=$0
+      sub(/^[[:space:]]+/, "", line)
+      sub(/[[:space:]]+\([0-9A-F-]+\)[[:space:]]+\((Shutdown|Booted)\)[[:space:]]*$/, "", line)
+      print line
+      exit
+    }
+  '
+}
+
 wait_for_http_ready() {
   # 轮询本地 HTTP 地址，避免后续自动打开客户端时 Metro 尚未就绪。
   local url="$1"
@@ -155,10 +168,20 @@ wait_for_http_ready() {
 
 ensure_booted_simulator() {
   # 显式确保 iOS 模拟器已启动，避免 Expo 自动 openurl 时命中超时。
+  local simulator_name=""
+
   if ! xcrun simctl list devices booted | grep -q "Booted"; then
     echo "[dev-mobile] booting iOS Simulator..."
     open -a Simulator >/dev/null 2>&1 || true
-    xcrun simctl boot "iPhone 17 Pro" >/dev/null 2>&1 || true
+
+    simulator_name="$(find_first_available_simulator)"
+    if [[ -z "${simulator_name}" ]]; then
+      echo "[dev-mobile] no available iOS simulator device found."
+      echo "[dev-mobile] install an iOS Simulator runtime in Xcode > Settings > Components, then rerun this command."
+      return 1
+    fi
+
+    xcrun simctl boot "${simulator_name}" >/dev/null 2>&1 || true
   fi
 
   for _ in $(seq 1 20); do
@@ -169,7 +192,7 @@ ensure_booted_simulator() {
   done
 
   echo "[dev-mobile] no booted iOS Simulator detected."
-  echo "[dev-mobile] please open Simulator.app and rerun this command."
+  echo "[dev-mobile] if Simulator.app is already open, verify that at least one iOS Simulator runtime is installed in Xcode > Settings > Components."
   return 1
 }
 

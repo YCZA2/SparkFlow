@@ -151,6 +151,7 @@ npm run dev:mobile:simulator
 
 这个模式会先启动 Metro，再由脚本手动唤起已安装的 iOS dev client，
 比直接依赖 Expo CLI 自动 `openurl` 更稳定。
+如果脚本提示 `no available iOS simulator device found` 或 `no booted iOS Simulator detected`，通常不是项目问题，而是本机 Xcode 还没有安装任何 iOS Simulator runtime；请到 `Xcode > Settings > Components` 里先安装一个 iOS Simulator，再重试。
 
 如需单独管理本地数据库：
 
