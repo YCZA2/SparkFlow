@@ -86,6 +86,20 @@ Use the root script instead of manually starting services:
 bash scripts/dev-mobile.sh
 ```
 
+First-time local bootstrap before the command above:
+
+```bash
+cp backend/.env.example backend/.env
+python3.12 -m venv backend/.venv
+backend/.venv/bin/pip install -r backend/requirements.txt
+cd mobile && npm install
+```
+
+Important first-run notes:
+
+- `scripts/dev-mobile.sh` prefers `backend/.venv`; if it is missing, the script falls back to system `python3`, which may not have `alembic` and other backend dependencies installed.
+- Backend startup currently requires a non-empty `DASHSCOPE_API_KEY`. If you only need to boot the app shell and non-AI screens, you may use a temporary placeholder such as `DASHSCOPE_API_KEY=test-dashscope-key`; AI generation, transcription, embedding, and other DashScope-backed flows still require a real key.
+
 This starts:
 
 - local PostgreSQL on `5432`
@@ -145,13 +159,22 @@ bash scripts/dev-mobile.sh
 From `backend/`:
 
 ```bash
-APP_ENV=development uvicorn main:app --reload --no-access-log
+cp .env.example .env
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+APP_ENV=development .venv/bin/uvicorn main:app --reload --no-access-log
 ```
 
 If you start the backend manually and still use the local default database, start PostgreSQL first:
 
 ```bash
 bash scripts/postgres-local.sh start dev
+```
+
+If you only need to verify non-AI pages locally and do not have a real DashScope key yet, you can temporarily export a placeholder key before starting:
+
+```bash
+export DASHSCOPE_API_KEY=test-dashscope-key
 ```
 
 Run tests with:

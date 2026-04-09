@@ -126,11 +126,22 @@ bash scripts/dev-mobile.sh start
 npm run dev:mobile
 ```
 
+首次在新机器启动前，建议先完成依赖引导：
+
+```bash
+cp backend/.env.example backend/.env
+python3.12 -m venv backend/.venv
+backend/.venv/bin/pip install -r backend/requirements.txt
+cd mobile && npm install
+```
+
 补充约定：
 
 - 不要在仓库根目录执行 `npm install` 或 `npm ci`；根目录只保留联调 / 发布脚本入口。
 - 需要安装移动端依赖时，请进入 `mobile/` 执行：`cd mobile && npm install`
 - 仓库根目录现在带有安装保护；如误在根目录执行安装，会直接失败并提示正确路径。
+- `scripts/dev-mobile.sh` 启动后端时会优先使用 `backend/.venv`；如果 `.venv` 不存在，脚本会退回系统 `python3`，常见结果是 `alembic` 等后端依赖缺失。
+- 后端启动前需要在 `backend/.env` 中提供非空 `DASHSCOPE_API_KEY`。如果你当前只需要联调登录、列表和其他非 AI 页面，可临时填 `test-dashscope-key` 一类占位值；录音转写、脚本生成、摘要、标签、向量检索等能力仍然需要真实 DashScope key。
 
 如果你要用 iOS 模拟器而不是真机，请执行：
 
