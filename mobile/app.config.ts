@@ -89,9 +89,11 @@ export default (): ExpoConfig => {
       'expo-font',
       'expo-web-browser',
       './plugins/withTsinghuaPodsource.js',
+      'expo-asset',
       'expo-audio',
       'expo-sqlite',
       'expo-secure-store',
+      'expo-system-ui',
     ],
     experiments: {
       typedRoutes: true,

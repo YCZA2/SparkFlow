@@ -134,12 +134,22 @@ bash scripts/postgres-local.sh status
 bash scripts/postgres-local.sh logs
 ```
 
-### When native iOS changes are involved
+### When native mobile changes are involved
+
+`mobile/app.config.ts` and Expo config plugins are the source of truth for generated native config. Local `mobile/ios` and `mobile/android` directories are rebuild artifacts under `mobile/.gitignore`, not long-term truth.
 
 If you changed native config, Expo plugins, `mobile/app.config.ts`, or files under `mobile/ios`, rebuild first:
 
 ```bash
 bash scripts/dev-mobile.sh build
+```
+
+If you need to verify the same kind of change on Android locally, regenerate the Android native project from the Expo config before running the app:
+
+```bash
+cd mobile
+APP_ENV=development npx expo prebuild --platform android --clean
+APP_ENV=development npx expo run:android
 ```
 
 If build already succeeded but device installation failed, retry install without rebuilding:

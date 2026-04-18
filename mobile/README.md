@@ -140,6 +140,7 @@ cd mobile && npm install
 - 不要在仓库根目录执行 `npm install` 或 `npm ci`；根目录只保留联调 / 发布脚本入口。
 - 需要安装移动端依赖时，请进入 `mobile/` 执行：`cd mobile && npm install`
 - 仓库根目录现在带有安装保护；如误在根目录执行安装，会直接失败并提示正确路径。
+- `mobile/app.config.ts` 和 Expo config plugins 是移动端原生配置真值；本地 `mobile/ios`、`mobile/android` 只是按需重建的生成目录，并且已被 `mobile/.gitignore` 忽略。
 - `scripts/dev-mobile.sh` 启动后端时会优先使用 `backend/.venv`；如果 `.venv` 不存在，脚本会退回系统 `python3`，常见结果是 `alembic` 等后端依赖缺失。
 - 后端启动前需要在 `backend/.env` 中提供非空 `DASHSCOPE_API_KEY`。如果你当前只需要联调登录、列表和其他非 AI 页面，可临时填 `test-dashscope-key` 一类占位值；录音转写、脚本生成、摘要、标签、向量检索等能力仍然需要真实 DashScope key。
 
@@ -190,6 +191,14 @@ npm run dev:mobile:build
 bash scripts/dev-mobile.sh
 ```
 
+如需在本地验证 Android 原生改动，请显式按 Expo config 重生 Android 目录：
+
+```bash
+cd mobile
+APP_ENV=development npx expo prebuild --platform android --clean
+APP_ENV=development npx expo run:android
+```
+
 ### 模式5：install-only（只重试安装）
 
 适用场景：
@@ -226,6 +235,11 @@ npx expo run:ios --device
 
 完成后脚本会提示你回到模式1。
 
+补充说明：
+
+- 上面的 iOS 重建流程会直接从 `mobile/app.config.ts` 和当前 Expo config plugins 重新生成原生目录，因此修改 app identity、scheme、权限、插件后，应以这条流程为准，而不是手工修补生成目录。
+- EAS 云构建同样遵循这条约束：因为 `mobile/.gitignore` 已忽略生成的 `ios/`、`android/`，上传到 EAS 的项目会按当前 Expo 配置重新 prebuild。
+
 ## 发布命令
 
 现在推荐统一走根目录发布脚本，不再手动记忆 EAS profile：
@@ -252,6 +266,7 @@ bash scripts/mobile-release.sh submit prod ios --latest
 - `dev` 固定映射到 `development:device` profile，并注入 `APP_ENV=development`
 - `prod` 固定映射到 `production` profile，并注入 `APP_ENV=production`
 - `submit` 只允许 `prod`，避免误把开发包提审
+- 由于生成原生目录不作为仓库真值，发布前若刚改过 `mobile/app.config.ts` 或 Expo plugins，请先在本地执行一次对应平台的 prebuild / native build，确认生成结果和运行态一致。
 
 ## 三、真机联调约定
 
