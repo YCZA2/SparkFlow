@@ -36,6 +36,7 @@ from modules.fragments.derivative_pipeline import (
 from modules.knowledge.presentation import router as knowledge_router
 from modules.media_assets.presentation import router as media_assets_router
 from modules.pipelines.presentation import router as pipelines_router
+from modules.tasks.presentation import router as tasks_router
 from modules.scripts.application import DailyPushUseCase
 from modules.scripts.daily_push_pipeline import (
     PIPELINE_TYPE_DAILY_PUSH_GENERATION,
@@ -63,13 +64,7 @@ from modules.shared.media.audio_ingestion import (
     PIPELINE_TYPE_MEDIA_INGESTION,
 )
 from modules.shared.infrastructure.container import ServiceContainer, build_container
-from modules.shared.pipeline.pipeline_runtime import (
-    PipelineDefinitionRegistry,
-    PipelineDispatcher,
-    PipelineRecoveryService,
-    PipelineRunner,
-    StepExecutorRegistry,
-)
+from modules.shared.tasks.bootstrap import configure_task_runtime
 from modules.transcriptions.presentation import router as transcriptions_router
 from modules.scheduler.application import SchedulerService, create_scheduler
 
@@ -126,7 +121,7 @@ def _build_request_log_fields(
 def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
     """创建并装配 FastAPI 应用实例。"""
     container = build_container()
-    _configure_pipeline_runtime(container)
+    runtime = configure_task_runtime(container)
     scheduler_service = _build_scheduler_service(container)
 
     @asynccontextmanager
@@ -134,22 +129,17 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
         # 中文注释：测试 smoke/contract 可关闭启动副作用，避免数据库和调度器耦合。
         if enable_runtime_side_effects:
             ensure_local_test_user()
-            scheduler_service.start()
-            if container.pipeline_dispatcher:
-                container.pipeline_dispatcher.start()
         logger.info(
             "app_startup",
             runtime_side_effects_enabled=enable_runtime_side_effects,
-            scheduler_enabled=enable_runtime_side_effects,
-            pipeline_dispatcher_enabled=bool(container.pipeline_dispatcher),
+            scheduler_enabled=False,
+            celery_enabled=bool(container.celery_app),
         )
         try:
             yield
         finally:
             logger.info("app_shutdown")
             scheduler_service.stop()
-            if container.pipeline_dispatcher:
-                await container.pipeline_dispatcher.stop()
 
     app = FastAPI(
         title=settings.APP_NAME,
@@ -162,6 +152,7 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
 
     app.state.container = container
     app.state.scheduler_service = scheduler_service
+    app.state.celery_app = runtime.celery_app
 
     @app.middleware("http")
     async def bind_request_context(request: Request, call_next):
@@ -356,6 +347,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(transcriptions_router)
     app.include_router(scripts_router)
     app.include_router(knowledge_router)
+    app.include_router(tasks_router)
     app.include_router(pipelines_router)
 
 
@@ -382,89 +374,6 @@ def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:
         run_job=run_daily_push_job,
         run_writing_context_job=run_writing_context_job,
     )
-
-
-def _configure_pipeline_runtime(container: ServiceContainer) -> None:
-    """装配持久化流水线运行时和后台 worker。"""
-    definition_registry = PipelineDefinitionRegistry()
-    executor_registry = StepExecutorRegistry()
-    dispatcher = PipelineDispatcher(
-        session_factory=container.session_factory,
-        container=container,
-        definition_registry=definition_registry,
-        executor_registry=executor_registry,
-    )
-    container.pipeline_dispatcher = dispatcher
-    container.pipeline_runner = PipelineRunner(
-        session_factory=container.session_factory,
-        definition_registry=definition_registry,
-        dispatcher=dispatcher,
-    )
-    container.pipeline_recovery_service = PipelineRecoveryService(
-        session_factory=container.session_factory,
-        dispatcher=dispatcher,
-    )
-
-    _register_pipeline(
-        definition_registry=definition_registry,
-        executor_registry=executor_registry,
-        pipeline_type=PIPELINE_TYPE_MEDIA_INGESTION,
-        definitions=build_media_ingestion_pipeline_service(
-            container
-        ).build_pipeline_definitions(),
-    )
-    _register_pipeline(
-        definition_registry=definition_registry,
-        executor_registry=executor_registry,
-        pipeline_type=PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
-        definitions=build_fragment_derivative_pipeline_service(
-            container
-        ).build_pipeline_definitions(),
-    )
-    _register_pipeline(
-        definition_registry=definition_registry,
-        executor_registry=executor_registry,
-        pipeline_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
-        definitions=build_daily_push_pipeline_service(
-            container
-        ).build_pipeline_definitions(),
-    )
-    _register_pipeline(
-        definition_registry=definition_registry,
-        executor_registry=executor_registry,
-        pipeline_type=PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING,
-        definitions=build_reference_script_processing_pipeline_service(
-            container
-        ).build_pipeline_definitions(),
-    )
-    _register_pipeline(
-        definition_registry=definition_registry,
-        executor_registry=executor_registry,
-        pipeline_type=PIPELINE_TYPE_RAG_SCRIPT_GENERATION,
-        definitions=build_rag_script_pipeline_service(
-            container
-        ).build_pipeline_definitions(),
-    )
-    _register_pipeline(
-        definition_registry=definition_registry,
-        executor_registry=executor_registry,
-        pipeline_type=PIPELINE_TYPE_DOCUMENT_IMPORT,
-        definitions=DocumentImportStepExecutor().build_pipeline_definitions(),
-    )
-
-
-def _register_pipeline(
-    *,
-    definition_registry: PipelineDefinitionRegistry,
-    executor_registry: StepExecutorRegistry,
-    pipeline_type: str,
-    definitions,
-) -> None:
-    """统一注册某类流水线的步骤定义和执行器。"""
-    definition_registry.register(pipeline_type, definitions)
-    for definition in definitions:
-        executor_registry.register(pipeline_type, definition)
-
 
 def build_root_health_payload() -> dict:
     """构建根路径健康检查载荷。"""

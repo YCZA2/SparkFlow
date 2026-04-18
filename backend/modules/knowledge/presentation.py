@@ -14,6 +14,7 @@ from .schemas import (
     KnowledgeDocListResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
+    KnowledgeUploadResponse,
     KnowledgeDocUpdateRequest,
 )
 
@@ -48,9 +49,9 @@ async def create_knowledge_doc(
 
 @router.post(
     "/upload",
-    response_model=ResponseModel[KnowledgeDocItem],
+    response_model=ResponseModel[KnowledgeUploadResponse],
     summary="上传知识库文档",
-    description="上传 TXT 或 DOCX 文件并解析为知识库文档后入库。",
+    description="上传 TXT 或 DOCX 文件并解析为知识库文档；reference_script 会附带异步任务句柄。",
 )
 async def upload_knowledge_doc(
     file: UploadFile = File(..., description="TXT 或 Word 文档"),
@@ -60,7 +61,7 @@ async def upload_knowledge_doc(
     db: Session = Depends(get_db_session),
     use_case: KnowledgeUseCase = Depends(get_knowledge_use_case),
 ):
-    doc = await use_case.create_doc_from_upload(
+    payload = await use_case.create_doc_from_upload(
         db=db,
         user_id=current_user["user_id"],
         title=title,
@@ -69,7 +70,7 @@ async def upload_knowledge_doc(
         mime_type=file.content_type,
         doc_type=doc_type,
     )
-    return success_response(data=map_knowledge_doc(doc), message="知识库文档上传成功")
+    return success_response(data=payload, message="知识库文档上传成功")
 
 
 @router.get(

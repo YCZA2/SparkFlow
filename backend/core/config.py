@@ -255,6 +255,28 @@ class Settings(BaseSettings):
         description="判定碎片主题相关的相似度阈值"
     )
 
+    # Celery 配置
+    CELERY_BROKER_URL: str = Field(
+        default="amqp://guest:guest@127.0.0.1:5672//",
+        description="Celery broker 地址，默认使用本机 RabbitMQ",
+    )
+    CELERY_RESULT_BACKEND: str = Field(
+        default="redis://127.0.0.1:6379/0",
+        description="Celery result backend 地址，默认使用本机 Redis",
+    )
+    CELERY_TASK_ALWAYS_EAGER: bool = Field(
+        default=False,
+        description="是否开启 Celery eager 模式；测试环境可开启同步执行。",
+    )
+    CELERY_TASK_EAGER_PROPAGATES: bool = Field(
+        default=True,
+        description="eager 模式下是否直接抛出任务异常。",
+    )
+    CELERY_WORKER_CONCURRENCY: int = Field(
+        default=4,
+        description="Celery worker 默认并发数。",
+    )
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_ENV_FILES,
         env_file_encoding="utf-8",

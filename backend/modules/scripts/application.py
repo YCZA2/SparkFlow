@@ -58,6 +58,9 @@ class RagScriptGenerationUseCase:
             fragment_ids=fragment_ids,
         )
         return ScriptGenerationResponse(
+            task_id=run.id,
+            task_type="rag_script_generation",
+            status_query_url=f"/api/tasks/{run.id}",
             pipeline_run_id=run.id,
             pipeline_type="rag_script_generation",
             status=run.status,
@@ -149,6 +152,9 @@ class DailyPushUseCase:
             trigger_kind="manual_force" if force else "manual",
         )
         return ScriptGenerationResponse(
+            task_id=run.id,
+            task_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+            status_query_url=f"/api/tasks/{run.id}",
             pipeline_run_id=run.id,
             pipeline_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
             status=run.status,

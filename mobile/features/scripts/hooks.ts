@@ -40,12 +40,16 @@ export function useGenerateScript() {
         topic,
         fragment_ids: fragmentIds,
       });
+      const taskId = task.task_id ?? task.pipeline_run_id;
+      if (!taskId) {
+        throw new Error('生成任务返回缺少 task_id');
+      }
       await rememberPendingScriptPipelineTask(scope.userId, {
-        pipelineRunId: task.pipeline_run_id,
+        pipelineRunId: taskId,
         kind: 'manual',
         createdAt: new Date().toISOString(),
       });
-      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, '生成失败', { scope });
+      const script = await resolveScriptFromPipelineTask(taskId, '生成失败', { scope });
       setStatus('success');
       return script.id;
     } catch (err) {
@@ -192,7 +196,7 @@ export function useTodayDailyPush() {
 }
 
 function useDailyPushTriggerBase(
-  apiFn: () => Promise<{ pipeline_run_id: string }>,
+  apiFn: () => Promise<{ task_id?: string | null; pipeline_run_id?: string | null }>,
   errorMessage: string,
   kind: PendingScriptTaskKind
 ) {
@@ -206,12 +210,16 @@ function useDailyPushTriggerBase(
       setError(null);
       const scope = captureRequiredTaskExecutionScope();
       const task = await apiFn();
+      const taskId = task.task_id ?? task.pipeline_run_id;
+      if (!taskId) {
+        throw new Error('推盘任务返回缺少 task_id');
+      }
       await rememberPendingScriptPipelineTask(scope.userId, {
-        pipelineRunId: task.pipeline_run_id,
+        pipelineRunId: taskId,
         kind,
         createdAt: new Date().toISOString(),
       });
-      const script = await resolveScriptFromPipelineTask(task.pipeline_run_id, errorMessage, { scope });
+      const script = await resolveScriptFromPipelineTask(taskId, errorMessage, { scope });
       setStatus('success');
       return script;
     } catch (err) {

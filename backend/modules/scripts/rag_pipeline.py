@@ -16,7 +16,7 @@ from typing import Any
 
 from core.exceptions import ValidationError
 from core.logging_config import get_logger
-from models import PipelineRun
+from models import TaskRun
 from modules.shared.fragment_snapshots import FragmentSnapshotReader, read_fragment_snapshot_text
 from modules.shared.pipeline.pipeline_runtime import (
     PipelineExecutionContext,
@@ -65,7 +65,7 @@ class RagScriptPipelineService:
         user_id: str,
         topic: str,
         fragment_ids: list[str],
-    ) -> PipelineRun:
+    ) -> TaskRun:
         """创建 RAG 脚本生成任务态流水线。"""
         if not topic.strip():
             raise ValidationError(message="主题不能为空", field_errors={"topic": "请输入脚本主题"})

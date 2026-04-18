@@ -4,10 +4,9 @@ import {
   prepareManagedAudioFile,
 } from '@/features/core/files/runtime';
 import { sendForm } from '@/features/core/api/client';
+import type { TaskSubmissionHandle } from '@/types/task';
 
-export interface UploadAudioResponse {
-  pipeline_run_id: string;
-  pipeline_type: 'media_ingestion';
+export interface UploadAudioResponse extends TaskSubmissionHandle {
   fragment_id: string | null;
   local_fragment_id?: string | null;
   audio_object_key?: string | null;

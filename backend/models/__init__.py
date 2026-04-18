@@ -12,6 +12,7 @@ from models.fragment import FragmentFolder
 from models.script import Script
 from models.media import ContentMediaLink, KnowledgeDoc, MediaAsset
 from models.pipeline import PipelineRun, PipelineStepRun
+from models.task import TaskRun, TaskStepRun
 from models.writing_context import MethodologyEntry, StableCoreProfile
 
 __all__ = [
@@ -42,4 +43,6 @@ __all__ = [
     # 流水线
     "PipelineRun",
     "PipelineStepRun",
+    "TaskRun",
+    "TaskStepRun",
 ]

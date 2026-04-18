@@ -93,6 +93,9 @@ class DocumentImportUseCase:
             resource_id=normalized_local_fragment_id,
         )
         return DocumentImportResponse(
+            task_id=run.id,
+            task_type=PIPELINE_TYPE_DOCUMENT_IMPORT,
+            status_query_url=f"/api/tasks/{run.id}",
             pipeline_run_id=run.id,
             pipeline_type=PIPELINE_TYPE_DOCUMENT_IMPORT,
             local_fragment_id=normalized_local_fragment_id,

@@ -19,11 +19,11 @@
 | 登录与会话 | 已完成 | 邮箱密码登录、会话恢复、单设备在线 |
 | 灵感采集 | 已完成 | 语音上传、文本碎片、抖音链接导入、底部 `+` 导入抽屉 |
 | 本地正文 | 已完成 | fragment / script 统一 `body_html` 真值，backup queue 负责同步 |
-| 脚本生成 | 已完成 | `topic + SOP + 三层写作上下文`，返回 `pipeline_run_id` 轮询 |
+| 脚本生成 | 已完成 | `topic + SOP + 三层写作上下文`，返回 `task_id` 并统一走 `/api/tasks/*` 轮询 |
 | 提词拍摄 | 基本完成 | 拍摄、提词、保存系统相册 |
 | 知识库后端 | 已完成 | 创建、上传、搜索、详情、删除，支持 `txt/docx/pdf/xlsx` |
 | 向量与检索 | 已完成 | 相似检索、灵感云图、知识库 chunk 召回聚合 |
-| 后台任务 | 已完成 | `pipeline_runs` / `pipeline_step_runs` 为唯一任务事实源 |
+| 后台任务 | 已完成 | Celery + `task_runs` / `task_step_runs` 已成为任务执行与步骤投影主链路，`/api/pipelines/*` 仅保留兼容查询 |
 | 每日推盘后端 | 已完成 | scheduler + API + pipeline 已落地 |
 | 备份与恢复 | 已完成 | `/api/backups/*`、显式恢复、素材访问刷新 |
 | 文档体系 | 已完成 | 当前实现口径已收束到 `PRD.md` / `architecture.md` / README |

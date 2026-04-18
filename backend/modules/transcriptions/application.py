@@ -88,6 +88,9 @@ class TranscriptionUseCase:
             ),
         )
         return AudioUploadResponse(
+            task_id=result.pipeline_run_id,
+            task_type="media_ingestion",
+            status_query_url=f"/api/tasks/{result.pipeline_run_id}",
             pipeline_run_id=result.pipeline_run_id,
             pipeline_type="media_ingestion",
             fragment_id=result.fragment_id,

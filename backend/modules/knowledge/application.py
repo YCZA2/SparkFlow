@@ -5,7 +5,8 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ValidationError
-from models import KnowledgeDoc
+from domains.tasks import repository as task_repository
+from models import KnowledgeDoc, TaskRun
 from modules.shared.content.content_markdown import extract_plain_text
 from modules.shared.ports import KnowledgeIndexStore
 from utils.serialization import format_iso_datetime
@@ -14,7 +15,14 @@ from domains.knowledge import repository as knowledge_repository
 from .chunking import build_knowledge_chunks
 from .indexing import KnowledgeIndexingService
 from .parsers import parse_uploaded_text
-from .schemas import KnowledgeDocItem, KnowledgeDocListResponse, KnowledgeSearchItem, KnowledgeSearchResponse
+from .rag_processing_pipeline import PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING
+from .schemas import (
+    KnowledgeDocItem,
+    KnowledgeDocListResponse,
+    KnowledgeSearchItem,
+    KnowledgeSearchResponse,
+    KnowledgeUploadResponse,
+)
 
 VALID_DOC_TYPES = {"high_likes", "language_habit", "reference_script"}
 
@@ -36,6 +44,19 @@ def map_knowledge_doc(doc: KnowledgeDoc) -> KnowledgeDocItem:
         processing_error=doc.processing_error,
         created_at=format_iso_datetime(doc.created_at),
         updated_at=format_iso_datetime(doc.updated_at),
+    )
+
+
+def map_knowledge_upload_response(doc: KnowledgeDoc, task_run: TaskRun | None = None) -> KnowledgeUploadResponse:
+    """将上传结果映射为“文档详情 + 可选任务句柄”的统一响应。"""
+    payload = map_knowledge_doc(doc).model_dump()
+    return KnowledgeUploadResponse(
+        **payload,
+        task_id=task_run.id if task_run else None,
+        task_type=task_run.task_type if task_run else None,
+        status_query_url=f"/api/tasks/{task_run.id}" if task_run else None,
+        pipeline_run_id=task_run.id if task_run else None,
+        pipeline_type=task_run.task_type if task_run else None,
     )
 
 
@@ -121,10 +142,10 @@ class KnowledgeUseCase:
         filename: str,
         mime_type: str | None,
         doc_type: str,
-    ) -> KnowledgeDoc:
-        """解析上传文件并创建知识库文档。"""
+    ) -> KnowledgeUploadResponse:
+        """解析上传文件并创建知识库文档，必要时附带异步任务句柄。"""
         body_markdown = parse_uploaded_text(file_content=file_content, filename=filename)
-        return await self.create_doc(
+        doc = await self.create_doc(
             db=db,
             user_id=user_id,
             title=title,
@@ -134,6 +155,9 @@ class KnowledgeUseCase:
             source_filename=filename,
             source_mime_type=mime_type,
         )
+        task_run = self._find_upload_task(db=db, user_id=user_id, doc=doc)
+        db.refresh(doc)
+        return map_knowledge_upload_response(doc, task_run)
 
     async def _create_reference_script_doc(
         self,
@@ -294,6 +318,18 @@ class KnowledgeUseCase:
         doc = self.get_doc(db=db, user_id=user_id, doc_id=doc_id)
         knowledge_repository.delete(db=db, doc=doc)
         await self.indexing_service.delete_document(user_id=user_id, doc_id=doc_id)
+
+    def _find_upload_task(self, *, db: Session, user_id: str, doc: KnowledgeDoc) -> TaskRun | None:
+        """为异步上传文档回查刚创建的任务句柄。"""
+        if doc.doc_type != "reference_script":
+            return None
+        return task_repository.get_latest_run_by_resource(
+            db=db,
+            user_id=user_id,
+            task_type=PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING,
+            resource_type="knowledge_doc",
+            resource_id=doc.id,
+        )
 
 
 def _validate_doc_type(doc_type: str) -> None:

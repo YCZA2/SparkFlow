@@ -9,8 +9,8 @@ from modules.external_media.application import ExternalMediaUseCase
 
 
 @pytest.mark.asyncio
-async def test_import_audio_only_returns_pipeline_handle() -> None:
-    """外链导入 use case 应返回 local-first 任务句柄，而非同步媒体元数据。"""
+async def test_import_audio_only_returns_task_handle() -> None:
+    """外链导入 use case 应返回统一 task 句柄，而非同步媒体元数据。"""
     db = object()
     ingestion_service = SimpleNamespace(
         ingest_external_media=AsyncMock(
@@ -32,6 +32,9 @@ async def test_import_audio_only_returns_pipeline_handle() -> None:
     )
 
     assert payload.model_dump() == {
+        "task_id": "run-001",
+        "task_type": "media_ingestion",
+        "status_query_url": "/api/tasks/run-001",
         "pipeline_run_id": "run-001",
         "pipeline_type": "media_ingestion",
         "fragment_id": "fragment-001",

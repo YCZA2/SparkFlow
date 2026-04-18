@@ -43,4 +43,4 @@ async def upload_audio(
         folder_id=folder_id,
         local_fragment_id=local_fragment_id,
     )
-    return success_response(data=payload, message="音频上传成功，已创建后台流水线")
+    return success_response(data=payload, message="音频上传成功，已创建后台任务")

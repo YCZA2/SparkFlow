@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.exceptions import ValidationError
 from core.logging_config import get_logger
-from domains.pipelines import repository as pipeline_repository
+from domains.tasks import repository as task_repository
 from domains.scripts import repository as script_repository
-from models import PipelineRun
+from models import TaskRun
 from modules.shared.pipeline.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
 from modules.shared.ports import VectorStore
 from modules.shared.content.content_html import convert_markdown_to_basic_html
@@ -65,7 +65,7 @@ class DailyPushPersistenceService:
         self,
         *,
         db: Session,
-        run: PipelineRun,
+        run: TaskRun,
         input_payload: dict[str, Any],
         draft: str,
         title: str | None = None,
@@ -98,7 +98,7 @@ class DailyPushPersistenceService:
                 is_daily_push=True,
                 auto_commit=False,
             )
-            pipeline_repository.update_run_resource(
+            task_repository.update_run_resource(
                 db=db,
                 run_id=run.id,
                 resource_type="script",
@@ -155,7 +155,7 @@ class DailyPushPipelineService:
         source_day_offset: int,
         title_prefix: str,
         trigger_kind: str,
-    ) -> PipelineRun:
+    ) -> TaskRun:
         """为指定用户创建每日推盘流水线，必要时复用当天已有结果。"""
         target_time = reference_time or datetime.now(timezone.utc)
         today_start, today_end = get_local_day_bounds(target_time, day_offset=0)
@@ -166,19 +166,19 @@ class DailyPushPipelineService:
             end_at=today_end,
         )
         if existing_script:
-            existing_run = pipeline_repository.get_latest_run_by_resource(
+            existing_run = task_repository.get_latest_run_by_resource(
                 db=db,
                 user_id=user_id,
-                pipeline_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+                task_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
                 resource_type="script",
                 resource_id=existing_script.id,
             )
             if existing_run:
                 return existing_run
-        existing_active_run = pipeline_repository.get_latest_run_by_type_in_window(
+        existing_active_run = task_repository.get_latest_run_by_type_in_window(
             db=db,
             user_id=user_id,
-            pipeline_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+            task_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
             start_at=today_start,
             end_at=today_end,
             statuses=["queued", "running", "succeeded"],

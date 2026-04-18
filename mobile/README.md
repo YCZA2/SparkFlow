@@ -357,14 +357,14 @@ http://192.168.31.157:8000
 - `POST /api/scripts/daily-push/trigger`
 - `POST /api/scripts/daily-push/force-trigger`
 
-这些接口先返回 `pipeline_run_id`，不会保证请求返回时已经拿到最终 `fragment` 或 `script`。
+这些接口先返回 `task_id` / `task_type` / `status_query_url`，不会保证请求返回时已经拿到最终 `fragment` 或 `script`；兼容字段 `pipeline_run_id` 仅保留过渡期。
 
 联调顺序应改为：
 
-1. 发起创建请求，拿到 `pipeline_run_id`
-2. 轮询 `GET /api/pipelines/{run_id}`
-3. 需要看步骤时，再查 `GET /api/pipelines/{run_id}/steps`
-4. 失败后可调用 `POST /api/pipelines/{run_id}/retry`
+1. 发起创建请求，拿到 `task_id`
+2. 轮询 `GET /api/tasks/{task_id}`
+3. 需要看步骤时，再查 `GET /api/tasks/{task_id}/steps`
+4. 失败后可调用 `POST /api/tasks/{task_id}/retry`
 
 当前补齐范围：
 
@@ -393,7 +393,7 @@ http://192.168.31.157:8000
 - 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`
 - 录音上传和外链导入都会先创建本地 placeholder fragment，再在 pipeline 成功后把 `transcript` 种成可编辑正文，并将 `summary / tags / 音频元数据` 一并 patch 回写到本地实体
 - 手动脚本生成前会先显式执行一次 `flushBackupQueue()`；如果本地正文还没成功同步，客户端会阻断生成，避免后端基于旧 snapshot 出稿
-- local-first 语音上传成功后的主状态查询统一走 `pipeline_run_id -> GET /api/pipelines/{run_id}`；旧的 `GET /api/transcriptions/{fragment_id}` 兼容查询接口已移除
+- local-first 语音上传成功后的主状态查询统一走 `task_id -> GET /api/tasks/{task_id}`；旧的 `GET /api/transcriptions/{fragment_id}` 兼容查询接口已移除
 
 ### 1. 一打开 App 就红屏，出现 `8000/index.bundle`
 
@@ -437,7 +437,7 @@ bash scripts/postgres-local.sh status
 
 如果接口请求成功但页面一直卡在处理中，再额外检查：
 
-1. `GET /api/pipelines/{run_id}` 是否一直停在 `queued` / `running`
+1. `GET /api/tasks/{task_id}` 是否一直停在 `queued` / `running`
 2. 后端是否已经完成 Alembic 迁移
 3. Dify、本地 STT 或外链解析依赖是否可用
 
@@ -546,8 +546,8 @@ cd backend
 
 当前后台任务流水线依赖以下新表已经存在：
 
-- `pipeline_runs`
-- `pipeline_step_runs`
+- `task_runs`
+- `task_step_runs`
 
 ## 七、前后端协作入口
 

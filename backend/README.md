@@ -171,7 +171,7 @@ cd backend
 - 调用 `POST /api/auth/token` 获取开发用测试 token
 - 创建 1-2 条手动文本碎片
 - 调用 `POST /api/scripts/generation`
-- 轮询 `GET /api/pipelines/{run_id}` 直到终态
+- 轮询 `GET /api/tasks/{task_id}` 直到终态
 - 成功后读取 `GET /api/scripts/{script_id}` 并打印结果摘要
 - 传入 `--cleanup` 时自动删除本次联调创建的碎片和脚本
 
@@ -189,11 +189,11 @@ cd backend
 - 轮询 `reference_script` 直到异步处理完成
 - 调用 `POST /api/knowledge/search` 验证 chunk 聚合检索结果
 - 创建 1-2 条手动碎片并触发 `POST /api/scripts/generation`
-- 轮询 `GET /api/pipelines/{run_id}` 直到终态
+- 轮询 `GET /api/tasks/{task_id}` 直到终态
 - 成功后读取 `GET /api/scripts/{script_id}` 并输出搜索命中和脚本摘要
 - 传入 `--cleanup` 时自动删除本次联调创建的知识文档、碎片和脚本
 
-客户端只需要继续轮询 SparkFlow 自己的 `/api/pipelines/{run_id}`，不需要感知后台每日方法论刷新、大纲生成和草稿落库的后端内部步骤。
+客户端只需要轮询 SparkFlow 自己的 `/api/tasks/{task_id}`，不需要感知后台每日方法论刷新、大纲生成和草稿落库的后端内部步骤；`/api/pipelines/*` 只保留兼容查询。
 
 ## Backend Architecture
 
@@ -222,11 +222,14 @@ cd backend
    - `backend/modules/shared/infrastructure/infrastructure.py` 只保留兼容导出，真实实现拆到 `storage.py`、`vector_store.py`、`providers.py`。
    - `backend/modules/shared/media/audio_ingestion_use_case.py` 负责媒体导入入口编排，`backend/modules/shared/media/media_ingestion_steps.py` 负责 transcript-first 步骤执行，`backend/modules/shared/media/media_ingestion_persistence.py` 负责落库与终态输出。
    - `backend/modules/shared/media/audio_ingestion.py` 保留统一入口导出，供现有依赖平滑迁移。
-   - `backend/modules/shared/pipeline/pipeline_runtime.py` 提供持久化后台流水线运行时、worker 抢占、重试与恢复。
+   - `backend/modules/shared/tasks/runtime.py` 与 `backend/modules/shared/celery/*` 提供 Celery 任务运行时、步骤投递、重试与恢复。
    - `backend/modules/fragments/derivative_pipeline.py` 负责 fragment 摘要、标签与向量的异步回填流水线。
-7. `modules/pipelines`
-   - 后台任务流水线层。
-   - 负责 `pipeline_runs` / `pipeline_step_runs` 查询、步骤详情与手动重跑。
+7. `modules/tasks`
+   - 后台任务主查询层。
+   - 负责 `task_runs` / `task_step_runs` 查询、步骤详情与手动重跑。
+8. `modules/pipelines`
+   - 兼容查询层。
+   - 保留 `/api/pipelines/*` legacy 读取与重跑转发，避免旧客户端立刻失效。
 8. `core/logging_config.py`
    - 结构化日志装配层。
    - 负责 `structlog` 配置、request-id 绑定、访问日志分流、第三方 logger 降噪，以及控制台与按天轮转文件输出。
@@ -361,37 +364,41 @@ bash scripts/postgres-local.sh stop
 任务与工作流相关接口：
 
 - `POST /api/scripts/generation`
-- `GET /api/pipelines/{run_id}`
-- `GET /api/pipelines/{run_id}/steps`
-- `POST /api/pipelines/{run_id}/retry`
+- `GET /api/tasks/{task_id}`
+- `GET /api/tasks/{task_id}/steps`
+- `POST /api/tasks/{task_id}/retry`
+- `GET /api/pipelines/{run_id}`（deprecated）
+- `GET /api/pipelines/{run_id}/steps`（deprecated）
+- `POST /api/pipelines/{run_id}/retry`（deprecated）
 
 当前接入策略：
 
-- `POST /api/transcriptions` / `POST /api/external-media/audio-imports` / `POST /api/scripts/generation` / `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 现在都会先创建 `pipeline_runs`
-- `GET /api/pipelines/{run_id}` / `GET /api/pipelines/{run_id}/steps` / `POST /api/pipelines/{run_id}/retry` 提供统一后台任务观察与补偿入口
+- `POST /api/transcriptions` / `POST /api/external-media/audio-imports` / `POST /api/scripts/generation` / `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 现在都会先创建 `task_runs`
+- `POST /api/knowledge/upload` 在 `reference_script` 场景下也会附带统一任务句柄
+- `GET /api/tasks/{task_id}` / `GET /api/tasks/{task_id}/steps` / `POST /api/tasks/{task_id}/retry` 提供统一后台任务观察与补偿入口
 - `POST /api/external-media/audio-imports` 不再同步解析或下载媒体；`resolve_external_media` / `download_media` 也属于 `media_ingestion` pipeline 步骤
-- `media_ingestion` 当前固定步骤为 `resolve_external_media`（按需）、`download_media`、`transcribe_audio`、`finalize_fragment`；`GET /api/pipelines/{run_id}` 成功时允许 `summary=null`、`tags=[]`
+- `media_ingestion` 当前固定步骤为 `resolve_external_media`（按需）、`download_media`、`transcribe_audio`、`finalize_fragment`；`GET /api/tasks/{task_id}` 成功时允许 `summary=null`、`tags=[]`
 - transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` pipeline，异步执行摘要、标签和向量回填；该回填现在支持只有 `local_fragment_id`、没有 `Fragment` projection 的 local-first 路径，失败也不会回滚已成功的 ingest
 - SparkFlow 后端先收集预置稳定内核、已缓存方法论、相关素材和可选碎片背景，再生成大纲与草稿
 - `rag_script_generation` pipeline 依次执行 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`
-- `pipeline_runs` / `pipeline_step_runs` 是后台状态事实源
+- `task_runs` / `task_step_runs` 是后台状态事实源；`pipeline_runs` / `pipeline_step_runs` 只保留历史兼容查询
 - `agent_runs` 与 `/api/agent/*` 已移除，脚本生成公开链路完全收口到 `scripts + pipelines`
 
 任务态客户端约定：
 
-- `POST /api/transcriptions` 返回 `pipeline_run_id`、`pipeline_type`、以及按路径不同返回的 `fragment_id` 或 `local_fragment_id`
+- `POST /api/transcriptions` 返回 `task_id`、`task_type`、`status_query_url`，以及按路径不同返回的 `fragment_id` 或 `local_fragment_id`；兼容字段 `pipeline_run_id` / `pipeline_type` 仍会短期保留
 - `POST /api/transcriptions` 与 `POST /api/external-media/audio-imports` 现在要求 `local_fragment_id` 必填，调用前必须先在客户端创建本地占位 fragment
-- `POST /api/external-media/audio-imports` 请求体支持 `share_url`、`platform` 和可选 `folder_id`，返回 `pipeline_run_id`、`pipeline_type`、`fragment_id`
-- `POST /api/scripts/generation` 返回 `pipeline_run_id`、`pipeline_type`、`status`
-- `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 返回 `pipeline_run_id`、`pipeline_type`、`status`
+- `POST /api/external-media/audio-imports` 请求体支持 `share_url`、`platform` 和可选 `folder_id`，返回统一任务句柄与 `fragment_id`
+- `POST /api/scripts/generation` 返回 `task_id`、`task_type`、`status_query_url`、`status`
+- `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 返回 `task_id`、`task_type`、`status_query_url`、`status`
 - `GET /api/scripts` / `GET /api/scripts/{script_id}` 在没有来源碎片时会稳定返回 `source_fragment_ids=[]` 与 `source_fragment_count=0`，不使用 `null`
 - 文件类响应不再暴露 `audio_path` / `storage_path`，统一返回签名 `*_file_url` 与过期时间
 - `fragments.transcript` 表示机器转写原文，`body_html` 表示用户整理后的正式正文；正文消费统一按 `body_html -> transcript` 回退
 - 手动文本碎片主链路已不再依赖 `POST /api/fragments*` 远端建单；客户端应先写本地真值，再通过 `/api/backups/*` 同步快照，`transcript` 仅保留给语音转写链路
-- 客户端应轮询 `/api/pipelines/{run_id}`，在成功后再读取 `fragment_id`、`local_fragment_id` 或 `script_id`；对 transcript 任务来说，首个成功仅保证 transcript 已可用，`summary` / `tags` 可能由后续 derivative pipeline 异步补齐
-- 当前后端已移除 `GET /api/transcriptions/{fragment_id}`、`GET /api/fragments` 与 `GET /api/fragments/{fragment_id}` 这三条兼容读取接口；状态查询统一走 `pipeline_run_id -> /api/pipelines/{run_id}`，fragment 主读取统一走移动端本地真值
+- 客户端应轮询 `/api/tasks/{task_id}`，在成功后再读取 `fragment_id`、`local_fragment_id` 或 `script_id`；对 transcript 任务来说，首个成功仅保证 transcript 已可用，`summary` / `tags` 可能由后续 derivative pipeline 异步补齐
+- 当前后端已移除 `GET /api/transcriptions/{fragment_id}`、`GET /api/fragments` 与 `GET /api/fragments/{fragment_id}` 这三条兼容读取接口；状态查询统一走 `task_id -> /api/tasks/{task_id}`，fragment 主读取统一走移动端本地真值
 - 手动脚本生成在客户端发起 `POST /api/scripts/generation` 之前，需要先完成一次成功的 backup flush；后端只消费已同步成功的 fragment snapshot，不读取设备上尚未上传的正文
-- 外链导入成功后的 `platform`、`share_url`、`media_id`、`title`、`author`、`cover_url`、`content_type`、`audio_file_url` 统一从 `GET /api/pipelines/{run_id}` 的 `output` 读取
+- 外链导入成功后的 `platform`、`share_url`、`media_id`、`title`、`author`、`cover_url`、`content_type`、`audio_file_url` 统一从 `GET /api/tasks/{task_id}` 的 `output` 读取
 - 当前移动端已切脚本生成任务态；外链导入也已接入底部 `+` 抽屉、导入页和任务态轮询
 
 ## Frontend Debug Logs

@@ -12,13 +12,7 @@ class PipelineResourcePreview(BaseModel):
 
 class PipelineRunResponse(BaseModel):
     id: str
-    pipeline_type: Literal[
-        "media_ingestion",
-        "script_generation",
-        "daily_push_generation",
-        "rag_script_generation",
-        "fragment_derivative_backfill",
-    ]
+    pipeline_type: str
     status: str
     current_step: str | None = None
     error_message: str | None = None

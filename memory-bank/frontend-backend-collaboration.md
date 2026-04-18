@@ -80,13 +80,13 @@ SparkFlow 当前以后端模块内 `schemas.py` 作为 API contract 单一事实
 
 ### 任务态约定
 
-- 媒体导入、脚本生成、每日推盘触发等后台链路，创建接口默认返回 `pipeline_run_id`
-- 任务真实状态以后端 `pipeline_runs` / `pipeline_step_runs` 为准
-- 外链导入接口只返回任务句柄；媒体元数据和最终 `audio_file_url` 统一从 `GET /api/pipelines/{run_id}` 的 `output` 读取
+- 媒体导入、脚本生成、每日推盘触发等后台链路，创建接口默认返回 `task_id` / `task_type` / `status_query_url`
+- 任务真实状态以后端 `task_runs` / `task_step_runs` 与 Celery 执行为准；`/api/pipelines/*` 仅保留兼容查询
+- 外链导入接口只返回任务句柄；媒体元数据和最终 `audio_file_url` 统一从 `GET /api/tasks/{task_id}` 的 `output` 读取
 - 旧的 `GET /api/transcriptions/{fragment_id}`、`GET /api/fragments` 与 `GET /api/fragments/{fragment_id}` 兼容读取接口已移除
-- 前端通过 `GET /api/pipelines/{run_id}` 观察整体状态
-- 需要展示细分节点时，通过 `GET /api/pipelines/{run_id}/steps`
-- 失败补偿统一走 `POST /api/pipelines/{run_id}/retry`
+- 前端通过 `GET /api/tasks/{task_id}` 观察整体状态
+- 需要展示细分节点时，通过 `GET /api/tasks/{task_id}/steps`
+- 失败补偿统一走 `POST /api/tasks/{task_id}/retry`
 
 ## 5. 任务拆分方式
 

@@ -55,13 +55,17 @@ export default function ImportLinkScreen() {
         deviceId,
       });
       const task = await importExternalAudio(trimmedShareUrl, params.folderId, localFragment.id);
+      const taskId = task.task_id ?? task.pipeline_run_id;
+      if (!taskId) {
+        throw new Error('导入任务返回缺少 task_id');
+      }
       assertTaskScopeActive(scope);
       await updateLocalFragmentEntity(localFragment.id, {
-        media_pipeline_run_id: task.pipeline_run_id,
+        media_pipeline_run_id: taskId,
         media_pipeline_status: 'queued',
         media_pipeline_error_message: null,
       });
-      const pipeline = await waitForPipelineTerminal(task.pipeline_run_id, {
+      const pipeline = await waitForPipelineTerminal(taskId, {
         timeoutMs: 180_000,
         scope,
       });

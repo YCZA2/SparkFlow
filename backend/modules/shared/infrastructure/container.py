@@ -48,6 +48,9 @@ class ServiceContainer:
     file_storage: FileStorage
     external_media_provider: ExternalMediaProvider
     web_search_provider: WebSearchProvider
+    celery_app: Any | None = None
+    task_runner: Any | None = None
+    task_recovery_service: Any | None = None
     pipeline_runner: Any | None = None
     pipeline_dispatcher: Any | None = None
     pipeline_recovery_service: Any | None = None

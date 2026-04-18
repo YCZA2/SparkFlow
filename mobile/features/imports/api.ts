@@ -1,10 +1,9 @@
 import { API_ENDPOINTS } from '@/constants/config';
 import { post } from '@/features/core/api/client';
 import { buildExternalAudioImportPayload } from '@/features/imports/importState';
+import type { TaskSubmissionHandle } from '@/types/task';
 
-export interface ExternalAudioImportTask {
-  pipeline_run_id: string;
-  pipeline_type: 'media_ingestion';
+export interface ExternalAudioImportTask extends TaskSubmissionHandle {
   fragment_id: string | null;
   local_fragment_id?: string | null;
   source: string;

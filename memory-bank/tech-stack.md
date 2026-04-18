@@ -20,7 +20,7 @@
 | Backend | FastAPI 0.135 + Uvicorn 0.41 | 模块化单体 |
 | ORM | SQLAlchemy 2.0 + Alembic | PostgreSQL migrations |
 | Scheduling | APScheduler 3.11 | 每日推盘 cron |
-| Async jobs | PostgreSQL task tables + in-app worker | `pipeline_runs` / `pipeline_step_runs` |
+| Async jobs | Celery + RabbitMQ + Redis + PostgreSQL task projection | `task_runs` / `task_step_runs` |
 | LLM | Qwen | 默认通过 DashScope |
 | STT | DashScope / Aliyun | 当前默认 DashScope |
 | Embedding | Qwen text-embedding-v2 | 通过 provider factory 装配 |
@@ -102,7 +102,7 @@
 - `modules/*/presentation.py`: Router
 - `modules/*/application.py`: Use case / orchestration
 - `modules/shared/*`: container、ports、共享增强逻辑
-- `backend/modules/shared/pipeline/pipeline_runtime.py`: 持久化任务运行时、worker、恢复与重跑
+- `backend/modules/shared/tasks/runtime.py` + `backend/modules/shared/celery/*`: Celery 任务运行时、步骤投递与恢复重跑
 - `domains/*/repository.py`: 数据访问
 - `services/*`: 外部 provider 与工厂
 
@@ -120,7 +120,7 @@
 - 默认连接串：`postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow`
 - ORM：SQLAlchemy
 - 迁移工具：Alembic
-- 后台任务表：`pipeline_runs` / `pipeline_step_runs`
+- 后台任务表：`task_runs` / `task_step_runs`（`pipeline_runs` / `pipeline_step_runs` 仅保留 legacy 兼容查询）
 
 ### 4.2 File storage
 

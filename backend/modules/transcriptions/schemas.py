@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from modules.tasks.schemas import TaskSubmissionHandle
 
 
-class AudioUploadResponse(BaseModel):
-    pipeline_run_id: str
-    pipeline_type: str
+class AudioUploadResponse(TaskSubmissionHandle):
     fragment_id: str | None = None
     local_fragment_id: str | None = None
     audio_object_key: str | None = None

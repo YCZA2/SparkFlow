@@ -165,7 +165,7 @@ flowchart TD
 - `script.source_fragment_ids` 只表示首次生成来源，script 不会重新进入 fragment 检索、聚类、每日推盘选材或下一轮脚本生成输入
 - 移动端在收到“设备会话已失效”后会停止自动补 token，转入本地只读态，并要求用户在 `profile.tsx` 显式重新连接当前设备
 - 录音上传、外链导入、脚本生成、备份队列冲刷和显式恢复现在都绑定统一 `TaskExecutionScope(user_id + session_version + workspace_epoch)`；一旦账号切换、登出或会话失效，飞行中的旧任务会停止回写当前工作区，并留在原工作区等待下次恢复
-- `scripts` 额外维护了按工作区隔离的 pending pipeline 注册表；App 启动并挂载工作区后，会先恢复本地 `pending|failed` 备份，再根据保存的 `pipeline_run_id` 重查媒体任务和脚本生成终态
+- `scripts` 额外维护了按工作区隔离的 pending task 注册表；App 启动并挂载工作区后，会先恢复本地 `pending|failed` 备份，再根据保存的 `task_id` 重查媒体任务和脚本生成终态；个别本地字段名仍保留 `pipeline*` 仅作兼容
 
 ### 3.5 Backup Snapshot And File Sync
 
@@ -271,7 +271,8 @@ flowchart TD
 - `backend/modules/shared/media/media_ingestion_steps.py`: 媒体导入 pipeline 的步骤执行器，当前只负责解析/下载、STT、transcript 落库与主任务终态。
 - `backend/modules/shared/media/media_ingestion_persistence.py`: 媒体导入链路的音频元数据回写、转写落库与终态输出组装。
 - `backend/modules/shared/media/stored_file_payloads.py`: `StoredFile` 与 pipeline payload 的互转 helper。
-- `backend/modules/shared/pipeline/pipeline_runtime.py`: 持久化后台流水线运行时，负责步骤定义、worker 抢占、自动重试与恢复。
+- `backend/modules/shared/tasks/runtime.py`：Celery 任务运行时，负责步骤定义、首步入队、自动重试与恢复。
+- `backend/modules/shared/celery/*`：Celery app、步骤投递、队列路由与 beat 任务装配。
 - `backend/modules/shared/pipeline/pipeline_types.py`: pipeline 步骤类型定义。
 - `backend/modules/fragments/derivative_pipeline.py`: fragment 摘要、标签和向量异步回填流水线。
 - `backend/modules/shared/content/`: 正文处理子目录，包含 `content_html.py`、`content_markdown.py`、`content_schemas.py`、`editor_document.py`、`fragment_body_markdown.py`、`document_parsers.py`（共享文档解析器，支持 txt/md/docx/pdf/xlsx）。
@@ -377,7 +378,8 @@ flowchart TD
 - 媒体资源表：`media_assets` / `content_media_links`，对象元数据保存 `storage_provider` / `bucket` / `object_key`
 - 碎片向量 namespace: `fragments_{user_id}`
 - 知识库向量 namespace: `knowledge_{user_id}`
-- 后台流水线表：`pipeline_runs` / `pipeline_step_runs`
+- 后台任务表：`task_runs` / `task_step_runs`
+- `pipeline_runs` / `pipeline_step_runs`：legacy 兼容查询表，不再写入新任务
 - 碎片音频对象元数据：`audio_storage_provider` / `audio_bucket` / `audio_object_key`
 - 后端全量业务日志文件: `runtime_logs/backend.log`
 - 后端错误日志文件: `runtime_logs/backend-error.log`
@@ -416,8 +418,8 @@ sequenceDiagram
     App->>API: POST audio (+ optional folder_id)
     API->>FS: save file
     API->>API: audio_ingestion.ingest_audio(upload)
-    API->>DB: seed fragment snapshot + pipeline_runs + pipeline_step_runs
-    API-->>App: pipeline_run_id + fragment_id
+    API->>DB: seed fragment snapshot + task_runs + task_step_runs
+    API-->>App: task_id + fragment_id
     PIPE->>STT: transcribe(audio)
     PIPE->>DB: persist transcript + speaker_segments
     PIPE->>DB: mark media_ingestion succeeded
@@ -449,8 +451,8 @@ sequenceDiagram
     App->>API: POST share_url + platform (+ optional folder_id)
     API->>DB: seed local fragment snapshot(source=voice, audio_source=external_link)
     API->>API: audio_ingestion.ingest_external_media(external_link)
-    API->>DB: create pipeline_runs + pipeline_step_runs
-    API-->>App: pipeline_run_id + fragment_id
+    API->>DB: create task_runs + task_step_runs
+    API-->>App: task_id + fragment_id
     PIPE->>Provider: resolve_audio(...)
     Provider->>FF: extract m4a from remote video url
     FF-->>Provider: temp m4a path
@@ -484,8 +486,8 @@ sequenceDiagram
     App->>API: POST file + local_fragment_id (+ optional folder_id)
     API->>FS: save document file
     API->>DB: seed fragment snapshot(source=document_import, content_state=empty)
-    API->>DB: create pipeline_runs + pipeline_step_runs
-    API-->>App: pipeline_run_id + file_size
+    API->>DB: create task_runs + task_step_runs
+    API-->>App: task_id + file_size
     PIPE->>FS: read_bytes(document file)
     PIPE->>PARSER: parse_uploaded_text(txt/md/docx/pdf/xlsx)
     PARSER-->>PIPE: plain_text
@@ -521,8 +523,8 @@ sequenceDiagram
     participant SCRIPT as scripts repository
 
     App->>API: POST fragment_ids + mode + query_hint?
-    API->>DB: create pipeline_runs + pipeline_step_runs
-    API-->>App: pipeline_run_id + status
+    API->>DB: create task_runs + task_step_runs
+    API-->>App: task_id + status
     PIPE->>VDB: query_knowledge_docs(...)
     PIPE->>WEB: optional search(...)
     PIPE->>WFP: submit workflow run
@@ -530,7 +532,7 @@ sequenceDiagram
     WFP-->>PIPE: outputs(title/outline/draft/...)
     PIPE->>SCRIPT: create script(body_html=normalized_html)
     PIPE->>DB: mark pipeline succeeded + resource(script_id)
-    App->>API: GET /api/pipelines/{run_id}
+    App->>API: GET /api/tasks/{task_id}
     API-->>App: script_id + latest status
 ```
 
@@ -538,8 +540,8 @@ sequenceDiagram
 
 - 外挂工作流 provider 只负责远程执行步骤，不直接访问 PostgreSQL、ChromaDB 或业务表。
 - fragments、knowledge hits 和可选 web hits 都由 SparkFlow 后端先收集。
-- SparkFlow 后端向内部 pipeline 传递稳定内核、方法论、相关素材、SOP 大纲和可选碎片背景；客户端继续只消费 `pipeline_run_id` 和 `/api/pipelines/*`。
-- `pipeline_runs` / `pipeline_step_runs` 是后台状态唯一事实源；`agent_runs` 与 `/api/agent/*` 已移除。
+- SparkFlow 后端向内部 task pipeline 传递稳定内核、方法论、相关素材、SOP 大纲和可选碎片背景；客户端主路径统一消费 `task_id` 和 `/api/tasks/*`，`/api/pipelines/*` 仅保留兼容查询。
+- `task_runs` / `task_step_runs` 是后台状态唯一事实源；`agent_runs` 与 `/api/agent/*` 已移除。
 
 ### 5.4 Script Generation Notes
 
@@ -548,11 +550,11 @@ sequenceDiagram
     participant App as Mobile
     participant API as /api/scripts/generation
     participant API as /api/scripts/generation
-    participant PIPE as /api/pipelines/{run_id}
+    participant PIPE as /api/tasks/{task_id}
     participant SCRIPT as /api/scripts/{script_id}
 
     App->>API: 创建脚本任务
-    API-->>App: pipeline_run_id
+    API-->>App: task_id
     App->>PIPE: 轮询直到 succeeded
     PIPE-->>App: resource.script_id
     App->>SCRIPT: 读取脚本详情
@@ -562,7 +564,7 @@ sequenceDiagram
 关键点：
 
 - `POST /api/scripts/generation` 只负责创建任务，不再同步返回 `Script`。
-- 客户端应统一经由 `/api/pipelines/{run_id}` 读取最终 `script_id`，再跳转脚本详情。
+- 客户端应统一经由 `/api/tasks/{task_id}` 读取最终 `script_id`，再跳转脚本详情。
 - 当前生成链路使用 `topic` 作为大纲生成和相关素材召回的统一驱动输入；稳定内核当前走系统预置，碎片方法论只读取缓存条目，离线维护任务每日检测碎片总量与增量后决定是否重算。
 - pipeline 关键步骤为 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`。
 
@@ -611,7 +613,7 @@ sequenceDiagram
 关键点：
 
 - scheduler 在 FastAPI lifespan 内启动与停止。
-- 手动触发接口已存在：`/api/scripts/daily-push/trigger` 和 `/api/scripts/daily-push/force-trigger`，当前返回异步 `pipeline_run_id`。
+- 手动触发接口已存在：`/api/scripts/daily-push/trigger` 和 `/api/scripts/daily-push/force-trigger`，当前返回异步 `task_id` / `task_type` / `status_query_url`。
 - 每日推盘当前和脚本生成一样，统一走后端直连 LLM + pipeline 编排；摘要/标签增强沿用同一组基础 provider。
 - 当前后端链路已完成，但首页“每日灵感卡片”还没有稳定接入到实际主页面。
 

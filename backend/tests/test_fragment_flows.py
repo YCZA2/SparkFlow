@@ -109,14 +109,13 @@ async def test_import_external_audio_only_creates_pipeline_in_request_phase(asyn
     )
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert payload == {
-        "pipeline_run_id": payload["pipeline_run_id"],
-        "pipeline_type": "media_ingestion",
-        "fragment_id": None,
-        "local_fragment_id": "import-local-001",
-        "source": "voice",
-        "audio_source": "external_link",
-    }
+    assert payload["task_id"] == payload["pipeline_run_id"]
+    assert payload["task_type"] == payload["pipeline_type"] == "media_ingestion"
+    assert payload["status_query_url"] == f"/api/tasks/{payload['task_id']}"
+    assert payload["fragment_id"] is None
+    assert payload["local_fragment_id"] == "import-local-001"
+    assert payload["source"] == "voice"
+    assert payload["audio_source"] == "external_link"
     assert external_media_provider.calls == []
 
     snapshot_payload = _read_fragment_payload(db_session_factory, "import-local-001")

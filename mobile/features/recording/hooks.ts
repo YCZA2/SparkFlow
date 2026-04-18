@@ -34,7 +34,7 @@ function formatDuration(seconds: number): string {
 }
 
 interface UploadResult {
-  pipeline_run_id: string;
+  task_id: string;
   fragment_id: string;
   audio_file_url: string | null;
   message: string;
@@ -238,17 +238,21 @@ export function useAudioUpload() {
         deviceId,
       });
       const response = await uploadAudio(uri, folderId, localFragment.id);
+      const taskId = response.task_id ?? response.pipeline_run_id;
+      if (!taskId) {
+        throw new Error('上传任务返回缺少 task_id');
+      }
       assertTaskScopeActive(scope);
       await updateLocalFragmentEntity(localFragment.id, {
         audio_object_key: response.audio_object_key ?? undefined,
         audio_file_url: response.audio_file_url,
         audio_file_expires_at: response.audio_file_expires_at,
-        media_pipeline_run_id: response.pipeline_run_id,
+        media_pipeline_run_id: taskId,
         media_pipeline_status: 'queued',
         media_pipeline_error_message: null,
       });
       const nextResult = {
-        pipeline_run_id: response.pipeline_run_id,
+        task_id: taskId,
         fragment_id: response.local_fragment_id ?? localFragment.id,
         audio_file_url: response.audio_file_url,
         message: '已创建后台转写任务，可在任务状态中继续观察进度。',
@@ -256,7 +260,7 @@ export function useAudioUpload() {
       markFragmentsStale();
       setResult(nextResult);
       setStatus('success');
-      void waitForPipelineTerminal(response.pipeline_run_id, { timeoutMs: 180_000, scope })
+      void waitForPipelineTerminal(taskId, { timeoutMs: 180_000, scope })
         .then(async (pipeline) => {
           const restoredFragment = await syncMediaIngestionPipelineState(localFragment.id, pipeline, { scope });
           if (!restoredFragment || !isMountedRef.current || pipeline.status !== 'succeeded') {

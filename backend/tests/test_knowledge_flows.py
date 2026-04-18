@@ -7,7 +7,7 @@ import io
 import pytest
 from models import KnowledgeDoc
 
-from tests.flow_helpers import _auth_headers
+from tests.flow_helpers import _auth_headers, _wait_task
 
 pytestmark = pytest.mark.integration
 
@@ -101,3 +101,34 @@ async def test_knowledge_upload_rejects_invalid_file_and_search_validates_top_k(
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert invalid_search_response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_reference_script_upload_returns_task_handle_and_finishes(async_client, auth_headers_factory) -> None:
+    """reference_script 上传应返回统一 task 句柄，并能经 /api/tasks 查询到终态。"""
+    upload_response = await async_client.post(
+        "/api/knowledge/upload",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+        files={"file": ("reference.txt", io.BytesIO("三秒抛冲突，再给结论与行动".encode("utf-8")), "text/plain")},
+        data={"title": "参考脚本", "doc_type": "reference_script"},
+    )
+    assert upload_response.status_code == 200
+    payload = upload_response.json()["data"]
+    assert payload["task_id"] == payload["pipeline_run_id"]
+    assert payload["task_type"] == payload["pipeline_type"] == "reference_script_processing"
+    assert payload["status_query_url"] == f"/api/tasks/{payload['task_id']}"
+
+    task = await _wait_task(async_client, auth_headers_factory, payload["task_id"], attempts=140)
+    assert task["status"] == "succeeded"
+    assert task["resource"]["resource_type"] == "knowledge_doc"
+    assert task["resource"]["resource_id"] == payload["id"]
+
+    detail_response = await async_client.get(
+        f"/api/knowledge/{payload['id']}",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert detail_response.status_code == 200
+    detail = detail_response.json()["data"]
+    assert detail["processing_status"] == "ready"
+    assert detail["style_description"]
+    assert detail["vector_ref_id"]

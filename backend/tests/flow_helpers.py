@@ -156,6 +156,19 @@ async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, att
     raise AssertionError(f"pipeline {run_id} did not finish")
 
 
+async def _wait_task(async_client, auth_headers_factory, task_id: str, *, attempts: int = 40) -> dict:
+    """轮询统一任务接口直到进入终态。"""
+    headers = await _auth_headers(async_client, auth_headers_factory)
+    for _ in range(attempts):
+        response = await async_client.get(f"/api/tasks/{task_id}", headers=headers)
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        if payload["status"] in {"succeeded", "failed"}:
+            return payload
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"task {task_id} did not finish")
+
+
 async def _wait_fragment_derivatives(db_session_factory, fragment_id: str, *, attempts: int = 80):
     """轮询 snapshot，直到摘要或标签等衍生字段补齐。"""
     for _ in range(attempts):

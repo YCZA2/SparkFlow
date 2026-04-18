@@ -6,9 +6,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from core.exceptions import ValidationError
-from domains.pipelines import repository as pipeline_repository
+from domains.tasks import repository as task_repository
 from domains.scripts import repository as script_repository
-from models import PipelineRun
+from models import TaskRun
 from modules.shared.content.content_html import convert_markdown_to_basic_html
 
 
@@ -48,7 +48,7 @@ class ScriptGenerationPersistenceService:
         self,
         *,
         db: Session,
-        run: PipelineRun,
+        run: TaskRun,
         input_payload: dict[str, Any],
         parsed_result: dict[str, Any],
         provider_metadata: dict[str, str] | None = None,
@@ -82,7 +82,7 @@ class ScriptGenerationPersistenceService:
                     provider_metadata=provider_metadata,
                 )
                 if run.resource_type != "script" or run.resource_id != existing.id:
-                    pipeline_repository.update_run_resource(
+                    task_repository.update_run_resource(
                         db=db,
                         run_id=run.id,
                         resource_type="script",
@@ -108,7 +108,7 @@ class ScriptGenerationPersistenceService:
                 mode=input_payload["mode"],
                 provider_metadata=provider_metadata,
             )
-            pipeline_repository.update_run_resource(
+            task_repository.update_run_resource(
                 db=db,
                 run_id=run.id,
                 resource_type="script",

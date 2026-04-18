@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class KnowledgeDocCreateRequest(BaseModel):
     title: str = Field(..., description="文档标题")
     body_markdown: str = Field(..., description="Markdown 正文")
-    doc_type: str = Field(..., description="文档类型：high_likes 或 language_habit")
+    doc_type: str = Field(..., description="文档类型：high_likes、language_habit 或 reference_script")
 
 
 class KnowledgeDocUpdateRequest(BaseModel):
@@ -34,6 +34,20 @@ class KnowledgeDocItem(BaseModel):
     processing_error: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
+
+
+class KnowledgeUploadResponse(KnowledgeDocItem):
+    task_id: str | None = None
+    task_type: str | None = None
+    status_query_url: str | None = None
+    pipeline_run_id: str | None = Field(
+        default=None,
+        description="deprecated：兼容旧客户端，等价于 task_id。",
+    )
+    pipeline_type: str | None = Field(
+        default=None,
+        description="deprecated：兼容旧客户端，等价于 task_type。",
+    )
 
 
 class KnowledgeDocListResponse(BaseModel):

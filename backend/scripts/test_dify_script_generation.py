@@ -141,7 +141,7 @@ def trigger_generation(
     topic: str,
     fragment_ids: list[str],
 ) -> str:
-    """发起一次真实脚本生成任务，并返回 pipeline_run_id。"""
+    """发起一次真实脚本生成任务，并返回 task_id。"""
     payload = request_json(
         client,
         "POST",
@@ -153,10 +153,10 @@ def trigger_generation(
         },
     )
     data = extract_response_data(payload)
-    run_id = data.get("pipeline_run_id") if isinstance(data, dict) else None
-    if not isinstance(run_id, str) or not run_id.strip():
-        raise ScriptGenerationCheckError(f"生成任务返回缺少 pipeline_run_id: {json.dumps(payload, ensure_ascii=False)}")
-    return run_id
+    task_id = (data.get("task_id") or data.get("pipeline_run_id")) if isinstance(data, dict) else None
+    if not isinstance(task_id, str) or not task_id.strip():
+        raise ScriptGenerationCheckError(f"生成任务返回缺少 task_id: {json.dumps(payload, ensure_ascii=False)}")
+    return task_id
 
 
 def is_terminal_status(status: str) -> bool:
@@ -164,27 +164,27 @@ def is_terminal_status(status: str) -> bool:
     return status in {"succeeded", "failed", "cancelled"}
 
 
-def poll_pipeline(
+def poll_task(
     client: httpx.Client,
     *,
     backend_base_url: str,
     headers: dict[str, str],
-    run_id: str,
+    task_id: str,
     poll_interval_seconds: float,
     poll_timeout_seconds: float,
 ) -> dict[str, Any]:
-    """轮询后台流水线，直到脚本生成进入终态。"""
+    """轮询统一任务接口，直到脚本生成进入终态。"""
     deadline = time.monotonic() + poll_timeout_seconds
     while time.monotonic() < deadline:
-        payload = request_json(client, "GET", f"{backend_base_url}/api/pipelines/{run_id}", headers=headers)
+        payload = request_json(client, "GET", f"{backend_base_url}/api/tasks/{task_id}", headers=headers)
         data = extract_response_data(payload)
         if not isinstance(data, dict):
-            raise ScriptGenerationCheckError(f"流水线返回结构无效: {json.dumps(payload, ensure_ascii=False)}")
+            raise ScriptGenerationCheckError(f"任务返回结构无效: {json.dumps(payload, ensure_ascii=False)}")
         status = str(data.get("status") or "")
         if is_terminal_status(status):
             return data
         time.sleep(poll_interval_seconds)
-    raise ScriptGenerationCheckError(f"流水线轮询超时: run_id={run_id}")
+    raise ScriptGenerationCheckError(f"任务轮询超时: task_id={task_id}")
 
 
 def fetch_script_detail(
@@ -307,27 +307,27 @@ def main() -> int:
                         body_html=f"<p>{fragment_text}</p>",
                     )
                 )
-            run_id = trigger_generation(
+            task_id = trigger_generation(
                 client,
                 backend_base_url=backend_base_url,
                 headers=headers,
                 topic=args.topic,
                 fragment_ids=resources.fragment_ids,
             )
-            pipeline = poll_pipeline(
+            task = poll_task(
                 client,
                 backend_base_url=backend_base_url,
                 headers=headers,
-                run_id=run_id,
+                task_id=task_id,
                 poll_interval_seconds=args.poll_interval_seconds,
                 poll_timeout_seconds=args.poll_timeout_seconds,
             )
-            if pipeline.get("status") != "succeeded":
-                raise ScriptGenerationCheckError(f"脚本生成失败: {json.dumps(pipeline, ensure_ascii=False)}")
-            output = pipeline.get("output") if isinstance(pipeline.get("output"), dict) else {}
+            if task.get("status") != "succeeded":
+                raise ScriptGenerationCheckError(f"脚本生成失败: {json.dumps(task, ensure_ascii=False)}")
+            output = task.get("output") if isinstance(task.get("output"), dict) else {}
             script_id = output.get("script_id")
             if not isinstance(script_id, str) or not script_id.strip():
-                raise ScriptGenerationCheckError(f"生成成功但缺少 script_id: {json.dumps(pipeline, ensure_ascii=False)}")
+                raise ScriptGenerationCheckError(f"生成成功但缺少 script_id: {json.dumps(task, ensure_ascii=False)}")
             resources.script_id = script_id
             script_detail = fetch_script_detail(
                 client,
@@ -337,7 +337,7 @@ def main() -> int:
             )
             print(json.dumps(
                 {
-                    "pipeline_run_id": run_id,
+                    "task_id": task_id,
                     "script_id": script_id,
                     "title": script_detail.get("title"),
                     "mode": script_detail.get("mode"),

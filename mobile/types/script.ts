@@ -2,7 +2,7 @@
  * 口播稿类型定义
  */
 
-import type { PipelineStatus } from './pipeline';
+import type { TaskStatus, TaskSubmissionHandle } from './task';
 
 // Pipeline 类型已迁移至 types/pipeline.ts，此处保留再导出以维持旧 import 路径兼容。
 export type { PipelineResourcePreview, PipelineRun, PipelineStatus, PipelineStep, PipelineStepListResponse, RetryPipelineRequest } from './pipeline';
@@ -50,8 +50,6 @@ export interface GenerateScriptRequest {
   fragment_ids: string[];
 }
 
-export interface ScriptGenerationTask {
-  pipeline_run_id: string;
-  pipeline_type: 'rag_script_generation';
-  status: PipelineStatus;
+export interface ScriptGenerationTask extends TaskSubmissionHandle {
+  status: TaskStatus;
 }

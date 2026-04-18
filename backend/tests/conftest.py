@@ -23,11 +23,16 @@ os.environ.setdefault("RUNTIME_LOG_DIR", TEST_RUNTIME_LOG_DIR)
 os.environ.setdefault("BACKEND_LOG_PATH", os.path.join(TEST_RUNTIME_LOG_DIR, "backend.log"))
 os.environ.setdefault("BACKEND_ERROR_LOG_PATH", os.path.join(TEST_RUNTIME_LOG_DIR, "backend-error.log"))
 os.environ.setdefault("MOBILE_DEBUG_LOG_PATH", os.path.join(TEST_RUNTIME_LOG_DIR, "mobile-debug.log"))
+os.environ.setdefault("CELERY_BROKER_URL", "memory://")
+os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
+os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "true")
+os.environ.setdefault("CELERY_TASK_EAGER_PROPAGATES", "false")
 
 from main import create_app
 from models import Base, User
 from modules.auth.application import TEST_USER_ID
 from modules.shared.infrastructure.infrastructure import LocalFileStorage
+from modules.shared.tasks.bootstrap import configure_task_runtime
 from tests.support import (
     FakeExternalMediaProvider,
     FakeLLMProvider,
@@ -118,6 +123,8 @@ async def app(
     test_app.state.container.web_search_provider = web_search_provider
     test_app.state.container.llm_provider = llm_provider
     test_app.state.container.stt_provider = stt_provider
+    configure_task_runtime(test_app.state.container)
+    test_app.state.celery_app = test_app.state.container.celery_app
     yield test_app
     test_app.state.scheduler_service.stop()
     if test_app.state.container.pipeline_dispatcher:

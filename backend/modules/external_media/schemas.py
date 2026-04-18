@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from modules.tasks.schemas import TaskSubmissionHandle
+
 
 class ExternalAudioImportRequest(BaseModel):
     share_url: str = Field(..., description="外部媒体分享链接")
@@ -12,9 +14,7 @@ class ExternalAudioImportRequest(BaseModel):
     local_fragment_id: str = Field(..., description="本地占位 fragment ID")
 
 
-class ExternalAudioImportResponse(BaseModel):
-    pipeline_run_id: str
-    pipeline_type: str
+class ExternalAudioImportResponse(TaskSubmissionHandle):
     fragment_id: str | None = None
     local_fragment_id: str | None = None
     source: str
