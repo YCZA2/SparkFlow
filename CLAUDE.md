@@ -29,7 +29,7 @@ FastAPI Backend (Python)
   ├─ modules/*/application.py   ← orchestration / use cases
   ├─ domains/*/repository.py    ← data access
   ├─ services/*                 ← provider adapters (DashScope, Qwen, ChromaDB)
-  └─ pipeline_runs tables       ← async task source of truth (not Celery/Redis)
+  └─ task_runs tables           ← async task source of truth (not Celery/Redis)
 ```
 
 **Local-first principle**: mobile SQLite/file system is the truth for fragments, folders, and scripts. The backend is an automatic backup target and explicit recovery source — not the primary store.
@@ -118,9 +118,9 @@ mobile/
 
 ## Core Features
 
-1. **Voice Capture** → POST `/api/transcriptions` → poll `pipeline_run_id` → fragment stored locally + synced
+1. **Voice Capture** → POST `/api/transcriptions` → poll `task_id` → fragment stored locally + synced
 2. **Manual Fragment** → local draft created immediately → background sync via `/api/backups/batch`
-3. **AI Script Generation** → select fragments → POST `/api/scripts/generation` → poll `pipeline_run_id`
+3. **AI Script Generation** → select fragments → POST `/api/scripts/generation` → poll `task_id`
    - Topic-driven generation with three-layer writing context
    - Stable core: system preset values and themes
    - Methodology: cached fragment distillation + uploaded materials + preset templates
@@ -132,7 +132,7 @@ mobile/
 
 - `fragments` — material assets with `transcript`, `summary`, `tags`, `body_html`
 - `scripts` — derived deliverables (mode, lineage, filmed state, `body_html`)
-- `pipeline_runs` / `pipeline_step_runs` — async task source of truth (step retries, external refs)
+- `task_runs` / `task_step_runs` — async task source of truth (step retries, external refs)
 - `knowledge_docs` — knowledge base docs + vector embeddings
 - `media_assets` / `content_media_links` — media file metadata and content references
 - `users` — device session auth (RBAC: user/creator roles)
@@ -146,7 +146,7 @@ Full schema in `memory-bank/tech-stack.md`.
 - **Doc sync after any feature change**: whenever any behavior, API, or user-visible flow is added, modified, or removed — even if not "major" — scan `memory-bank/*.md`, `AGENTS.md`, `backend/README.md`, and `mobile/README.md` for references to the affected area and update them; do not rely on memory to know which docs are affected, scan first
 - **Layering**: keep presentation / application / domain / service responsibilities separated; no bypassing for convenience
 - **Local-first naming**: use `legacy*` / `compat*` for old cloud-binding fields; never introduce new `remote*` / `server*` / `localDraft*` business names
-- **Async tasks**: `pipeline_runs` / `pipeline_step_runs` are the only task state; do not reintroduce `agent_runs` or fragment-level task fields
+- **Async tasks**: `task_runs` / `task_step_runs` are the only task state; do not reintroduce `agent_runs` or fragment-level task fields
 - **New mobile entities** needing remote persistence: hook into `/api/backups/*` + local `entity_version / backup_status` — do not default to "create remote record first"
 - **Fragment vs Script boundary**: keep `fragment` as the source-material pool and `script` as the derived deliverable; they may share editor / backup infrastructure, but they must not collapse into one business entity
 - **Script lineage**: `script.source_fragment_ids` is immutable first-generation lineage only; do not feed scripts back into fragment retrieval, clustering, daily-push selection, or later script generation

@@ -234,8 +234,8 @@ http://<your-lan-ip>:8000
 - `fragment` and `script` are separate domain entities: fragments are source material, scripts are derived outputs; they may share the editor foundation, `body_html`, backup infrastructure, exports, and media helpers, but they must not be merged into one business entity
 - `script.source_fragment_ids` only records the original generation sources; scripts must not re-enter fragment retrieval, clustering, daily-push input selection, or future script-generation input
 - For legacy cache, legacy cloud binding, or legacy body-draft compatibility code, use `legacy*` or `compat*` naming; do not add new business names such as `remote*`, `server*`, or `localDraft*` that imply the old remote-first model is still current
-- Treat `pipeline_runs` and `pipeline_step_runs` as the backend source of truth for async media ingestion, knowledge ingestion, daily push, and script generation tasks
-- Do not reintroduce fragment-level task-state compatibility fields or `agent_runs`; task progress must stay on `pipeline_runs` and `pipeline_step_runs`
+- Treat `task_runs` and `task_step_runs` as the backend source of truth for async media ingestion, knowledge ingestion, daily push, and script generation tasks
+- Do not reintroduce fragment-level task-state compatibility fields or `agent_runs`; task progress must stay on `task_runs` and `task_step_runs`
 - When adding new mobile entities that need remote persistence, integrate with `/api/backups/*` and local `entity_version` / `backup_status` first; do not default to “create a backend business row first”
 - Reuse existing scripts and utilities before adding new entrypoints
 - Reuse `scripts/mobile-release.sh` and the existing npm aliases for mobile build / submission flows instead of duplicating EAS profile names, platform flags, or `APP_ENV` mappings in new docs or scripts

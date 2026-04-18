@@ -52,11 +52,3 @@ class TaskSubmissionHandle(BaseModel):
     task_id: str
     task_type: str
     status_query_url: str
-    pipeline_run_id: str | None = Field(
-        default=None,
-        description="deprecated：兼容旧客户端，等价于 task_id。",
-    )
-    pipeline_type: str | None = Field(
-        default=None,
-        description="deprecated：兼容旧客户端，等价于 task_type。",
-    )

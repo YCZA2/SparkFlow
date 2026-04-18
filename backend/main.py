@@ -35,7 +35,6 @@ from modules.fragments.derivative_pipeline import (
 )
 from modules.knowledge.presentation import router as knowledge_router
 from modules.media_assets.presentation import router as media_assets_router
-from modules.pipelines.presentation import router as pipelines_router
 from modules.tasks.presentation import router as tasks_router
 from modules.scripts.application import DailyPushUseCase
 from modules.scripts.daily_push_pipeline import (
@@ -348,7 +347,6 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(scripts_router)
     app.include_router(knowledge_router)
     app.include_router(tasks_router)
-    app.include_router(pipelines_router)
 
 
 def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:

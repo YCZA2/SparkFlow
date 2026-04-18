@@ -2,11 +2,11 @@ import { assertTaskScopeActive, isTaskScopeActive, type TaskExecutionScope } fro
 import { forgetPendingScriptPipelineTask, listPendingScriptPipelineTasks } from '@/features/scripts/pendingTasks';
 import { syncRemoteScriptDetailToLocal } from '@/features/scripts/sync';
 import { markScriptsStale } from '@/features/scripts/store';
-import { fetchPipelineRun, waitForPipelineTerminal } from '@/features/pipelines/api';
-import type { PipelineRun } from '@/types/pipeline';
+import { fetchTaskRun, waitForTaskTerminal } from '@/features/tasks/api';
+import type { TaskRun } from '@/types/task';
 
-function resolveScriptIdFromPipeline(pipeline: Pick<PipelineRun, 'status' | 'resource'>): string | null {
-  /*脚本类 pipeline 成功后统一从 resource 中取最终 script_id。 */
+function resolveScriptIdFromTask(pipeline: Pick<TaskRun, 'status' | 'resource'>): string | null {
+  /*脚本类 task 成功后统一从 resource 中取最终 script_id。 */
   if (pipeline.status !== 'succeeded' || pipeline.resource?.resource_type !== 'script') {
     return null;
   }
@@ -14,12 +14,12 @@ function resolveScriptIdFromPipeline(pipeline: Pick<PipelineRun, 'status' | 'res
 }
 
 async function syncRecoveredScriptPipeline(
-  pipeline: Pick<PipelineRun, 'id' | 'status' | 'resource'>,
+  pipeline: Pick<TaskRun, 'id' | 'status' | 'resource'>,
   scope: TaskExecutionScope
 ): Promise<void> {
   /*工作区恢复命中脚本终态后，把远端详情补回本地真值并清掉待恢复登记。 */
   assertTaskScopeActive(scope);
-  const scriptId = resolveScriptIdFromPipeline(pipeline);
+  const scriptId = resolveScriptIdFromTask(pipeline);
   if (scriptId) {
     await syncRemoteScriptDetailToLocal(scriptId, { scope });
     markScriptsStale();
@@ -30,12 +30,12 @@ async function syncRecoveredScriptPipeline(
 async function recoverSingleScriptPipeline(task: { pipelineRunId: string }, scope: TaskExecutionScope): Promise<void> {
   /*脚本恢复先查一次当前状态，未终态则继续后台轮询直到收敛。 */
   assertTaskScopeActive(scope);
-  const pipeline = await fetchPipelineRun(task.pipelineRunId);
+  const pipeline = await fetchTaskRun(task.pipelineRunId);
   if (pipeline.status === 'succeeded' || pipeline.status === 'failed' || pipeline.status === 'cancelled') {
     await syncRecoveredScriptPipeline(pipeline, scope);
     return;
   }
-  void waitForPipelineTerminal(task.pipelineRunId, { timeoutMs: 180_000, scope })
+  void waitForTaskTerminal(task.pipelineRunId, { timeoutMs: 180_000, scope })
     .then(async (terminalRun) => {
       if (!isTaskScopeActive(scope)) {
         return;

@@ -23,7 +23,7 @@ export function useGenerateScript() {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   创建脚本任务后轮询 pipeline，成功时返回最终脚本 ID。
+   创建脚本任务后轮询 task，成功时返回最终脚本 ID。
    */
   const run = async (
     fragmentIds: string[],
@@ -40,10 +40,7 @@ export function useGenerateScript() {
         topic,
         fragment_ids: fragmentIds,
       });
-      const taskId = task.task_id ?? task.pipeline_run_id;
-      if (!taskId) {
-        throw new Error('生成任务返回缺少 task_id');
-      }
+      const taskId = task.task_id;
       await rememberPendingScriptPipelineTask(scope.userId, {
         pipelineRunId: taskId,
         kind: 'manual',
@@ -196,11 +193,11 @@ export function useTodayDailyPush() {
 }
 
 function useDailyPushTriggerBase(
-  apiFn: () => Promise<{ task_id?: string | null; pipeline_run_id?: string | null }>,
+  apiFn: () => Promise<{ task_id: string }>,
   errorMessage: string,
   kind: PendingScriptTaskKind
 ) {
-  /* 推盘触发钩子公共逻辑：管理 loading/error 状态，等待 pipeline 完成后返回脚本。*/
+  /* 推盘触发钩子公共逻辑：管理 loading/error 状态，等待 task 完成后返回脚本。*/
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -210,10 +207,7 @@ function useDailyPushTriggerBase(
       setError(null);
       const scope = captureRequiredTaskExecutionScope();
       const task = await apiFn();
-      const taskId = task.task_id ?? task.pipeline_run_id;
-      if (!taskId) {
-        throw new Error('推盘任务返回缺少 task_id');
-      }
+      const taskId = task.task_id;
       await rememberPendingScriptPipelineTask(scope.userId, {
         pipelineRunId: taskId,
         kind,

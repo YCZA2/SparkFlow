@@ -19,7 +19,7 @@ import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { createLocalFragmentEntity, updateLocalFragmentEntity } from '@/features/fragments/store';
 import { importExternalAudio } from '@/features/imports/api';
 import { isImportLinkReady, resolveImportedFragmentId } from '@/features/imports/importState';
-import { waitForPipelineTerminal } from '@/features/pipelines/api';
+import { waitForTaskTerminal } from '@/features/tasks/api';
 import { syncMediaIngestionPipelineState } from '@/features/pipelines/mediaIngestionRecovery';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { getErrorMessage } from '@/utils/error';
@@ -55,17 +55,14 @@ export default function ImportLinkScreen() {
         deviceId,
       });
       const task = await importExternalAudio(trimmedShareUrl, params.folderId, localFragment.id);
-      const taskId = task.task_id ?? task.pipeline_run_id;
-      if (!taskId) {
-        throw new Error('导入任务返回缺少 task_id');
-      }
+      const taskId = task.task_id;
       assertTaskScopeActive(scope);
       await updateLocalFragmentEntity(localFragment.id, {
         media_pipeline_run_id: taskId,
         media_pipeline_status: 'queued',
         media_pipeline_error_message: null,
       });
-      const pipeline = await waitForPipelineTerminal(taskId, {
+      const pipeline = await waitForTaskTerminal(taskId, {
         timeoutMs: 180_000,
         scope,
       });

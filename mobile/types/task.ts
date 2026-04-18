@@ -48,6 +48,4 @@ export interface TaskSubmissionHandle {
   task_id: string;
   task_type: string;
   status_query_url: string;
-  pipeline_run_id?: string | null;
-  pipeline_type?: string | null;
 }

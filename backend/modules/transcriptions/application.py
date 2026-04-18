@@ -91,8 +91,6 @@ class TranscriptionUseCase:
             task_id=result.pipeline_run_id,
             task_type="media_ingestion",
             status_query_url=f"/api/tasks/{result.pipeline_run_id}",
-            pipeline_run_id=result.pipeline_run_id,
-            pipeline_type="media_ingestion",
             fragment_id=result.fragment_id,
             local_fragment_id=normalized_local_fragment_id,
             audio_object_key=saved.object_key,

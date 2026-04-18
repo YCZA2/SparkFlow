@@ -1,5 +1,5 @@
 import { assertTaskScopeActive, type TaskExecutionScope } from '@/features/auth/taskScope';
-import { waitForPipelineTerminal } from '@/features/pipelines/api';
+import { waitForTaskTerminal } from '@/features/tasks/api';
 import { forgetPendingScriptPipelineTask } from '@/features/scripts/pendingTasks';
 import { markScriptsStale } from '@/features/scripts/store';
 import { syncRemoteScriptDetailToLocal } from '@/features/scripts/sync';
@@ -10,8 +10,8 @@ export async function resolveScriptFromPipelineTask(
   fallbackMessage: string,
   options: { scope: TaskExecutionScope }
 ): Promise<Script> {
-  /*统一消费任务态脚本结果：等待 pipeline 终态，落本地真值，清除任务登记。 */
-  const pipeline = await waitForPipelineTerminal(pipelineRunId, { scope: options.scope });
+  /*统一消费任务态脚本结果：等待 task 终态，落本地真值，清除任务登记。 */
+  const pipeline = await waitForTaskTerminal(pipelineRunId, { scope: options.scope });
   const scriptId =
     pipeline.status === 'succeeded' && pipeline.resource.resource_type === 'script'
       ? pipeline.resource.resource_id

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from domains.pipelines import repository as pipeline_repository
+from domains.tasks import repository as task_repository
 from models import User
 from main import ensure_local_test_user
 from modules.auth.application import TEST_USER_ID
@@ -127,17 +127,17 @@ async def test_auth_token_recreates_missing_test_user(async_client, db_session_f
 
 
 @pytest.mark.asyncio
-async def test_pipeline_detail_is_scoped_to_current_user(async_client, db_session_factory) -> None:
-    """用户只能读取自己的 pipeline_run，不能跨账号查看任务状态。"""
+async def test_task_detail_is_scoped_to_current_user(async_client, db_session_factory) -> None:
+    """用户只能读取自己的 task_run，不能跨账号查看任务状态。"""
     owner = await _register_user(async_client, email="owner@example.com", device_id="owner-device")
     viewer = await _register_user(async_client, email="viewer@example.com", device_id="viewer-device")
 
     with db_session_factory() as db:
-        run = pipeline_repository.create_run(
+        run = task_repository.create_run(
             db=db,
             run_id="pipeline-run-owner-only",
             user_id=owner["user"]["user_id"],
-            pipeline_type="media_ingestion",
+            task_type="media_ingestion",
             input_payload={"source": "test"},
             resource_type="local_fragment",
             resource_id="fragment-owner",
@@ -145,7 +145,7 @@ async def test_pipeline_detail_is_scoped_to_current_user(async_client, db_sessio
         )
 
     response = await async_client.get(
-        f"/api/pipelines/{run.id}",
+        f"/api/tasks/{run.id}",
         headers={"Authorization": f"Bearer {viewer['access_token']}"},
     )
     assert response.status_code == 404

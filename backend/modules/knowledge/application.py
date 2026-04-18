@@ -55,8 +55,6 @@ def map_knowledge_upload_response(doc: KnowledgeDoc, task_run: TaskRun | None = 
         task_id=task_run.id if task_run else None,
         task_type=task_run.task_type if task_run else None,
         status_query_url=f"/api/tasks/{task_run.id}" if task_run else None,
-        pipeline_run_id=task_run.id if task_run else None,
-        pipeline_type=task_run.task_type if task_run else None,
     )
 
 

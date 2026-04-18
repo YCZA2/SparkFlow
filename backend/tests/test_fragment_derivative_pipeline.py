@@ -23,17 +23,17 @@ async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
     return await auth_headers_factory(async_client)
 
 
-async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, attempts: int = 40) -> dict:
-    """轮询直到 fragment 衍生字段流水线进入终态。"""
+async def _wait_task(async_client, auth_headers_factory, task_id: str, *, attempts: int = 40) -> dict:
+    """轮询直到 fragment 衍生字段任务进入终态。"""
     headers = await _auth_headers(async_client, auth_headers_factory)
     for _ in range(attempts):
-        response = await async_client.get(f"/api/pipelines/{run_id}", headers=headers)
+        response = await async_client.get(f"/api/tasks/{task_id}", headers=headers)
         assert response.status_code == 200
         payload = response.json()["data"]
         if payload["status"] in {"succeeded", "failed", "cancelled"}:
             return payload
         await asyncio.sleep(0.05)
-    raise AssertionError(f"pipeline {run_id} did not finish")
+    raise AssertionError(f"task {task_id} did not finish")
 
 
 def _seed_fragment_snapshot(db_session_factory, *, fragment_id: str, text: str) -> str:
@@ -107,8 +107,8 @@ async def test_fragment_derivative_pipeline_backfills_summary_tags_and_vector(
         resource_type="fragment",
         resource_id=fragment_id,
     )
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, run.id)
-    assert pipeline["status"] == "succeeded"
+    task = await _wait_task(async_client, auth_headers_factory, run.id)
+    assert task["status"] == "succeeded"
 
     snapshot = _read_fragment_snapshot(db_session_factory, fragment_id)
     assert snapshot is not None
@@ -147,8 +147,8 @@ async def test_fragment_derivative_pipeline_uses_fallback_when_llm_fails(
             resource_type="fragment",
             resource_id=fragment_id,
         )
-        pipeline = await _wait_pipeline(async_client, auth_headers_factory, run.id)
-        assert pipeline["status"] == "succeeded"
+        task = await _wait_task(async_client, auth_headers_factory, run.id)
+        assert task["status"] == "succeeded"
 
         snapshot = _read_fragment_snapshot(db_session_factory, fragment_id)
         assert snapshot is not None
@@ -182,8 +182,8 @@ async def test_fragment_derivative_pipeline_logs_vector_failure_without_failing_
             resource_type="fragment",
             resource_id=fragment_id,
         )
-        pipeline = await _wait_pipeline(async_client, auth_headers_factory, run.id)
-        assert pipeline["status"] == "succeeded"
+        task = await _wait_task(async_client, auth_headers_factory, run.id)
+        assert task["status"] == "succeeded"
 
         snapshot = _read_fragment_snapshot(db_session_factory, fragment_id)
         assert snapshot is not None
@@ -214,9 +214,9 @@ async def test_fragment_derivative_pipeline_succeeds_without_fragment_projection
         resource_type="local_fragment",
         resource_id="local-fragment-001",
     )
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, run.id)
-    assert pipeline["status"] == "succeeded"
-    assert pipeline["resource"]["resource_type"] == "local_fragment"
-    assert pipeline["resource"]["resource_id"] == "local-fragment-001"
-    assert pipeline["output"]["local_fragment_id"] == "local-fragment-001"
+    task = await _wait_task(async_client, auth_headers_factory, run.id)
+    assert task["status"] == "succeeded"
+    assert task["resource"]["resource_type"] == "local_fragment"
+    assert task["resource"]["resource_id"] == "local-fragment-001"
+    assert task["output"]["local_fragment_id"] == "local-fragment-001"
     assert vector_store.fragment_docs["local-fragment-001"]["text"] == "只存在于本地 placeholder 的转写正文"

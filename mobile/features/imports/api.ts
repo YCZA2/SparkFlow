@@ -11,7 +11,7 @@ export interface ExternalAudioImportTask extends TaskSubmissionHandle {
 }
 
 /**
- 提交抖音外链导入任务，返回异步 pipeline 句柄。
+ 提交抖音外链导入任务，返回异步 task 句柄。
  */
 export async function importExternalAudio(
   shareUrl: string,

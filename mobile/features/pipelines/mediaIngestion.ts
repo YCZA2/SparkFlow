@@ -1,7 +1,7 @@
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { readLocalFragmentEntity, updateLocalFragmentEntity } from '@/features/fragments/store';
 import type { Fragment } from '@/types/fragment';
-import type { PipelineRun } from '@/types/pipeline';
+import type { TaskRun } from '@/types/task';
 
 export {
   extractMediaIngestionOutput,
@@ -17,7 +17,7 @@ import {
 /*把媒体导入 pipeline 的终态结果回写到本地真值 fragment。 */
 export async function applyMediaIngestionPipelineResult(
   fallbackFragmentId: string,
-  pipeline: Pick<PipelineRun, 'status' | 'resource' | 'output'>
+  pipeline: Pick<TaskRun, 'status' | 'resource' | 'output'>
 ): Promise<Fragment | null> {
   if (pipeline.status !== 'succeeded') {
     return null;

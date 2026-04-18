@@ -22,7 +22,7 @@ from tests.flow_helpers import (
     _editor_document,
     _seed_fragment_vector,
     _wait_fragment_derivatives,
-    _wait_pipeline,
+    _wait_task,
     _wait_vector_doc,
 )
 
@@ -59,9 +59,9 @@ async def test_scripts_list_detail_update_and_delete(async_client, auth_headers_
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert create_response.status_code == 201
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
-    script_id = pipeline["resource"]["resource_id"]
+    task = await _wait_task(async_client, auth_headers_factory, create_response.json()["data"]["task_id"])
+    assert task["status"] == "succeeded"
+    script_id = task["resource"]["resource_id"]
 
     list_response = await async_client.get("/api/scripts", headers=await _auth_headers(async_client, auth_headers_factory))
     assert script_id in {item["id"] for item in list_response.json()["data"]["items"]}
@@ -92,9 +92,9 @@ async def test_update_script_rejects_invalid_status(async_client, auth_headers_f
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert create_response.status_code == 201
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
-    script_id = pipeline["resource"]["resource_id"]
+    task = await _wait_task(async_client, auth_headers_factory, create_response.json()["data"]["task_id"])
+    assert task["status"] == "succeeded"
+    script_id = task["resource"]["resource_id"]
 
     response = await async_client.patch(
         f"/api/scripts/{script_id}",
@@ -117,16 +117,16 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
     )
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert payload["pipeline_type"] == "media_ingestion"
+    assert payload["task_type"] == "media_ingestion"
     assert payload["fragment_id"] is None
     assert payload["local_fragment_id"] == "upload-local-001"
     assert payload["audio_file_url"]
     assert "audio_path" not in payload
     assert "relative_path" not in payload
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
-    assert pipeline["status"] == "succeeded"
-    assert pipeline["output"]["summary"] is None
-    assert pipeline["output"]["tags"] == []
+    task = await _wait_task(async_client, auth_headers_factory, payload["task_id"], attempts=140)
+    assert task["status"] == "succeeded"
+    assert task["output"]["summary"] is None
+    assert task["output"]["tags"] == []
 
     enriched = await _wait_fragment_derivatives(db_session_factory, "upload-local-001")
     assert enriched.audio_source == "upload"
@@ -154,13 +154,13 @@ async def test_upload_audio_with_local_fragment_id_succeeds_without_projection(a
     assert payload["fragment_id"] is None
     assert payload["local_fragment_id"] == "local-fragment-001"
 
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
-    assert pipeline["status"] == "succeeded"
-    assert pipeline["resource"]["resource_type"] == "local_fragment"
-    assert pipeline["resource"]["resource_id"] == "local-fragment-001"
-    assert pipeline["output"]["local_fragment_id"] == "local-fragment-001"
-    assert pipeline["output"]["fragment_id"] is None
-    assert pipeline["output"]["transcript"] == "转写完成"
+    task = await _wait_task(async_client, auth_headers_factory, payload["task_id"], attempts=140)
+    assert task["status"] == "succeeded"
+    assert task["resource"]["resource_type"] == "local_fragment"
+    assert task["resource"]["resource_id"] == "local-fragment-001"
+    assert task["output"]["local_fragment_id"] == "local-fragment-001"
+    assert task["output"]["fragment_id"] is None
+    assert task["output"]["transcript"] == "转写完成"
 
     vector_doc = await _wait_vector_doc(app, "local-fragment-001")
     assert vector_doc["text"] == "转写完成"
@@ -190,11 +190,11 @@ async def test_upload_audio_succeeds_when_derivative_enqueue_fails(async_client,
         )
         assert response.status_code == 200
         payload = response.json()["data"]
-        pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
-        assert pipeline["status"] == "succeeded"
-        assert pipeline["output"]["transcript"] == "转写完成"
-        assert pipeline["output"]["summary"] is None
-        assert pipeline["output"]["tags"] == []
+        task = await _wait_task(async_client, auth_headers_factory, payload["task_id"], attempts=140)
+        assert task["status"] == "succeeded"
+        assert task["output"]["transcript"] == "转写完成"
+        assert task["output"]["summary"] is None
+        assert task["output"]["tags"] == []
 
         snapshot_payload = _read_fragment_payload(db_session_factory, "upload-local-derivative-fail")
         assert snapshot_payload["transcript"] == "转写完成"
@@ -218,10 +218,10 @@ async def test_upload_audio_marks_failed_when_stt_crashes(async_client, auth_hea
         data={"local_fragment_id": "upload-local-stt-fail"},
     )
     payload = response.json()["data"]
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
-    assert pipeline["status"] == "failed"
+    task = await _wait_task(async_client, auth_headers_factory, payload["task_id"], attempts=140)
+    assert task["status"] == "failed"
     steps_response = await async_client.get(
-        f"/api/pipelines/{payload['pipeline_run_id']}/steps",
+        f"/api/tasks/{payload['task_id']}/steps",
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
@@ -248,11 +248,11 @@ async def test_upload_audio_retries_transcription_and_then_succeeds(async_client
         data={"local_fragment_id": "upload-local-stt-retry"},
     )
     payload = response.json()["data"]
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
+    task = await _wait_task(async_client, auth_headers_factory, payload["task_id"])
+    assert task["status"] == "succeeded"
 
     steps_response = await async_client.get(
-        f"/api/pipelines/{payload['pipeline_run_id']}/steps",
+        f"/api/tasks/{payload['task_id']}/steps",
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
@@ -278,10 +278,10 @@ async def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(async_
             data={"local_fragment_id": "upload-local-llm-timeout"},
         )
     payload = response.json()["data"]
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
-    assert pipeline["output"]["summary"] is None
-    assert pipeline["output"]["tags"] == []
+    task = await _wait_task(async_client, auth_headers_factory, payload["task_id"])
+    assert task["status"] == "succeeded"
+    assert task["output"]["summary"] is None
+    assert task["output"]["tags"] == []
 
     enriched = await _wait_fragment_derivatives(db_session_factory, "upload-local-llm-timeout")
     assert enriched.summary
@@ -306,8 +306,8 @@ async def test_upload_audio_marks_failed_when_transcription_is_cancelled(async_c
         data={"local_fragment_id": "upload-local-cancelled"},
     )
     payload = response.json()["data"]
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
-    assert pipeline["status"] == "failed"
+    task = await _wait_task(async_client, auth_headers_factory, payload["task_id"])
+    assert task["status"] == "failed"
 
     snapshot_payload = _read_fragment_payload(db_session_factory, "upload-local-cancelled")
     assert snapshot_payload.get("transcript") is None
@@ -328,14 +328,14 @@ async def test_scripts_daily_push_trigger_get_force_trigger_and_idempotency(asyn
 
     first_response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
     assert first_response.status_code == 200
-    first_run_id = first_response.json()["data"]["pipeline_run_id"]
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, first_run_id)
-    assert pipeline["status"] == "succeeded"
+    first_run_id = first_response.json()["data"]["task_id"]
+    task = await _wait_task(async_client, auth_headers_factory, first_run_id)
+    assert task["status"] == "succeeded"
 
     get_response = await async_client.get("/api/scripts/daily-push", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert get_response.json()["data"]["id"] == pipeline["resource"]["resource_id"]
+    assert get_response.json()["data"]["id"] == task["resource"]["resource_id"]
 
     second_response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
     force_response = await async_client.post("/api/scripts/daily-push/force-trigger", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert second_response.json()["data"]["pipeline_run_id"] == first_run_id
-    assert force_response.json()["data"]["pipeline_run_id"] == first_run_id
+    assert second_response.json()["data"]["task_id"] == first_run_id
+    assert force_response.json()["data"]["task_id"] == first_run_id

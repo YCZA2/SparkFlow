@@ -20,7 +20,7 @@ import {
   updateLocalFragmentEntity,
 } from '@/features/fragments/store';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
-import { waitForPipelineTerminal } from '@/features/pipelines/api';
+import { waitForTaskTerminal } from '@/features/tasks/api';
 import { syncMediaIngestionPipelineState } from '@/features/pipelines/mediaIngestionRecovery';
 import { uploadAudio } from '@/features/recording/api';
 import { updateScriptStatus } from '@/features/scripts/api';
@@ -238,10 +238,7 @@ export function useAudioUpload() {
         deviceId,
       });
       const response = await uploadAudio(uri, folderId, localFragment.id);
-      const taskId = response.task_id ?? response.pipeline_run_id;
-      if (!taskId) {
-        throw new Error('上传任务返回缺少 task_id');
-      }
+      const taskId = response.task_id;
       assertTaskScopeActive(scope);
       await updateLocalFragmentEntity(localFragment.id, {
         audio_object_key: response.audio_object_key ?? undefined,
@@ -260,7 +257,7 @@ export function useAudioUpload() {
       markFragmentsStale();
       setResult(nextResult);
       setStatus('success');
-      void waitForPipelineTerminal(taskId, { timeoutMs: 180_000, scope })
+      void waitForTaskTerminal(taskId, { timeoutMs: 180_000, scope })
         .then(async (pipeline) => {
           const restoredFragment = await syncMediaIngestionPipelineState(localFragment.id, pipeline, { scope });
           if (!restoredFragment || !isMountedRef.current || pipeline.status !== 'succeeded') {

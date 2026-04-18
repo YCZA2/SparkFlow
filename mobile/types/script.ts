@@ -4,9 +4,6 @@
 
 import type { TaskStatus, TaskSubmissionHandle } from './task';
 
-// Pipeline 类型已迁移至 types/pipeline.ts，此处保留再导出以维持旧 import 路径兼容。
-export type { PipelineResourcePreview, PipelineRun, PipelineStatus, PipelineStep, PipelineStepListResponse, RetryPipelineRequest } from './pipeline';
-
 export type ScriptMode = 'mode_rag' | 'mode_daily_push';
 export type ScriptStatus = 'draft' | 'ready' | 'filmed';
 export type ScriptGenerationKind = 'manual' | 'daily_push';

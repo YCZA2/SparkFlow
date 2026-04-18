@@ -79,17 +79,17 @@ def _upsert_fragment_snapshot(db, payload: dict) -> None:
     )
 
 
-async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, attempts: int = 40) -> dict:
-    """轮询直到流水线进入终态。"""
+async def _wait_task(async_client, auth_headers_factory, task_id: str, *, attempts: int = 40) -> dict:
+    """轮询直到任务进入终态。"""
     headers = await _auth_headers(async_client, auth_headers_factory)
     for _ in range(attempts):
-        response = await async_client.get(f"/api/pipelines/{run_id}", headers=headers)
+        response = await async_client.get(f"/api/tasks/{task_id}", headers=headers)
         assert response.status_code == 200
         payload = response.json()["data"]
         if payload["status"] in {"succeeded", "failed", "cancelled"}:
             return payload
         await asyncio.sleep(0.05)
-    raise AssertionError(f"pipeline {run_id} did not finish")
+    raise AssertionError(f"task {task_id} did not finish")
 
 
 @pytest.mark.asyncio
@@ -123,14 +123,14 @@ async def test_rag_script_generation_pipeline_runs_and_persists_script(
     )
     assert create_response.status_code == 201
     payload = create_response.json()["data"]
-    assert payload["pipeline_type"] == "rag_script_generation"
+    assert payload["task_type"] == "rag_script_generation"
 
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
-    assert pipeline["resource"]["resource_type"] == "script"
+    task = await _wait_task(async_client, auth_headers_factory, payload["task_id"])
+    assert task["status"] == "succeeded"
+    assert task["resource"]["resource_type"] == "script"
 
     detail_response = await async_client.get(
-        f"/api/scripts/{pipeline['resource']['resource_id']}",
+        f"/api/scripts/{task['resource']['resource_id']}",
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert detail_response.status_code == 200
@@ -173,8 +173,8 @@ async def test_rag_script_generation_with_optional_fragments(
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert create_response.status_code == 201
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
+    task = await _wait_task(async_client, auth_headers_factory, create_response.json()["data"]["task_id"])
+    assert task["status"] == "succeeded"
 
     llm_provider.generate = original_generate
 
@@ -221,8 +221,8 @@ async def test_rag_script_generation_pipeline_fails_when_llm_returns_empty_draft
     )
     assert create_response.status_code == 201
 
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "failed"
+    task = await _wait_task(async_client, auth_headers_factory, create_response.json()["data"]["task_id"])
+    assert task["status"] == "failed"
 
     llm_provider.generate = original_generate
 
@@ -336,8 +336,8 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
     )
     assert create_response.status_code == 201
 
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
+    task = await _wait_task(async_client, auth_headers_factory, create_response.json()["data"]["task_id"])
+    assert task["status"] == "succeeded"
 
     final_prompt = captured_user_messages[-1]
     assert "[稳定内核]" in final_prompt
@@ -410,7 +410,7 @@ async def test_rag_script_generation_succeeds_with_snapshot_only_fragment(
             headers=await _auth_headers(async_client, auth_headers_factory),
         )
         assert create_response.status_code == 201
-        pipeline = await _wait_pipeline(async_client, auth_headers_factory, create_response.json()["data"]["pipeline_run_id"])
-        assert pipeline["status"] == "succeeded"
+        task = await _wait_task(async_client, auth_headers_factory, create_response.json()["data"]["task_id"])
+        assert task["status"] == "succeeded"
     finally:
         llm_provider.generate = original_generate

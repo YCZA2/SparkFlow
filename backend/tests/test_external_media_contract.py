@@ -35,8 +35,6 @@ async def test_import_audio_only_returns_task_handle() -> None:
         "task_id": "run-001",
         "task_type": "media_ingestion",
         "status_query_url": "/api/tasks/run-001",
-        "pipeline_run_id": "run-001",
-        "pipeline_type": "media_ingestion",
         "fragment_id": "fragment-001",
         "local_fragment_id": None,
         "source": "voice",

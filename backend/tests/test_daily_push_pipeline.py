@@ -63,17 +63,17 @@ def _build_fragment_backup_item(fragment_id: str, transcript: str, created_at: d
     }
 
 
-async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, attempts: int = 40) -> dict:
-    """轮询直到每日推盘流水线进入终态。"""
+async def _wait_task(async_client, auth_headers_factory, task_id: str, *, attempts: int = 40) -> dict:
+    """轮询直到每日推盘任务进入终态。"""
     headers = await _auth_headers(async_client, auth_headers_factory)
     for _ in range(attempts):
-        response = await async_client.get(f"/api/pipelines/{run_id}", headers=headers)
+        response = await async_client.get(f"/api/tasks/{task_id}", headers=headers)
         assert response.status_code == 200
         payload = response.json()["data"]
         if payload["status"] in {"succeeded", "failed", "cancelled"}:
             return payload
         await asyncio.sleep(0.05)
-    raise AssertionError(f"pipeline {run_id} did not finish")
+    raise AssertionError(f"task {task_id} did not finish")
 
 
 @pytest.mark.asyncio
@@ -105,20 +105,20 @@ async def test_daily_push_pipeline_creates_script_and_reuses_same_run(
     first_response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
     assert first_response.status_code == 200
     first_payload = first_response.json()["data"]
-    assert first_payload["pipeline_type"] == "daily_push_generation"
+    assert first_payload["task_type"] == "daily_push_generation"
 
     second_response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
     assert second_response.status_code == 200
-    assert second_response.json()["data"]["pipeline_run_id"] == first_payload["pipeline_run_id"]
+    assert second_response.json()["data"]["task_id"] == first_payload["task_id"]
 
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, first_payload["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
-    assert pipeline["resource"]["resource_type"] == "script"
-    assert pipeline["output"]["is_daily_push"] is True
+    task = await _wait_task(async_client, auth_headers_factory, first_payload["task_id"])
+    assert task["status"] == "succeeded"
+    assert task["resource"]["resource_type"] == "script"
+    assert task["output"]["is_daily_push"] is True
 
     get_response = await async_client.get("/api/scripts/daily-push", headers=await _auth_headers(async_client, auth_headers_factory))
     assert get_response.status_code == 200
-    assert get_response.json()["data"]["id"] == pipeline["resource"]["resource_id"]
+    assert get_response.json()["data"]["id"] == task["resource"]["resource_id"]
 
 
 @pytest.mark.asyncio
@@ -144,12 +144,12 @@ async def test_daily_push_pipeline_force_trigger_reuses_existing_result(async_cl
         }
 
     first_response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
-    first_run_id = first_response.json()["data"]["pipeline_run_id"]
-    await _wait_pipeline(async_client, auth_headers_factory, first_run_id)
+    first_run_id = first_response.json()["data"]["task_id"]
+    await _wait_task(async_client, auth_headers_factory, first_run_id)
 
     force_response = await async_client.post("/api/scripts/daily-push/force-trigger", headers=await _auth_headers(async_client, auth_headers_factory))
     assert force_response.status_code == 200
-    assert force_response.json()["data"]["pipeline_run_id"] == first_run_id
+    assert force_response.json()["data"]["task_id"] == first_run_id
 
 
 @pytest.mark.asyncio
@@ -181,8 +181,8 @@ async def test_daily_push_pipeline_marks_failed_when_llm_fails(
 
     response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
     assert response.status_code == 200
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "failed"
+    task = await _wait_task(async_client, auth_headers_factory, response.json()["data"]["task_id"])
+    assert task["status"] == "failed"
 
 
 @pytest.mark.asyncio
@@ -210,8 +210,8 @@ async def test_scheduler_daily_push_job_enqueues_pipeline(async_client, auth_hea
     result = await app.state.scheduler_service.run_job()
     assert result["queued_runs"]
 
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, result["run_ids"][0])
-    assert pipeline["status"] == "succeeded"
+    task = await _wait_task(async_client, auth_headers_factory, result["run_ids"][0])
+    assert task["status"] == "succeeded"
 
 
 @pytest.mark.asyncio

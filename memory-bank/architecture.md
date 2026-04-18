@@ -540,7 +540,7 @@ sequenceDiagram
 
 - 外挂工作流 provider 只负责远程执行步骤，不直接访问 PostgreSQL、ChromaDB 或业务表。
 - fragments、knowledge hits 和可选 web hits 都由 SparkFlow 后端先收集。
-- SparkFlow 后端向内部 task pipeline 传递稳定内核、方法论、相关素材、SOP 大纲和可选碎片背景；客户端主路径统一消费 `task_id` 和 `/api/tasks/*`，`/api/pipelines/*` 仅保留兼容查询。
+- SparkFlow 后端向内部 task pipeline 传递稳定内核、方法论、相关素材、SOP 大纲和可选碎片背景；客户端主路径统一消费 `task_id` 和 `/api/tasks/*`。
 - `task_runs` / `task_step_runs` 是后台状态唯一事实源；`agent_runs` 与 `/api/agent/*` 已移除。
 
 ### 5.4 Script Generation Notes

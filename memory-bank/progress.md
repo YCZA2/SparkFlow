@@ -23,7 +23,7 @@
 | 提词拍摄 | 基本完成 | 拍摄、提词、保存系统相册 |
 | 知识库后端 | 已完成 | 创建、上传、搜索、详情、删除，支持 `txt/docx/pdf/xlsx` |
 | 向量与检索 | 已完成 | 相似检索、灵感云图、知识库 chunk 召回聚合 |
-| 后台任务 | 已完成 | Celery + `task_runs` / `task_step_runs` 已成为任务执行与步骤投影主链路，`/api/pipelines/*` 仅保留兼容查询 |
+| 后台任务 | 已完成 | Celery + `task_runs` / `task_step_runs` 已成为任务执行与步骤投影主链路，客户端统一走 `/api/tasks/*` |
 | 每日推盘后端 | 已完成 | scheduler + API + pipeline 已落地 |
 | 备份与恢复 | 已完成 | `/api/backups/*`、显式恢复、素材访问刷新 |
 | 文档体系 | 已完成 | 当前实现口径已收束到 `PRD.md` / `architecture.md` / README |

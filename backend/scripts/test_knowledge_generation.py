@@ -241,7 +241,7 @@ def trigger_generation(
         json_body={"topic": topic, "fragment_ids": fragment_ids},
     )
     data = extract_response_data(payload)
-    task_id = (data.get("task_id") or data.get("pipeline_run_id")) if isinstance(data, dict) else None
+    task_id = data.get("task_id") if isinstance(data, dict) else None
     if not isinstance(task_id, str) or not task_id.strip():
         raise KnowledgeGenerationCheckError(f"生成任务返回缺少 task_id: {json.dumps(payload, ensure_ascii=False)}")
     return task_id

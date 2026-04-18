@@ -39,8 +39,6 @@ class ExternalMediaUseCase:
             task_id=ingestion_result.pipeline_run_id,
             task_type="media_ingestion",
             status_query_url=f"/api/tasks/{ingestion_result.pipeline_run_id}",
-            pipeline_run_id=ingestion_result.pipeline_run_id,
-            pipeline_type="media_ingestion",
             fragment_id=ingestion_result.fragment_id,
             local_fragment_id=local_fragment_id,
             source=ingestion_result.source,

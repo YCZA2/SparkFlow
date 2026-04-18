@@ -25,7 +25,7 @@ from tests.flow_helpers import (
     _seed_fragment_vector,
     _update_fragment_snapshot,
     _wait_fragment_derivatives,
-    _wait_pipeline,
+    _wait_task,
 )
 
 pytestmark = pytest.mark.integration
@@ -109,8 +109,8 @@ async def test_import_external_audio_only_creates_pipeline_in_request_phase(asyn
     )
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert payload["task_id"] == payload["pipeline_run_id"]
-    assert payload["task_type"] == payload["pipeline_type"] == "media_ingestion"
+    assert payload["task_id"]
+    assert payload["task_type"] == "media_ingestion"
     assert payload["status_query_url"] == f"/api/tasks/{payload['task_id']}"
     assert payload["fragment_id"] is None
     assert payload["local_fragment_id"] == "import-local-001"
@@ -186,26 +186,26 @@ async def test_import_external_audio_runs_full_async_pipeline(
     )
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert payload["pipeline_type"] == "media_ingestion"
+    assert payload["task_type"] == "media_ingestion"
     assert payload["source"] == "voice"
     assert payload["audio_source"] == "external_link"
     assert payload["fragment_id"] is None
     assert payload["local_fragment_id"] == "external-local-001"
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
-    assert pipeline["status"] == "succeeded"
-    assert pipeline["resource"]["resource_id"] == "external-local-001"
-    assert pipeline["output"]["platform"] == "douyin"
-    assert pipeline["output"]["media_id"] == "7614713222814088953"
-    assert pipeline["output"]["title"] == "别说了 拿大力胶吧"
-    assert pipeline["output"]["author"] == "老薯的薯"
-    assert pipeline["output"]["cover_url"] == "https://example.com/cover.jpg"
-    assert pipeline["output"]["content_type"] == "video"
-    assert pipeline["output"]["audio_file_url"]
-    assert pipeline["output"]["summary"] is None
-    assert pipeline["output"]["tags"] == []
+    task = await _wait_task(async_client, auth_headers_factory, payload["task_id"], attempts=140)
+    assert task["status"] == "succeeded"
+    assert task["resource"]["resource_id"] == "external-local-001"
+    assert task["output"]["platform"] == "douyin"
+    assert task["output"]["media_id"] == "7614713222814088953"
+    assert task["output"]["title"] == "别说了 拿大力胶吧"
+    assert task["output"]["author"] == "老薯的薯"
+    assert task["output"]["cover_url"] == "https://example.com/cover.jpg"
+    assert task["output"]["content_type"] == "video"
+    assert task["output"]["audio_file_url"]
+    assert task["output"]["summary"] is None
+    assert task["output"]["tags"] == []
 
     steps_response = await async_client.get(
-        f"/api/pipelines/{payload['pipeline_run_id']}/steps",
+        f"/api/tasks/{payload['task_id']}/steps",
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
@@ -241,12 +241,12 @@ async def test_import_external_audio_marks_pipeline_failed_for_invalid_link(asyn
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 200
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "failed"
-    assert pipeline["error_message"] == "无法识别外部媒体链接"
+    task = await _wait_task(async_client, auth_headers_factory, response.json()["data"]["task_id"])
+    assert task["status"] == "failed"
+    assert task["error_message"] == "无法识别外部媒体链接"
 
     steps_response = await async_client.get(
-        f"/api/pipelines/{response.json()['data']['pipeline_run_id']}/steps",
+        f"/api/tasks/{response.json()['data']['task_id']}/steps",
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}
@@ -279,12 +279,12 @@ async def test_import_external_audio_retries_when_provider_temporarily_fails(asy
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     assert response.status_code == 200
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, response.json()["data"]["pipeline_run_id"])
-    assert pipeline["status"] == "succeeded"
-    assert pipeline["output"]["media_id"] == "7614713222814088954"
+    task = await _wait_task(async_client, auth_headers_factory, response.json()["data"]["task_id"])
+    assert task["status"] == "succeeded"
+    assert task["output"]["media_id"] == "7614713222814088954"
 
     steps_response = await async_client.get(
-        f"/api/pipelines/{response.json()['data']['pipeline_run_id']}/steps",
+        f"/api/tasks/{response.json()['data']['task_id']}/steps",
         headers=await _auth_headers(async_client, auth_headers_factory),
     )
     steps = {item["step_name"]: item for item in steps_response.json()["data"]["items"]}

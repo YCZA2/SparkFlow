@@ -40,14 +40,6 @@ class KnowledgeUploadResponse(KnowledgeDocItem):
     task_id: str | None = None
     task_type: str | None = None
     status_query_url: str | None = None
-    pipeline_run_id: str | None = Field(
-        default=None,
-        description="deprecated：兼容旧客户端，等价于 task_id。",
-    )
-    pipeline_type: str | None = Field(
-        default=None,
-        description="deprecated：兼容旧客户端，等价于 task_type。",
-    )
 
 
 class KnowledgeDocListResponse(BaseModel):

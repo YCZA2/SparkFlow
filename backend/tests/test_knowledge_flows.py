@@ -114,8 +114,8 @@ async def test_reference_script_upload_returns_task_handle_and_finishes(async_cl
     )
     assert upload_response.status_code == 200
     payload = upload_response.json()["data"]
-    assert payload["task_id"] == payload["pipeline_run_id"]
-    assert payload["task_type"] == payload["pipeline_type"] == "reference_script_processing"
+    assert payload["task_id"]
+    assert payload["task_type"] == "reference_script_processing"
     assert payload["status_query_url"] == f"/api/tasks/{payload['task_id']}"
 
     task = await _wait_task(async_client, auth_headers_factory, payload["task_id"], attempts=140)

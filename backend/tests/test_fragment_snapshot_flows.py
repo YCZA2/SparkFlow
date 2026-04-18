@@ -22,17 +22,17 @@ async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
     return await auth_headers_factory(async_client)
 
 
-async def _wait_pipeline(async_client, auth_headers_factory, run_id: str, *, attempts: int = 80) -> dict:
-    """轮询后台流水线直到进入终态。"""
+async def _wait_task(async_client, auth_headers_factory, task_id: str, *, attempts: int = 80) -> dict:
+    """轮询统一任务接口直到进入终态。"""
     headers = await _auth_headers(async_client, auth_headers_factory)
     for _ in range(attempts):
-        response = await async_client.get(f"/api/pipelines/{run_id}", headers=headers)
+        response = await async_client.get(f"/api/tasks/{task_id}", headers=headers)
         assert response.status_code == 200
         payload = response.json()["data"]
         if payload["status"] in {"succeeded", "failed"}:
             return payload
         await asyncio.sleep(0.05)
-    raise AssertionError(f"pipeline {run_id} did not finish")
+    raise AssertionError(f"task {task_id} did not finish")
 
 
 async def _push_fragment_snapshot(
@@ -295,8 +295,8 @@ async def test_upload_audio_backfills_fragment_snapshot(async_client, auth_heade
     )
     assert response.status_code == 200
     payload = response.json()["data"]
-    pipeline = await _wait_pipeline(async_client, auth_headers_factory, payload["pipeline_run_id"], attempts=140)
-    assert pipeline["status"] == "succeeded"
+    task = await _wait_task(async_client, auth_headers_factory, payload["task_id"], attempts=140)
+    assert task["status"] == "succeeded"
 
     for _ in range(80):
         with db_session_factory() as db:

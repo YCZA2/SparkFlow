@@ -1,7 +1,7 @@
 import { assertTaskScopeActive, isTaskScopeActive, type TaskExecutionScope } from '@/features/auth/taskScope';
 import { getLocalDatabase } from '@/features/core/db/database';
 import { fragmentsTable } from '@/features/core/db/schema';
-import { fetchPipelineRun, waitForPipelineTerminal } from '@/features/pipelines/api';
+import { fetchTaskRun, waitForTaskTerminal } from '@/features/tasks/api';
 import { syncMediaIngestionPipelineState } from '@/features/pipelines/mediaIngestionRecovery';
 import { isNull } from 'drizzle-orm';
 
@@ -12,12 +12,12 @@ async function recoverSingleMediaPipeline(
 ): Promise<void> {
   /*媒体任务恢复时优先同步当前状态，仍在运行则转为后台等待终态。 */
   assertTaskScopeActive(scope);
-  const pipeline = await fetchPipelineRun(pipelineRunId);
+  const pipeline = await fetchTaskRun(pipelineRunId);
   if (pipeline.status === 'succeeded' || pipeline.status === 'failed' || pipeline.status === 'cancelled') {
     await syncMediaIngestionPipelineState(fragmentId, pipeline, { scope });
     return;
   }
-  void waitForPipelineTerminal(pipelineRunId, { timeoutMs: 180_000, scope })
+  void waitForTaskTerminal(pipelineRunId, { timeoutMs: 180_000, scope })
     .then(async (terminalRun) => {
       if (!isTaskScopeActive(scope)) {
         return;
@@ -32,7 +32,7 @@ async function recoverSingleMediaPipeline(
 }
 
 export async function recoverPendingMediaPipelines(scope: TaskExecutionScope): Promise<void> {
-  /*扫描当前工作区里带 pipeline_run_id 的媒体 placeholder，并恢复后台状态。 */
+  /*扫描当前工作区里带 task_id 的媒体 placeholder，并恢复后台状态。 */
   assertTaskScopeActive(scope);
   const database = await getLocalDatabase();
   const rows = await database

@@ -1,7 +1,7 @@
 import { convertPlainTextToHtml } from '@/features/editor/html';
 import type { Fragment } from '@/types/fragment';
 import type { SpeakerSegment } from '@/types/fragment';
-import type { PipelineRun } from '@/types/pipeline';
+import type { TaskRun } from '@/types/task';
 
 export interface MediaIngestionOutput {
   transcript: string | null;
@@ -15,7 +15,7 @@ export interface MediaIngestionOutput {
 
 /*把 pipeline output 规整成可直接回写本地 fragment 的 patch 数据。 */
 export function extractMediaIngestionOutput(
-  pipeline: Pick<PipelineRun, 'output'>
+  pipeline: Pick<TaskRun, 'output'>
 ): MediaIngestionOutput {
   const output = (pipeline.output ?? {}) as Record<string, unknown>;
   const rawTags = output.tags;
@@ -57,7 +57,7 @@ export function extractMediaIngestionOutput(
 /*解析媒体导入最终对应的本地 fragment id，优先取 pipeline 终态资源。 */
 export function resolveMediaIngestionFragmentId(
   fallbackFragmentId: string,
-  pipeline: Pick<PipelineRun, 'status' | 'resource'>
+  pipeline: Pick<TaskRun, 'status' | 'resource'>
 ): string | null {
   if (
     pipeline.status === 'succeeded' &&

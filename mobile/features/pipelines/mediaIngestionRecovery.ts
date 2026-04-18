@@ -1,5 +1,5 @@
 import { assertTaskScopeActive, type TaskExecutionScope } from '@/features/auth/taskScope';
-import { retryPipelineRun, waitForPipelineTerminal } from '@/features/pipelines/api';
+import { retryTaskRun, waitForTaskTerminal } from '@/features/tasks/api';
 import {
   extractMediaIngestionOutput,
   resolveMediaIngestionFragmentPatch,
@@ -7,15 +7,15 @@ import {
 import { readLocalFragmentEntity, updateLocalFragmentEntity } from '@/features/fragments/store';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import type { Fragment } from '@/types/fragment';
-import type { PipelineRun } from '@/types/pipeline';
+import type { TaskRun } from '@/types/task';
 export { isFailedMediaIngestionFragment, isProcessingMediaIngestionFragment } from './mediaIngestionRecoveryState';
 
 export async function syncMediaIngestionPipelineState(
   fallbackFragmentId: string,
-  pipeline: Pick<PipelineRun, 'id' | 'status' | 'resource' | 'output' | 'error_message'>,
+  pipeline: Pick<TaskRun, 'id' | 'status' | 'resource' | 'output' | 'error_message'>,
   options?: { scope?: TaskExecutionScope | null }
 ): Promise<Fragment | null> {
-  /*统一把媒体 pipeline 终态回写到本地 fragment，成功时补正文，失败时保留错误态。 */
+  /*统一把媒体 task 终态回写到本地 fragment，成功时补正文，失败时保留错误态。 */
   if (options?.scope) {
     assertTaskScopeActive(options.scope);
   }
@@ -72,13 +72,13 @@ export async function retryFailedMediaIngestionFragment(fragment: Pick<Fragment,
     media_pipeline_status: 'queued',
     media_pipeline_error_message: null,
   });
-  const retriedRun = await retryPipelineRun(runId, { strategy: 'from_failed_step' });
+  const retriedRun = await retryTaskRun(runId, { strategy: 'from_failed_step' });
   await updateLocalFragmentEntity(fragment.id, {
     media_pipeline_run_id: retriedRun.id,
     media_pipeline_status: retriedRun.status,
     media_pipeline_error_message: retriedRun.error_message ?? null,
   });
 
-  const terminalRun = await waitForPipelineTerminal(retriedRun.id, { timeoutMs: 180_000 });
+  const terminalRun = await waitForTaskTerminal(retriedRun.id, { timeoutMs: 180_000 });
   return await syncMediaIngestionPipelineState(fragment.id, terminalRun);
 }

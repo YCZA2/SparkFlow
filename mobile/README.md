@@ -357,7 +357,7 @@ http://192.168.31.157:8000
 - `POST /api/scripts/daily-push/trigger`
 - `POST /api/scripts/daily-push/force-trigger`
 
-这些接口先返回 `task_id` / `task_type` / `status_query_url`，不会保证请求返回时已经拿到最终 `fragment` 或 `script`；兼容字段 `pipeline_run_id` 仅保留过渡期。
+这些接口先返回 `task_id` / `task_type` / `status_query_url`，不会保证请求返回时已经拿到最终 `fragment` 或 `script`。
 
 联调顺序应改为：
 
