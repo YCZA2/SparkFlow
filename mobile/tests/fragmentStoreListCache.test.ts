@@ -63,3 +63,60 @@ test('fragment list cache removes a deleted fragment without clearing unrelated 
   );
   assert.deepEqual(useFragmentStore.getState().getList('folder-1'), []);
 });
+
+test('syncFragmentInLists refreshes cached preview after detail edit', () => {
+  useFragmentStore.getState().clearCache();
+
+  useFragmentStore.getState().setList(
+    null,
+    [buildFragment({ summary: '旧摘要', plain_text_snapshot: '旧摘要' })] as any
+  );
+
+  useFragmentStore.getState().syncFragmentInLists(
+    buildFragment({
+      updated_at: '2026-03-25T08:10:00.000Z',
+      body_html: '<p>新的标题</p><p>新的摘要正文</p>',
+      plain_text_snapshot: '新的标题\n新的摘要正文',
+      summary: '新的摘要正文',
+      content_state: 'body_present',
+    }) as any
+  );
+
+  const cached = useFragmentStore.getState().getList(null);
+  assert.equal(cached?.[0]?.summary, '新的摘要正文');
+  assert.equal(cached?.[0]?.plain_text_snapshot, '新的标题\n新的摘要正文');
+  assert.equal(cached?.[0]?.updated_at, '2026-03-25T08:10:00.000Z');
+});
+
+test('syncFragmentInLists replaces processing row after media task succeeds', () => {
+  useFragmentStore.getState().clearCache();
+
+  useFragmentStore.getState().setList(
+    null,
+    [
+      buildFragment({
+        media_task_run_id: 'task-1',
+        media_task_status: 'running',
+        transcript: null,
+        summary: null,
+      }),
+    ] as any
+  );
+
+  useFragmentStore.getState().syncFragmentInLists(
+    buildFragment({
+      updated_at: '2026-03-25T08:20:00.000Z',
+      transcript: '转录正文',
+      summary: '转录摘要',
+      plain_text_snapshot: '转录正文',
+      media_task_run_id: 'task-1',
+      media_task_status: 'succeeded',
+      content_state: 'transcript_only',
+    }) as any
+  );
+
+  const cached = useFragmentStore.getState().getList(null);
+  assert.equal(cached?.[0]?.media_task_status, 'succeeded');
+  assert.equal(cached?.[0]?.transcript, '转录正文');
+  assert.equal(cached?.[0]?.summary, '转录摘要');
+});

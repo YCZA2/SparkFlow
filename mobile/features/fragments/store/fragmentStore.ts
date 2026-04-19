@@ -34,6 +34,7 @@ export interface FragmentActions {
   getList: (folderId: string | null) => Fragment[] | undefined;
   deleteList: (folderId: string | null) => void;
   removeFragmentFromLists: (fragmentId: string) => void;
+  syncFragmentInLists: (fragment: Fragment) => void;
 
   /*批量更新（从 SQLite 同步后调用）*/
   batchUpdateDetails: (fragments: Fragment[]) => void;
@@ -104,6 +105,18 @@ function isSameFragmentList(a: Fragment[], b: Fragment[]): boolean {
         fragment.media_task_error_message === b[index]?.media_task_error_message
     )
   );
+}
+
+/*统一按列表时间降序重排，保证单条同步后列表顺序与 SQLite 查询口径一致。 */
+function sortFragmentsByUpdatedAt(fragments: Fragment[]): Fragment[] {
+  return [...fragments].sort(
+    (left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at)
+  );
+}
+
+/*比较单条 fragment 是否仍可视为同一展示快照，避免无效替换触发重渲染。 */
+function isSameFragmentSnapshot(current: Fragment, next: Fragment): boolean {
+  return isSameFragmentList([current], [next]);
 }
 
 export const useFragmentStore = create<FragmentStore>()(
@@ -196,6 +209,51 @@ export const useFragmentStore = create<FragmentStore>()(
           },
           false,
           'removeFragmentFromLists'
+        );
+      },
+
+      syncFragmentInLists: (fragment) => {
+        set(
+          (state) => {
+            /*把单条更新同步回所有已缓存列表，避免详情编辑和后台任务只刷新详情缓存。 */
+            const nextListCache = new Map(state.listCache);
+            let didChange = false;
+            const targetFolderKey = fragment.folder_id ?? null;
+
+            for (const [key, fragments] of state.listCache.entries()) {
+              const isAllList = key === ALL_FOLDERS_KEY;
+              const shouldContainFragment = isAllList || key === targetFolderKey;
+              const currentIndex = fragments.findIndex((item) => item.id === fragment.id);
+
+              if (currentIndex >= 0 && !shouldContainFragment) {
+                const nextFragments = fragments.filter((item) => item.id !== fragment.id);
+                nextListCache.set(key, nextFragments);
+                didChange = true;
+                continue;
+              }
+
+              if (currentIndex >= 0 && shouldContainFragment) {
+                const currentFragment = fragments[currentIndex];
+                if (isSameFragmentSnapshot(currentFragment, fragment)) {
+                  continue;
+                }
+                const nextFragments = [...fragments];
+                nextFragments[currentIndex] = fragment;
+                nextListCache.set(key, sortFragmentsByUpdatedAt(nextFragments));
+                didChange = true;
+                continue;
+              }
+
+              if (currentIndex === -1 && shouldContainFragment) {
+                nextListCache.set(key, sortFragmentsByUpdatedAt([fragment, ...fragments]));
+                didChange = true;
+              }
+            }
+
+            return didChange ? { listCache: nextListCache } : state;
+          },
+          false,
+          'syncFragmentInLists'
         );
       },
 

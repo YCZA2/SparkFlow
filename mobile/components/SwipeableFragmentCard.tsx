@@ -271,7 +271,8 @@ export function SwipeableFragmentCard({
 
 const styles = StyleSheet.create({
   swipeableContainer: {
-    marginHorizontal: 16,
+    /*卡片自身已经带页面级横向边距，侧滑容器不要再额外收窄一层。 */
+    marginHorizontal: 0,
   },
   actionsContainer: {
     width: ACTIONS_WIDTH,

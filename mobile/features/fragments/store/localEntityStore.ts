@@ -138,7 +138,12 @@ export async function updateLocalFragmentEntity(
     .set(resolvedUpdate.nextRow)
     .where(eq(fragmentsTable.id, id));
   useFragmentStore.getState().deleteDetail(id);
-  return await readLocalFragmentEntity(id);
+  const nextFragment = await readLocalFragmentEntity(id);
+  if (nextFragment) {
+    /*本地真值更新后同步刷新所有已缓存列表，避免详情返回和任务回写依赖额外下拉刷新。 */
+    useFragmentStore.getState().syncFragmentInLists(nextFragment);
+  }
+  return nextFragment;
 }
 
 export async function stageLocalFragmentPendingImage(
