@@ -9,7 +9,12 @@ import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { Text } from '@/components/Themed';
 import { InputDialog } from '@/components/InputDialog';
 import { NotesListHero } from '@/components/layout/NotesListHero';
-import { NotesListScreenShell } from '@/components/layout/NotesListScreenShell';
+import {
+  NOTES_LIST_QUICK_ACTION_FADE_EXTRA,
+  NOTES_LIST_QUICK_ACTION_PADDING_EXTRA,
+  NOTES_LIST_TOP_FADE_EXTRA,
+  NotesListScreenShell,
+} from '@/components/layout/NotesListScreenShell';
 import { NotesScreenStateView } from '@/components/layout/NotesScreenStateView';
 import { consumePendingFragmentCleanupDirectly } from '@/features/fragments/cleanup/runtime';
 import { FolderListRow } from '@/features/folders/components/FolderListRow';
@@ -132,8 +137,9 @@ export default function FoldersScreen() {
             </View>
           </View>
         }
-        topFadeHeight={insets.top + 96}
-        bottomFadeHeight={insets.bottom + 108}
+        blurTint={theme.name === 'dark' ? 'dark' : 'light'}
+        topFadeHeight={insets.top + NOTES_LIST_TOP_FADE_EXTRA}
+        bottomFadeHeight={insets.bottom + NOTES_LIST_QUICK_ACTION_FADE_EXTRA}
       >
         <FlatList
           data={homeList.items}
@@ -167,7 +173,7 @@ export default function FoldersScreen() {
           ListEmptyComponent={
             <ScreenState icon="📁" title="还没有文件夹" message="系统会自动创建文件夹，或从后端同步" />
           }
-          contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + NOTES_LIST_QUICK_ACTION_PADDING_EXTRA }}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}

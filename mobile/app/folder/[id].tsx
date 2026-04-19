@@ -8,7 +8,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SwipeableFragmentCard } from '@/components/SwipeableFragmentCard';
 import { BackButton } from '@/components/layout/BackButton';
 import { NotesListHero } from '@/components/layout/NotesListHero';
-import { NotesListScreenShell } from '@/components/layout/NotesListScreenShell';
+import {
+  NOTES_LIST_QUICK_ACTION_FADE_EXTRA,
+  NOTES_LIST_QUICK_ACTION_PADDING_EXTRA,
+  NOTES_LIST_SELECTION_FADE_EXTRA,
+  NOTES_LIST_SELECTION_PADDING_EXTRA,
+  NOTES_LIST_TOP_FADE_EXTRA,
+  NotesListScreenShell,
+} from '@/components/layout/NotesListScreenShell';
 import { NotesScreenStateView } from '@/components/layout/NotesScreenStateView';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { AnimatedFragmentListItem } from '@/features/fragments/components/AnimatedFragmentListItem';
@@ -109,6 +116,12 @@ export default function FolderDetailScreen() {
   const handleDismissOpenSwipe = useCallback(() => {
     requestCloseOpenCard();
   }, [requestCloseOpenCard]);
+  const bottomFadeHeight = screen.selection.isSelectionMode
+    ? insets.bottom + NOTES_LIST_SELECTION_FADE_EXTRA
+    : insets.bottom + NOTES_LIST_QUICK_ACTION_FADE_EXTRA;
+  const contentPaddingBottom = screen.selection.isSelectionMode
+    ? insets.bottom + NOTES_LIST_SELECTION_PADDING_EXTRA
+    : insets.bottom + NOTES_LIST_QUICK_ACTION_PADDING_EXTRA;
 
   if (screen.isLoading && screen.fragments.length === 0) {
     return (
@@ -149,8 +162,9 @@ export default function FolderDetailScreen() {
           />
         </View>
       }
-      topFadeHeight={insets.top + 96}
-      bottomFadeHeight={insets.bottom + 108}
+      blurTint={theme.name === 'dark' ? 'dark' : 'light'}
+      topFadeHeight={insets.top + NOTES_LIST_TOP_FADE_EXTRA}
+      bottomFadeHeight={bottomFadeHeight}
       bottomOverlay={
         screen.selection.isSelectionMode ? (
           <View
@@ -251,7 +265,7 @@ export default function FolderDetailScreen() {
             onPress={handleDismissOpenSwipe}
           />
         }
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom + 110 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: contentPaddingBottom }}
         refreshControl={
           <RefreshControl
             refreshing={screen.isRefreshing}
