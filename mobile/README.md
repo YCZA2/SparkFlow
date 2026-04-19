@@ -186,6 +186,18 @@ npm run dev:db:status
 bash scripts/dev-mobile.sh build
 ```
 
+脚本现在会在执行时提示你手动选择构建目标：
+
+- `iOS Simulator`
+- `Physical iPhone`
+
+如果你想跳过交互，也可以直接传参数：
+
+```bash
+bash scripts/dev-mobile.sh build simulator
+bash scripts/dev-mobile.sh build device
+```
+
 也可以用 npm 别名：
 
 ```bash
@@ -194,10 +206,11 @@ npm run dev:mobile:build
 
 这个模式只做重建相关步骤，不会启动前后端。
 
-执行完模式2后，再执行模式1开始联调：
+执行完模式2后，再按目标进入日常联调：
 
 ```bash
-bash scripts/dev-mobile.sh
+bash scripts/dev-mobile.sh simulator   # 如果刚才构建的是 simulator
+bash scripts/dev-mobile.sh             # 如果刚才构建的是 device / LAN 联调
 ```
 
 如需在本地验证 Android 原生改动，请显式按 Expo config 重生 Android 目录：
@@ -239,7 +252,9 @@ cd mobile
 npm install
 npx expo prebuild --platform ios --clean
 npx pod-install ios
-npx expo run:ios --device
+npx expo run:ios --device "<当前 iOS Simulator 名称>"   # 选择 simulator 时
+# 或
+npx expo run:ios --device      # 选择 device 时
 ```
 
 完成后脚本会提示你回到模式1。
@@ -527,7 +542,7 @@ bash scripts/test-all.sh
 如果你以后不想记脚本，可以对照下面理解：
 
 - 模式1 ≈ 启动后端 + `npx expo start --lan`
-- 模式2 ≈ `npm install` + `expo prebuild` + `pod-install` + `expo run:ios --device`
+- 模式2 ≈ `npm install` + `expo prebuild` + `pod-install` + `expo run:ios --device <simulator>|--device`
 - 模式5 ≈ 复用已有 `.app` + `expo run:ios --device --binary <path>`
 - 根目录 `npm install` 会被保护脚本拦住；只有 `cd mobile && npm install` 才是正确安装路径
 

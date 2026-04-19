@@ -1,6 +1,7 @@
 import React from 'react';
 import { BlurView } from 'expo-blur';
-import { StyleProp, View, ViewStyle } from 'react-native';
+import MaskedView from '@react-native-masked-view/masked-view';
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export const NOTES_LIST_TOP_FADE_EXTRA = 96;
@@ -8,6 +9,49 @@ export const NOTES_LIST_QUICK_ACTION_FADE_EXTRA = 92;
 export const NOTES_LIST_QUICK_ACTION_PADDING_EXTRA = 152;
 export const NOTES_LIST_SELECTION_FADE_EXTRA = 124;
 export const NOTES_LIST_SELECTION_PADDING_EXTRA = 184;
+
+function FadeMaskedBlur({
+  direction,
+  tint,
+  intensity,
+  backgroundColor,
+}: {
+  direction: 'top' | 'bottom';
+  tint: 'light' | 'dark' | 'default';
+  intensity: number;
+  backgroundColor: string;
+}) {
+  /*用渐变遮罩 BlurView，让列表边缘的模糊强度真正平滑过渡。 */
+  const isTop = direction === 'top';
+  const maskColors = isTop
+    ? (['rgba(0,0,0,1)', 'rgba(0,0,0,1)', 'rgba(0,0,0,0)'] as const)
+    : (['rgba(0,0,0,0)', 'rgba(0,0,0,1)', 'rgba(0,0,0,1)'] as const);
+  const maskLocations = isTop ? ([0, 0.38, 1] as const) : ([0, 0.62, 1] as const);
+  const overlayColors = isTop
+    ? ([`${backgroundColor}D8`, `${backgroundColor}96`, `${backgroundColor}36`, `${backgroundColor}00`] as const)
+    : ([`${backgroundColor}00`, `${backgroundColor}2C`, `${backgroundColor}9E`, `${backgroundColor}E8`] as const);
+  const overlayLocations = isTop ? ([0, 0.24, 0.6, 1] as const) : ([0, 0.34, 0.72, 1] as const);
+
+  return (
+    <MaskedView
+      style={styles.absoluteFill}
+      maskElement={(
+        <LinearGradient
+          colors={maskColors}
+          locations={maskLocations}
+          style={styles.absoluteFill}
+        />
+      )}
+    >
+      <BlurView tint={tint} intensity={intensity} style={styles.absoluteFill} />
+      <LinearGradient
+        colors={overlayColors}
+        locations={overlayLocations}
+        style={styles.absoluteFill}
+      />
+    </MaskedView>
+  );
+}
 
 /*统一承载 notes 风格列表页的背景、浮层和渐隐壳层，不接管业务数据流。 */
 export function NotesListScreenShell({
@@ -47,15 +91,11 @@ export function NotesListScreenShell({
           style={{ height: topFadeHeight, zIndex: 8 }}
           pointerEvents="none"
         >
-          <BlurView
+          <FadeMaskedBlur
+            direction="top"
             tint={blurTint}
-            intensity={22}
-            className="absolute inset-0"
-          />
-          <LinearGradient
-            colors={[`${backgroundColor}F7`, `${backgroundColor}D6`, `${backgroundColor}70`, `${backgroundColor}00`]}
-            locations={[0, 0.26, 0.58, 1]}
-            className="absolute inset-0"
+            intensity={20}
+            backgroundColor={backgroundColor}
           />
         </View>
       ) : null}
@@ -66,15 +106,11 @@ export function NotesListScreenShell({
           style={{ height: bottomFadeHeight, zIndex: 8 }}
           pointerEvents="none"
         >
-          <BlurView
+          <FadeMaskedBlur
+            direction="bottom"
             tint={blurTint}
-            intensity={28}
-            className="absolute inset-0"
-          />
-          <LinearGradient
-            colors={[`${backgroundColor}00`, `${backgroundColor}78`, `${backgroundColor}D8`, `${backgroundColor}FA`]}
-            locations={[0, 0.34, 0.72, 1]}
-            className="absolute inset-0"
+            intensity={24}
+            backgroundColor={backgroundColor}
           />
         </View>
       ) : null}
@@ -83,3 +119,9 @@ export function NotesListScreenShell({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  absoluteFill: {
+    ...StyleSheet.absoluteFillObject,
+  },
+});

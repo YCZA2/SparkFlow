@@ -155,6 +155,8 @@ If you changed native config, Expo plugins, `mobile/app.config.ts`, or files und
 bash scripts/dev-mobile.sh build
 ```
 
+`build` mode now asks for an iOS build target when run interactively. Use `bash scripts/dev-mobile.sh build simulator` to build for Simulator directly, or `bash scripts/dev-mobile.sh build device` for a physical iPhone.
+
 If you need to verify the same kind of change on Android locally, regenerate the Android native project from the Expo config before running the app:
 
 ```bash

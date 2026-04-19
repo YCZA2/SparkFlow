@@ -20,6 +20,7 @@ IOS_DEV_BUNDLE_ID="${IOS_DEV_BUNDLE_ID:-com.sparkflow.mobile.dev}"
 IOS_DEV_SCHEME="${IOS_DEV_SCHEME:-sparkflowmobiledev}"
 
 MODE="${1:-start}"
+BUILD_TARGET_INPUT="${2:-${BUILD_TARGET:-}}"
 BACKEND_PID=""
 CELERY_WORKER_PID=""
 EXPO_PID=""
@@ -31,7 +32,9 @@ print_usage() {
   bash scripts/dev-mobile.sh           # 模式1：启动前后端联调（默认，LAN 模式）
   bash scripts/dev-mobile.sh start     # 模式1：启动前后端联调（LAN 模式）
   bash scripts/dev-mobile.sh simulator # 模式3：启动前后端联调（iOS Simulator）
-  bash scripts/dev-mobile.sh build     # 模式2：执行 iOS 重建，不启动前后端
+  bash scripts/dev-mobile.sh build     # 模式2：交互选择 iOS 构建目标，不启动前后端
+  bash scripts/dev-mobile.sh build simulator  # 模式2：重建并安装到 iOS Simulator
+  bash scripts/dev-mobile.sh build device     # 模式2：重建并安装到物理 iPhone
   bash scripts/dev-mobile.sh install   # 模式5：仅安装已有 iOS .app 到设备
   bash scripts/dev-mobile.sh help      # 查看帮助
 
@@ -39,6 +42,7 @@ print_usage() {
   模式1 适合：只改 JS / TS / 样式 / 页面逻辑，LAN 模式便于真机测试。
   模式3 适合：只改 JS / TS / 样式 / 页面逻辑，使用本地 iOS Simulator 调试。
   模式2 适合：改了原生配置、插件、Pod、Info.plist、AppDelegate 后，需要重新 Build。
+            不传 target 时会交互选择 simulator 或 device。
   模式5 适合：build 已成功但安装真机失败时，复用已有 .app 仅重试安装。
   执行完模式2或模式5后，再执行模式1或模式3即可开始联调。
 USAGE
@@ -259,13 +263,13 @@ open_expo_in_simulator() {
     echo "[dev-mobile] iOS dev client is missing from the booted simulator."
     simulator_name="$(get_booted_simulator_name)"
     if ! install_dev_client_to_booted_simulator "${simulator_name}"; then
-      echo "[dev-mobile] auto-install failed. run 'bash scripts/dev-mobile.sh build' and retry."
+      echo "[dev-mobile] auto-install failed. run 'bash scripts/dev-mobile.sh build simulator' and retry."
       return 1
     fi
 
     if ! xcrun simctl listapps booted | grep -q "\"${bundle_id}\""; then
       echo "[dev-mobile] dev client install finished but app is still not detected."
-      echo "[dev-mobile] run 'bash scripts/dev-mobile.sh build' and retry."
+      echo "[dev-mobile] run 'bash scripts/dev-mobile.sh build simulator' and retry."
       return 1
     fi
   fi
@@ -304,6 +308,78 @@ run_backend_migrations() {
 ensure_build_mode_deps() {
   ensure_workspace
   ensure_node_tools
+}
+
+normalize_build_target() {
+  # 统一解析 build 目标别名，避免脚本和人工输入出现多套写法。
+  local raw_target="${1:-}"
+
+  case "${raw_target}" in
+    "")
+      echo ""
+      ;;
+    simulator|ios-simulator|ios_simulator|simulator-ios|sim)
+      echo "ios-simulator"
+      ;;
+    device|ios-device|ios_device|device-ios|iphone|physical)
+      echo "ios-device"
+      ;;
+    *)
+      echo "[dev-mobile] unknown build target: ${raw_target}" >&2
+      echo "[dev-mobile] use 'simulator' or 'device'." >&2
+      return 1
+      ;;
+  esac
+}
+
+prompt_build_target() {
+  # 交互式选择 iOS 构建目标，避免默认误装到物理设备。
+  local choice=""
+
+  echo "[dev-mobile] choose build target:" >&2
+  echo "  1) iOS Simulator" >&2
+  echo "  2) Physical iPhone" >&2
+
+  while true; do
+    printf "Enter choice [1-2]: " >&2
+    if [[ -e /dev/tty ]]; then
+      read -r choice </dev/tty
+    else
+      read -r choice
+    fi
+    case "${choice}" in
+      1)
+        echo "ios-simulator"
+        return 0
+        ;;
+      2)
+        echo "ios-device"
+        return 0
+        ;;
+      *)
+        echo "[dev-mobile] invalid choice: ${choice}" >&2
+        ;;
+    esac
+  done
+}
+
+resolve_build_target() {
+  # 优先读取显式参数；缺失时在交互终端里询问用户选择构建目标。
+  local normalized_target=""
+
+  normalized_target="$(normalize_build_target "${BUILD_TARGET_INPUT}")" || return 1
+  if [[ -n "${normalized_target}" ]]; then
+    echo "${normalized_target}"
+    return 0
+  fi
+
+  if [[ ! -t 0 ]]; then
+    echo "[dev-mobile] build target is required in non-interactive mode." >&2
+    echo "[dev-mobile] run 'bash scripts/dev-mobile.sh build simulator' or 'bash scripts/dev-mobile.sh build device'." >&2
+    return 1
+  fi
+
+  prompt_build_target
 }
 
 find_latest_ios_app_binary() {
@@ -510,8 +586,15 @@ run_simulator_mode() {
 }
 
 run_build_mode() {
+  local build_target=""
+  local run_command_label=""
+  local simulator_name=""
+
+  build_target="$(resolve_build_target)"
+
   echo "[dev-mobile] mode2: rebuilding iOS app only..."
   echo "[dev-mobile] this mode does not start backend or expo."
+  echo "[dev-mobile] target: ${build_target}"
 
   cd "${MOBILE_DIR}"
 
@@ -524,13 +607,39 @@ run_build_mode() {
   echo "[dev-mobile] step 3/4: pod-install ios"
   npx pod-install ios
 
-  echo "[dev-mobile] step 4/4: expo run:ios --device"
-  APP_ENV="${APP_ENV}" npx expo run:ios --device
+  case "${build_target}" in
+    ios-simulator)
+      ensure_booted_simulator
+      simulator_name="$(get_booted_simulator_name)"
+      if [[ -z "${simulator_name}" ]]; then
+        simulator_name="$(find_first_available_simulator)"
+      fi
+
+      if [[ -z "${simulator_name}" ]]; then
+        echo "[dev-mobile] no available iOS simulator device found."
+        echo "[dev-mobile] install an iOS Simulator runtime in Xcode > Settings > Components, then retry."
+        exit 1
+      fi
+
+      echo "[dev-mobile] step 4/4: expo run:ios --device ${simulator_name}"
+      APP_ENV="${APP_ENV}" npx expo run:ios --device "${simulator_name}"
+      run_command_label="bash scripts/dev-mobile.sh simulator"
+      ;;
+    ios-device)
+      echo "[dev-mobile] step 4/4: expo run:ios --device"
+      APP_ENV="${APP_ENV}" npx expo run:ios --device
+      run_command_label="bash scripts/dev-mobile.sh"
+      ;;
+    *)
+      echo "[dev-mobile] unsupported build target: ${build_target}"
+      exit 1
+      ;;
+  esac
 
   echo
   echo "========================================"
   echo "Mode2 build finished."
-  echo "Next step: run 'bash scripts/dev-mobile.sh'"
+  echo "Next step: run '${run_command_label}'"
   echo "That will start backend + expo for daily development."
   echo "========================================"
 }
