@@ -62,7 +62,7 @@ const layout = {
 
 const radius = sparkFlowTheme.radius;
 
-/*兼容旧 StyleSheet 调用；新增视觉 token 应优先进入 Tailwind theme。 */
+/*服务仍在迁移中的 StyleSheet 调用；新增视觉 token 应优先进入 Tailwind theme。 */
 export const themes: Record<ThemeName, AppTheme> = {
   light: {
     name: 'light',

@@ -33,22 +33,22 @@ function buildFragment(overrides: Partial<Fragment> = {}): Fragment {
   };
 }
 
-test('resolveHydratedBodySession prefers local draft and keeps baseline', () => {
+test('resolveHydratedBodySession prefers pending body and keeps baseline', () => {
   const result = resolveHydratedBodySession({
     fragment: buildFragment({ body_html: '服务端正文' }),
-    draftHtml: '<p>本地草稿</p>',
+    pendingBodyHtml: '<p>本地待同步正文</p>',
     baselineContentHtml: '<p>基线正文</p>',
   });
 
-  assert.equal(result.snapshot.body_html, '<p>本地草稿</p>');
+  assert.equal(result.snapshot.body_html, '<p>本地待同步正文</p>');
   assert.equal(result.baselineBodyHtml, '<p>基线正文</p>');
   assert.equal(result.syncStatus, 'idle');
 });
 
-test('resolveHydratedBodySession marks synced when no draft overrides remote body', () => {
+test('resolveHydratedBodySession marks synced when no pending body overrides remote body', () => {
   const result = resolveHydratedBodySession({
     fragment: buildFragment({ body_html: '服务端正文' }),
-    draftHtml: null,
+    pendingBodyHtml: null,
     baselineContentHtml: null,
   });
 
@@ -64,7 +64,7 @@ test('shouldRehydrateBodySession allows remote detail to replace stale empty sna
       plain_text_snapshot: '远端正文',
       media_assets: [],
     }),
-    draftHtml: null,
+    pendingBodyHtml: null,
     currentSnapshot: buildEditorDocumentSnapshot(''),
     baselineBodyHtml: '',
     visibleMediaAssets: [],
@@ -74,15 +74,15 @@ test('shouldRehydrateBodySession allows remote detail to replace stale empty sna
   assert.equal(shouldRehydrate, true);
 });
 
-test('shouldRehydrateBodySession blocks remote reset when local draft exists', () => {
+test('shouldRehydrateBodySession blocks remote reset when pending body exists', () => {
   const shouldRehydrate = shouldRehydrateBodySession({
     fragment: buildFragment({
       body_html: '远端正文',
       plain_text_snapshot: '远端正文',
       media_assets: [],
     }),
-    draftHtml: '<p>本地草稿</p>',
-    currentSnapshot: buildEditorDocumentSnapshot('<p>本地草稿</p>'),
+    pendingBodyHtml: '<p>本地待同步正文</p>',
+    currentSnapshot: buildEditorDocumentSnapshot('<p>本地待同步正文</p>'),
     baselineBodyHtml: '服务端正文',
     visibleMediaAssets: [],
     hasConfirmedLocalEdit: true,
@@ -95,7 +95,7 @@ test('shouldProtectSuspiciousEmptySnapshot blocks accidental empty commit withou
   const shouldProtect = shouldProtectSuspiciousEmptySnapshot({
     snapshot: buildEditorDocumentSnapshot(''),
     baselineBodyHtml: '可信远端正文',
-    hasLocalDraft: false,
+    hasPendingBody: false,
     hasConfirmedLocalEdit: false,
   });
 
@@ -106,7 +106,7 @@ test('shouldProtectSuspiciousEmptySnapshot allows intentional empty commit after
   const shouldProtect = shouldProtectSuspiciousEmptySnapshot({
     snapshot: buildEditorDocumentSnapshot(''),
     baselineBodyHtml: '可信远端正文',
-    hasLocalDraft: false,
+    hasPendingBody: false,
     hasConfirmedLocalEdit: true,
   });
 

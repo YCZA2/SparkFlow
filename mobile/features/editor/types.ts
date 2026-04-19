@@ -40,7 +40,7 @@ export interface EditorSourceDocument {
   id: string;
   body_html: string;
   media_assets?: EditorMediaAsset[];
-  legacy_save_state?: EditorSaveState | null;
+  save_state?: EditorSaveState | null;
 }
 
 export interface EditorSessionBaseline {
@@ -48,7 +48,7 @@ export interface EditorSessionBaseline {
   snapshot: EditorDocumentSnapshot;
   baseline_body_html: string;
   baseline_content_html: string | null;
-  local_draft_html: string | null;
+  pending_body_html: string | null;
   media_assets: EditorMediaAsset[];
   save_state: EditorSaveState;
 }

@@ -110,7 +110,12 @@ class DashScopeSTTService(BaseSTTService):
         try:
             loop = asyncio.get_running_loop()
             result = await asyncio.wait_for(
-                loop.run_in_executor(None, self._transcribe_recorded_file, audio_path, language),
+                loop.run_in_executor(
+                    None,
+                    self._file_transcriber.transcribe_recorded_file,
+                    audio_path,
+                    language,
+                ),
                 timeout=self.file_transcription_timeout_seconds,
             )
             logger.info("dashscope_stt_succeeded", provider="dashscope", model=self.model)
@@ -153,10 +158,6 @@ class DashScopeSTTService(BaseSTTService):
                 os.unlink(temp_path)
             except Exception:
                 pass
-
-    def _transcribe_recorded_file(self, audio_path: str, language: str) -> TranscriptionResult:
-        """兼容旧策略测试的录音文件识别入口。"""
-        return self._file_transcriber.transcribe_recorded_file(audio_path=audio_path, language=language)
 
     async def health_check(self) -> bool:
         """以 API Key 是否存在作为轻量健康检查。"""

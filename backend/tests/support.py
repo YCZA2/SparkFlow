@@ -49,28 +49,6 @@ class FakeVectorStore:
     async def list_fragment_documents(self, *, user_id: str, include_embeddings: bool = True):
         return []
 
-    async def upsert_knowledge_doc(self, *, user_id: str, doc_id: str, title: str, content: str, doc_type: str):
-        vector_ref_id = f"knowledge_{user_id}:{doc_id}"
-        self.knowledge_docs[doc_id] = {
-            "user_id": user_id,
-            "title": title,
-            "content": content,
-            "doc_type": doc_type,
-            "vector_ref_id": vector_ref_id,
-            "matched_chunks": [content],
-        }
-        return vector_ref_id
-
-    async def query_knowledge_docs(self, *, user_id: str, query_text: str, top_k: int):
-        if self.knowledge_results:
-            return self.knowledge_results[:top_k]
-        items = [
-            {"doc_id": doc_id, "score": 0.9, "content": payload["content"], "metadata": {"title": payload["title"]}}
-            for doc_id, payload in self.knowledge_docs.items()
-            if payload["user_id"] == user_id and query_text in payload["content"]
-        ]
-        return items[:top_k]
-
     async def index_document(self, *, user_id: str, doc_id: str, title: str, doc_type: str, chunks: list[KnowledgeChunk]):
         """按文档级聚合保存知识分块，用于替身检索。"""
         matched_chunks = [chunk.content for chunk in chunks if chunk.content]
@@ -138,40 +116,6 @@ class FakeVectorStore:
                 )
             return custom_hits
         return hits
-
-    async def delete_knowledge_doc(self, *, user_id: str, doc_id: str):
-        self.knowledge_docs.pop(doc_id, None)
-        return True
-
-    async def upsert_reference_script_chunks(self, *, user_id: str, doc_id: str, chunks):
-        """内存存储参考脚本分块。"""
-        ref_ids = []
-        for chunk_index, chunk_text in chunks:
-            ref_id = f"refscript_{doc_id}:chunk_{chunk_index}"
-            self.knowledge_docs[ref_id] = {
-                "user_id": user_id,
-                "doc_id": doc_id,
-                "doc_type": "reference_script",
-                "chunk_index": chunk_index,
-                "content": chunk_text,
-            }
-            ref_ids.append(ref_id)
-        return ref_ids
-
-    async def query_reference_script_chunks(self, *, user_id: str, query_text: str, top_k: int):
-        """返回内存中的参考脚本分块检索结果。"""
-        if hasattr(self, "reference_script_results"):
-            return self.reference_script_results[:top_k]
-        hits = await self.search_reference_examples(user_id=user_id, query_text=query_text, top_k=top_k)
-        results = []
-        for hit in hits:
-            for chunk_index, content in enumerate(hit.matched_chunks or []):
-                results.append({"doc_id": hit.doc_id, "chunk_index": chunk_index, "content": content, "score": hit.score})
-        return results[:top_k]
-
-    async def delete_reference_script_chunks(self, *, user_id: str, doc_id: str):
-        """删除内存中的参考脚本分块。"""
-        return await self.delete_document(user_id=user_id, doc_id=doc_id)
 
     async def health_check(self):
         return True

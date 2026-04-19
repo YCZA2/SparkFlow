@@ -35,7 +35,7 @@ export function FragmentDetailScreen({
         capabilities={FRAGMENT_EDITOR_CAPABILITIES}
         isLoading={screen.resource.isLoading}
         error={screen.resource.error}
-        isDraftHydrated={editor.isDraftHydrated}
+        isPendingBodyHydrated={editor.isPendingBodyHydrated}
         showDoneButton={editor.isEditorFocused}
         formattingState={editor.formattingState}
         statusLabel={editor.statusLabel}

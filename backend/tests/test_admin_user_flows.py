@@ -20,8 +20,16 @@ OTHER_USER_ID = "other-user-001"
 async def admin_headers(db_session_factory) -> dict[str, str]:
     """创建 admin 角色用户并签发不含 device_id 的 JWT（绕过设备会话校验）。"""
     with db_session_factory() as db:
-        db.add(User(id=ADMIN_USER_ID, role="admin", nickname="超级管理员", status="active",
-                    email="admin@sparkflow.dev"))
+        db.add(
+            User(
+                id=ADMIN_USER_ID,
+                role="admin",
+                nickname="超级管理员",
+                status="active",
+                email="admin@sparkflow.dev",
+                password_hash="test-password-hash",
+            )
+        )
         db.commit()
     token = create_access_token(user_id=ADMIN_USER_ID, role="admin")
     return {"Authorization": f"Bearer {token}"}
@@ -31,8 +39,16 @@ async def admin_headers(db_session_factory) -> dict[str, str]:
 async def other_user(db_session_factory) -> str:
     """创建普通测试用户，返回其 user_id。"""
     with db_session_factory() as db:
-        db.add(User(id=OTHER_USER_ID, role="user", nickname="普通用户", status="active",
-                    email="other@sparkflow.dev"))
+        db.add(
+            User(
+                id=OTHER_USER_ID,
+                role="user",
+                nickname="普通用户",
+                status="active",
+                email="other@sparkflow.dev",
+                password_hash="test-password-hash",
+            )
+        )
         db.commit()
     return OTHER_USER_ID
 

@@ -9,12 +9,12 @@ import type { EditorSessionState } from './sessionState';
 
 /*仅当正文或素材展示态变化时才回写详情资源层。 */
 export function shouldPublishOptimisticDocument(state: EditorSessionState): boolean {
-  if (!state.source.document || !state.documentId || !state.isDraftHydrated) return false;
+  if (!state.source.document || !state.documentId || !state.isPendingBodyHydrated) return false;
   const baselineBodyHtml = state.baseline?.baseline_body_html ?? '';
   if (shouldProtectSuspiciousEmptySnapshot({
     snapshot: state.snapshot,
     baselineBodyHtml,
-    hasLocalDraft: state.source.local_draft_html !== null,
+    hasPendingBody: state.source.pending_body_html !== null,
     hasConfirmedLocalEdit: state.hasConfirmedLocalEdit,
   })) {
     return false;

@@ -75,8 +75,8 @@ export async function refreshBackupMediaAssetUrls(plan: BackupRestorePlan): Prom
   const objectKeys = Array.from(
     new Set(
       plan.mediaAssets
-        .filter((asset) => !asset.deletedAt && asset.remoteAssetId)
-        .map((asset) => asset.remoteAssetId as string)
+        .filter((asset) => !asset.deletedAt && asset.backupObjectKey)
+        .map((asset) => asset.backupObjectKey as string)
     )
   );
   if (objectKeys.length === 0) {
@@ -89,10 +89,10 @@ export async function refreshBackupMediaAssetUrls(plan: BackupRestorePlan): Prom
       response.items.map((item) => [item.object_key, item] as const)
     );
     for (const asset of plan.mediaAssets) {
-      if (!asset.remoteAssetId) {
+      if (!asset.backupObjectKey) {
         continue;
       }
-      const refreshed = accessByObjectKey.get(asset.remoteAssetId);
+      const refreshed = accessByObjectKey.get(asset.backupObjectKey);
       if (!refreshed) {
         continue;
       }

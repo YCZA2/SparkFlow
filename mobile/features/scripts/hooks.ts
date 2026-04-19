@@ -13,7 +13,6 @@ import { consumeScriptsStale } from '@/features/scripts/refreshSignal';
 import { rememberPendingScriptTask, type PendingScriptTaskKind } from '@/features/scripts/pendingScriptTasks';
 import { listLocalScriptEntities, upsertLocalScriptEntity } from '@/features/scripts/store';
 import { useScriptList, useScriptStore } from '@/features/scripts/store/scriptStore';
-import { syncRemoteScriptsToLocal } from '@/features/scripts/sync';
 import { resolveScriptFromTask } from '@/features/scripts/scriptTask';
 import type { Script } from '@/types/script';
 import { getErrorMessage } from '@/utils/error';
@@ -86,19 +85,6 @@ export function useScripts(options?: { sourceFragmentId?: string | null }) {
         const nextItems = await listLocalScriptEntities({ sourceFragmentId: options?.sourceFragmentId });
         useScriptStore.getState().setList(cacheKey, nextItems);
         setError(null);
-
-        if (mode !== 'silent' || nextItems.length === 0) {
-          try {
-            const scope = captureRequiredTaskExecutionScope();
-            await syncRemoteScriptsToLocal({ scope });
-            const refreshedItems = await listLocalScriptEntities({ sourceFragmentId: options?.sourceFragmentId });
-            useScriptStore.getState().setList(cacheKey, refreshedItems);
-          } catch (syncError) {
-            if (nextItems.length === 0) {
-              throw syncError;
-            }
-          }
-        }
       } catch (err) {
         setError(getErrorMessage(err, '加载口播稿失败'));
       } finally {

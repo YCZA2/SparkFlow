@@ -49,7 +49,7 @@ export const fragmentFoldersTable = sqliteTable('fragment_folders', {
 export const mediaAssetsTable = sqliteTable('media_assets', {
   id: text('id').primaryKey(),
   fragmentId: text('fragment_id').notNull(),
-  remoteAssetId: text('remote_asset_id'),
+  backupObjectKey: text('backup_object_key'),
   mediaKind: text('media_kind').notNull(),
   mimeType: text('mime_type').notNull(),
   fileName: text('file_name').notNull(),

@@ -9,7 +9,7 @@
 - 以用户流为单位协作，不以“页面完成”或“接口完成”单独算完成。
 - 以前后端契约为中心协作，不以口头约定或聊天截图为准。
 - 先定义最小可联调闭环，再补细节和体验优化。
-- 对破坏性变更保持克制，优先兼容已有调用方。
+- 项目当前仍处于无老用户开发期，破坏性变更可以随前后端同步落地，但必须提前对齐契约和测试。
 - 对异步后台链路，默认以后端任务态为准，不再假设创建接口返回时最终实体已经完成。
 
 ## 2. 角色边界
@@ -75,15 +75,15 @@ SparkFlow 当前以后端模块内 `schemas.py` 作为 API contract 单一事实
 
 - 所有对外接口默认返回 `ResponseModel` 包裹结构。
 - 删除接口统一返回 `200 + ResponseModel[None]`，成功时 `data=null`。
-- 如果新增字段，优先追加，不直接改名或删除已有字段。
-- 如果必须做破坏性变更，需提前同步前端，并给出兼容期或一起修改。
+- 如果新增字段，优先选择当前领域语义清晰的名称。
+- 如果必须做破坏性变更，需提前同步前端并一起修改，不为历史本地库、历史快照或早期调用入口保留过渡层。
 
 ### 任务态约定
 
 - 媒体导入、脚本生成、每日推盘触发等后台链路，创建接口默认返回 `task_id` / `task_type` / `status_query_url`
 - 任务真实状态以后端 `task_runs` / `task_step_runs` 与 Celery 执行为准；客户端只查询 `/api/tasks/*`
 - 外链导入接口只返回任务句柄；媒体元数据和最终 `audio_file_url` 统一从 `GET /api/tasks/{task_id}` 的 `output` 读取
-- 旧的 `GET /api/transcriptions/{fragment_id}`、`GET /api/fragments` 与 `GET /api/fragments/{fragment_id}` 兼容读取接口已移除
+- 旧的 `GET /api/transcriptions/{fragment_id}`、`GET /api/fragments` 与 `GET /api/fragments/{fragment_id}` 读取接口已移除
 - 前端通过 `GET /api/tasks/{task_id}` 观察整体状态
 - 需要展示细分节点时，通过 `GET /api/tasks/{task_id}/steps`
 - 失败补偿统一走 `POST /api/tasks/{task_id}/retry`
@@ -158,7 +158,7 @@ SparkFlow 当前以后端模块内 `schemas.py` 作为 API contract 单一事实
 同步内容至少包括：
 
 - 影响范围
-- 是否破坏兼容
+- 是否包含破坏性契约调整
 - 前端是否需要同时改动
 - 是否要更新 README / architecture / API 示例
 

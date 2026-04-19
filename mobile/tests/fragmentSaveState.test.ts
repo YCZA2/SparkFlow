@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { resolveDoneAction, resolveSaveOutcome } from '../features/fragments/fragmentSaveState';
 
-test('resolveSaveOutcome marks synced save as clearable draft', () => {
+test('resolveSaveOutcome marks synced save as clearable pending body', () => {
   const outcome = resolveSaveOutcome({
     ok: true,
     savedHtml: '<p>服务端最新正文</p>',
@@ -11,7 +11,7 @@ test('resolveSaveOutcome marks synced save as clearable draft', () => {
   });
 
   assert.equal(outcome.syncStatus, 'synced');
-  assert.equal(outcome.shouldClearDraft, true);
+  assert.equal(outcome.shouldClearPendingBody, true);
   assert.equal(outcome.lastSyncedHtml, '<p>服务端最新正文</p>');
 });
 
@@ -23,7 +23,7 @@ test('resolveSaveOutcome keeps unsynced state on save failure', () => {
   });
 
   assert.equal(outcome.syncStatus, 'unsynced');
-  assert.equal(outcome.shouldClearDraft, false);
+  assert.equal(outcome.shouldClearPendingBody, false);
   assert.equal(outcome.lastSyncedHtml, '<p>本地未同步正文</p>');
 });
 
@@ -32,5 +32,5 @@ test('resolveDoneAction blocks navigation when saveNow fails', () => {
 
   assert.equal(result.ok, false);
   assert.equal(result.shouldNavigate, false);
-  assert.equal(result.message, '内容未同步，已保留本地草稿');
+  assert.equal(result.message, '内容未同步，已保留本地待同步正文');
 });

@@ -101,7 +101,7 @@ async function buildMediaAssetItems(deviceId: string): Promise<BackupMutationIte
   const nextItems: BackupMutationItem[] = [];
   for (const row of rows) {
     let backupFileUrl = row.remoteFileUrl;
-    let backupObjectKey = row.remoteAssetId;
+    let backupObjectKey = row.backupObjectKey;
     if (!row.deletedAt && row.localFileUri) {
       const uploaded = await uploadBackupAsset({
         uri: row.localFileUri,
@@ -116,7 +116,7 @@ async function buildMediaAssetItems(deviceId: string): Promise<BackupMutationIte
         .update(mediaAssetsTable)
         .set({
           remoteFileUrl: uploaded.file_url,
-          remoteAssetId: uploaded.object_key,
+          backupObjectKey: uploaded.object_key,
         })
         .where(eq(mediaAssetsTable.id, row.id));
     }

@@ -105,7 +105,7 @@ export function useFragmentDetailScreen(
   };
 
   const confirmDelete = async () => {
-    /*删除详情时同步清理缓存和本地草稿，避免返回列表后残留旧内容。 */
+    /*删除详情时同步清理缓存和本地待同步正文，避免返回列表后残留旧内容。 */
     if (!fragmentId) return;
 
     try {

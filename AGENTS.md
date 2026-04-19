@@ -243,10 +243,10 @@ http://<your-lan-ip>:8000
 
 - Prefer modular changes; do not collapse new logic into a single large file
 - Respect current backend layering: presentation / application / domain / service responsibilities must stay separated
-- `fragments`, `folders`, and `scripts` are evolving under a local-first plus backup/recovery model; assume mobile SQLite and local files are the source of truth, while the backend handles backup, restore, AI execution, and compatible projections
+- `fragments`, `folders`, and `scripts` are under a local-first plus backup/recovery model; assume mobile SQLite and local files are the source of truth, while the backend handles backup, restore, and AI execution
 - `fragment` and `script` are separate domain entities: fragments are source material, scripts are derived outputs; they may share the editor foundation, `body_html`, backup infrastructure, exports, and media helpers, but they must not be merged into one business entity
 - `script.source_fragment_ids` only records the original generation sources; scripts must not re-enter fragment retrieval, clustering, daily-push input selection, or future script-generation input
-- For legacy cache, legacy cloud binding, or legacy body-draft compatibility code, use `legacy*` or `compat*` naming; do not add new business names such as `remote*`, `server*`, or `localDraft*` that imply the old remote-first model is still current
+- The project is still pre-user; do not preserve historical local database, old backup payload, or old remote-first upgrade paths. Prefer current-domain names such as `backupObjectKey`, `pendingBodyHtml`, and `saveState`; reserve `legacy*` only for third-party or environment adapters that are still actively required.
 - Treat `task_runs` and `task_step_runs` as the backend source of truth for async media ingestion, knowledge ingestion, daily push, and script generation tasks
 - Do not reintroduce fragment-level task-state compatibility fields or `agent_runs`; task progress must stay on `task_runs` and `task_step_runs`
 - When adding new mobile entities that need remote persistence, integrate with `/api/backups/*` and local `entity_version` / `backup_status` first; do not default to “create a backend business row first”

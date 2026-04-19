@@ -99,7 +99,7 @@ test('buildBackupRestorePlan converts snapshot items into local restore rows', (
   assert.equal(plan.fragments[0]?.isFilmed, 1);
   assert.equal(plan.fragments[0]?.filmedAt, '2026-03-17T09:35:00Z');
   assert.equal(plan.mediaAssets[0]?.remoteFileUrl, 'https://example.com/cover.png');
-  assert.equal(plan.mediaAssets[0]?.remoteAssetId, 'backups/assets/demo.png');
+  assert.equal(plan.mediaAssets[0]?.backupObjectKey, 'backups/assets/demo.png');
   assert.equal(plan.scripts[0]?.title, '今天这条怎么讲');
   assert.equal(plan.scripts[0]?.mode, 'mode_daily_push');
   assert.equal(plan.scripts[0]?.generationKind, 'daily_push');
@@ -155,13 +155,13 @@ test('buildBackupRestorePlan preserves script tombstones and trash metadata', ()
   assert.equal(plan.scripts[0]?.backupStatus, 'synced');
 });
 
-test('buildBackupRestorePlan normalizes legacy manual script modes to mode_rag', () => {
+test('buildBackupRestorePlan keeps current manual script modes as mode_rag', () => {
   const plan = buildBackupRestorePlan({
     server_generated_at: '2026-03-17T10:00:00Z',
     items: [
       {
         entity_type: 'script',
-        entity_id: 'script-legacy',
+        entity_id: 'script-manual',
         entity_version: 2,
         operation: 'upsert',
         payload: {

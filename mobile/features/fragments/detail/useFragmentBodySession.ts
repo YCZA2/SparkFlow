@@ -60,7 +60,7 @@ export function useFragmentBodySession({
 }: UseFragmentBodySessionOptions) {
   const resolvedFragmentId = fragmentId ?? fragment?.id ?? null;
 
-  const loadLocalDraft = useCallback(
+  const loadPendingBody = useCallback(
     async (id: string): Promise<string | null> => {
       const fragmentEntity = await readLocalFragmentEntity(id);
       return fragmentEntity?.body_html ?? null;
@@ -113,7 +113,7 @@ export function useFragmentBodySession({
     documentId: resolvedFragmentId,
     document: fragment,
     buildSourceDocument: buildEditorDocumentFromFragment,
-    loadLocalDraft,
+    loadPendingBody,
     loadBaseline,
     saveLocally,
     commitOptimistic: commitOptimisticFragment,

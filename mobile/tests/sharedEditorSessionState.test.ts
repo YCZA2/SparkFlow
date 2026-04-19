@@ -19,19 +19,19 @@ function buildDocument(overrides: Partial<EditorSourceDocument> = {}): EditorSou
   };
 }
 
-test('resolveEditorSessionBaseline prefers local draft over baseline and remote', () => {
+test('resolveEditorSessionBaseline prefers pending body over baseline and remote', () => {
   const baseline = resolveEditorSessionBaseline({
     document: buildDocument({ body_html: '远端正文' }),
-    draftHtml: '<p>本地草稿</p>',
+    pendingBodyHtml: '<p>本地待同步正文</p>',
     baselineContentHtml: '<p>基线正文</p>',
   });
 
-  assert.equal(baseline.snapshot.body_html, '<p>本地草稿</p>');
+  assert.equal(baseline.snapshot.body_html, '<p>本地待同步正文</p>');
   assert.equal(baseline.baseline_body_html, '<p>基线正文</p>');
   assert.equal(baseline.save_state, 'idle');
 });
 
-test('shared session keeps local draft snapshot stable across remote refresh', () => {
+test('shared session keeps pending body snapshot stable across remote refresh', () => {
   let state = createInitialEditorSessionState('document-1');
   state = reduceEditorSession(state, {
     type: 'SOURCE_DOCUMENT_LOADED',
@@ -42,8 +42,8 @@ test('shared session keeps local draft snapshot stable across remote refresh', (
     html: '<p>基线正文</p>',
   });
   state = reduceEditorSession(state, {
-    type: 'LOCAL_DRAFT_HTML_LOADED',
-    html: '<p>本地草稿</p>',
+    type: 'PENDING_BODY_HTML_LOADED',
+    html: '<p>本地待同步正文</p>',
   });
 
   const initialEditorKey = state.editorKey;
@@ -52,7 +52,7 @@ test('shared session keeps local draft snapshot stable across remote refresh', (
     document: buildDocument({ body_html: '新的远端正文' }),
   });
 
-  assert.equal(state.snapshot.body_html, '<p>本地草稿</p>');
+  assert.equal(state.snapshot.body_html, '<p>本地待同步正文</p>');
   assert.equal(state.editorKey, initialEditorKey);
 });
 
@@ -67,7 +67,7 @@ test('shared session keeps hydrated baseline stable while typing locally', () =>
     html: '<p>远端正文</p>',
   });
   state = reduceEditorSession(state, {
-    type: 'LOCAL_DRAFT_HTML_LOADED',
+    type: 'PENDING_BODY_HTML_LOADED',
     html: null,
   });
   state = reduceEditorSession(state, {
@@ -97,7 +97,7 @@ test('local-first save success keeps session in unsynced state until remote reco
     html: '<p>已同步正文</p>',
   });
   state = reduceEditorSession(state, {
-    type: 'LOCAL_DRAFT_HTML_LOADED',
+    type: 'PENDING_BODY_HTML_LOADED',
     html: '<p>已同步正文</p>',
   });
   state = reduceEditorSession(state, {

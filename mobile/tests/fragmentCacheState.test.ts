@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  applyDraftToFragment,
+  applyPendingBodyToFragment,
 } from '../features/fragments/fragmentCacheState';
 
 function buildFragment(overrides = {}) {
@@ -23,14 +23,14 @@ function buildFragment(overrides = {}) {
   };
 }
 
-test('applyDraftToFragment prefers unsynced draft over cached server html', () => {
+test('applyPendingBodyToFragment prefers pending body over cached html', () => {
   const fragment = buildFragment({
     body_html: '服务端正文',
     plain_text_snapshot: '服务端正文',
   }) as any;
 
-  const nextFragment = applyDraftToFragment(fragment, '<h1>本地草稿</h1><p>更新后的正文</p>');
+  const nextFragment = applyPendingBodyToFragment(fragment, '<h1>本地待同步正文</h1><p>更新后的正文</p>');
 
-  assert.equal(nextFragment?.body_html, '<h1>本地草稿</h1><p>更新后的正文</p>');
-  assert.equal(nextFragment?.plain_text_snapshot, '本地草稿 更新后的正文');
+  assert.equal(nextFragment?.body_html, '<h1>本地待同步正文</h1><p>更新后的正文</p>');
+  assert.equal(nextFragment?.plain_text_snapshot, '本地待同步正文 更新后的正文');
 });

@@ -35,13 +35,6 @@ export interface Script {
   last_modified_device_id?: string | null;
 }
 
-export interface ScriptListResponse {
-  items: Script[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
 export interface GenerateScriptRequest {
   topic: string;
   fragment_ids: string[];

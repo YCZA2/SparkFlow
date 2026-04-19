@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import time
 
 from core.logging_config import get_logger
@@ -8,8 +7,6 @@ from modules.shared.enrichment import build_fallback_summary_and_tags, generate_
 from modules.shared.fragment_snapshots import FragmentSnapshotReader
 from modules.shared.warning_throttle import WarningThrottle
 
-SUMMARY_REFRESH_MIN_ABS_DELTA = 50
-SUMMARY_REFRESH_MIN_RATIO = 0.2
 VECTOR_SYNC_WARNING_THROTTLE_SECONDS = 60.0
 
 logger = get_logger(__name__)
@@ -24,53 +21,6 @@ class FragmentDerivativeService:
         """装配衍生字段计算所需依赖。"""
         self.vector_store = vector_store
         self.llm_provider = llm_provider
-
-    async def refresh_fragment_derivatives(
-        self,
-        *,
-        db,
-        user_id: str,
-        fragment,
-        previous_effective_text: str,
-        current_effective_text: str,
-    ) -> None:
-        """兼容旧调用方：基于当前正文刷新摘要标签与向量。"""
-        if not current_effective_text:
-            summary, tags = await self.backfill_snapshot_derivatives(
-                db=db,
-                user_id=user_id,
-                fragment_id=fragment.id,
-                source=fragment.source,
-                effective_text="",
-                body_html=getattr(fragment, "body_html", None),
-            )
-            fragment.summary = summary
-            fragment.tags = self.serialize_tags(tags)
-            return
-        if not self.should_refresh_enrichment(
-            previous_effective_text=previous_effective_text,
-            current_effective_text=current_effective_text,
-        ):
-            await self._sync_fragment_vector_by_fields(
-                action="upsert",
-                user_id=user_id,
-                fragment_id=fragment.id,
-                source=fragment.source,
-                text=current_effective_text,
-                summary=getattr(fragment, "summary", None),
-                tags=self._deserialize_tags(getattr(fragment, "tags", None)),
-            )
-            return
-        summary, tags = await self.backfill_snapshot_derivatives(
-            db=db,
-            user_id=user_id,
-            fragment_id=fragment.id,
-            source=fragment.source,
-            effective_text=current_effective_text,
-            body_html=getattr(fragment, "body_html", None),
-        )
-        fragment.summary = summary
-        fragment.tags = self.serialize_tags(tags)
 
     async def backfill_snapshot_derivatives(
         self,
@@ -198,19 +148,6 @@ class FragmentDerivativeService:
                 error=error_message,
             )
 
-    @staticmethod
-    def should_refresh_enrichment(*, previous_effective_text: str, current_effective_text: str) -> bool:
-        """根据改动量决定是否重算摘要与标签。"""
-        if not current_effective_text.strip():
-            return True
-        previous_length = len(previous_effective_text.strip())
-        current_length = len(current_effective_text.strip())
-        if previous_length == 0:
-            return True
-        absolute_delta = abs(current_length - previous_length)
-        ratio_delta = absolute_delta / max(previous_length, 1)
-        return absolute_delta >= SUMMARY_REFRESH_MIN_ABS_DELTA or ratio_delta >= SUMMARY_REFRESH_MIN_RATIO
-
     async def generate_fragment_enrichment(
         self,
         effective_text: str,
@@ -230,26 +167,3 @@ class FragmentDerivativeService:
         except Exception:
             logger.warning("summary_and_tags_generation_failed", exc_info=True)
             return build_fallback_summary_and_tags(normalized_text)
-
-    @staticmethod
-    def serialize_tags(tags: list[str]) -> str | None:
-        """把标签列表转换为稳定 JSON 字符串。"""
-        normalized_tags = [tag.strip() for tag in tags if tag and tag.strip()]
-        if not normalized_tags:
-            return None
-        return json.dumps(normalized_tags, ensure_ascii=False)
-
-    @staticmethod
-    def _deserialize_tags(raw: str | list[str] | None) -> list[str]:
-        """兼容旧测试和运行时对象上的标签存储格式。"""
-        if isinstance(raw, list):
-            return [tag.strip() for tag in raw if isinstance(tag, str) and tag.strip()]
-        if not isinstance(raw, str) or not raw.strip():
-            return []
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            return []
-        if not isinstance(parsed, list):
-            return []
-        return [str(tag).strip() for tag in parsed if str(tag).strip()]

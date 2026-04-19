@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/fragments", tags=["fragments"], responses={401: 
 
 
 def get_fragment_query_service(container: ServiceContainer = Depends(get_container)) -> FragmentQueryService:
-    return FragmentQueryService(vector_store=container.vector_store, file_storage=container.file_storage)
+    return FragmentQueryService(vector_store=container.vector_store)
 
 
 @router.post(
@@ -80,5 +80,4 @@ async def list_fragment_tags(
             limit=limit,
         )
     )
-
 

@@ -22,7 +22,7 @@ export function ScreenHeader({
   className,
   style,
 }: ScreenHeaderProps) {
-  /*共享页头先接入 NativeWind，同时保留 style 兼容旧调用方。 */
+  /*共享页头使用 NativeWind，同时保留 style 覆盖入口。 */
   return (
     <View className={`mb-sf-section pt-sf-md ${className ?? ''}`} style={style}>
       <View className="flex-row items-start justify-between gap-sf-md">

@@ -45,7 +45,7 @@ class TaskDispatchController:
         self.enabled = True
 
     async def stop(self) -> None:
-        """暂停自动投递，保留“只创建任务不执行”的旧测试语义。"""
+        """暂停自动投递，供测试验证任务创建后的待执行状态。"""
         self.enabled = False
 
     def wake_up(self) -> None:

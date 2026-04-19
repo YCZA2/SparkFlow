@@ -175,7 +175,7 @@ async def test_backup_asset_access_rejects_other_users_object_key(async_client) 
 
 
 def test_startup_hook_recreates_missing_test_user(db_session_factory, monkeypatch) -> None:
-    """启动阶段应补齐测试用户，兼容旧 token 直接恢复场景。"""
+    """启动阶段应补齐本地联调所需的测试用户。"""
     with db_session_factory() as db:
         db.query(User).filter(User.id == TEST_USER_ID).delete()
         db.commit()

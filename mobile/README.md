@@ -2,7 +2,7 @@
 
 SparkFlow 的 Expo / React Native 移动端工程。
 
-当前项目只面向 iOS / Android 原生端，不维护 Expo Web 构建、浏览器运行时兼容层或 web 导出流程。
+当前项目只面向 iOS / Android 原生端，不维护 Expo Web 构建、浏览器运行时适配层或 web 导出流程。
 
 ## 今日进展（2026-04-01）
 
@@ -17,10 +17,10 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 录音上传与抖音链接导入现在都要求客户端**先创建本地 fragment placeholder**，并把 `local_fragment_id` 显式传给后端；服务端不再兜底创建远端 fragment 记录。
 - 服务端返回的 `transcript / summary / tags / audio_object_key` 会直接补写进 fragment backup snapshot；客户端后续 backup flush 不会把这些服务器字段冲掉。
 - “创作工作台”已接入显式恢复；恢复时会重建本地 SQLite、`body.html` 与媒体缓存，并在需要时按 `object_key` 向后端刷新最新访问地址。
-- `script` 本轮已接入 local-first：生成成功后立即落本地 SQLite + `body.html` 文件，后续编辑、回收站、冲突恢复副本和拍摄状态都先写本地，再异步备份；后端 `scripts` 表只保留生成初稿与兼容查询投影，不再反向覆盖本地已编辑正文。
+- `script` 本轮已接入 local-first：生成成功后立即落本地 SQLite + `body.html` 文件，后续编辑、回收站、冲突恢复副本和拍摄状态都先写本地，再异步备份；后端 `scripts` 表只保存生成初稿和任务完成后的详情读取，不再反向覆盖本地已编辑正文。
 - `fragment` 与 `script` 继续是两个独立领域对象：碎片负责素材沉淀与生成输入，成稿负责派生正文与拍摄消费；两者共享 editor / `body_html` / 导出与媒体能力，但不共享生命周期语义。
-- 本轮清理已经移除旧的 `localFragmentSyncQueue / localDraftStore / remoteFragments / remoteBodyDrafts` 主链路依赖，兼容层命名统一改成 `legacy*`。
-- 以后在移动端新增代码时，`server_id / sync_status / remote_id` 只允许作为 legacy cloud-binding 兼容字段出现，不能再被当作当前领域模型的核心语义。
+- 当前项目仍处于无老用户开发阶段，移动端不保留历史本地 SQLite 升级链、旧备份 payload 或旧远端投影补水；旧开发数据需要通过重装 App / 清库重建。
+- 新增代码使用当前 local-first 领域命名，例如 `backup_object_key / pending_body_html / save_state`；不要再引入旧 remote-first 语义字段。
 - 移动端 UI 已开始渐进迁移到 NativeWind：`tailwind.config.js` 承载新的设计 token，`global.css` 在根布局导入；首页、文件夹页、成稿列表及核心列表卡片已经优先使用 `className`，复杂编辑器、录音、拍摄和动画组件仍保留 `StyleSheet`。
 
 ## 目录说明
@@ -37,11 +37,11 @@ SparkFlow 的 Expo / React Native 移动端工程。
 ## 当前移动端已接入的内容能力
 
 - fragments / folders 主链路当前采用**local-first 架构**：列表、详情、编辑、删除统一读取本地 SQLite / 文件系统，远端只做自动备份与显式恢复
-- 远端快照、本地草稿、待上传图片不再混放在 `AsyncStorage`；`AsyncStorage` 仅保留 token、用户信息、后端地址和少量轻量配置
+- 远端快照、待同步正文、待上传图片不再混放在 `AsyncStorage`；`AsyncStorage` 仅保留 token、用户信息、后端地址和少量轻量配置
 - 当前不再自动使用测试用户进入主流程；正式登录采用邮箱密码认证，`/api/auth/token` 仅用于本地开发联调
 - “写下灵感”文本链路当前直接创建本地 fragment 实体；编辑完成后只标记待备份，不再先建远端 fragment 空壳。
 - 录音与外链导入同样遵循这条约束：必须先有本地 fragment 实体，再调用 `/api/transcriptions` 或 `/api/external-media/audio-imports`。
-- legacy 草稿会聚合进首页/文件夹页列表顶部；若后续绑定了 legacy 云端记录 ID，列表会自动对兼容卡片去重。
+- 首页和文件夹页只展示当前本地 SQLite 真值，不再聚合历史草稿缓存或远端投影卡片。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
 - 碎片详情页默认进入轻量正文编辑视图，正文改动会优先写本地 HTML 草稿；`transcript`、音频、摘要、标签收口到右上角“更多”底部抽屉，AI patch 本期已下线。
@@ -53,8 +53,8 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
 - 首页、文件夹页、成稿页现在共享一层 `NotesListScreenShell / NotesListHero / NotesScreenStateView` 页面壳层；各页面仍各自保留列表数据源、导航和选择态逻辑。
 - 生成页现在采用统一主题输入：用户补一个主题后，后端按 `topic + SOP + 三层写作上下文` 创建脚本任务。
-- 碎片正文详情和列表已接入本地真值与 legacy 兼容层：详情会优先读本地 HTML 与实体缓存，再按需叠加升级期兼容数据；正文与媒体改动统一留在本地真值并由 backup queue 异步备份。
-- 脚本详情页现在也采用 local-first：先读本地 script 真值，再按需补远端缺失稿件；编辑成功后正文只写本地并进入 backup queue，`/api/scripts/*` 只用于缺失补齐和兼容查询，不再作为已存在本地稿件的正文权威来源。
+- 碎片正文详情和列表已接入本地真值：详情优先读本地 HTML 与实体缓存，正文与媒体改动统一留在本地真值并由 backup queue 异步备份。
+- 脚本详情页现在也采用 local-first：先读本地 script 真值；生成任务成功后才按 `script_id` 读取后端生成详情并落本地，编辑成功后正文只写本地并进入 backup queue。
 - 首页系统区当前包含“全部”和按需出现的“成稿”；只有用户真的存在 script 时才会显示“成稿”入口，成稿列表与碎片列表继续分开，不做混排。
 - fragment 与 script 详情页统一成“正文主舞台 + 更多底部抽屉”交互；来源碎片、关联成稿、拍摄入口和附加元信息都收口到抽屉中。
 - `fragment` 与 `script` 都可以进入拍摄页；拍摄完成后会记录本地 `is_filmed / filmed_at`，默认不在列表卡片展示，只用于详情与后续筛选。
@@ -67,16 +67,15 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 - `mobile/features/core/db/`：SQLite 连接、schema、迁移和 Drizzle 查询入口
 - `mobile/features/core/files/`：fragment / script 正文文件和图片/音频 staging 文件管理；当前已按 `runtimePaths.native.ts`（工作区与路径约束）和 `runtimeFs.native.ts`（文件读写与 staging 操作）拆分
-- `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `localEntityStore / runtime / shared update helpers` 拆分职责；主链路统一从 `store/index.ts` 读取本地实体能力。旧缓存、旧正文草稿和旧云端绑定的升级兼容，现已收敛到 `mobile/features/core/db/migrations.ts` 与显式 `legacy*` 字段，而不是单独的 `legacyMigration*` 模块
+- `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `localEntityStore / runtime / shared update helpers` 拆分职责；主链路统一从 `store/index.ts` 读取本地实体能力
 - `mobile/features/scripts/store/`：scripts 本地数据入口，负责成稿真值、lineage、回收站、冲突副本和恢复合并
 - `mobile/features/editor/html.ts`：唯一 HTML / 纯文本快照 helper 真值源，fragment 与 script 共用
 
 补充约定：
-- SQLite 物理列仍保留 `server_id / sync_status / remote_id` 以兼容旧库，但 Drizzle 层属性名已经切到 `legacyServerBindingId / legacyCloudBindingStatus / legacyRemoteId`；新增代码不要再把这些字段当本地真值主语义。
-- 兼容旧缓存、旧正文草稿、旧云端绑定时，命名统一使用 `legacy*` / `compat*`；不要再新增 `remote*`、`server*`、`localDraft*` 这类会混淆主链路语义的名字。
-- `media_task_*` 是当前移动端 fragment 媒体导入任务状态的正式本地字段，会参与任务恢复、失败提示和重试；旧本地库里的 `media_pipeline_*` 会在 SQLite migration 中自动迁移到新列名。
-- 新增 UI 默认使用 NativeWind `className` 和 Tailwind token；仅在动画、复杂运行时计算样式、第三方组件限制或迁移中的兼容层里继续使用 `StyleSheet.create`。
-- `mobile/theme/tokens.ts` 继续服务旧 `useAppTheme()` 调用，但新颜色、间距、圆角和阴影应先进入 `mobile/theme/tailwind-tokens.js`，再由 `tailwind.config.js` 暴露为 utility class。
+- SQLite 迁移当前采用开发期基线重建策略；`user_version` 低于当前版本时会重建本地表，不迁移历史开发数据。
+- `media_task_*` 是当前移动端 fragment 媒体导入任务状态的正式本地字段，会参与任务恢复、失败提示和重试。
+- 新增 UI 默认使用 NativeWind `className` 和 Tailwind token；仅在动画、复杂运行时计算样式或第三方组件限制里继续使用 `StyleSheet.create`。
+- `mobile/theme/tokens.ts` 继续服务迁移中的 `useAppTheme()` 调用，但新颜色、间距、圆角和阴影应先进入 `mobile/theme/tailwind-tokens.js`，再由 `tailwind.config.js` 暴露为 utility class。
 
 当前 fragments / folders / scripts 读写规则：
 
@@ -84,7 +83,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 编辑、删除、创建文件夹都会先修改本地实体并增加 `entity_version`
 - 图片、音频等大对象先存本地 staging，再由 `/api/backups/assets` 补传
 - 远端备份统一通过 `features/backups/queue.ts` 扫描 `backup_status=pending|failed` 的实体批量推送；当前 snapshot 已覆盖 fragment / folder / media_asset / script
-- scripts 列表页的远端同步当前只负责补齐本地缺失稿件，不会再用后端 `scripts` 旧投影覆盖已存在的本地 `body.html`
+- scripts 列表页只读本地 SQLite；只有脚本生成或恢复任务成功后，客户端才按 `script_id` 拉取后端生成详情并写入本地
 - “创作工作台”页已提供显式“从备份恢复”入口：会先创建 restore session，再拉取 `/api/backups/snapshot` 重建本地 SQLite 与 `body.html`，并尽量把音频/图片重新缓存到 app sandbox
 - 恢复媒体缓存前，移动端会先调用 `/api/backups/assets/access` 按 `object_key` 刷新最新访问地址，减少签名 URL 过期导致的恢复失败
 - fragment 自身音频现在也会把 `audio_object_key` 持久化到本地真值与备份快照，恢复时会和媒体素材一起刷新访问地址并重建本地缓存
@@ -418,7 +417,7 @@ http://192.168.31.157:8000
 - 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`
 - 录音上传和外链导入都会先创建本地 placeholder fragment，再在任务成功后把 `transcript` 种成可编辑正文，并将 `summary / tags / 音频元数据` 一并 patch 回写到本地实体
 - 手动脚本生成前会先显式执行一次 `flushBackupQueue()`；如果本地正文还没成功同步，客户端会阻断生成，避免后端基于旧 snapshot 出稿
-- local-first 语音上传成功后的主状态查询统一走 `task_id -> GET /api/tasks/{task_id}`；旧的 `GET /api/transcriptions/{fragment_id}` 兼容查询接口已移除
+- local-first 语音上传成功后的主状态查询统一走 `task_id -> GET /api/tasks/{task_id}`；不再保留按 fragment 读取转写状态的接口
 
 ### 1. 一打开 App 就红屏，出现 `8000/index.bundle`
 

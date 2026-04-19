@@ -12,9 +12,9 @@
 - `fragments / folders` 的 phase 1 local-first 主链路已经落地：移动端本地 SQLite + `body.html` 为真值，远端只承担自动备份与显式恢复。
 - 后端已经补齐 `backups` 模块、`device session` 单设备在线约束，以及面向本地快照的转写 / 外链导入 / 脚本生成请求入口。
 - `media_ingestion` 已改成 transcript-first：上传录音和外链导入都会在 transcript 落库后立刻结束主任务，摘要 / 标签 / 向量由单独的 `fragment_derivative_backfill` 任务异步回填。
-- 向量检索链路已补齐对当前 Chroma 版本的兼容：`list_collections()` 返回字符串集合名时，namespace 检查、相似检索和文档枚举都按同一适配层处理。
+- 向量检索链路已补齐对当前 Chroma 版本差异的适配：`list_collections()` 返回字符串集合名时，namespace 检查、相似检索和文档枚举都按同一适配层处理。
 - 移动端已经补齐 backup queue、显式恢复、本地媒体缓存重建、音频 `object_key` 持久化与恢复链路。
-- `scripts` 本轮也切入 local-first：脚本生成成功后会立即落本地 SQLite + `body.html` 文件，后续详情编辑、回收站、恢复冲突副本与拍摄状态都以本地为真值；后端 `scripts` 表只保留生成初稿与兼容查询投影，不再反向覆盖本地正文。
+- `scripts` 本轮也切入 local-first：脚本生成成功后会立即落本地 SQLite + `body.html` 文件，后续详情编辑、回收站、恢复冲突副本与拍摄状态都以本地为真值；后端 `scripts` 表只保留生成初稿、任务详情和服务端流程状态，不再反向覆盖本地正文。
 - `daily_push` 已切到“后端定时 + 备份快照输入”模式：调度器与手动补跑都从 `backup_records` 中读取 fragment snapshot，再交给 `daily_push_generation` 任务生成脚本，不再把历史 `fragments` 表当作推盘输入真值。
 - 后端本轮已经正式下线 `fragments / fragment_tags / fragment_blocks` 旧投影表：标签聚合、导出、文件夹计数、录音导入和外链导入全部改为直接读写 `backup_records` 中的 fragment snapshot。
 - `transcriptions` 与 `external_media` 现在都要求客户端先创建本地 placeholder，并显式传入 `local_fragment_id`；后端不再兜底创建远端 fragment 业务记录。
@@ -23,9 +23,9 @@
 - `document_import` 后端新增文档导入碎片能力：`txt/md/docx/pdf/xlsx` 文件上传后通过 `document_import` 任务异步解析为纯文本，转为 HTML 写入 fragment snapshot 的 `body_html`，随后自动触发 `fragment_derivative_backfill` 补齐摘要、标签和向量。文档解析逻辑已从知识库 `parsers.py` 提升为共享模块 `modules/shared/content/document_parsers.py`，供知识库与文档导入复用。
 - 脚本生成三层上下文本轮调整为“预置稳定内核 + 缓存方法论 + 实时相关素材召回”：稳定内核当前不再按用户素材动态生成，碎片方法论改由每日后台维护任务在阈值达标后静默刷新。
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
-- 仓库本轮也完成了一次大规模命名清理：旧的 remote-first / local-draft 兼容层统一下沉为 `legacy*` 语义；凡仍映射旧库或旧协议的字段，都明确标记为 legacy cloud-binding / legacy snapshot，而不再伪装成当前领域真值。
-- 这意味着后续新增实现默认应直接接入 local-first 实体、`backup_status / entity_version` 与 `/api/backups/*`；只有升级迁移或历史兼容路径，才允许继续使用 `legacy*` 模块和字段。
-- 移动端 UI 样式开始从 `StyleSheet + useAppTheme/tokens` 渐进迁移到 NativeWind：Tailwind token 现在由 `mobile/theme/tailwind-tokens.js` 驱动，`theme/tokens.ts` 只保留为旧 StyleSheet 调用的兼容镜像；首页、文件夹页、成稿列表与核心列表卡片已作为第一批迁移范围。
+- 仓库本轮也完成了一次大规模命名清理：项目仍处于开发期且没有老用户，移动端旧本地库、旧备份 payload 和旧 remote-first 投影不再保留升级路径，字段直接使用当前领域语义。
+- 这意味着后续新增实现默认应直接接入 local-first 实体、`backup_status / entity_version` 与 `/api/backups/*`；除第三方版本或运行环境适配外，不再新增历史升级命名。
+- 移动端 UI 样式开始从 `StyleSheet + useAppTheme/tokens` 渐进迁移到 NativeWind：Tailwind token 现在由 `mobile/theme/tailwind-tokens.js` 驱动，`theme/tokens.ts` 只保留为迁移中的 StyleSheet 调用镜像；首页、文件夹页、成稿列表与核心列表卡片已作为第一批迁移范围。
 
 ## 1. Overall
 
@@ -134,8 +134,8 @@ flowchart TD
 - `features/recording/components/*` 负责录音页的 UI 壳层、按钮组与样式，路由文件只保留参数接入与页面装配。
 - `features/editor/useEditorSession.ts` 当前只负责组装共享正文会话协议；hydration、保存生命周期、图片插入和运行时 ref 同步已经拆到内部 helper / 子 hook，避免 fragment 与 script 两端继续往主 hook 堆副作用。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
-- `features/fragments/store/*` 现在承接 fragment 的 **local-first 真值**：列表、详情、编辑和删除统一读写本地 SQLite / 文件系统；主链路集中在 `localEntityStore`、`runtime` 与共享 update helpers。旧缓存、旧正文草稿和旧云端绑定的升级兼容，现已收敛到 `features/core/db/migrations.ts` 与显式 `legacy*` 字段，不再单独保留 `legacyMigration*` 模块。
-- `features/core/db/schema.ts` 仍映射旧 SQLite 物理列名，但 Drizzle 属性名已经显式标成 `legacy*` 语义，避免在实现层误把云端绑定字段当成本地真值。
+- `features/fragments/store/*` 现在承接 fragment 的 **local-first 真值**：列表、详情、编辑和删除统一读写本地 SQLite / 文件系统；主链路集中在 `localEntityStore`、`runtime` 与共享 update helpers。本地 SQLite 迁移改为当前基线重建，旧开发库可通过重装 App 或清库恢复。
+- `features/core/db/schema.ts` 只描述当前本地表结构；媒体备份键使用 `backup_object_key`，编辑器保存态使用 `save_state`，待落盘正文使用 `pending_body_html`。
 - `features/core/files/*` 当前已把工作区路径约束与文件读写/staging helper 拆开，避免单个 runtime 文件继续膨胀。
 - `features/fragments/detail/*` 保留 `resource / 编辑会话 / sheet / screen actions` 四层，但资源层已经改成优先读取本地实体，不再把远端详情当作首屏真值。
 - `features/fragments/components/detailSheet/*` 现在承接碎片更多抽屉的 section 组合与只读展示逻辑；内部已进一步拆成 primitives / section blocks / styles，`detail/fragmentDetailSheetState.ts` 负责 related scripts 计数和抽屉载荷组装，避免 `useFragmentDetailScreen` 同时维护 UI 拼装与页面动作。
@@ -157,7 +157,7 @@ flowchart TD
 - 远端只负责自动备份与显式恢复，不再承担 fragments / folders / scripts 的主读取路径
 - 编辑与删除先更新本地实体，再由 backup queue 批量推送快照和 tombstone
 - AI 生成、转写、外链导入继续走后端，但输入来自客户端上传的本地快照或媒体文件；手动脚本生成发起前会先显式执行一次 `flushBackupQueue()`，确保后端读取到最新已同步 fragment snapshot；script 生成成功后会立刻回写本地 script 真值
-- `GET /api/scripts` 与 `GET /api/scripts/{id}` 当前仍读取后端 `scripts` 表，但移动端只在本地缺失该稿件时才会用它们补齐历史稿件；一旦本地已有 script 真值，远端旧投影不得覆盖本地 `body.html`
+- 移动端脚本列表只读取本地 SQLite；脚本生成或任务恢复成功后，可按 `script_id` 拉取详情并落成本地真值。
 - 单设备在线由 `device session` 约束；旧设备失效后仍可离线读写本地，但不能继续备份或调用远端 AI
 - 显式恢复入口当前挂在 `profile.tsx`，执行时会拉取 `/api/backups/snapshot` 并重建本地 SQLite 与 fragment / script `body.html`，同时最佳努力回填音频/图片本地缓存
 - 对于带 `backup_object_key` 的媒体资源，恢复前会额外调用 `/api/backups/assets/access` 刷新最新访问地址，再尝试下载到本地缓存
@@ -174,7 +174,7 @@ flowchart TD
 当前 local-first 内容层的备份/同步语义需要明确区分“本地真值”“远端快照”和“后端投影表”：
 
 - `fragment / folder / media_asset / script` 的真值仍然在移动端本地 SQLite + 文件系统
-- 后端 `scripts` 业务表对于移动端 script 来说属于 projection / 兼容查询层，而不是编辑后的主真值；脚本编辑后的最新正文应通过 `backup_records` 镜像到服务端
+- 后端 `scripts` 业务表对于移动端 script 来说属于生成初稿、任务详情和服务端流程状态，而不是编辑后的主真值；脚本编辑后的最新正文应通过 `backup_records` 镜像到服务端
 - 服务端 `backup_records` 保存的是**按实体粒度**的最新 snapshot，而不是“某个时刻包含所有实体的大快照文件”
 - 一次 `flushBackupQueue()` 可以批量上传很多实体，但每个 item 仍只对应一条实体 snapshot；服务端按 `user_id + entity_type + entity_id` 覆盖为该实体当前最新版本
 - 这意味着 snapshot 的职责是“让服务端理解截至当前已同步成功的前端真值”，而不是替代本地真值本身
@@ -212,7 +212,7 @@ flowchart TD
 
 - 本地 SQLite + 文件系统：前端真值
 - `backup_records` snapshot：服务端读取前端真值的标准入口
-- `scripts` 等后端业务表：面向兼容查询、生成初稿和执行流程的 projection；`fragment` 已不再保留独立业务投影表
+- `scripts` 等后端业务表：面向生成初稿、任务详情和执行流程；`fragment` 已不再保留独立业务投影表
 
 ## 4. Backend Architecture
 
@@ -263,12 +263,12 @@ flowchart TD
 - `backend/modules/shared/enrichment.py`: 摘要与标签增强逻辑。
 - `backend/modules/shared/warning_throttle.py`: 告警限流工具。
 - `backend/modules/shared/infrastructure/container.py`: DI 容器入口，只负责 `ServiceContainer`、默认依赖装配和 FastAPI 依赖读取。
-- `backend/modules/shared/infrastructure/infrastructure.py`: 兼容层，统一转发 `storage` / `vector_store` / `providers` 的导出，避免上层导入点一次性迁移。
+- `backend/modules/shared/infrastructure/infrastructure.py`: 聚合导出入口，统一转发 `storage` / `vector_store` / `providers`，避免调用方散落到多个基础设施文件。
 - `backend/modules/shared/infrastructure/storage.py`: 本地 / OSS 文件存储实现、对象 key 规则与上传校验。
 - `backend/modules/shared/infrastructure/vector_store.py`: 应用级向量存储适配与 namespace 规则。
-- `backend/services/chroma_vector_db.py`: Chroma 持久化实现，兼容不同版本 `list_collections()` 返回的集合名结构。
+- `backend/services/chroma_vector_db.py`: Chroma 持久化实现，适配不同版本 `list_collections()` 返回的集合名结构。
 - `backend/modules/shared/infrastructure/providers.py`: 外部媒体、网页搜索与 workflow provider 的默认工厂。
-- `backend/modules/shared/media/audio_ingestion.py`: 兼容层，对外保留媒体导入统一入口。
+- `backend/modules/shared/media/audio_ingestion.py`: 媒体导入统一入口，负责把外部调用收口到当前 use case。
 - `backend/modules/shared/media/audio_ingestion_use_case.py`: 媒体导入任务创建入口，负责 fragment 初始化、入队与前置校验。
 - `backend/modules/shared/media/media_ingestion_steps.py`: 媒体导入任务的步骤执行器，当前只负责解析/下载、STT、transcript 落库与主任务终态。
 - `backend/modules/shared/media/media_ingestion_persistence.py`: 媒体导入链路的音频元数据回写、转写落库与终态输出组装。
@@ -277,7 +277,7 @@ flowchart TD
 - `backend/modules/shared/celery/*`：Celery app、步骤投递、队列路由与 beat 任务装配。
 - `backend/modules/fragments/derivative_task.py`: fragment 摘要、标签和向量异步回填任务。
 - `backend/modules/shared/content/`: 正文处理子目录，包含 `content_html.py`、`content_markdown.py`、`content_schemas.py`、`editor_document.py`、`fragment_body_markdown.py`、`document_parsers.py`（共享文档解析器，支持 txt/md/docx/pdf/xlsx）。
-- `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，而不是继续扩散到 legacy service 文件。
+- `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，不要继续扩散到早期 service 层。
 
 当前 `fragments` 模块内部进一步拆分为：
 
@@ -328,7 +328,7 @@ flowchart TD
 - `transcriptions`: 音频上传入口；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录，主状态入口统一收敛到 `tasks`。
 - `external_media`: 外部媒体音频导入，当前支持抖音分享链接；local-first 请求会直接绑定客户端 placeholder fragment，解析链接、下载转 m4a、主转写在 `media_ingestion` 中执行，摘要/标签/向量由后续 derivative task 异步补齐。
 - `scripts`: 合稿、脚本生成任务定义、三层写作上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。脚本生成主链路里的 fragment 背景、方法论维护和相关碎片召回都已经切到共享 fragment snapshot reader。
-- `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷；模块内部已拆成 `parsers.py`、`chunking.py`、`indexing.py`、`application.py`；`parsers.py` 已改为从共享模块 `modules/shared/content/document_parsers.py` 导入。
+- `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷；模块内部已拆成 `chunking.py`、`indexing.py`、`application.py`，文档解析直接复用 `modules/shared/content/document_parsers.py`。
 - `document_import`: 文档导入碎片入口；支持 `.txt/.md/.docx/.pdf/.xlsx` 文件上传，通过 `document_import` task 异步解析文档为纯文本并转为 HTML 写入 fragment snapshot，随后自动触发 `fragment_derivative_backfill` 补齐摘要、标签和向量。调用前客户端需先创建本地占位 fragment 并传入 `local_fragment_id`。
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
 - `exports`: 单条 Markdown 导出与批量 zip 导出。
@@ -373,7 +373,7 @@ flowchart TD
 - fragment snapshot 的 `transcript` 保存机器转写原文，`body_html` 保存唯一正式正文的 HTML，`plain_text_snapshot` 保存派生纯文本快照
 - 非语音碎片必须直接写入 `body_html`，不再把 `transcript` 当作正式正文来源
 - 移动端碎片详情正文改为 `react-native-enriched` 原生富文本输入；前端运行时与本地草稿统一消费 HTML 快照，AI patch 本期停用
-- 移动端碎片详情采用**local-first 分层缓存策略**：`features/fragments/store/*` 统一管理本地实体与少量 legacy 兼容缓存；detail resource 负责组合这些本地数据为当前展示态，远端仅承担备份与恢复
+- 移动端碎片详情采用**local-first 分层缓存策略**：`features/fragments/store/*` 统一管理本地实体；detail resource 负责组合这些本地数据为当前展示态，远端仅承担备份与恢复
 - 详情编辑会话的纯逻辑已下沉到 `editorSessionState.ts`、`bodySessionState.ts` 和 `fragmentSaveController.ts`：`editorSessionState.ts` 负责 session reducer、基线解析、自动保存触发条件与图片 fallback 规则，`bodySessionState.ts` 继续承载 Markdown 快照构建、远端刷新判定、AI fallback patch 和乐观展示态合成，`fragmentSaveController.ts` 保证自动保存只串行提交最后一版快照
 - `scripts.body_html` / `knowledge_docs.body_markdown` 分别保存脚本 HTML 正文与知识库 Markdown 正文
 - 媒体资源表：`media_assets` / `content_media_links`，对象元数据保存 `storage_provider` / `bucket` / `object_key`
@@ -678,7 +678,7 @@ sequenceDiagram
 
 ## 8. Current Architectural Notes
 
-- 代码已经从早期的 `routers + service` 形态迁移到 `modules/*` 主入口，但仓库里仍保留一部分 provider 与兼容性 service 文件，不应再把它们当成新的业务层规范。
+- 代码已经从早期的 `routers + service` 形态迁移到 `modules/*` 主入口；仓库里的 `services/*` 主要作为外部 provider 适配层，不应再把它们当成新的业务层规范。
 - 碎片管理现在分为“真实文件夹 + 全部系统视图”两层：文件夹模块负责容器管理；fragment 主写链路已切到客户端 local-first，后端 `fragments` 模块当前主要保留标签聚合和基于 snapshot 的检索/可视化能力。
 - `GET /api/fragments/tags` 提供热门 Tag 与模糊建议能力；碎片列表筛选主路径已回到移动端本地 SQLite，不再依赖后端 `GET /api/fragments`。
 - Tag 对外仍通过 fragment snapshot 的 `tags` 返回，后端聚合、建议与过滤统一基于 `FragmentSnapshotReader` 扫描已同步快照。
@@ -697,7 +697,7 @@ sequenceDiagram
 - 后端模块内 `schemas.py` 是 API contract 单一事实源。
 - `presentation.py` 上声明的 `response_model=ResponseModel[...]` 与 `/docs`、`/redoc` 一起构成前后端联调契约。
 - 前端可以基于 contract 先做 mock 和页面状态流，不等待后端完整实现。
-- 后端字段应尽量追加兼容，避免无通知的破坏性改动。
+- 项目当前仍处于无老用户开发期，允许随前后端同步做破坏性契约调整；变更必须提前对齐并同步更新文档与测试。
 
 ### 9.2 Expected Workflow
 

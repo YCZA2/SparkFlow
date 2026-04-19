@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { captureTaskExecutionScope } from '@/features/auth/taskScope';
 import { readLocalScriptEntity, updateLocalScriptEntity } from '@/features/scripts/store';
 import { useScriptStore } from '@/features/scripts/store/scriptStore';
-import { syncRemoteScriptDetailToLocal } from '@/features/scripts/sync';
+import { hydrateGeneratedScriptToLocal } from '@/features/scripts/sync';
 import type { Script } from '@/types/script';
 import { getErrorMessage } from '@/utils/error';
 
@@ -55,7 +55,7 @@ export function useScriptDetailResource(scriptId?: string | null): UseScriptDeta
         return;
       }
       const scope = captureTaskExecutionScope();
-      const hydrated = await syncRemoteScriptDetailToLocal(scriptId, { scope });
+      const hydrated = await hydrateGeneratedScriptToLocal(scriptId, { scope });
       hasVisibleScriptRef.current = true;
       setScript(hydrated);
     } catch (err) {

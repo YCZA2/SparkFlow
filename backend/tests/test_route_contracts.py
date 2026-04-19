@@ -92,7 +92,7 @@ def test_public_api_routes_are_stable() -> None:
     assert normalized_routes == expected
 
 
-def test_legacy_paths_not_registered() -> None:
+def test_removed_paths_not_registered() -> None:
     """历史遗留路径不应继续暴露。"""
     app = create_app(enable_runtime_side_effects=False)
     paths = {route.path for route in app.routes}

@@ -51,7 +51,7 @@ export interface RestoredFragmentRow {
 export interface RestoredMediaAssetRow {
   id: string;
   fragmentId: string;
-  remoteAssetId: string | null;
+  backupObjectKey: string | null;
   mediaKind: 'image' | 'audio' | 'file';
   mimeType: string;
   fileName: string;
@@ -231,8 +231,7 @@ export function buildBackupRestorePlan(snapshot: BackupSnapshotResponse): Backup
       plan.mediaAssets.push({
         id: item.entity_id,
         fragmentId: readString(mediaPayload.fragment_id) ?? '__deleted_fragment__',
-        remoteAssetId:
-          readString(mediaPayload.backup_object_key) ?? readString(mediaPayload.remote_asset_id),
+        backupObjectKey: readString(mediaPayload.backup_object_key),
         mediaKind:
           mediaPayload.media_kind === 'image' || mediaPayload.media_kind === 'audio'
             ? mediaPayload.media_kind

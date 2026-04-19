@@ -56,20 +56,20 @@ function buildAsset(id: string): EditorMediaAsset {
 // reconcileHydration — 通过 reducer 验证三条分支
 // ============================================================================
 
-test('reconcileHydration 在 local_draft_loaded 为 false 时保持 booting 阶段', () => {
-  /*source.document 已到但草稿加载未完成，应等待而不提前 hydrate。 */
+test('reconcileHydration 在 pending_body_loaded 为 false 时保持 booting 阶段', () => {
+  /*source.document 已到但待同步正文加载未完成，应等待而不提前 hydrate。 */
   let state = createInitialEditorSessionState('doc-1');
   state = reduceEditorSession(state, {
     type: 'SOURCE_DOCUMENT_LOADED',
     document: buildDocument(),
   });
 
-  // 此时 local_draft_loaded 仍为 false（LOCAL_DRAFT_HTML_LOADED 尚未 dispatch）
-  assert.equal(state.isDraftHydrated, false);
+  // 此时 pending_body_loaded 仍为 false（PENDING_BODY_HTML_LOADED 尚未 dispatch）
+  assert.equal(state.isPendingBodyHydrated, false);
   assert.equal(state.phase, 'booting');
 });
 
-test('reconcileHydration 所有来源就绪后完成初始化并标记 isDraftHydrated', () => {
+test('reconcileHydration 所有来源就绪后完成初始化并标记 isPendingBodyHydrated', () => {
   /*三个来源全部到位后，reconcileHydration 应建立 baseline 并进入就绪状态。 */
   let state = createInitialEditorSessionState('doc-1');
   state = reduceEditorSession(state, {
@@ -81,11 +81,11 @@ test('reconcileHydration 所有来源就绪后完成初始化并标记 isDraftHy
     html: '<p>服务端正文</p>',
   });
   state = reduceEditorSession(state, {
-    type: 'LOCAL_DRAFT_HTML_LOADED',
+    type: 'PENDING_BODY_HTML_LOADED',
     html: null,
   });
 
-  assert.equal(state.isDraftHydrated, true);
+  assert.equal(state.isPendingBodyHydrated, true);
   assert.ok(state.baseline !== null);
   assert.equal(state.snapshot.body_html, '<p>服务端正文</p>');
 });
@@ -98,7 +98,7 @@ test('reconcileHydration 走 sync-only 分支：内容未变时不重置 editorK
     document: buildDocument({ body_html: '<p>正文</p>' }),
   });
   state = reduceEditorSession(state, {
-    type: 'LOCAL_DRAFT_HTML_LOADED',
+    type: 'PENDING_BODY_HTML_LOADED',
     html: null,
   });
 
@@ -110,7 +110,7 @@ test('reconcileHydration 走 sync-only 分支：内容未变时不重置 editorK
     type: 'SOURCE_DOCUMENT_LOADED',
     document: buildDocument({
       body_html: '<p>正文</p>',
-      legacy_save_state: 'synced',
+      save_state: 'synced',
     }),
   });
 
@@ -126,14 +126,14 @@ test('reconcileHydration 在 documentId 切换时重置会话并重新初始化'
     type: 'SOURCE_DOCUMENT_LOADED',
     document: buildDocument({ id: 'doc-1', body_html: '<p>文档一</p>' }),
   });
-  state = reduceEditorSession(state, { type: 'LOCAL_DRAFT_HTML_LOADED', html: null });
+  state = reduceEditorSession(state, { type: 'PENDING_BODY_HTML_LOADED', html: null });
 
   state = reduceEditorSession(state, { type: 'RESET_SESSION', documentId: 'doc-2' });
   state = reduceEditorSession(state, {
     type: 'SOURCE_DOCUMENT_LOADED',
     document: buildDocument({ id: 'doc-2', body_html: '<p>文档二</p>' }),
   });
-  state = reduceEditorSession(state, { type: 'LOCAL_DRAFT_HTML_LOADED', html: null });
+  state = reduceEditorSession(state, { type: 'PENDING_BODY_HTML_LOADED', html: null });
 
   assert.equal(state.editorKey, 'doc-2');
   assert.equal(state.snapshot.body_html, '<p>文档二</p>');
@@ -147,7 +147,7 @@ test('shouldRehydrateEditorSession 远端正文比本地短时不触发刷新', 
   /*防止服务端返回旧的短版本覆盖用户已扩展的本地内容。 */
   const shouldRehydrate = shouldRehydrateEditorSession({
     document: buildDocument({ body_html: '<p>短</p>' }),
-    draftHtml: null,
+    pendingBodyHtml: null,
     currentSnapshot: buildEditorDocumentSnapshot('<p>这是一段更长的本地正文内容</p>'),
     baselineBodyHtml: '<p>这是一段更长的本地正文内容</p>',
     visibleMediaAssets: [],
@@ -165,7 +165,7 @@ test('shouldRehydrateEditorSession 仅素材列表增加时触发刷新', () => 
       body_html: '<p>正文</p>',
       media_assets: [buildAsset('asset-new')],
     }),
-    draftHtml: null,
+    pendingBodyHtml: null,
     currentSnapshot,
     baselineBodyHtml: '<p>正文</p>',
     visibleMediaAssets: [],
@@ -181,7 +181,7 @@ test('shouldRehydrateEditorSession 正文和素材均无变化时不触发刷新
   const snapshot = buildEditorDocumentSnapshot(html);
   const shouldRehydrate = shouldRehydrateEditorSession({
     document: buildDocument({ body_html: html, media_assets: [] }),
-    draftHtml: null,
+    pendingBodyHtml: null,
     currentSnapshot: snapshot,
     baselineBodyHtml: html,
     visibleMediaAssets: [],
@@ -191,12 +191,12 @@ test('shouldRehydrateEditorSession 正文和素材均无变化时不触发刷新
   assert.equal(shouldRehydrate, false);
 });
 
-test('shouldRehydrateEditorSession 本地草稿存在时始终阻止远端刷新', () => {
-  /*有本地未保存草稿时，远端任何内容变化都不应覆盖用户输入。 */
+test('shouldRehydrateEditorSession 本地待同步正文存在时始终阻止远端刷新', () => {
+  /*有本地待同步正文时，远端任何内容变化都不应覆盖用户输入。 */
   const shouldRehydrate = shouldRehydrateEditorSession({
     document: buildDocument({ body_html: '<p>远端新内容</p>' }),
-    draftHtml: '<p>本地草稿</p>',
-    currentSnapshot: buildEditorDocumentSnapshot('<p>本地草稿</p>'),
+    pendingBodyHtml: '<p>本地待同步正文</p>',
+    currentSnapshot: buildEditorDocumentSnapshot('<p>本地待同步正文</p>'),
     baselineBodyHtml: '<p>服务端原始</p>',
     visibleMediaAssets: [],
     hasConfirmedLocalEdit: false,

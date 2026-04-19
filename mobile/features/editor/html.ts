@@ -195,7 +195,7 @@ export function applyHtmlPatchToBody(
   patch: HtmlPatch,
   _selectionText: string
 ): string {
-  /*保留最小 HTML patch 能力，兼容历史纯状态测试。 */
+  /*保留最小 HTML patch 能力，供富文本桥不可用时兜底。 */
   const normalizedCurrentHtml = normalizeBodyHtml(currentHtml);
   const normalizedSnippet = normalizeBodyHtml(patch.html_snippet);
   if (!normalizedSnippet) return normalizedCurrentHtml;

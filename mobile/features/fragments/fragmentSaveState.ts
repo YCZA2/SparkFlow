@@ -8,7 +8,7 @@ interface ResolveSaveOutcomeInput {
 
 interface ResolveSaveOutcomeResult {
   syncStatus: FragmentSyncStatus;
-  shouldClearDraft: boolean;
+  shouldClearPendingBody: boolean;
   lastSyncedHtml: string;
 }
 
@@ -27,20 +27,20 @@ export function resolveSaveOutcome({
   if (ok) {
     return {
       syncStatus: 'synced',
-      shouldClearDraft: true,
+      shouldClearPendingBody: true,
       lastSyncedHtml: savedHtml,
     };
   }
 
   return {
     syncStatus: 'unsynced',
-    shouldClearDraft: false,
+    shouldClearPendingBody: false,
     lastSyncedHtml: attemptedHtml,
   };
 }
 
 export function resolveDoneAction(error: unknown): ResolveDoneActionResult {
-  /*收敛“完成编辑”动作的导航与提示语义，保证失败时停留本地草稿。 */
+  /*收敛“完成编辑”动作的导航与提示语义，保证失败时保留本地待同步正文。 */
   if (!error) {
     return {
       ok: true,
@@ -52,6 +52,6 @@ export function resolveDoneAction(error: unknown): ResolveDoneActionResult {
   return {
     ok: false,
     shouldNavigate: false,
-    message: '内容未同步，已保留本地草稿',
+    message: '内容未同步，已保留本地待同步正文',
   };
 }

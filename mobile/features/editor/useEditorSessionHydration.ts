@@ -3,12 +3,12 @@ import { useEffect } from 'react';
 import type { EditorSourceDocument } from '@/features/editor/types';
 import type { EditorSessionEvent } from '@/features/editor/sessionState';
 
-/*统一处理正文会话的 reset、本地草稿加载、缓存加载和来源文档回灌。 */
+/*统一处理正文会话的 reset、待同步正文加载、缓存加载和来源文档回灌。 */
 export function useEditorSessionHydration<TDocument>(input: {
   documentId: string | null;
   document: TDocument | null;
   buildSourceDocument: (doc: TDocument) => EditorSourceDocument;
-  loadLocalDraft?: (id: string) => Promise<string | null>;
+  loadPendingBody?: (id: string) => Promise<string | null>;
   loadBaseline?: (id: string) => Promise<string | null>;
   dispatch: React.Dispatch<EditorSessionEvent>;
   resetUiState: () => void;
@@ -17,7 +17,7 @@ export function useEditorSessionHydration<TDocument>(input: {
     documentId,
     document,
     buildSourceDocument,
-    loadLocalDraft,
+    loadPendingBody,
     loadBaseline,
     dispatch,
     resetUiState,
@@ -29,22 +29,22 @@ export function useEditorSessionHydration<TDocument>(input: {
   }, [dispatch, documentId, resetUiState]);
 
   useEffect(() => {
-    if (!documentId || !loadLocalDraft) {
-      dispatch({ type: 'LOCAL_DRAFT_HTML_LOADED', html: null });
+    if (!documentId || !loadPendingBody) {
+      dispatch({ type: 'PENDING_BODY_HTML_LOADED', html: null });
       return;
     }
 
     let cancelled = false;
     void (async () => {
-      const draftHtml = await loadLocalDraft(documentId);
+      const pendingBodyHtml = await loadPendingBody(documentId);
       if (cancelled) return;
-      dispatch({ type: 'LOCAL_DRAFT_HTML_LOADED', html: draftHtml });
+      dispatch({ type: 'PENDING_BODY_HTML_LOADED', html: pendingBodyHtml });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [dispatch, documentId, loadLocalDraft]);
+  }, [dispatch, documentId, loadPendingBody]);
 
   useEffect(() => {
     if (!documentId || !loadBaseline) {

@@ -45,7 +45,7 @@ export function useEditorSession<TDocument>(
     documentId,
     document,
     buildSourceDocument,
-    loadLocalDraft,
+    loadPendingBody,
     loadBaseline,
     saveLocally,
     commitOptimistic,
@@ -85,7 +85,7 @@ export function useEditorSession<TDocument>(
     documentId,
     document,
     buildSourceDocument,
-    loadLocalDraft,
+    loadPendingBody,
     loadBaseline,
     dispatch,
     resetUiState: useCallback(() => {
@@ -145,7 +145,7 @@ export function useEditorSession<TDocument>(
     : false;
 
   const statusLabel = (() => {
-    if (!state.isDraftHydrated || !state.isEditorReady) return null;
+    if (!state.isPendingBodyHydrated || !state.isEditorReady) return null;
 
     if (state.errorMessage || state.syncStatus === 'unsynced') {
       return '已保存在本地，稍后同步';
@@ -164,7 +164,7 @@ export function useEditorSession<TDocument>(
     shouldAutoFocus,
     mediaAssets: state.mediaAssets,
     formattingState,
-    isDraftHydrated: state.isDraftHydrated,
+    isPendingBodyHydrated: state.isPendingBodyHydrated,
     isEditorFocused,
     statusLabel,
     isUploadingImage,

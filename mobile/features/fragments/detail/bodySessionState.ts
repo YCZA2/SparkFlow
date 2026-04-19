@@ -19,20 +19,20 @@ export {
 
 export function resolveHydratedBodySession(input: {
   fragment: Fragment;
-  draftHtml: string | null;
+  pendingBodyHtml: string | null;
   baselineContentHtml: string | null;
 }) {
   /*碎片详情复用共享 hydrate 优先级逻辑。 */
   return resolveHydratedEditorDocument({
     document: input.fragment,
-    draftHtml: input.draftHtml,
+    pendingBodyHtml: input.pendingBodyHtml,
     baselineContentHtml: input.baselineContentHtml,
   });
 }
 
 export function shouldRehydrateBodySession(input: {
   fragment: Fragment;
-  draftHtml: string | null;
+  pendingBodyHtml: string | null;
   currentSnapshot: EditorDocumentSnapshot;
   baselineBodyHtml: string;
   visibleMediaAssets: MediaAsset[];
@@ -41,7 +41,7 @@ export function shouldRehydrateBodySession(input: {
   /*碎片详情复用共享远端刷新判定。 */
   return shouldRehydrateEditorSession({
     document: input.fragment,
-    draftHtml: input.draftHtml,
+    pendingBodyHtml: input.pendingBodyHtml,
     currentSnapshot: input.currentSnapshot,
     baselineBodyHtml: input.baselineBodyHtml,
     visibleMediaAssets: input.visibleMediaAssets,

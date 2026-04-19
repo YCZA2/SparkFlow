@@ -11,8 +11,28 @@ from services.base import SpeakerSegment, STTRecognitionError, TranscriptionResu
 from services.dashscope_stt import DashScopeSTTService
 
 
+class StubFileTranscriber:
+    """模拟文件识别成功或失败。"""
+
+    def __init__(self, *, fail_transcription: bool = False) -> None:
+        """记录调用并配置是否抛出识别异常。"""
+        self.fail_transcription = fail_transcription
+        self.calls: list[str] = []
+
+    def transcribe_recorded_file(self, audio_path: str, language: str) -> TranscriptionResult:
+        """返回固定转写结果，供服务层测试消费。"""
+        self.calls.append("file")
+        if self.fail_transcription:
+            raise STTRecognitionError("file transcription failed")
+        return TranscriptionResult(
+            text="文件转写",
+            language=language,
+            speaker_segments=[SpeakerSegment(speaker_id="spk-1", start_ms=0, end_ms=1000, text="你好")],
+        )
+
+
 class StubDashScopeSTTService(DashScopeSTTService):
-    """通过覆写底层识别方法来测试文件识别调用。"""
+    """绕过真实 DashScope 初始化，注入文件识别替身。"""
 
     def __init__(
         self,
@@ -26,19 +46,7 @@ class StubDashScopeSTTService(DashScopeSTTService):
         self.speaker_count = 0
         self.file_url_mode = "temp"
         self.file_transcription_timeout_seconds = 5
-        self.fail_transcription = fail_transcription
-        self.calls: list[str] = []
-
-    def _transcribe_recorded_file(self, audio_path: str, language: str) -> TranscriptionResult:
-        """模拟文件识别成功或失败。"""
-        self.calls.append("file")
-        if self.fail_transcription:
-            raise STTRecognitionError("file transcription failed")
-        return TranscriptionResult(
-            text="文件转写",
-            language=language,
-            speaker_segments=[SpeakerSegment(speaker_id="spk-1", start_ms=0, end_ms=1000, text="你好")],
-        )
+        self._file_transcriber = StubFileTranscriber(fail_transcription=fail_transcription)
 
 
 @pytest.fixture
@@ -59,7 +67,7 @@ async def test_file_transcription_keeps_speaker_segments(temp_audio_path: str) -
     """录音文件识别应保留说话人分段。"""
     service = StubDashScopeSTTService(diarization_enabled=True)
     result = await service.transcribe(temp_audio_path)
-    assert service.calls == ["file"]
+    assert service._file_transcriber.calls == ["file"]
     assert result.text == "文件转写"
     assert len(result.speaker_segments or []) == 1
 

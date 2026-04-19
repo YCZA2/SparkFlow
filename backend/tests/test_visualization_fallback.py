@@ -26,11 +26,11 @@ class _FakeVectorStore:
         return self._docs
 
     async def upsert_fragment(self, **kwargs):
-        """兼容云图缺失向量回填逻辑。"""
+        """模拟云图缺失向量时的回填写入。"""
         return True
 
     async def delete_fragment(self, *, user_id: str, fragment_id: str):
-        """兼容可视化链路的删除调用。"""
+        """模拟可视化链路的删除调用。"""
         return True
 
 

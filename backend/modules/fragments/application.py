@@ -97,10 +97,9 @@ class FragmentCommandService:
 class FragmentQueryService:
     """封装基于 snapshot 的 fragment 读操作。"""
 
-    def __init__(self, *, vector_store: VectorStore, file_storage: FileStorage) -> None:
-        """装配读操作依赖；file_storage 保留给兼容构造函数与后续扩展。"""
+    def __init__(self, *, vector_store: VectorStore) -> None:
+        """装配读操作依赖。"""
         self.vector_store = vector_store
-        self.file_storage = file_storage
 
     def list_tags(
         self,

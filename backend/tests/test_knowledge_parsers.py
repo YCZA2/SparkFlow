@@ -9,7 +9,7 @@ import pytest
 from docx import Document
 
 from core.exceptions import ValidationError
-from modules.knowledge.parsers import parse_uploaded_text
+from modules.shared.content.document_parsers import parse_uploaded_text
 
 
 def _build_docx_bytes(text: str) -> bytes:

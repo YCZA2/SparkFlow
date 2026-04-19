@@ -17,8 +17,8 @@ def _iter_python_files(relative_dir: str):
         yield path
 
 
-def test_legacy_domain_service_files_are_removed() -> None:
-    legacy_files = [
+def test_removed_domain_service_files_stay_removed() -> None:
+    removed_files = [
         BACKEND_ROOT / "domains" / "fragments" / "service.py",
         BACKEND_ROOT / "domains" / "knowledge" / "service.py",
         BACKEND_ROOT / "domains" / "scripts" / "service.py",
@@ -29,18 +29,18 @@ def test_legacy_domain_service_files_are_removed() -> None:
         BACKEND_ROOT / "services" / "scheduler.py",
         BACKEND_ROOT / "services" / "stt_service.py",
     ]
-    for path in legacy_files:
-        assert not path.exists(), f"legacy file should be removed: {path}"
+    for path in removed_files:
+        assert not path.exists(), f"removed service file should stay absent: {path}"
 
 
 def test_router_layer_is_removed() -> None:
     """旧路由目录应整体删除，避免回流到历史结构。"""
-    assert not (BACKEND_ROOT / "routers").exists(), "legacy backend/routers directory should be removed"
+    assert not (BACKEND_ROOT / "routers").exists(), "backend/routers directory should stay removed"
 
 
 def test_global_schema_directory_is_removed() -> None:
     """旧全局 schema 目录应保持不存在。"""
-    assert not (BACKEND_ROOT / "schemas").exists(), "legacy backend/schemas directory should be removed"
+    assert not (BACKEND_ROOT / "schemas").exists(), "backend/schemas directory should stay removed"
 
 
 def test_presentation_depends_on_application_not_inverse() -> None:
@@ -51,11 +51,11 @@ def test_presentation_depends_on_application_not_inverse() -> None:
             assert ".presentation" not in content, f"{path_text} should not import another presentation module"
         if path.name == "application.py":
             assert ".presentation" not in content, f"{path_text} should not depend on presentation layer"
-            assert "from services" not in content, f"{path_text} should not depend on legacy services layer"
-            assert "import services" not in content, f"{path_text} should not depend on legacy services layer"
+            assert "from services" not in content, f"{path_text} should not depend on services layer"
+            assert "import services" not in content, f"{path_text} should not depend on services layer"
 
 
-def test_modules_do_not_depend_on_legacy_router_package() -> None:
+def test_modules_do_not_depend_on_removed_router_package() -> None:
     for path in _iter_python_files("modules"):
         content = path.read_text(encoding="utf-8")
         assert "from routers" not in content, f"{path} should not import routers"

@@ -1,19 +1,12 @@
 import { API_ENDPOINTS } from '@/constants/config';
 import { ApiError, get, patch, post } from '@/features/core/api/client';
-import type { GenerateScriptRequest, Script, ScriptGenerationTask, ScriptListResponse } from '@/types/script';
+import type { GenerateScriptRequest, Script, ScriptGenerationTask } from '@/types/script';
 
 /**
  脚本生成入口现在只返回任务句柄，由上层继续轮询 task。
  */
 export async function generateScript(data: GenerateScriptRequest): Promise<ScriptGenerationTask> {
   return post<ScriptGenerationTask>(API_ENDPOINTS.SCRIPTS.GENERATE, data);
-}
-
-/**
- 读取脚本列表。
- */
-export async function fetchScripts(): Promise<ScriptListResponse> {
-  return get<ScriptListResponse>(API_ENDPOINTS.SCRIPTS.LIST);
 }
 
 /**

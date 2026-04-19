@@ -9,7 +9,7 @@ import {
   type EditorSessionRuntimeRefs,
 } from '@/features/editor/editorSessionRuntime';
 
-/*统一图片插入流程，兼容本地 pending asset 和直接上传两条路径。 */
+/*统一图片插入流程，支持本地 pending asset 和直接上传两条路径。 */
 export function useEditorSessionImageInsertion<TDocument>(input: {
   supportsImages: boolean;
   uploadImageAsset?: EditorSessionConfig<TDocument>['uploadImageAsset'];

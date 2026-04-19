@@ -30,7 +30,8 @@ os.environ.setdefault("CELERY_TASK_EAGER_PROPAGATES", "false")
 
 from main import create_app
 from models import Base, User
-from modules.auth.application import TEST_USER_ID
+from modules.auth.application import TEST_USER_EMAIL, TEST_USER_ID, TEST_USER_PASSWORD
+from modules.auth.password_service import hash_password
 from modules.shared.infrastructure.infrastructure import LocalFileStorage
 from modules.shared.tasks.bootstrap import configure_task_runtime
 from tests.support import (
@@ -67,7 +68,15 @@ def db_session_factory(test_engine):
     session_factory = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     with session_factory() as session:
         # 为鉴权链路和默认业务测试预置测试用户，避免 PostgreSQL 外键约束失败。
-        session.add(User(id=TEST_USER_ID, role="user", nickname="测试用户"))
+        session.add(
+            User(
+                id=TEST_USER_ID,
+                role="user",
+                nickname="测试用户",
+                email=TEST_USER_EMAIL,
+                password_hash=hash_password(TEST_USER_PASSWORD),
+            )
+        )
         session.commit()
     yield session_factory
     Base.metadata.drop_all(bind=test_engine)

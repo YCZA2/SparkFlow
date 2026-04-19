@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from core.logging_config import get_logger
 from modules.fragments.content import read_fragment_plain_text
-from utils.serialization import format_iso_datetime, parse_json_list
+from utils.serialization import format_iso_datetime
 
 from .visualization_math import cluster_embeddings, project_embeddings_to_coordinates
 
@@ -93,11 +93,11 @@ def _summary_terms(summary: Optional[str]) -> list[str]:
 
 
 def _read_tags(fragment: Any) -> list[str]:
-    """统一读取标签，兼容 ORM 字符串字段和 snapshot 字符串数组。"""
+    """统一读取 snapshot 标签数组。"""
     raw_tags = getattr(fragment, "tags", None)
-    if isinstance(raw_tags, list):
-        return [tag.strip() for tag in raw_tags if isinstance(tag, str) and tag.strip()]
-    return parse_json_list(raw_tags, allow_csv_fallback=True) or []
+    if not isinstance(raw_tags, list):
+        return []
+    return [tag.strip() for tag in raw_tags if isinstance(tag, str) and tag.strip()]
 
 
 def _cluster_keywords(fragments: list[Any]) -> list[str]:

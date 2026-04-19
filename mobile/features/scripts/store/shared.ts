@@ -5,7 +5,6 @@ import { getScriptBodyFile, readScriptBodyFile, writeScriptBodyFile } from '@/fe
 import { extractPlainTextFromHtml, normalizeBodyHtml } from '@/features/editor/html';
 import { scriptsTable } from '@/features/core/db/schema';
 import type { Script, ScriptCopyReason, ScriptGenerationKind, ScriptMode, ScriptStatus } from '@/types/script';
-export { shouldSkipRemoteScriptHydration, type LocalScriptHydrationGuardInput } from './hydrationGuard';
 
 export type ScriptRow = typeof scriptsTable.$inferSelect;
 
@@ -46,7 +45,7 @@ export function buildScriptCopyTitle(title: string | null | undefined, reason: S
   return `${baseTitle}（副本）`;
 }
 
-/*把是否已拍转换为当前兼容脚本接口仍需暴露的 status。 */
+/*把是否已拍转换为脚本展示模型仍需暴露的 status。 */
 export function resolveScriptStatus(isFilmed: boolean): ScriptStatus {
   return isFilmed ? 'filmed' : 'draft';
 }

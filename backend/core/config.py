@@ -287,7 +287,7 @@ class Settings(BaseSettings):
     @field_validator("DEBUG", mode="before")
     @classmethod
     def parse_debug_value(cls, value):
-        """允许历史上的 release/debug 字符串配置。"""
+        """允许 release/debug 等常见字符串配置。"""
         if isinstance(value, str):
             normalized = value.strip().lower()
             if normalized in FALSEY_DEBUG_VALUES:

@@ -43,7 +43,7 @@ export interface LocalPendingImageAsset {
   local_uri: string;
   mime_type: string;
   file_name: string;
-  remote_asset_id?: string | null;
+  backup_object_key?: string | null;
   upload_status: LocalPendingImageUploadStatus;
 }
 

@@ -15,7 +15,7 @@ from utils.serialization import format_iso_datetime
 from domains.knowledge import repository as knowledge_repository
 from .chunking import build_knowledge_chunks
 from .indexing import KnowledgeIndexingService
-from .parsers import parse_uploaded_text
+from modules.shared.content.document_parsers import parse_uploaded_text
 from .reference_script_task import (
     TASK_TYPE_REFERENCE_SCRIPT_PROCESSING,
     build_reference_script_processing_task_service,

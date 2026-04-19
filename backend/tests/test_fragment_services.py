@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import time
-from types import SimpleNamespace
 
 import pytest
 
@@ -20,7 +18,7 @@ class StubDbSession:
         self.commit_calls = 0
 
     def commit(self) -> None:
-        """保留兼容接口，避免旧断言依赖崩溃。"""
+        """记录 commit 调用次数，确保衍生服务不会误提交单测替身。"""
         self.commit_calls += 1
 
 
@@ -52,81 +50,55 @@ class StubLogger:
 
 
 @pytest.mark.asyncio
-async def test_derivative_service_skips_enrichment_for_small_edits() -> None:
-    """小改动时应复用已有摘要标签，只同步向量。"""
+async def test_derivative_service_backfills_snapshot_summary_tags_and_vector() -> None:
+    """衍生回填应生成摘要标签并同步向量。"""
     db = StubDbSession()
-    fragment = SimpleNamespace(id="frag-1", source="manual", summary="已有摘要", tags=json.dumps(["旧标签"], ensure_ascii=False))
-    vector_store = FakeVectorStore()
-    llm_provider = FakeLLMProvider()
-    service = FragmentDerivativeService(vector_store=vector_store, llm_provider=llm_provider)
-
-    await service.refresh_fragment_derivatives(
-        db=db,
-        user_id="test-user-001",
-        fragment=fragment,
-        previous_effective_text="这是一段足够长的原始内容，用来验证小改动不会触发重算。",
-        current_effective_text="这是一段足够长的原始内容，用来验证小改动不会触发重算。!",
-    )
-
-    assert llm_provider.calls == []
-    assert db.commit_calls == 0
-    assert vector_store.fragment_docs[fragment.id]["summary"] == "已有摘要"
-    assert vector_store.fragment_docs[fragment.id]["tags"] == ["旧标签"]
-
-
-@pytest.mark.asyncio
-async def test_derivative_service_refreshes_summary_and_tags_for_large_edits() -> None:
-    """大改动时应重算摘要标签并更新内存对象与向量。"""
-    db = StubDbSession()
-    fragment = SimpleNamespace(id="frag-2", source="manual", summary=None, tags=None, body_html="")
     vector_store = FakeVectorStore()
     llm_provider = FakeLLMProvider()
     llm_provider.queue_text('["产品", "增长"]')
     service = FragmentDerivativeService(vector_store=vector_store, llm_provider=llm_provider)
 
-    await service.refresh_fragment_derivatives(
+    summary, tags = await service.backfill_snapshot_derivatives(
         db=db,
         user_id="test-user-001",
-        fragment=fragment,
-        previous_effective_text="旧内容",
-        current_effective_text="这是一次足够长的内容重写，用来触发摘要与标签刷新逻辑，并同步向量结果。",
+        fragment_id="frag-2",
+        source="manual",
+        effective_text="这是一次足够长的内容重写，用来触发摘要与标签刷新逻辑，并同步向量结果。",
     )
 
     assert len(llm_provider.calls) == 1
     assert db.commit_calls == 0
-    assert fragment.summary
-    assert json.loads(fragment.tags) == ["产品", "增长"]
-    assert vector_store.fragment_docs[fragment.id]["text"].startswith("这是一次足够长的内容重写")
+    assert summary
+    assert tags == ["产品", "增长"]
+    assert vector_store.fragment_docs["frag-2"]["text"].startswith("这是一次足够长的内容重写")
 
 
 @pytest.mark.asyncio
 async def test_derivative_service_degrades_when_vector_sync_fails() -> None:
     """向量同步失败时不应阻断摘要标签刷新。"""
     db = StubDbSession()
-    fragment = SimpleNamespace(id="frag-3", source="manual", summary=None, tags=None, body_html="")
     llm_provider = FakeLLMProvider()
     llm_provider.queue_text('["编辑", "整理"]')
     service = FragmentDerivativeService(vector_store=ExplodingVectorStore(), llm_provider=llm_provider)
 
-    await service.refresh_fragment_derivatives(
+    summary, tags = await service.backfill_snapshot_derivatives(
         db=db,
         user_id="test-user-001",
-        fragment=fragment,
-        previous_effective_text="旧内容",
-        current_effective_text="这是一段足够长的重写正文，用来验证向量同步失败时，摘要标签刷新仍然可以成功结束。",
+        fragment_id="frag-3",
+        source="manual",
+        effective_text="这是一段足够长的重写正文，用来验证向量同步失败时，摘要标签刷新仍然可以成功结束。",
     )
 
-    assert fragment.summary
-    assert json.loads(fragment.tags) == ["编辑", "整理"]
+    assert summary
+    assert tags == ["编辑", "整理"]
 
 
 @pytest.mark.asyncio
 async def test_derivative_service_throttles_duplicate_vector_sync_warnings(monkeypatch) -> None:
     """同一条向量同步错误在冷却窗口内应只保留一次 warning。"""
-    fragment = SimpleNamespace(id="frag-4", source="manual", summary="已有摘要", tags=json.dumps(["旧标签"], ensure_ascii=False))
     service = FragmentDerivativeService(vector_store=ExplodingVectorStore(), llm_provider=FakeLLMProvider())
     stub_logger = StubLogger()
-    monotonic_values = iter([100.0, 100.0, 110.0, 110.0])
+    monotonic_values = iter([100.0] * 20)
     real_monotonic = time.monotonic
 
     def _fake_monotonic() -> float:
@@ -140,19 +112,19 @@ async def test_derivative_service_throttles_duplicate_vector_sync_warnings(monke
     monkeypatch.setattr("modules.fragments.derivative_service.time.monotonic", _fake_monotonic)
     monkeypatch.setattr("modules.fragments.derivative_service._vector_sync_throttle._last_seen", {})
 
-    await service.refresh_fragment_derivatives(
+    await service.backfill_snapshot_derivatives(
         db=StubDbSession(),
         user_id="test-user-001",
-        fragment=fragment,
-        previous_effective_text="这是一段足够长的原始内容，用来验证小改动不会触发重算。",
-        current_effective_text="这是一段足够长的原始内容，用来验证小改动不会触发重算。!",
+        fragment_id="frag-4",
+        source="manual",
+        effective_text="这是一段足够长的原始内容，用来验证重复向量同步错误会被限频。",
     )
-    await service.refresh_fragment_derivatives(
+    await service.backfill_snapshot_derivatives(
         db=StubDbSession(),
         user_id="test-user-001",
-        fragment=fragment,
-        previous_effective_text="这是一段足够长的原始内容，用来验证小改动不会触发重算。",
-        current_effective_text="这是一段足够长的原始内容，用来验证小改动不会触发重算。!",
+        fragment_id="frag-4",
+        source="manual",
+        effective_text="这是一段足够长的原始内容，用来验证重复向量同步错误会被限频。",
     )
 
     assert len(stub_logger.warning_calls) == 1
@@ -179,7 +151,7 @@ def test_fragment_query_service_list_tags_reads_snapshot(db_session_factory) -> 
             source="manual",
             server_patch={"tags": ["apple", "banana"]},
         )
-        payload = FragmentQueryService(vector_store=FakeVectorStore(), file_storage=SimpleNamespace()).list_tags(
+        payload = FragmentQueryService(vector_store=FakeVectorStore()).list_tags(
             db=db,
             user_id="test-user-001",
             query_text="ab",

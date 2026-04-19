@@ -107,7 +107,7 @@ interface ContentEditorScaffoldProps {
   capabilities: EditorCapabilities;
   isLoading: boolean;
   error: string | null;
-  isDraftHydrated: boolean;
+  isPendingBodyHydrated: boolean;
   formattingState: EditorFormattingState | null;
   statusLabel?: string | null;
   isUploadingImage?: boolean;
@@ -128,7 +128,7 @@ export function ContentEditorScaffold({
   capabilities,
   isLoading,
   error,
-  isDraftHydrated,
+  isPendingBodyHydrated,
   formattingState,
   statusLabel,
   isUploadingImage = false,
@@ -264,7 +264,7 @@ export function ContentEditorScaffold({
                   void onRetry();
                 }}
               />
-            ) : isDraftHydrated ? (
+            ) : isPendingBodyHydrated ? (
               editor
             ) : (
               <EditorSkeleton dark={isDark} />

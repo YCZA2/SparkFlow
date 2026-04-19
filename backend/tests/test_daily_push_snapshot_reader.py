@@ -100,7 +100,15 @@ def test_snapshot_reader_lists_only_users_with_fragment_upserts(db_session_facto
     with db_session_factory() as db:
         now = datetime.now(timezone.utc)
         _insert_fragment_backup(db, entity_id="keep-user", created_at=now, plain_text_snapshot="正文")
-        db.add(User(id="user-delete-only", role="user", nickname="删除用户"))
+        db.add(
+            User(
+                id="user-delete-only",
+                role="user",
+                nickname="删除用户",
+                email="delete-only@sparkflow.dev",
+                password_hash="test-password-hash",
+            )
+        )
         db.flush()
         backup_repository.upsert_record(
             db=db,

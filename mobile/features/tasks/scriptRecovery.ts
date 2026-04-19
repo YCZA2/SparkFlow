@@ -1,6 +1,6 @@
 import { assertTaskScopeActive, isTaskScopeActive, type TaskExecutionScope } from '@/features/auth/taskScope';
 import { forgetPendingScriptTask, listPendingScriptTasks } from '@/features/scripts/pendingScriptTasks';
-import { syncRemoteScriptDetailToLocal } from '@/features/scripts/sync';
+import { hydrateGeneratedScriptToLocal } from '@/features/scripts/sync';
 import { markScriptsStale } from '@/features/scripts/store';
 import { fetchTaskRun, waitForTaskTerminal } from '@/features/tasks/api';
 import type { TaskRun } from '@/types/task';
@@ -21,7 +21,7 @@ async function syncRecoveredScriptTask(
   assertTaskScopeActive(scope);
   const scriptId = resolveScriptIdFromTask(task);
   if (scriptId) {
-    await syncRemoteScriptDetailToLocal(scriptId, { scope });
+    await hydrateGeneratedScriptToLocal(scriptId, { scope });
     markScriptsStale();
   }
   await forgetPendingScriptTask(scope.userId, task.id);

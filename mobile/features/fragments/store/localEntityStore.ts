@@ -163,7 +163,7 @@ export async function stageLocalFragmentPendingImage(
     local_uri: stagedFile.uri,
     mime_type: payload.mime_type,
     file_name: payload.file_name,
-    remote_asset_id: null,
+    backup_object_key: null,
     upload_status: 'pending',
   };
 
@@ -171,7 +171,7 @@ export async function stageLocalFragmentPendingImage(
   await database.insert(mediaAssetsTable).values({
     id: pendingAsset.local_asset_id,
     fragmentId,
-    remoteAssetId: null,
+    backupObjectKey: null,
     mediaKind: 'image',
     mimeType: pendingAsset.mime_type,
     fileName: pendingAsset.file_name,

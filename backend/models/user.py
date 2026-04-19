@@ -21,8 +21,8 @@ class User(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     role = Column(String, default="user", nullable=False)  # 'user' | 'creator' | 'admin'
     nickname = Column(String, nullable=True)
-    email = Column(String, nullable=True, unique=True)  # 登录凭证，迁移兼容 nullable
-    password_hash = Column(String, nullable=True)        # bcrypt 哈希，迁移兼容 nullable
+    email = Column(String, nullable=False, unique=True)  # 登录凭证
+    password_hash = Column(String, nullable=False)       # bcrypt 哈希
     status = Column(String, nullable=False, default="active")
     storage_quota = Column(Integer, default=1073741824)  # 预留：存储配额(字节)，默认1GB
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)

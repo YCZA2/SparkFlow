@@ -331,8 +331,8 @@
 | `id` | `VARCHAR` | `否` |
 | `role` | `VARCHAR` | `否` |
 | `nickname` | `VARCHAR` | `是` |
-| `email` | `VARCHAR` | `是` |
-| `password_hash` | `VARCHAR` | `是` |
+| `email` | `VARCHAR` | `否` |
+| `password_hash` | `VARCHAR` | `否` |
 | `status` | `VARCHAR` | `否` |
 | `storage_quota` | `INTEGER` | `是` |
 | `created_at` | `TIMESTAMP` | `否` |

@@ -7,8 +7,8 @@ import pytest
 from core.config import BACKEND_DIR, Settings
 
 
-def test_debug_accepts_legacy_release_value(monkeypatch) -> None:
-    """兼容历史 release/debug 风格的 DEBUG 配置。"""
+def test_debug_accepts_release_value(monkeypatch) -> None:
+    """DEBUG 配置应接受 release/debug 风格字符串。"""
     monkeypatch.setenv("DEBUG", "release")
     settings = Settings()
     assert settings.DEBUG is False

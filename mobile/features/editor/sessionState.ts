@@ -43,8 +43,8 @@ export { shouldPublishOptimisticDocument } from './sessionPersistence';
 
 interface SessionSourceState {
   document: EditorSourceDocument | null;
-  local_draft_html: string | null;
-  local_draft_loaded: boolean;
+  pending_body_html: string | null;
+  pending_body_loaded: boolean;
   baseline_content_html: string | null;
 }
 
@@ -57,7 +57,7 @@ export interface EditorSessionState {
   mediaAssets: EditorMediaAsset[];
   syncStatus: EditorSaveState;
   isEditorReady: boolean;
-  isDraftHydrated: boolean;
+  isPendingBodyHydrated: boolean;
   hasConfirmedLocalEdit: boolean;
   errorMessage: string | null;
   saveRequestId: number;
@@ -66,7 +66,7 @@ export interface EditorSessionState {
 
 export type EditorSessionEvent =
   | { type: 'RESET_SESSION'; documentId: string | null }
-  | { type: 'LOCAL_DRAFT_HTML_LOADED'; html: string | null }
+  | { type: 'PENDING_BODY_HTML_LOADED'; html: string | null }
   | { type: 'BASELINE_CONTENT_LOADED'; html: string | null }
   | { type: 'SOURCE_DOCUMENT_LOADED'; document: EditorSourceDocument | null }
   | { type: 'EDITOR_READY' }
@@ -94,14 +94,14 @@ export function createInitialEditorSessionState(
     mediaAssets: [],
     syncStatus: 'idle',
     isEditorReady: false,
-    isDraftHydrated: false,
+    isPendingBodyHydrated: false,
     hasConfirmedLocalEdit: false,
     errorMessage: null,
     saveRequestId: 0,
     source: {
       document: null,
-      local_draft_html: null,
-      local_draft_loaded: false,
+      pending_body_html: null,
+      pending_body_loaded: false,
       baseline_content_html: null,
     },
   };
@@ -120,13 +120,13 @@ export function reduceEditorSession(
     return createInitialEditorSessionState(event.documentId);
   }
 
-  if (event.type === 'LOCAL_DRAFT_HTML_LOADED') {
+  if (event.type === 'PENDING_BODY_HTML_LOADED') {
     return reconcileHydration({
       ...state,
       source: {
         ...state.source,
-        local_draft_loaded: true,
-        local_draft_html: event.html,
+        pending_body_loaded: true,
+        pending_body_html: event.html,
       },
     });
   }
@@ -171,7 +171,7 @@ export function reduceEditorSession(
       snapshot: event.snapshot,
       hasConfirmedLocalEdit: hasMeaningfulChange ? true : state.hasConfirmedLocalEdit,
       syncStatus: hasMeaningfulChange
-        ? state.source.document?.legacy_save_state != null
+        ? state.source.document?.save_state != null
           ? 'syncing'
           : state.syncStatus === 'synced'
             ? 'idle'
@@ -231,7 +231,7 @@ export function reduceEditorSession(
       errorMessage: null,
       source: {
         ...state.source,
-        local_draft_html: normalizedSavedHtml,
+        pending_body_html: normalizedSavedHtml,
         document: nextDocument,
       },
       phase: resolveSessionPhase({

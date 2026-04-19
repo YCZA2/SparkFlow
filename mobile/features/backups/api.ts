@@ -35,7 +35,7 @@ export type BackupFolderContractPayload = Record<string, unknown> & {
   deleted_at: string | null;
 };
 
-/* 备份协议里的媒体 payload，兼容历史 remote_asset_id / 备份对象键。 */
+/* 备份协议里的媒体 payload，承接备份对象键与恢复所需文件元数据。 */
 export type BackupMediaAssetContractPayload = Record<string, unknown> & {
   id: string;
   fragment_id: string;
@@ -44,7 +44,6 @@ export type BackupMediaAssetContractPayload = Record<string, unknown> & {
   file_name: string;
   backup_object_key: string | null;
   backup_file_url: string | null;
-  remote_asset_id?: string | null;
   remote_expires_at: string | null;
   upload_status: string;
   file_size: number;

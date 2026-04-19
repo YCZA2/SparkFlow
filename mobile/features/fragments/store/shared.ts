@@ -25,7 +25,7 @@ export const LOCAL_IMAGE_ASSET_ID_PREFIX = 'local:image:';
 export type FragmentRow = typeof fragmentsTable.$inferSelect;
 export type MediaAssetRow = typeof mediaAssetsTable.$inferSelect;
 
-/*为本地草稿生成稳定的 UUID 主键。 */
+/*为本地 fragment 生成稳定的 UUID 主键。 */
 export function generateFragmentId(): string {
   return `${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -45,7 +45,7 @@ export function serializeTags(tags: string[] | null | undefined): string {
   return JSON.stringify(normalizeFragmentTags(tags));
 }
 
-/*从 SQLite 记录中恢复标签数组，避免旧数据结构污染 UI。 */
+/*从 SQLite 记录中恢复当前标签数组。 */
 export function deserializeTags(raw: string | null | undefined): string[] {
   if (!raw) {
     return [];
@@ -53,7 +53,7 @@ export function deserializeTags(raw: string | null | undefined): string[] {
   try {
     return normalizeFragmentTags(JSON.parse(raw));
   } catch {
-    return normalizeFragmentTags(raw);
+    return [];
   }
 }
 
@@ -165,7 +165,7 @@ export async function loadMediaRowsByFragmentIds(
   return map;
 }
 
-/*创建本地草稿时顺手生成空图片节点，供后续图片插入测试复用。 */
+/*创建本地 fragment 时顺手生成空图片节点，供后续图片插入测试复用。 */
 export function createPendingImageHtml(assetId: string): string {
   return createImageHtml(assetId);
 }
@@ -184,7 +184,7 @@ export async function stagePendingImage(
   return await prepareManagedImageFile(localUri, fileName, mimeType);
 }
 
-/*读取兼容快照列表时统一构造文件夹筛选条件，避免多模块复制判断。 */
+/*读取本地快照列表时统一构造文件夹筛选条件，避免多模块复制判断。 */
 export function buildFragmentListCondition(folderId?: string | null) {
   const normalizedFolderId = String(folderId ?? '').trim();
   // "全部"文件夹是虚拟系统文件夹，查询所有非删除碎片
