@@ -124,11 +124,6 @@ export function getScriptDirectoryUri(scriptId: string): string {
   return `${getScriptsDirectoryUri()}${scriptId}/`;
 }
 
-/*为单条片段创建 meta 子目录，用于放置草稿和辅助文件。 */
-export function getFragmentMetaDirectoryUri(fragmentId: string): string {
-  return `${getFragmentDirectoryUri(fragmentId)}meta/`;
-}
-
 /*为单条片段创建 assets 子目录，统一承接恢复后的媒体本地缓存。 */
 export function getFragmentAssetsDirectoryUri(fragmentId: string): string {
   return `${getFragmentDirectoryUri(fragmentId)}assets/`;
@@ -152,14 +147,4 @@ export function getFragmentBodyFile(fragmentId: string): ManagedNativeFile {
 /*返回 script 正式正文文件句柄，供成稿 local-first 真值落盘。 */
 export function getScriptBodyFile(scriptId: string): ManagedNativeFile {
   return createManagedNativeFile(getScriptDirectoryUri(scriptId), 'body.html');
-}
-
-/*返回兼容草稿正文文件句柄，供未持久化输入临时落盘。 */
-export function getFragmentDraftBodyFile(fragmentId: string): ManagedNativeFile {
-  return createManagedNativeFile(getFragmentMetaDirectoryUri(fragmentId), 'draft.html');
-}
-
-/*返回片段目录下的元数据目录，便于后续扩展调试文件。 */
-export function getFragmentMetaPath(fragmentId: string): string {
-  return getFragmentMetaDirectoryUri(fragmentId);
 }

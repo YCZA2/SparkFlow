@@ -6,8 +6,6 @@ import {
   getFileWorkspaceUserId,
   getFragmentAssetsDirectoryUri,
   getFragmentBodyFile,
-  getFragmentDraftBodyFile,
-  getFragmentMetaPath,
   getFragmentsDirectoryUri,
   getRootDirectoryUri,
   getScriptBodyFile,
@@ -81,32 +79,6 @@ export async function writeScriptBodyFile(scriptId: string, html: string): Promi
 /*读取 script 正式正文，缺失时返回 null。 */
 export async function readScriptBodyFile(scriptId: string): Promise<string | null> {
   return await readTextFile(getScriptBodyFile(scriptId));
-}
-
-/*把兼容草稿正文写到 meta 目录，避免污染正式基线文件。 */
-export async function writeFragmentDraftBodyFile(fragmentId: string, html: string): Promise<string> {
-  return await writeTextFile(getFragmentDraftBodyFile(fragmentId), html);
-}
-
-/*读取兼容草稿正文，供编辑器 hydrate 优先恢复最近输入。 */
-export async function readFragmentDraftBodyFile(fragmentId: string): Promise<string | null> {
-  return await readTextFile(getFragmentDraftBodyFile(fragmentId));
-}
-
-/*清理兼容草稿正文文件，让持久化成功后的状态回到干净基线。 */
-export async function clearFragmentDraftBodyFile(fragmentId: string): Promise<void> {
-  await deleteFileIfExists(getFragmentDraftBodyFile(fragmentId));
-}
-
-/*枚举当前本地存在正文草稿的片段 id，用于启动时恢复同步。 */
-export async function listFragmentDraftBodyIds(): Promise<string[]> {
-  const fragmentsDirectoryUri = getFragmentsDirectoryUri();
-  await ensureDirectoryAsync(fragmentsDirectoryUri);
-  const entries = toDirectoryHandle(new Directory(fragmentsDirectoryUri)).list();
-  return entries
-    .filter((entry): entry is Directory => entry instanceof Directory)
-    .map((directory) => directory.name)
-    .filter((fragmentId) => toFileHandle(new File(getFragmentDraftBodyFile(fragmentId).uri)).exists);
 }
 
 /*递归删除目录及其所有内容。 */
@@ -278,5 +250,3 @@ export async function ensureFileRuntimeReady(): Promise<void> {
     ensureDirectoryAsync(getStagingAudioDirectoryUri()),
   ]);
 }
-
-export { getFragmentMetaPath };

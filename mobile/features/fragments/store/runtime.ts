@@ -1,5 +1,5 @@
 import { getDatabaseWorkspaceUserId, getLocalDatabase } from '@/features/core/db/database';
-import { ensureFileRuntimeReady, getFragmentMetaPath } from '@/features/core/files/runtime';
+import { ensureFileRuntimeReady } from '@/features/core/files/runtime';
 
 let storeReadyPromise: Promise<void> | null = null;
 
