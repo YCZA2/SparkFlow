@@ -22,13 +22,12 @@ def _editor_document(text: str) -> dict:
     normalized = text.strip()
     return {
         "type": "doc",
-        "blocks": []
+        "content": []
         if not normalized
         else [
             {
-                "id": "test-block-1",
                 "type": "paragraph",
-                "children": [{"text": normalized, "marks": []}],
+                "content": [{"type": "text", "text": normalized}],
             }
         ],
     }

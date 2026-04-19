@@ -7,7 +7,8 @@ import schemathesis
 
 from main import create_app
 from models import Base, User, engine
-from modules.auth.application import TEST_USER_ID
+from modules.auth.application import TEST_USER_EMAIL, TEST_USER_ID, TEST_USER_PASSWORD
+from modules.auth.password_service import hash_password
 
 schemathesis.experimental.OPEN_API_3_1.enable()
 
@@ -25,6 +26,8 @@ def prepare_database():
                 id=TEST_USER_ID,
                 role="user",
                 nickname="测试用户",
+                email=TEST_USER_EMAIL,
+                password_hash=hash_password(TEST_USER_PASSWORD),
             )
         )
     yield

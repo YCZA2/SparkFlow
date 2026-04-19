@@ -327,7 +327,7 @@ async def test_scripts_daily_push_trigger_get_force_trigger_and_idempotency(asyn
         _seed_fragment_vector(app, fragment["id"], "同主题内容", source=fragment["source"])
 
     first_response = await async_client.post("/api/scripts/daily-push/trigger", headers=await _auth_headers(async_client, auth_headers_factory))
-    assert first_response.status_code == 200
+    assert first_response.status_code == 200, first_response.text
     first_run_id = first_response.json()["data"]["task_id"]
     task = await _wait_task(async_client, auth_headers_factory, first_run_id)
     assert task["status"] == "succeeded"
