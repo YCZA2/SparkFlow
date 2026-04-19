@@ -10,7 +10,7 @@ from modules.shared.media.media_ingestion_persistence import MediaIngestionPersi
 from modules.shared.media.media_ingestion_steps import MediaIngestionStepExecutor
 from modules.shared.media.stored_file_payloads import stored_file_to_payload
 
-PIPELINE_TYPE_MEDIA_INGESTION = "media_ingestion"
+TASK_TYPE_MEDIA_INGESTION = "media_ingestion"
 _FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 
 
@@ -27,7 +27,7 @@ class AudioIngestionRequest:
 
 @dataclass
 class AudioIngestionResult:
-    pipeline_run_id: str
+    task_run_id: str
     fragment_id: str | None
     audio_file: Any
     source: str
@@ -40,12 +40,12 @@ class AudioIngestionUseCase:
     def __init__(
         self,
         *,
-        pipeline_runner,
+        task_runner,
         step_executor: MediaIngestionStepExecutor,
         stt_provider,
     ) -> None:
         """装配媒体导入入口依赖。"""
-        self.pipeline_runner = pipeline_runner
+        self.task_runner = task_runner
         self.step_executor = step_executor
         self.stt_provider = stt_provider
 
@@ -67,7 +67,7 @@ class AudioIngestionUseCase:
         db,
         request: AudioIngestionRequest,
     ) -> AudioIngestionResult:
-        """创建上传音频流水线并返回异步任务句柄。"""
+        """创建上传音频任务并返回异步任务句柄。"""
         self.step_executor.validate_audio_source(request.audio_source)
         self.step_executor.validate_folder_exists(db=db, user_id=request.user_id, folder_id=request.folder_id)
         normalized_local_fragment_id = str(request.local_fragment_id or "").strip()
@@ -83,10 +83,10 @@ class AudioIngestionUseCase:
             folder_id=request.folder_id,
             audio_source=request.audio_source,
         )
-        run = await self.pipeline_runner.create_run(
+        run = await self.task_runner.create_run(
             run_id=None,
             user_id=request.user_id,
-            pipeline_type=PIPELINE_TYPE_MEDIA_INGESTION,
+            task_type=TASK_TYPE_MEDIA_INGESTION,
             input_payload={
                 "source_kind": request.audio_source,
                 "audio_file": stored_file_to_payload(request.audio_file),
@@ -99,7 +99,7 @@ class AudioIngestionUseCase:
             resource_id=normalized_local_fragment_id,
         )
         return AudioIngestionResult(
-            pipeline_run_id=run.id,
+            task_run_id=run.id,
             fragment_id=None,
             audio_file=request.audio_file,
             source="voice",
@@ -116,7 +116,7 @@ class AudioIngestionUseCase:
         folder_id: str | None = None,
         local_fragment_id: str | None = None,
     ) -> AudioIngestionResult:
-        """创建外链导入流水线并返回异步任务句柄。"""
+        """创建外链导入任务并返回异步任务句柄。"""
         self.step_executor.validate_folder_exists(db=db, user_id=user_id, folder_id=folder_id)
         normalized_local_fragment_id = str(local_fragment_id or "").strip()
         if not normalized_local_fragment_id:
@@ -131,10 +131,10 @@ class AudioIngestionUseCase:
             folder_id=folder_id,
             audio_source="external_link",
         )
-        run = await self.pipeline_runner.create_run(
+        run = await self.task_runner.create_run(
             run_id=None,
             user_id=user_id,
-            pipeline_type=PIPELINE_TYPE_MEDIA_INGESTION,
+            task_type=TASK_TYPE_MEDIA_INGESTION,
             input_payload={
                 "source_kind": "external_link",
                 "fragment_id": None,
@@ -147,16 +147,16 @@ class AudioIngestionUseCase:
             resource_id=normalized_local_fragment_id,
         )
         return AudioIngestionResult(
-            pipeline_run_id=run.id,
+            task_run_id=run.id,
             fragment_id=None,
             audio_file=None,
             source="voice",
             audio_source="external_link",
         )
 
-    def build_pipeline_definitions(self):
-        """透传媒体导入流水线的固定步骤定义。"""
-        return self.step_executor.build_pipeline_definitions()
+    def build_task_definitions(self):
+        """透传媒体导入任务的固定步骤定义。"""
+        return self.step_executor.build_task_definitions()
 
     @staticmethod
     def _ensure_fragment_placeholder(
@@ -184,12 +184,12 @@ class AudioIngestionUseCase:
         )
 
 
-def build_media_ingestion_pipeline_service(container) -> AudioIngestionUseCase:
+def build_media_ingestion_task_service(container) -> AudioIngestionUseCase:
     """基于容器组装媒体导入入口与步骤执行器。"""
     persistence_service = MediaIngestionPersistenceService()
     step_executor = MediaIngestionStepExecutor(persistence_service=persistence_service)
     return AudioIngestionUseCase(
-        pipeline_runner=container.pipeline_runner,
+        task_runner=container.task_runner,
         step_executor=step_executor,
         stt_provider=container.stt_provider,
     )

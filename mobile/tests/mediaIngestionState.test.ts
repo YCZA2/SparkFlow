@@ -9,9 +9,9 @@ import {
   extractMediaIngestionOutput,
   resolveMediaIngestionFragmentPatch,
   resolveMediaIngestionFragmentId,
-} from '../features/pipelines/mediaIngestionState';
+} from '../features/tasks/mediaIngestionTaskState';
 
-test('extractMediaIngestionOutput keeps transcript, summary and tags from pipeline output', () => {
+test('extractMediaIngestionOutput keeps transcript, summary and tags from task output', () => {
   assert.deepEqual(
     extractMediaIngestionOutput({
       output: {
@@ -34,7 +34,7 @@ test('extractMediaIngestionOutput keeps transcript, summary and tags from pipeli
   );
 });
 
-test('extractMediaIngestionOutput extracts valid speaker_segments from pipeline output', () => {
+test('extractMediaIngestionOutput extracts valid speaker_segments from task output', () => {
   const segments = [
     { speaker_id: 'SPEAKER_0', start_ms: 0, end_ms: 1200, text: '你好' },
     { speaker_id: 'SPEAKER_1', start_ms: 1300, end_ms: 2500, text: '世界' },
@@ -67,7 +67,7 @@ test('extractMediaIngestionOutput falls back to audio_file payload object key', 
   );
 });
 
-test('resolveMediaIngestionFragmentId prefers pipeline resource id', () => {
+test('resolveMediaIngestionFragmentId prefers task resource id', () => {
   assert.equal(
     resolveMediaIngestionFragmentId('fragment-local', {
       status: 'succeeded',

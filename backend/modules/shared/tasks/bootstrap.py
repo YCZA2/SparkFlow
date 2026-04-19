@@ -2,36 +2,36 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from modules.document_import.pipeline_steps import (
+from modules.document_import.task_steps import (
     DocumentImportStepExecutor,
-    PIPELINE_TYPE_DOCUMENT_IMPORT,
+    TASK_TYPE_DOCUMENT_IMPORT,
 )
-from modules.fragments.derivative_pipeline import (
-    PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
-    build_fragment_derivative_pipeline_service,
+from modules.fragments.derivative_task import (
+    TASK_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
+    build_fragment_derivative_task_service,
 )
-from modules.knowledge.rag_processing_pipeline import (
-    PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING,
-    build_reference_script_processing_pipeline_service,
+from modules.knowledge.reference_script_task import (
+    TASK_TYPE_REFERENCE_SCRIPT_PROCESSING,
+    build_reference_script_processing_task_service,
 )
-from modules.scripts.daily_push_pipeline import (
-    PIPELINE_TYPE_DAILY_PUSH_GENERATION,
-    build_daily_push_pipeline_service,
+from modules.scripts.daily_push_task import (
+    TASK_TYPE_DAILY_PUSH_GENERATION,
+    build_daily_push_task_service,
 )
-from modules.scripts.rag_pipeline import (
-    PIPELINE_TYPE_RAG_SCRIPT_GENERATION,
-    build_rag_script_pipeline_service,
+from modules.scripts.rag_task import (
+    TASK_TYPE_RAG_SCRIPT_GENERATION,
+    build_rag_script_task_service,
 )
 from modules.shared.celery.app import build_celery_app
 from modules.shared.celery.tasks import TASK_QUEUE_BY_TYPE
 from modules.shared.infrastructure.container import ServiceContainer, build_container
 from modules.shared.media.audio_ingestion import (
-    PIPELINE_TYPE_MEDIA_INGESTION,
-    build_media_ingestion_pipeline_service,
+    TASK_TYPE_MEDIA_INGESTION,
+    build_media_ingestion_task_service,
 )
 
 from .runtime import (
-    LegacyPipelineDispatcherAdapter,
+    TaskDispatchController,
     TaskDefinitionRegistry,
     TaskRecoveryService,
     TaskRunner,
@@ -56,52 +56,52 @@ def configure_task_runtime(container: ServiceContainer) -> TaskRuntimeState:
     definition_registry = TaskDefinitionRegistry()
 
     definition_registry.register(
-        PIPELINE_TYPE_MEDIA_INGESTION,
+        TASK_TYPE_MEDIA_INGESTION,
         _apply_default_queue(
-            PIPELINE_TYPE_MEDIA_INGESTION,
-            build_media_ingestion_pipeline_service(container).build_pipeline_definitions(),
+            TASK_TYPE_MEDIA_INGESTION,
+            build_media_ingestion_task_service(container).build_task_definitions(),
         ),
     )
     definition_registry.register(
-        PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
+        TASK_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
         _apply_default_queue(
-            PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
-            build_fragment_derivative_pipeline_service(container).build_pipeline_definitions(),
+            TASK_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
+            build_fragment_derivative_task_service(container).build_task_definitions(),
         ),
     )
     definition_registry.register(
-        PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+        TASK_TYPE_DAILY_PUSH_GENERATION,
         _apply_default_queue(
-            PIPELINE_TYPE_DAILY_PUSH_GENERATION,
-            build_daily_push_pipeline_service(container).build_pipeline_definitions(),
+            TASK_TYPE_DAILY_PUSH_GENERATION,
+            build_daily_push_task_service(container).build_task_definitions(),
         ),
     )
     definition_registry.register(
-        PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING,
+        TASK_TYPE_REFERENCE_SCRIPT_PROCESSING,
         _apply_default_queue(
-            PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING,
-            build_reference_script_processing_pipeline_service(container).build_pipeline_definitions(),
+            TASK_TYPE_REFERENCE_SCRIPT_PROCESSING,
+            build_reference_script_processing_task_service(container).build_task_definitions(),
         ),
     )
     definition_registry.register(
-        PIPELINE_TYPE_RAG_SCRIPT_GENERATION,
+        TASK_TYPE_RAG_SCRIPT_GENERATION,
         _apply_default_queue(
-            PIPELINE_TYPE_RAG_SCRIPT_GENERATION,
-            build_rag_script_pipeline_service(container).build_pipeline_definitions(),
+            TASK_TYPE_RAG_SCRIPT_GENERATION,
+            build_rag_script_task_service(container).build_task_definitions(),
         ),
     )
     definition_registry.register(
-        PIPELINE_TYPE_DOCUMENT_IMPORT,
+        TASK_TYPE_DOCUMENT_IMPORT,
         _apply_default_queue(
-            PIPELINE_TYPE_DOCUMENT_IMPORT,
-            DocumentImportStepExecutor().build_pipeline_definitions(),
+            TASK_TYPE_DOCUMENT_IMPORT,
+            DocumentImportStepExecutor().build_task_definitions(),
         ),
     )
 
     celery_app = build_celery_app(container.settings)
-    dispatcher = container.pipeline_dispatcher
-    if not isinstance(dispatcher, LegacyPipelineDispatcherAdapter):
-        dispatcher = LegacyPipelineDispatcherAdapter()
+    dispatcher = container.task_dispatcher
+    if not isinstance(dispatcher, TaskDispatchController):
+        dispatcher = TaskDispatchController()
     container.celery_app = celery_app
     container.task_runner = TaskRunner(
         session_factory=container.session_factory,
@@ -115,10 +115,7 @@ def configure_task_runtime(container: ServiceContainer) -> TaskRuntimeState:
         celery_app=celery_app,
         dispatcher=dispatcher,
     )
-    # 中文注释：业务层暂时保留旧命名别名，避免一次性重写所有 pipeline 调用点。
-    container.pipeline_runner = container.task_runner
-    container.pipeline_recovery_service = container.task_recovery_service
-    container.pipeline_dispatcher = dispatcher
+    container.task_dispatcher = dispatcher
     runtime = TaskRuntimeState(
         container=container,
         celery_app=celery_app,

@@ -23,7 +23,7 @@ def stored_file_to_payload(stored_file: StoredFile | None) -> dict[str, Any] | N
 
 
 def stored_file_from_payload(payload: dict[str, Any] | None) -> StoredFile | None:
-    """从流水线 payload 恢复统一文件元数据。"""
+    """从任务 payload 恢复统一文件元数据。"""
     if not payload:
         return None
     object_key = payload.get("object_key")

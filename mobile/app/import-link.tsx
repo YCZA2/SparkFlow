@@ -20,7 +20,7 @@ import { createLocalFragmentEntity, updateLocalFragmentEntity } from '@/features
 import { importExternalAudio } from '@/features/imports/api';
 import { isImportLinkReady, resolveImportedFragmentId } from '@/features/imports/importState';
 import { waitForTaskTerminal } from '@/features/tasks/api';
-import { syncMediaIngestionPipelineState } from '@/features/pipelines/mediaIngestionRecovery';
+import { syncMediaIngestionTaskState } from '@/features/tasks/mediaIngestionTaskRecovery';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { getErrorMessage } from '@/utils/error';
 
@@ -62,16 +62,16 @@ export default function ImportLinkScreen() {
         media_pipeline_status: 'queued',
         media_pipeline_error_message: null,
       });
-      const pipeline = await waitForTaskTerminal(taskId, {
+      const taskRun = await waitForTaskTerminal(taskId, {
         timeoutMs: 180_000,
         scope,
       });
-      const fragmentId = resolveImportedFragmentId(task.local_fragment_id ?? task.fragment_id, pipeline);
+      const fragmentId = resolveImportedFragmentId(task.local_fragment_id ?? task.fragment_id, taskRun);
 
-      await syncMediaIngestionPipelineState(localFragment.id, pipeline, { scope });
+      await syncMediaIngestionTaskState(localFragment.id, taskRun, { scope });
 
-      if (pipeline.status !== 'succeeded' || !fragmentId) {
-        throw new Error(pipeline.error_message || '导入失败，请稍后重试');
+      if (taskRun.status !== 'succeeded' || !fragmentId) {
+        throw new Error(taskRun.error_message || '导入失败，请稍后重试');
       }
 
       markFragmentsStale();

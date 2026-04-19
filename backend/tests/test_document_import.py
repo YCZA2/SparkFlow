@@ -15,33 +15,33 @@ from core.exceptions import NotFoundError
 from modules.document_import.application import DocumentImportUseCase
 from modules.auth.application import TEST_USER_ID
 from modules.shared.fragment_snapshots import FragmentSnapshotReader
-from modules.shared.pipeline.pipeline_types import PipelineExecutionContext
+from modules.shared.tasks.task_types import TaskExecutionContext
 
-from modules.document_import.pipeline_steps import (
+from modules.document_import.task_steps import (
     DocumentImportStepExecutor,
-    PIPELINE_TYPE_DOCUMENT_IMPORT,
+    TASK_TYPE_DOCUMENT_IMPORT,
 )
 
 
-def test_pipeline_type_constant() -> None:
-    """文档导入流水线类型标识应保持稳定。"""
-    assert PIPELINE_TYPE_DOCUMENT_IMPORT == "document_import"
+def test_task_type_constant() -> None:
+    """文档导入任务类型标识应保持稳定。"""
+    assert TASK_TYPE_DOCUMENT_IMPORT == "document_import"
 
 
-def test_pipeline_definitions_have_expected_steps() -> None:
-    """文档导入流水线应包含三个步骤。"""
+def test_task_definitions_have_expected_steps() -> None:
+    """文档导入任务应包含三个步骤。"""
     executor = DocumentImportStepExecutor()
-    definitions = executor.build_pipeline_definitions()
+    definitions = executor.build_task_definitions()
     assert len(definitions) == 3
     assert definitions[0].step_name == "parse_document"
     assert definitions[1].step_name == "write_fragment_body"
     assert definitions[2].step_name == "finalize_import"
 
 
-def test_pipeline_step_max_attempts() -> None:
+def test_task_step_max_attempts() -> None:
     """解析步骤可重试，写入和终态步骤不可重试。"""
     executor = DocumentImportStepExecutor()
-    definitions = executor.build_pipeline_definitions()
+    definitions = executor.build_task_definitions()
     assert definitions[0].max_attempts == 2
     assert definitions[1].max_attempts == 1
     assert definitions[2].max_attempts == 1
@@ -112,10 +112,10 @@ async def test_write_fragment_body_updates_snapshot_fields(monkeypatch) -> None:
         captured.update(kwargs)
 
     monkeypatch.setattr(
-        "modules.document_import.pipeline_steps._FRAGMENT_SNAPSHOT_READER.merge_server_fields",
+        "modules.document_import.task_steps._FRAGMENT_SNAPSHOT_READER.merge_server_fields",
         _capture_merge_server_fields,
     )
-    context = PipelineExecutionContext(
+    context = TaskExecutionContext(
         db=SimpleNamespace(),
         session_factory=SimpleNamespace(),
         run=SimpleNamespace(
@@ -142,10 +142,10 @@ async def test_write_fragment_body_updates_snapshot_fields(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_document_import_use_case_rejects_invalid_folder(monkeypatch) -> None:
     """文档导入入口应拒绝不存在或无权访问的文件夹。"""
-    pipeline_runner = SimpleNamespace(create_run=AsyncMock())
+    task_runner = SimpleNamespace(create_run=AsyncMock())
     file_storage = SimpleNamespace(save_upload=AsyncMock())
     use_case = DocumentImportUseCase(
-        pipeline_runner=pipeline_runner,
+        task_runner=task_runner,
         file_storage=file_storage,
     )
     upload = UploadFile(
@@ -168,7 +168,7 @@ async def test_document_import_use_case_rejects_invalid_folder(monkeypatch) -> N
         )
 
     file_storage.save_upload.assert_not_awaited()
-    pipeline_runner.create_run.assert_not_awaited()
+    task_runner.create_run.assert_not_awaited()
 
 
 def test_merge_server_fields_can_patch_snapshot_structure(monkeypatch) -> None:

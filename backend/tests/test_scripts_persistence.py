@@ -7,20 +7,20 @@ from datetime import date
 import pytest
 
 from core.exceptions import ValidationError
-from domains.pipelines import repository as pipeline_repository
+from domains.tasks import repository as task_repository
 from domains.scripts import repository as script_repository
 from modules.auth.application import TEST_USER_ID
-from modules.scripts.daily_push_pipeline import DailyPushPersistenceService
+from modules.scripts.daily_push_task import DailyPushPersistenceService
 from modules.scripts.persistence import ScriptGenerationPersistenceService
 
 
 def _create_script_run(db):
-    """创建供脚本持久化测试使用的流水线。"""
-    return pipeline_repository.create_run(
+    """创建供脚本持久化测试使用的任务。"""
+    return task_repository.create_run(
         db=db,
         run_id="script-run-001",
         user_id=TEST_USER_ID,
-        pipeline_type="rag_script_generation",
+        task_type="rag_script_generation",
         input_payload={"topic": "测试主题", "fragment_ids": [], "mode": "mode_rag"},
         resource_type=None,
         resource_id=None,
@@ -29,12 +29,12 @@ def _create_script_run(db):
 
 
 def _create_daily_push_run(db):
-    """创建供每日推盘持久化测试使用的流水线。"""
-    return pipeline_repository.create_run(
+    """创建供每日推盘持久化测试使用的任务。"""
+    return task_repository.create_run(
         db=db,
         run_id="daily-push-run-001",
         user_id=TEST_USER_ID,
-        pipeline_type="daily_push_generation",
+        task_type="daily_push_generation",
         input_payload={
             "fragment_ids": ["fragment-1"],
             "target_date": date.today().isoformat(),
@@ -111,7 +111,7 @@ def test_persistence_service_persists_script_idempotently(db_session_factory) ->
             input_payload={"topic": "测试主题", "fragment_ids": ["fragment-1"], "mode": "mode_rag"},
             parsed_result={"title": "新标题", "draft": "新正文"},
         )
-        refreshed_run = pipeline_repository.get_by_id(db=db, user_id=TEST_USER_ID, run_id=run.id)
+        refreshed_run = task_repository.get_by_id(db=db, user_id=TEST_USER_ID, run_id=run.id)
         script_count = script_repository.count_by_user(db=db, user_id=TEST_USER_ID)
         persisted_script = script_repository.get_by_id(db=db, user_id=TEST_USER_ID, script_id=first["script_id"])
 
@@ -134,7 +134,7 @@ def test_persistence_service_rolls_back_script_when_run_binding_fails(db_session
     def _boom(*args, **kwargs):
         raise RuntimeError("bind run failed")
 
-    monkeypatch.setattr(pipeline_repository, "update_run_resource", _boom)
+    monkeypatch.setattr(task_repository, "update_run_resource", _boom)
 
     with db_session_factory() as db:
         run = _create_script_run(db)
@@ -146,7 +146,7 @@ def test_persistence_service_rolls_back_script_when_run_binding_fails(db_session
                 parsed_result={"title": "标题", "draft": "正文"},
             )
         db.expire_all()
-        refreshed_run = pipeline_repository.get_by_id(db=db, user_id=TEST_USER_ID, run_id=run.id)
+        refreshed_run = task_repository.get_by_id(db=db, user_id=TEST_USER_ID, run_id=run.id)
         script_count = script_repository.count_by_user(db=db, user_id=TEST_USER_ID)
 
     assert refreshed_run is not None
@@ -162,7 +162,7 @@ def test_daily_push_persistence_rolls_back_script_when_run_binding_fails(db_sess
     def _boom(*args, **kwargs):
         raise RuntimeError("bind run failed")
 
-    monkeypatch.setattr(pipeline_repository, "update_run_resource", _boom)
+    monkeypatch.setattr(task_repository, "update_run_resource", _boom)
 
     with db_session_factory() as db:
         run = _create_daily_push_run(db)
@@ -179,7 +179,7 @@ def test_daily_push_persistence_rolls_back_script_when_run_binding_fails(db_sess
                 title="每日标题",
             )
         db.expire_all()
-        refreshed_run = pipeline_repository.get_by_id(db=db, user_id=TEST_USER_ID, run_id=run.id)
+        refreshed_run = task_repository.get_by_id(db=db, user_id=TEST_USER_ID, run_id=run.id)
         script_count = script_repository.count_by_user(db=db, user_id=TEST_USER_ID)
 
     assert refreshed_run is not None

@@ -8,8 +8,8 @@ from core.auth import get_current_user
 from modules.shared.infrastructure.container import ServiceContainer, get_container, get_db_session
 
 from .application import DailyPushUseCase, RagScriptGenerationUseCase, ScriptCommandService, ScriptQueryService, map_script
-from .daily_push_pipeline import build_daily_push_pipeline_service
-from .rag_pipeline import build_rag_script_pipeline_service
+from .daily_push_task import build_daily_push_task_service
+from .rag_task import build_rag_script_task_service
 from .schemas import ScriptDetail, ScriptGenerationRequest, ScriptGenerationResponse, ScriptListResponse, ScriptUpdateRequest
 
 router = APIRouter(prefix="/api/scripts", tags=["scripts"], responses={401: {"description": "未认证"}})
@@ -18,14 +18,14 @@ router = APIRouter(prefix="/api/scripts", tags=["scripts"], responses={401: {"de
 def get_rag_script_generation_use_case(container: ServiceContainer = Depends(get_container)) -> RagScriptGenerationUseCase:
     """构建 RAG 脚本生成用例。"""
     return RagScriptGenerationUseCase(
-        pipeline_service=build_rag_script_pipeline_service(container),
+        pipeline_service=build_rag_script_task_service(container),
     )
 
 
 def get_daily_push_use_case(container: ServiceContainer = Depends(get_container)) -> DailyPushUseCase:
     """构建每日推盘用例。"""
     return DailyPushUseCase(
-        pipeline_service=build_daily_push_pipeline_service(container),
+        pipeline_service=build_daily_push_task_service(container),
     )
 
 
@@ -34,7 +34,7 @@ def get_daily_push_use_case(container: ServiceContainer = Depends(get_container)
     status_code=status.HTTP_201_CREATED,
     response_model=ResponseModel[ScriptGenerationResponse],
     summary="生成口播稿",
-    description="基于主题和可选碎片，通过 RAG 参考脚本和 SOP 大纲创建异步脚本生成流水线。",
+    description="基于主题和可选碎片，通过 RAG 参考脚本和 SOP 大纲创建异步脚本生成任务。",
 )
 async def generate_script(
     data: ScriptGenerationRequest,
@@ -83,7 +83,7 @@ async def get_daily_push(
     "/daily-push/trigger",
     response_model=ResponseModel[ScriptGenerationResponse],
     summary="立即补跑今日推盘",
-    description="调试或运维场景下，基于当前已备份到服务端的 fragment 快照创建一条异步每日推盘流水线。",
+    description="调试或运维场景下，基于当前已备份到服务端的 fragment 快照创建一条异步每日推盘任务。",
 )
 async def trigger_daily_push(
     current_user: dict = Depends(get_current_user),
@@ -98,7 +98,7 @@ async def trigger_daily_push(
     "/daily-push/force-trigger",
     response_model=ResponseModel[ScriptGenerationResponse],
     summary="强制补跑今日推盘",
-    description="调试或运维场景下忽略语义聚合约束，基于当前已备份到服务端的 fragment 快照创建一条异步每日推盘流水线。",
+    description="调试或运维场景下忽略语义聚合约束，基于当前已备份到服务端的 fragment 快照创建一条异步每日推盘任务。",
 )
 async def force_trigger_daily_push(
     current_user: dict = Depends(get_current_user),

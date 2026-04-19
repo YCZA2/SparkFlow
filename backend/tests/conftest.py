@@ -127,8 +127,8 @@ async def app(
     test_app.state.celery_app = test_app.state.container.celery_app
     yield test_app
     test_app.state.scheduler_service.stop()
-    if test_app.state.container.pipeline_dispatcher:
-        await test_app.state.container.pipeline_dispatcher.stop()
+    if test_app.state.container.task_dispatcher:
+        await test_app.state.container.task_dispatcher.stop()
 
 
 @pytest_asyncio.fixture
@@ -137,8 +137,8 @@ async def stateless_app():
     test_app = create_app(enable_runtime_side_effects=False)
     yield test_app
     test_app.state.scheduler_service.stop()
-    if test_app.state.container.pipeline_dispatcher:
-        await test_app.state.container.pipeline_dispatcher.stop()
+    if test_app.state.container.task_dispatcher:
+        await test_app.state.container.task_dispatcher.stop()
 
 
 @pytest_asyncio.fixture

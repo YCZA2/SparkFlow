@@ -7,29 +7,29 @@ export {
   extractMediaIngestionOutput,
   resolveMediaIngestionFragmentPatch,
   resolveMediaIngestionFragmentId,
-} from './mediaIngestionState';
+} from './mediaIngestionTaskState';
 import {
   extractMediaIngestionOutput,
   resolveMediaIngestionFragmentPatch,
   resolveMediaIngestionFragmentId,
-} from './mediaIngestionState';
+} from './mediaIngestionTaskState';
 
-/*把媒体导入 pipeline 的终态结果回写到本地真值 fragment。 */
-export async function applyMediaIngestionPipelineResult(
+/*把媒体导入 task 的终态结果回写到本地真值 fragment。 */
+export async function applyMediaIngestionTaskResult(
   fallbackFragmentId: string,
-  pipeline: Pick<TaskRun, 'status' | 'resource' | 'output'>
+  task: Pick<TaskRun, 'status' | 'resource' | 'output'>
 ): Promise<Fragment | null> {
-  if (pipeline.status !== 'succeeded') {
+  if (task.status !== 'succeeded') {
     return null;
   }
 
-  const fragmentId = resolveMediaIngestionFragmentId(fallbackFragmentId, pipeline);
+  const fragmentId = resolveMediaIngestionFragmentId(fallbackFragmentId, task);
   if (!fragmentId) {
     return null;
   }
 
   const current = await readLocalFragmentEntity(fragmentId);
-  const output = extractMediaIngestionOutput(pipeline);
+  const output = extractMediaIngestionOutput(task);
   const patch = resolveMediaIngestionFragmentPatch({ current, output });
 
   const nextFragment = await updateLocalFragmentEntity(fragmentId, patch);

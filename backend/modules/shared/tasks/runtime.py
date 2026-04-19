@@ -34,8 +34,8 @@ class TaskDefinitionRegistry:
             raise RuntimeError(f"missing task definition: {task_type}") from exc
 
 
-class LegacyPipelineDispatcherAdapter:
-    """向旧测试和兼容代码暴露最小 dispatcher 行为。"""
+class TaskDispatchController:
+    """控制任务是否自动投递，供测试暂停后台执行。"""
 
     def __init__(self) -> None:
         self.enabled = True
@@ -71,7 +71,7 @@ class TaskRunner:
         session_factory: sessionmaker[Session],
         definition_registry: TaskDefinitionRegistry,
         celery_app: Celery,
-        dispatcher: LegacyPipelineDispatcherAdapter | None = None,
+        dispatcher: TaskDispatchController | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.definition_registry = definition_registry
@@ -83,20 +83,20 @@ class TaskRunner:
         *,
         run_id: str | None,
         user_id: str,
-        pipeline_type: str,
+        task_type: str,
         input_payload: dict[str, Any] | None,
         resource_type: str | None = None,
         resource_id: str | None = None,
         auto_wake: bool = True,
     ) -> TaskRun:
         """创建任务记录并按需投递第一个步骤。"""
-        definitions = self.definition_registry.get(pipeline_type)
+        definitions = self.definition_registry.get(task_type)
         with self.session_factory() as db:
             run = task_repository.create_run(
                 db=db,
                 run_id=run_id,
                 user_id=user_id,
-                task_type=pipeline_type,
+                task_type=task_type,
                 input_payload=input_payload,
                 resource_type=resource_type,
                 resource_id=resource_id,
@@ -116,7 +116,7 @@ class TaskRunner:
             result = enqueue_task_step(
                 celery_app=self.celery_app,
                 task_run_id=run.id,
-                task_type=pipeline_type,
+                task_type=task_type,
                 step_name=definitions[0].step_name,
                 queue=definitions[0].queue,
             )
@@ -136,7 +136,7 @@ class TaskRecoveryService:
         session_factory: sessionmaker[Session],
         definition_registry: TaskDefinitionRegistry,
         celery_app: Celery,
-        dispatcher: LegacyPipelineDispatcherAdapter | None = None,
+        dispatcher: TaskDispatchController | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.definition_registry = definition_registry
@@ -172,7 +172,7 @@ __all__ = [
     "RETRY_STRATEGY_FROM_FAILED_STEP",
     "RETRY_STRATEGY_FROM_START",
     "TaskDefinitionRegistry",
-    "LegacyPipelineDispatcherAdapter",
+    "TaskDispatchController",
     "TaskRuntimeState",
     "TaskRunner",
     "TaskRecoveryService",

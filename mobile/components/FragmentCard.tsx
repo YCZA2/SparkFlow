@@ -4,7 +4,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
   isFailedMediaIngestionFragment,
   isProcessingMediaIngestionFragment,
-} from '@/features/pipelines/mediaIngestionRecoveryState';
+} from '@/features/tasks/mediaIngestionTaskRecoveryState';
 import {
   extractPreviewSkippingTitle,
   extractTitleFromFirstLine,

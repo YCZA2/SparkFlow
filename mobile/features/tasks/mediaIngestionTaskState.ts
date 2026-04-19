@@ -13,11 +13,11 @@ export interface MediaIngestionOutput {
   audio_file_expires_at: string | null;
 }
 
-/*把 pipeline output 规整成可直接回写本地 fragment 的 patch 数据。 */
+/*把 task output 规整成可直接回写本地 fragment 的 patch 数据。 */
 export function extractMediaIngestionOutput(
-  pipeline: Pick<TaskRun, 'output'>
+  task: Pick<TaskRun, 'output'>
 ): MediaIngestionOutput {
-  const output = (pipeline.output ?? {}) as Record<string, unknown>;
+  const output = (task.output ?? {}) as Record<string, unknown>;
   const rawTags = output.tags;
   const rawSegments = output.speaker_segments;
   const rawAudioFile =
@@ -54,18 +54,18 @@ export function extractMediaIngestionOutput(
   };
 }
 
-/*解析媒体导入最终对应的本地 fragment id，优先取 pipeline 终态资源。 */
+/*解析媒体导入最终对应的本地 fragment id，优先取 task 终态资源。 */
 export function resolveMediaIngestionFragmentId(
   fallbackFragmentId: string,
-  pipeline: Pick<TaskRun, 'status' | 'resource'>
+  task: Pick<TaskRun, 'status' | 'resource'>
 ): string | null {
   if (
-    pipeline.status === 'succeeded' &&
-    (pipeline.resource?.resource_type === 'local_fragment' ||
-      pipeline.resource?.resource_type === 'fragment') &&
-    pipeline.resource.resource_id
+    task.status === 'succeeded' &&
+    (task.resource?.resource_type === 'local_fragment' ||
+      task.resource?.resource_type === 'fragment') &&
+    task.resource.resource_id
   ) {
-    return pipeline.resource.resource_id;
+    return task.resource.resource_id;
   }
 
   return fallbackFragmentId || null;

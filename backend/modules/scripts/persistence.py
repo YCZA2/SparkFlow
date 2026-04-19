@@ -17,7 +17,7 @@ class ScriptGenerationPersistenceService:
 
     @staticmethod
     def build_provider_metadata(*, workflow_id: str | None, provider_run_id: str | None, provider_task_id: str | None) -> dict[str, str]:
-        """构造流水线结果中可复用的 provider 元数据。"""
+        """构造任务结果中可复用的 provider 元数据。"""
         provider: dict[str, str] = {}
         if workflow_id:
             provider["workflow_id"] = workflow_id
@@ -131,7 +131,7 @@ class ScriptGenerationPersistenceService:
         mode: str,
         provider_metadata: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """构造统一的流水线输出载荷。"""
+        """构造统一的任务输出载荷。"""
         payload = {
             "script_id": script_id,
             "result": parsed_result,
@@ -149,7 +149,7 @@ class ScriptGenerationPersistenceService:
         mode: str,
         provider_metadata: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """构造结束流水线所需的最终返回。"""
+        """构造结束任务所需的最终返回。"""
         return {
             "resource_type": "script",
             "resource_id": script_id,

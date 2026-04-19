@@ -13,7 +13,7 @@ from core.logging_config import get_logger
 from domains.tasks import repository as task_repository
 from domains.scripts import repository as script_repository
 from models import TaskRun
-from modules.shared.pipeline.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
+from modules.shared.tasks.task_types import TaskExecutionContext, TaskExecutionError, TaskStepDefinition
 from modules.shared.ports import VectorStore
 from modules.shared.content.content_html import convert_markdown_to_basic_html
 from modules.shared.fragment_snapshots import hydrate_fragment_snapshot
@@ -25,7 +25,7 @@ from .daily_push_snapshots import DailyPushFragmentSnapshot, DailyPushSnapshotRe
 
 logger = get_logger(__name__)
 
-PIPELINE_TYPE_DAILY_PUSH_GENERATION = "daily_push_generation"
+TASK_TYPE_DAILY_PUSH_GENERATION = "daily_push_generation"
 
 # 每日推盘生成系统提示路径
 _DAILY_PUSH_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "daily_push.txt"
@@ -54,7 +54,7 @@ def _build_fragment_summary(fragment: DailyPushFragmentSnapshot) -> str:
 
 
 def _hydrate_fragment_snapshot(item: dict[str, Any], *, user_id: str) -> DailyPushFragmentSnapshot | None:
-    """把 pipeline 输入中的字典恢复为快照 DTO。"""
+    """把任务输入中的字典恢复为快照 DTO。"""
     return hydrate_fragment_snapshot(item, user_id=user_id)
 
 
@@ -127,22 +127,22 @@ class DailyPushPersistenceService:
         )
 
 
-class DailyPushPipelineService:
-    """负责每日推盘异步流水线的定义、创建与推进。"""
+class DailyPushTaskService:
+    """负责每日推盘异步任务的定义、创建与推进。"""
 
     def __init__(
         self,
         *,
         vector_store: VectorStore,
         persistence_service: DailyPushPersistenceService,
-        pipeline_runner,
+        task_runner,
         snapshot_reader: DailyPushSnapshotReader,
         fragment_selector: DailyPushFragmentSelector | None = None,
     ) -> None:
-        """装配每日推盘流水线依赖。"""
+        """装配每日推盘任务依赖。"""
         self.fragment_selector = fragment_selector or DailyPushFragmentSelector(vector_store=vector_store)
         self.persistence_service = persistence_service
-        self.pipeline_runner = pipeline_runner
+        self.task_runner = task_runner
         self.snapshot_reader = snapshot_reader
 
     async def create_run(
@@ -156,7 +156,7 @@ class DailyPushPipelineService:
         title_prefix: str,
         trigger_kind: str,
     ) -> TaskRun:
-        """为指定用户创建每日推盘流水线，必要时复用当天已有结果。"""
+        """为指定用户创建每日推盘任务，必要时复用当天已有结果。"""
         target_time = reference_time or datetime.now(timezone.utc)
         today_start, today_end = get_local_day_bounds(target_time, day_offset=0)
         existing_script = script_repository.get_latest_daily_push_for_window(
@@ -169,7 +169,7 @@ class DailyPushPipelineService:
             existing_run = task_repository.get_latest_run_by_resource(
                 db=db,
                 user_id=user_id,
-                task_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+                task_type=TASK_TYPE_DAILY_PUSH_GENERATION,
                 resource_type="script",
                 resource_id=existing_script.id,
             )
@@ -178,7 +178,7 @@ class DailyPushPipelineService:
         existing_active_run = task_repository.get_latest_run_by_type_in_window(
             db=db,
             user_id=user_id,
-            task_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+            task_type=TASK_TYPE_DAILY_PUSH_GENERATION,
             start_at=today_start,
             end_at=today_end,
             statuses=["queued", "running", "succeeded"],
@@ -221,10 +221,10 @@ class DailyPushPipelineService:
                 raise ValidationError(message="今天的碎片主题还不够集中，暂时无法生成灵感卡片", field_errors={"fragments": "语义关联不足"})
 
         local_date = target_time.astimezone(get_app_timezone()).date().isoformat()
-        return await self.pipeline_runner.create_run(
+        return await self.task_runner.create_run(
             run_id=None,
             user_id=user_id,
-            pipeline_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+            task_type=TASK_TYPE_DAILY_PUSH_GENERATION,
             input_payload={
                 "fragment_ids": [fragment.id for fragment in selected],
                 "fragment_snapshots": self.snapshot_reader.serialize_snapshots(selected),
@@ -269,16 +269,16 @@ class DailyPushPipelineService:
             "skipped_users": skipped_users,
         }
 
-    def build_pipeline_definitions(self) -> list[PipelineStepDefinition]:
-        """返回每日推盘流水线的固定步骤。"""
+    def build_task_definitions(self) -> list[TaskStepDefinition]:
+        """返回每日推盘任务的固定步骤。"""
         return [
-            PipelineStepDefinition(step_name="collect_daily_push_context", executor=self.collect_daily_push_context, max_attempts=1),
-            PipelineStepDefinition(step_name="generate_daily_push_draft", executor=self.generate_daily_push_draft, max_attempts=2),
-            PipelineStepDefinition(step_name="persist_daily_push_script", executor=self.persist_daily_push_script, max_attempts=2),
-            PipelineStepDefinition(step_name="finalize_daily_push_run", executor=self.finalize_daily_push_run, max_attempts=1),
+            TaskStepDefinition(step_name="collect_daily_push_context", executor=self.collect_daily_push_context, max_attempts=1),
+            TaskStepDefinition(step_name="generate_daily_push_draft", executor=self.generate_daily_push_draft, max_attempts=2),
+            TaskStepDefinition(step_name="persist_daily_push_script", executor=self.persist_daily_push_script, max_attempts=2),
+            TaskStepDefinition(step_name="finalize_daily_push_run", executor=self.finalize_daily_push_run, max_attempts=1),
         ]
 
-    async def collect_daily_push_context(self, context: PipelineExecutionContext) -> dict[str, Any]:
+    async def collect_daily_push_context(self, context: TaskExecutionContext) -> dict[str, Any]:
         """根据已选碎片组装每日推盘上下文文本。"""
         payload = context.input_payload
         serialized_snapshots = payload.get("fragment_snapshots") or []
@@ -301,20 +301,20 @@ class DailyPushPipelineService:
             raise ValidationError(message="选中的碎片均无可用文本，无法生成每日推盘", field_errors={"fragment_ids": "碎片内容为空"})
         return {"fragments_text": "\n\n---\n\n".join(content_parts)}
 
-    async def generate_daily_push_draft(self, context: PipelineExecutionContext) -> dict[str, Any]:
+    async def generate_daily_push_draft(self, context: TaskExecutionContext) -> dict[str, Any]:
         """调用 LLM 基于碎片文本生成每日推盘草稿。"""
         fragments_text = context.get_step_output("collect_daily_push_context").get("fragments_text", "")
         try:
             system_prompt = _load_daily_push_prompt()
         except Exception as exc:
-            raise PipelineExecutionError(f"读取每日推盘提示词失败: {exc}", retryable=False) from exc
+            raise TaskExecutionError(f"读取每日推盘提示词失败: {exc}", retryable=False) from exc
         draft = await context.container.llm_provider.generate(
             system_prompt=system_prompt,
             user_message=render_prompt_template(_DAILY_PUSH_USER_PROMPT_PATH, fragments_text=fragments_text),
             temperature=0.7,
         )
         if not draft or not draft.strip():
-            raise PipelineExecutionError("LLM 未返回每日推盘草稿", retryable=True)
+            raise TaskExecutionError("LLM 未返回每日推盘草稿", retryable=True)
         # 尝试从首行提取标题
         lines = draft.strip().splitlines()
         title = lines[0].strip() if lines else None
@@ -324,7 +324,7 @@ class DailyPushPipelineService:
             title = None
         return {"draft": body, "title": title}
 
-    async def persist_daily_push_script(self, context: PipelineExecutionContext) -> dict[str, Any]:
+    async def persist_daily_push_script(self, context: TaskExecutionContext) -> dict[str, Any]:
         """将 LLM 草稿写入脚本记录。"""
         draft_output = context.get_step_output("generate_daily_push_draft")
         return self.persistence_service.persist_script(
@@ -335,8 +335,8 @@ class DailyPushPipelineService:
             title=draft_output.get("title"),
         )
 
-    async def finalize_daily_push_run(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """结束每日推盘流水线。"""
+    async def finalize_daily_push_run(self, context: TaskExecutionContext) -> dict[str, Any]:
+        """结束每日推盘任务。"""
         persist_payload = context.get_step_output("persist_daily_push_script")
         script_id = persist_payload["script_id"]
         return {
@@ -347,11 +347,11 @@ class DailyPushPipelineService:
         }
 
 
-def build_daily_push_pipeline_service(container) -> DailyPushPipelineService:
-    """基于容器组装每日推盘流水线服务。"""
-    return DailyPushPipelineService(
+def build_daily_push_task_service(container) -> DailyPushTaskService:
+    """基于容器组装每日推盘任务服务。"""
+    return DailyPushTaskService(
         vector_store=container.vector_store,
         persistence_service=DailyPushPersistenceService(),
-        pipeline_runner=container.pipeline_runner,
+        task_runner=container.task_runner,
         snapshot_reader=DailyPushSnapshotReader(),
     )

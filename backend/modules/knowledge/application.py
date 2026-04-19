@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
@@ -15,7 +16,10 @@ from domains.knowledge import repository as knowledge_repository
 from .chunking import build_knowledge_chunks
 from .indexing import KnowledgeIndexingService
 from .parsers import parse_uploaded_text
-from .rag_processing_pipeline import PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING
+from .reference_script_task import (
+    TASK_TYPE_REFERENCE_SCRIPT_PROCESSING,
+    build_reference_script_processing_task_service,
+)
 from .schemas import (
     KnowledgeDocItem,
     KnowledgeDocListResponse,
@@ -59,10 +63,10 @@ def map_knowledge_upload_response(doc: KnowledgeDoc, task_run: TaskRun | None = 
 
 
 class KnowledgeUseCase:
-    def __init__(self, *, knowledge_index_store: KnowledgeIndexStore, pipeline_runner: Any = None) -> None:
+    def __init__(self, *, knowledge_index_store: KnowledgeIndexStore, task_runner: Any = None) -> None:
         """装配知识库用例依赖。"""
         self.indexing_service = KnowledgeIndexingService(store=knowledge_index_store)
-        self.pipeline_runner = pipeline_runner
+        self.task_runner = task_runner
 
     async def create_doc(
         self,
@@ -170,7 +174,7 @@ class KnowledgeUseCase:
         source_filename: str | None,
         source_mime_type: str | None,
     ) -> KnowledgeDoc:
-        """创建 reference_script 文档并触发异步处理 pipeline。"""
+        """创建 reference_script 文档并触发异步处理任务。"""
         doc = knowledge_repository.create(
             db=db,
             user_id=user_id,
@@ -248,21 +252,21 @@ class KnowledgeUseCase:
         user_id: str,
         plain_text: str,
     ) -> KnowledgeDoc:
-        """启动 reference_script 处理 pipeline；runner 未配置时回写失败状态。"""
-        from .rag_processing_pipeline import ReferenceScriptProcessingPipelineService
-
-        if self.pipeline_runner is None:
+        """启动 reference_script 处理任务；runner 未配置时回写失败状态。"""
+        if self.task_runner is None:
             return knowledge_repository.update(
                 db=db,
                 doc=doc,
                 processing_status="failed",
-                processing_error="reference_script pipeline runner 未配置",
+                processing_error="reference_script task runner 未配置",
             )
-        pipeline_service = ReferenceScriptProcessingPipelineService(
-            pipeline_runner=self.pipeline_runner,
-            knowledge_index_store=self.indexing_service.store,
+        task_service = build_reference_script_processing_task_service(
+            SimpleNamespace(
+                task_runner=self.task_runner,
+                knowledge_index_store=self.indexing_service.store,
+            )
         )
-        await pipeline_service.create_run(
+        await task_service.create_run(
             doc_id=doc.id,
             user_id=user_id,
             script_text=plain_text,
@@ -324,7 +328,7 @@ class KnowledgeUseCase:
         return task_repository.get_latest_run_by_resource(
             db=db,
             user_id=user_id,
-            task_type=PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING,
+            task_type=TASK_TYPE_REFERENCE_SCRIPT_PROCESSING,
             resource_type="knowledge_doc",
             resource_id=doc.id,
         )

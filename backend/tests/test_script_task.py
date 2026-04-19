@@ -93,7 +93,7 @@ async def _wait_task(async_client, auth_headers_factory, task_id: str, *, attemp
 
 
 @pytest.mark.asyncio
-async def test_rag_script_generation_pipeline_runs_and_persists_script(
+async def test_rag_script_generation_task_runs_and_persists_script(
     async_client,
     auth_headers_factory,
     app,

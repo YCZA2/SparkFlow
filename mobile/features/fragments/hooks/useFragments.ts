@@ -14,7 +14,7 @@ import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
 import {
   isFailedMediaIngestionFragment,
   retryFailedMediaIngestionFragment,
-} from '@/features/pipelines/mediaIngestionRecovery';
+} from '@/features/tasks/mediaIngestionTaskRecovery';
 import type {
   Fragment,
   FragmentVisualizationResponse,

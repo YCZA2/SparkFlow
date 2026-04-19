@@ -268,13 +268,12 @@ flowchart TD
 - `backend/modules/shared/infrastructure/providers.py`: 外部媒体、网页搜索与 workflow provider 的默认工厂。
 - `backend/modules/shared/media/audio_ingestion.py`: 兼容层，对外保留媒体导入统一入口。
 - `backend/modules/shared/media/audio_ingestion_use_case.py`: 媒体导入任务创建入口，负责 fragment 初始化、入队与前置校验。
-- `backend/modules/shared/media/media_ingestion_steps.py`: 媒体导入 pipeline 的步骤执行器，当前只负责解析/下载、STT、transcript 落库与主任务终态。
+- `backend/modules/shared/media/media_ingestion_steps.py`: 媒体导入任务的步骤执行器，当前只负责解析/下载、STT、transcript 落库与主任务终态。
 - `backend/modules/shared/media/media_ingestion_persistence.py`: 媒体导入链路的音频元数据回写、转写落库与终态输出组装。
-- `backend/modules/shared/media/stored_file_payloads.py`: `StoredFile` 与 pipeline payload 的互转 helper。
+- `backend/modules/shared/media/stored_file_payloads.py`: `StoredFile` 与任务 payload 的互转 helper。
 - `backend/modules/shared/tasks/runtime.py`：Celery 任务运行时，负责步骤定义、首步入队、自动重试与恢复。
 - `backend/modules/shared/celery/*`：Celery app、步骤投递、队列路由与 beat 任务装配。
-- `backend/modules/shared/pipeline/pipeline_types.py`: pipeline 步骤类型定义。
-- `backend/modules/fragments/derivative_pipeline.py`: fragment 摘要、标签和向量异步回填流水线。
+- `backend/modules/fragments/derivative_task.py`: fragment 摘要、标签和向量异步回填任务。
 - `backend/modules/shared/content/`: 正文处理子目录，包含 `content_html.py`、`content_markdown.py`、`content_schemas.py`、`editor_document.py`、`fragment_body_markdown.py`、`document_parsers.py`（共享文档解析器，支持 txt/md/docx/pdf/xlsx）。
 - `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，而不是继续扩散到 legacy service 文件。
 
@@ -289,8 +288,8 @@ flowchart TD
 当前 `scripts` 模块内部进一步拆分为：
 
 - `application.py`: 脚本查询、写操作与每日推盘编排入口。
-- `rag_pipeline.py`: `rag_script_generation` 流水线步骤定义与协调。
-- `daily_push_pipeline.py`: `daily_push_generation` 流水线步骤定义与结果回流。
+- `rag_task.py`: `rag_script_generation` 任务步骤定义与协调。
+- `daily_push_task.py`: `daily_push_generation` 任务步骤定义与结果回流。
 - `writing_context_builder.py`: 三层写作上下文构建与方法论缓存维护。
 - `rag_context_builder.py`: 最终生成提示词拼装。
 - `persistence.py`: workflow 输出解析、失败消息提取、脚本幂等落库。
@@ -324,14 +323,14 @@ flowchart TD
 - `backups`: 远端备份批量写入、快照拉取、restore session 审计与备份素材上传；不承担 fragments / folders 的日常主读取职责，但脚本生成、相似检索、可视化和 daily push 都会通过内部 snapshot reader 消费其中的 fragment snapshot。
 - `fragment_folders`: 碎片文件夹 CRUD、文件夹内碎片数量统计。
 - `fragments`: 当前对外只保留标签、相似检索和可视化接口；移动端 phase 1 已不再依赖其作为 fragments / folders 首屏真值读取来源，`transcript` 只保留语音机器转写原文，正式正文统一存于 `body_html`，`plain_text_snapshot` 负责检索、摘要和生成输入。
-- `transcriptions`: 音频上传入口；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录，主状态入口统一收敛到 `pipelines`。
-- `external_media`: 外部媒体音频导入，当前支持抖音分享链接；local-first 请求会直接绑定客户端 placeholder fragment，解析链接、下载转 m4a、主转写在 `media_ingestion` 中执行，摘要/标签/向量由后续 derivative pipeline 异步补齐。
-- `scripts`: 合稿、脚本生成 pipeline 定义、三层写作上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。脚本生成主链路里的 fragment 背景、方法论维护和相关碎片召回都已经切到共享 fragment snapshot reader。
+- `transcriptions`: 音频上传入口；local-first 请求会带 `local_fragment_id`，后端不再先创建远端 fragment 业务记录，主状态入口统一收敛到 `tasks`。
+- `external_media`: 外部媒体音频导入，当前支持抖音分享链接；local-first 请求会直接绑定客户端 placeholder fragment，解析链接、下载转 m4a、主转写在 `media_ingestion` 中执行，摘要/标签/向量由后续 derivative task 异步补齐。
+- `scripts`: 合稿、脚本生成任务定义、三层写作上下文组装、结果回流、列表、详情、更新、删除、每日推盘；正文在存储层和对外契约中都只保留 `body_html`，导出 Markdown 由后端统一派生。脚本生成主链路里的 fragment 背景、方法论维护和相关碎片召回都已经切到共享 fragment snapshot reader。
 - `knowledge`: 文档创建、上传、列表、搜索、详情、删除；对外正文字段继续保留 `body_markdown`，内部 `content` 仅保留派生纯文本索引载荷；模块内部已拆成 `parsers.py`、`chunking.py`、`indexing.py`、`application.py`；`parsers.py` 已改为从共享模块 `modules/shared/content/document_parsers.py` 导入。
-- `document_import`: 文档导入碎片入口；支持 `.txt/.md/.docx/.pdf/.xlsx` 文件上传，通过 `document_import` pipeline 异步解析文档为纯文本并转为 HTML 写入 fragment snapshot，随后自动触发 `fragment_derivative_backfill` 补齐摘要、标签和向量。调用前客户端需先创建本地占位 fragment 并传入 `local_fragment_id`。
+- `document_import`: 文档导入碎片入口；支持 `.txt/.md/.docx/.pdf/.xlsx` 文件上传，通过 `document_import` task 异步解析文档为纯文本并转为 HTML 写入 fragment snapshot，随后自动触发 `fragment_derivative_backfill` 补齐摘要、标签和向量。调用前客户端需先创建本地占位 fragment 并传入 `local_fragment_id`。
 - `media_assets`: 统一媒体资源上传、列表和删除，响应层返回签名文件 URL。
 - `exports`: 单条 Markdown 导出与批量 zip 导出。
-- `pipelines`: 后台流水线详情、步骤查询与手动重跑入口。
+- `tasks`: 后台任务详情、步骤查询与手动重跑入口。
 - `debug_logs`: 移动端调试日志接收，并复用结构化日志链路落盘。
 - `scheduler`: APScheduler 装配与启停。
 
@@ -379,7 +378,6 @@ flowchart TD
 - 碎片向量 namespace: `fragments_{user_id}`
 - 知识库向量 namespace: `knowledge_{user_id}`
 - 后台任务表：`task_runs` / `task_step_runs`
-- `pipeline_runs` / `pipeline_step_runs`：legacy 兼容查询表，不再写入新任务
 - 碎片音频对象元数据：`audio_storage_provider` / `audio_bucket` / `audio_object_key`
 - 后端全量业务日志文件: `runtime_logs/backend.log`
 - 后端错误日志文件: `runtime_logs/backend-error.log`
@@ -433,7 +431,7 @@ sequenceDiagram
 
 - 上传接口立即返回，转写在后台继续执行。
 - `media_ingestion` 现在以 transcript 落库为唯一成功条件；主任务成功时 `summary` / `tags` 可以暂时为空。
-- transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` 流水线，异步补齐 `summary`、`tags` 与向量。
+- transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` 任务，异步补齐 `summary`、`tags` 与向量。
 - derivative 或向量写入失败不会回滚主转写结果。
 
 ### 5.2 External Media Audio Import
@@ -670,7 +668,7 @@ sequenceDiagram
 - Fragment folders module: `backend/modules/fragment_folders/presentation.py`
 - Transcriptions module: `backend/modules/transcriptions/application.py`
 - Scripts application: `backend/modules/scripts/application.py`
-- Scripts pipeline: `backend/modules/scripts/rag_pipeline.py`
+- Scripts task: `backend/modules/scripts/rag_task.py`
 - Scripts context builder: `backend/modules/scripts/rag_context_builder.py`
 - Knowledge module: `backend/modules/knowledge/application.py`
 - Document import module: `backend/modules/document_import/application.py`

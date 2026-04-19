@@ -10,11 +10,11 @@ import {
   triggerDailyPush,
 } from '@/features/scripts/api';
 import { consumeScriptsStale } from '@/features/scripts/refreshSignal';
-import { rememberPendingScriptPipelineTask, type PendingScriptTaskKind } from '@/features/scripts/pendingTasks';
+import { rememberPendingScriptTask, type PendingScriptTaskKind } from '@/features/scripts/pendingScriptTasks';
 import { listLocalScriptEntities, upsertLocalScriptEntity } from '@/features/scripts/store';
 import { useScriptList, useScriptStore } from '@/features/scripts/store/scriptStore';
 import { syncRemoteScriptsToLocal } from '@/features/scripts/sync';
-import { resolveScriptFromPipelineTask } from '@/features/scripts/scriptPipelineTask';
+import { resolveScriptFromTask } from '@/features/scripts/scriptTask';
 import type { Script } from '@/types/script';
 import { getErrorMessage } from '@/utils/error';
 
@@ -41,12 +41,12 @@ export function useGenerateScript() {
         fragment_ids: fragmentIds,
       });
       const taskId = task.task_id;
-      await rememberPendingScriptPipelineTask(scope.userId, {
-        pipelineRunId: taskId,
+      await rememberPendingScriptTask(scope.userId, {
+        taskRunId: taskId,
         kind: 'manual',
         createdAt: new Date().toISOString(),
       });
-      const script = await resolveScriptFromPipelineTask(taskId, '生成失败', { scope });
+      const script = await resolveScriptFromTask(taskId, '生成失败', { scope });
       setStatus('success');
       return script.id;
     } catch (err) {
@@ -208,12 +208,12 @@ function useDailyPushTriggerBase(
       const scope = captureRequiredTaskExecutionScope();
       const task = await apiFn();
       const taskId = task.task_id;
-      await rememberPendingScriptPipelineTask(scope.userId, {
-        pipelineRunId: taskId,
+      await rememberPendingScriptTask(scope.userId, {
+        taskRunId: taskId,
         kind,
         createdAt: new Date().toISOString(),
       });
-      const script = await resolveScriptFromPipelineTask(taskId, errorMessage, { scope });
+      const script = await resolveScriptFromTask(taskId, errorMessage, { scope });
       setStatus('success');
       return script;
     } catch (err) {

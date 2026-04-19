@@ -12,7 +12,7 @@ import pytest
 
 from domains.backups import repository as backup_repository
 from modules.auth.application import TEST_USER_ID
-from modules.fragments.derivative_pipeline import PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL
+from modules.fragments.derivative_task import TASK_TYPE_FRAGMENT_DERIVATIVE_BACKFILL
 
 from tests.flow_helpers import (
     _auth_headers,
@@ -173,14 +173,14 @@ async def test_upload_audio_with_local_fragment_id_succeeds_without_projection(a
 @pytest.mark.asyncio
 async def test_upload_audio_succeeds_when_derivative_enqueue_fails(async_client, auth_headers_factory, app, db_session_factory) -> None:
     """异步衍生字段回填入队失败时，主转写链路仍应成功。"""
-    original_create_run = app.state.container.pipeline_runner.create_run
+    original_create_run = app.state.container.task_runner.create_run
 
     async def create_run_with_derivative_failure(**kwargs):
-        if kwargs.get("pipeline_type") == PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL:
+        if kwargs.get("task_type") == TASK_TYPE_FRAGMENT_DERIVATIVE_BACKFILL:
             raise RuntimeError("derivative enqueue boom")
         return await original_create_run(**kwargs)
 
-    app.state.container.pipeline_runner.create_run = create_run_with_derivative_failure
+    app.state.container.task_runner.create_run = create_run_with_derivative_failure
     try:
         response = await async_client.post(
             "/api/transcriptions",
@@ -201,7 +201,7 @@ async def test_upload_audio_succeeds_when_derivative_enqueue_fails(async_client,
         assert snapshot_payload.get("summary") is None
         assert snapshot_payload.get("tags") == []
     finally:
-        app.state.container.pipeline_runner.create_run = original_create_run
+        app.state.container.task_runner.create_run = original_create_run
 
 
 @pytest.mark.asyncio

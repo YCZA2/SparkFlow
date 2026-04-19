@@ -21,7 +21,7 @@ import {
 } from '@/features/fragments/store';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { waitForTaskTerminal } from '@/features/tasks/api';
-import { syncMediaIngestionPipelineState } from '@/features/pipelines/mediaIngestionRecovery';
+import { syncMediaIngestionTaskState } from '@/features/tasks/mediaIngestionTaskRecovery';
 import { uploadAudio } from '@/features/recording/api';
 import { updateScriptStatus } from '@/features/scripts/api';
 import { markScriptsStale } from '@/features/scripts/refreshSignal';
@@ -258,9 +258,9 @@ export function useAudioUpload() {
       setResult(nextResult);
       setStatus('success');
       void waitForTaskTerminal(taskId, { timeoutMs: 180_000, scope })
-        .then(async (pipeline) => {
-          const restoredFragment = await syncMediaIngestionPipelineState(localFragment.id, pipeline, { scope });
-          if (!restoredFragment || !isMountedRef.current || pipeline.status !== 'succeeded') {
+        .then(async (task) => {
+          const restoredFragment = await syncMediaIngestionTaskState(localFragment.id, task, { scope });
+          if (!restoredFragment || !isMountedRef.current || task.status !== 'succeeded') {
             return;
           }
           setResult((current) =>
@@ -273,9 +273,9 @@ export function useAudioUpload() {
               : current
           );
         })
-        .catch((pipelineError) => {
-          if (!(pipelineError instanceof TaskScopeMismatchError)) {
-            console.warn('录音转写后台回写失败:', pipelineError);
+        .catch((taskError) => {
+          if (!(taskError instanceof TaskScopeMismatchError)) {
+            console.warn('录音转写后台回写失败:', taskError);
           }
         });
       return nextResult;

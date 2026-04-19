@@ -51,9 +51,7 @@ class ServiceContainer:
     celery_app: Any | None = None
     task_runner: Any | None = None
     task_recovery_service: Any | None = None
-    pipeline_runner: Any | None = None
-    pipeline_dispatcher: Any | None = None
-    pipeline_recovery_service: Any | None = None
+    task_dispatcher: Any | None = None
     external_provider: WorkflowProvider | None = None  # 接入 Dify/Multi-Agent 时注入
 
 

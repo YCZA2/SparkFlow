@@ -34,7 +34,7 @@ class TranscriptionUseCase:
         folder_id: str | None = None,
         local_fragment_id: str,
     ) -> AudioUploadResponse:
-        """上传录音文件、落库对象元数据并启动转写流水线。"""
+        """上传录音文件、落库对象元数据并启动转写任务。"""
         normalized_local_fragment_id = str(local_fragment_id or "").strip()
         if not normalized_local_fragment_id:
             raise ValidationError(
@@ -88,9 +88,9 @@ class TranscriptionUseCase:
             ),
         )
         return AudioUploadResponse(
-            task_id=result.pipeline_run_id,
+            task_id=result.task_run_id,
             task_type="media_ingestion",
-            status_query_url=f"/api/tasks/{result.pipeline_run_id}",
+            status_query_url=f"/api/tasks/{result.task_run_id}",
             fragment_id=result.fragment_id,
             local_fragment_id=normalized_local_fragment_id,
             audio_object_key=saved.object_key,

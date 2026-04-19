@@ -1,4 +1,4 @@
-"""每日推盘 pipeline 任务态测试。"""
+"""每日推盘任务态测试。"""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ async def _wait_task(async_client, auth_headers_factory, task_id: str, *, attemp
 
 
 @pytest.mark.asyncio
-async def test_daily_push_pipeline_creates_script_and_reuses_same_run(
+async def test_daily_push_task_creates_script_and_reuses_same_run(
     async_client,
     auth_headers_factory,
     app,
@@ -122,8 +122,8 @@ async def test_daily_push_pipeline_creates_script_and_reuses_same_run(
 
 
 @pytest.mark.asyncio
-async def test_daily_push_pipeline_force_trigger_reuses_existing_result(async_client, auth_headers_factory, app) -> None:
-    """强制触发在当日已有结果时应复用同一条流水线结果。"""
+async def test_daily_push_task_force_trigger_reuses_existing_result(async_client, auth_headers_factory, app) -> None:
+    """强制触发在当日已有结果时应复用同一条任务结果。"""
     now = datetime.now(timezone.utc)
     fragment_ids = await _push_fragment_backups(
         async_client,
@@ -153,7 +153,7 @@ async def test_daily_push_pipeline_force_trigger_reuses_existing_result(async_cl
 
 
 @pytest.mark.asyncio
-async def test_daily_push_pipeline_marks_failed_when_llm_fails(
+async def test_daily_push_task_marks_failed_when_llm_fails(
     async_client,
     auth_headers_factory,
     app,
@@ -187,7 +187,7 @@ async def test_daily_push_pipeline_marks_failed_when_llm_fails(
 
 @pytest.mark.asyncio
 async def test_scheduler_daily_push_job_enqueues_pipeline(async_client, auth_headers_factory, app) -> None:
-    """scheduler 应复用同一条异步每日推盘流水线。"""
+    """scheduler 应复用同一条异步每日推盘任务。"""
     yesterday = datetime.now(timezone.utc) - timedelta(days=1)
     fragment_ids = await _push_fragment_backups(
         async_client,

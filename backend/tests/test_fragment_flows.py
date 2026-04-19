@@ -99,8 +99,8 @@ async def test_fragments_similarity_and_visualization(async_client, auth_headers
 @pytest.mark.asyncio
 async def test_import_external_audio_only_creates_pipeline_in_request_phase(async_client, auth_headers_factory, app, external_media_provider, db_session_factory) -> None:
     """外链导入请求阶段只创建 local-first 任务，不同步解析媒体。"""
-    await app.state.container.pipeline_dispatcher.stop()
-    app.state.container.pipeline_runner.dispatcher.wake_up = lambda: None
+    await app.state.container.task_dispatcher.stop()
+    app.state.container.task_runner.dispatcher.wake_up = lambda: None
 
     response = await async_client.post(
         "/api/external-media/audio-imports",
@@ -133,8 +133,8 @@ async def test_import_external_audio_assigns_fragment_to_requested_folder(
     db_session_factory,
 ) -> None:
     """外链导入在请求阶段应把 placeholder snapshot 放入指定文件夹。"""
-    await app.state.container.pipeline_dispatcher.stop()
-    app.state.container.pipeline_runner.dispatcher.wake_up = lambda: None
+    await app.state.container.task_dispatcher.stop()
+    app.state.container.task_runner.dispatcher.wake_up = lambda: None
     folder_id = await _create_folder(async_client, auth_headers_factory, "抖音导入")
 
     response = await async_client.post(

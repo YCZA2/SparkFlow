@@ -32,7 +32,7 @@ def get_document_import_use_case(
     status_code=status.HTTP_200_OK,
     response_model=ResponseModel[DocumentImportResponse],
     summary="导入文档为碎片",
-    description="上传文档文件后创建后台解析流水线；调用前必须先在本地创建占位 fragment，并传入 local_fragment_id。",
+    description="上传文档文件后创建后台解析任务；调用前必须先在本地创建占位 fragment，并传入 local_fragment_id。",
 )
 async def import_document(
     file: UploadFile = File(..., description="文档文件（.txt/.md/.docx/.pdf/.xlsx）"),

@@ -10,46 +10,46 @@ from core.logging_config import get_logger
 from sqlalchemy.orm import Session
 
 from domains.fragment_folders import repository as fragment_folder_repository
-from modules.shared.pipeline.pipeline_runtime import PipelineExecutionContext, PipelineExecutionError, PipelineStepDefinition
+from modules.shared.tasks.task_types import TaskExecutionContext, TaskExecutionError, TaskStepDefinition
 
 from modules.shared.media.media_ingestion_persistence import MediaIngestionPersistenceService
 from modules.shared.ports import ExternalMediaProvider
 from modules.shared.infrastructure.storage import build_imported_audio_object_key, sanitize_filename
 from modules.shared.media.stored_file_payloads import stored_file_from_payload, stored_file_to_payload
-from modules.fragments.derivative_pipeline import PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL
+from modules.fragments.derivative_task import TASK_TYPE_FRAGMENT_DERIVATIVE_BACKFILL
 
 logger = get_logger(__name__)
 
 
 class MediaIngestionStepExecutor:
-    """封装媒体导入 pipeline 的步骤执行逻辑。"""
+    """封装媒体导入任务的步骤执行逻辑。"""
 
     def __init__(self, *, persistence_service: MediaIngestionPersistenceService) -> None:
         """装配媒体导入步骤依赖。"""
         self.persistence_service = persistence_service
 
-    def build_pipeline_definitions(self) -> list[PipelineStepDefinition]:
-        """返回媒体导入流水线固定步骤定义。"""
+    def build_task_definitions(self) -> list[TaskStepDefinition]:
+        """返回媒体导入任务固定步骤定义。"""
         return [
-            PipelineStepDefinition(step_name="resolve_external_media", executor=self.resolve_external_media, max_attempts=2),
-            PipelineStepDefinition(step_name="download_media", executor=self.download_media, max_attempts=2),
-            PipelineStepDefinition(step_name="transcribe_audio", executor=self.transcribe_audio, max_attempts=3),
-            PipelineStepDefinition(step_name="finalize_fragment", executor=self.finalize_fragment, max_attempts=1),
+            TaskStepDefinition(step_name="resolve_external_media", executor=self.resolve_external_media, max_attempts=2),
+            TaskStepDefinition(step_name="download_media", executor=self.download_media, max_attempts=2),
+            TaskStepDefinition(step_name="transcribe_audio", executor=self.transcribe_audio, max_attempts=3),
+            TaskStepDefinition(step_name="finalize_fragment", executor=self.finalize_fragment, max_attempts=1),
         ]
 
-    def _runtime_external_media_provider(self, context: PipelineExecutionContext) -> ExternalMediaProvider | None:
+    def _runtime_external_media_provider(self, context: TaskExecutionContext) -> ExternalMediaProvider | None:
         """按当前容器状态读取外链解析 provider。"""
         return context.container.external_media_provider
 
-    def _runtime_file_storage(self, context: PipelineExecutionContext):
+    def _runtime_file_storage(self, context: TaskExecutionContext):
         """按当前容器状态读取文件存储实现。"""
         return context.container.file_storage
 
-    def _runtime_stt_provider(self, context: PipelineExecutionContext):
+    def _runtime_stt_provider(self, context: TaskExecutionContext):
         """按当前容器状态读取 STT provider。"""
         return context.container.stt_provider
 
-    async def resolve_external_media(self, context: PipelineExecutionContext) -> dict[str, Any]:
+    async def resolve_external_media(self, context: TaskExecutionContext) -> dict[str, Any]:
         """解析外链媒体并拿到临时音频文件。"""
         payload = context.input_payload
         if payload.get("source_kind") != "external_link":
@@ -77,7 +77,7 @@ class MediaIngestionStepExecutor:
             "local_audio_path": resolved.local_audio_path,
         }
 
-    async def download_media(self, context: PipelineExecutionContext) -> dict[str, Any]:
+    async def download_media(self, context: TaskExecutionContext) -> dict[str, Any]:
         """保存外链音频产物，并把对象元数据补写回碎片。"""
         payload = context.input_payload
         if payload.get("source_kind") != "external_link":
@@ -109,7 +109,7 @@ class MediaIngestionStepExecutor:
                 mime_type=mime_type,
             )
         except Exception as exc:
-            raise PipelineExecutionError(
+            raise TaskExecutionError(
                 f"媒体音频保存失败: {str(exc) or 'unknown error'}",
                 retryable=True,
             ) from exc
@@ -138,7 +138,7 @@ class MediaIngestionStepExecutor:
             "audio_file_expires_at": access.expires_at,
         }
 
-    async def transcribe_audio(self, context: PipelineExecutionContext) -> dict[str, Any]:
+    async def transcribe_audio(self, context: TaskExecutionContext) -> dict[str, Any]:
         """调用 STT 把音频转成文本。"""
         payload = context.input_payload
         stored_file = stored_file_from_payload(context.get_step_output("download_media").get("audio_file") or payload.get("audio_file"))
@@ -150,9 +150,9 @@ class MediaIngestionStepExecutor:
             try:
                 result = await self._runtime_stt_provider(context).transcribe(str(materialized.local_path))
             except asyncio.CancelledError as exc:
-                raise PipelineExecutionError("语音转写被取消", retryable=False) from exc
+                raise TaskExecutionError("语音转写被取消", retryable=False) from exc
             except Exception as exc:
-                raise PipelineExecutionError(
+                raise TaskExecutionError(
                     f"语音转写失败: {str(exc) or 'unknown error'}",
                     retryable=True,
                 ) from exc
@@ -166,8 +166,8 @@ class MediaIngestionStepExecutor:
             "speaker_segments": normalized_segments,
         }
 
-    async def finalize_fragment(self, context: PipelineExecutionContext) -> dict[str, Any]:
-        """落库最终转写内容并结束媒体流水线。"""
+    async def finalize_fragment(self, context: TaskExecutionContext) -> dict[str, Any]:
+        """落库最终转写内容并结束媒体任务。"""
         transcript_payload = context.get_step_output("transcribe_audio")
         audio_payload = context.get_step_output("download_media")
         self.persistence_service.save_transcription_result(
@@ -198,31 +198,31 @@ class MediaIngestionStepExecutor:
     async def enqueue_fragment_derivative_backfill(
         self,
         *,
-        context: PipelineExecutionContext,
+        context: TaskExecutionContext,
         fragment_id: str | None,
         local_fragment_id: str | None,
         effective_text: str,
         source: str,
         audio_source: str | None,
     ) -> None:
-        """在 transcript 落库后最佳努力创建异步衍生字段回填流水线。"""
+        """在 transcript 落库后最佳努力创建异步衍生字段回填任务。"""
         normalized_fragment_id = str(fragment_id or "").strip()
         normalized_local_fragment_id = str(local_fragment_id or "").strip()
         if not normalized_fragment_id and not normalized_local_fragment_id:
             return
-        pipeline_runner = context.container.pipeline_runner
-        if pipeline_runner is None:
+        task_runner = context.container.task_runner
+        if task_runner is None:
             logger.warning(
-                "fragment_derivative_pipeline_runner_missing",
+                "fragment_derivative_task_runner_missing",
                 fragment_id=normalized_local_fragment_id or normalized_fragment_id,
                 user_id=context.run.user_id,
             )
             return
         try:
-            await pipeline_runner.create_run(
+            await task_runner.create_run(
                 run_id=None,
                 user_id=context.run.user_id,
-                pipeline_type=PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
+                task_type=TASK_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
                 input_payload={
                     "fragment_id": normalized_fragment_id or None,
                     "local_fragment_id": normalized_local_fragment_id or None,
@@ -317,13 +317,13 @@ class MediaIngestionStepExecutor:
             )
 
     @staticmethod
-    def wrap_external_media_error(exc: Exception, *, fallback_message: str) -> PipelineExecutionError:
-        """将外链导入异常映射为带重试语义的流水线错误。"""
-        if isinstance(exc, PipelineExecutionError):
+    def wrap_external_media_error(exc: Exception, *, fallback_message: str) -> TaskExecutionError:
+        """将外链导入异常映射为带重试语义的任务错误。"""
+        if isinstance(exc, TaskExecutionError):
             return exc
         if isinstance(exc, ValidationError):
-            return PipelineExecutionError(str(exc), retryable=False)
+            return TaskExecutionError(str(exc), retryable=False)
         if isinstance(exc, AppException):
             retryable = exc.status_code >= 500
-            return PipelineExecutionError(exc.message or fallback_message, retryable=retryable)
-        return PipelineExecutionError(f"{fallback_message}: {str(exc) or 'unknown error'}", retryable=True)
+            return TaskExecutionError(exc.message or fallback_message, retryable=retryable)
+        return TaskExecutionError(f"{fallback_message}: {str(exc) or 'unknown error'}", retryable=True)

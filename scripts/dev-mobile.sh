@@ -6,17 +6,22 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/backend"
 MOBILE_DIR="${ROOT_DIR}/mobile"
 POSTGRES_SCRIPT="${ROOT_DIR}/scripts/postgres-local.sh"
+RABBITMQ_SCRIPT="${ROOT_DIR}/scripts/rabbitmq-local.sh"
+CELERY_WORKER_SCRIPT="${ROOT_DIR}/scripts/celery-worker.sh"
 
 BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 EXPO_PORT="${EXPO_PORT:-8081}"
 IOS_PLATFORM="${IOS_PLATFORM:-ios}"
 APP_ENV="${APP_ENV:-development}"
+CELERY_BROKER_URL="${CELERY_BROKER_URL:-amqp://guest:guest@127.0.0.1:5672//}"
+CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND:-rpc://}"
 IOS_DEV_BUNDLE_ID="${IOS_DEV_BUNDLE_ID:-com.sparkflow.mobile.dev}"
 IOS_DEV_SCHEME="${IOS_DEV_SCHEME:-sparkflowmobiledev}"
 
 MODE="${1:-start}"
 BACKEND_PID=""
+CELERY_WORKER_PID=""
 EXPO_PID=""
 BACKEND_PYTHON=""
 
@@ -71,13 +76,16 @@ get_local_ip() {
 cleanup() {
   trap - EXIT INT TERM
 
-  if [[ -n "${EXPO_PID}" || -n "${BACKEND_PID}" ]]; then
+  if [[ -n "${EXPO_PID}" || -n "${BACKEND_PID}" || -n "${CELERY_WORKER_PID}" ]]; then
     echo
     echo "[dev-mobile] stopping processes..."
   fi
 
   if [[ -n "${EXPO_PID}" ]]; then
     kill "${EXPO_PID}" 2>/dev/null || true
+  fi
+  if [[ -n "${CELERY_WORKER_PID}" ]]; then
+    kill "${CELERY_WORKER_PID}" 2>/dev/null || true
   fi
   if [[ -n "${BACKEND_PID}" ]]; then
     kill "${BACKEND_PID}" 2>/dev/null || true
@@ -134,6 +142,32 @@ ensure_local_postgres() {
     exit 1
   fi
   bash "${POSTGRES_SCRIPT}" start dev
+}
+
+ensure_local_rabbitmq() {
+  # 真实 Celery 拓扑需要 RabbitMQ 作为跨进程 broker；未安装时提示用户按需安装。
+  if [[ ! -f "${RABBITMQ_SCRIPT}" ]]; then
+    echo "[dev-mobile] RabbitMQ helper not found: ${RABBITMQ_SCRIPT}"
+    exit 1
+  fi
+  bash "${RABBITMQ_SCRIPT}" start
+}
+
+start_celery_worker() {
+  if [[ ! -f "${CELERY_WORKER_SCRIPT}" ]]; then
+    echo "[dev-mobile] Celery worker helper not found: ${CELERY_WORKER_SCRIPT}"
+    exit 1
+  fi
+  echo "[dev-mobile] starting celery worker..."
+  (
+    cd "${ROOT_DIR}"
+    exec env \
+      APP_ENV="${APP_ENV}" \
+      CELERY_BROKER_URL="${CELERY_BROKER_URL}" \
+      CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND}" \
+      bash "${CELERY_WORKER_SCRIPT}"
+  ) &
+  CELERY_WORKER_PID=$!
 }
 
 find_first_available_simulator() {
@@ -343,12 +377,19 @@ run_start_mode() {
   free_port "${EXPO_PORT}" "expo"
 
   ensure_local_postgres
+  ensure_local_rabbitmq
   run_backend_migrations
+  start_celery_worker
 
   echo "[dev-mobile] starting backend..."
   (
     cd "${BACKEND_DIR}"
-    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload --no-access-log
+    exec env \
+      APP_ENV="${APP_ENV}" \
+      CELERY_BROKER_URL="${CELERY_BROKER_URL}" \
+      CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND}" \
+      CELERY_TASK_ALWAYS_EAGER=false \
+      "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload --no-access-log
   ) &
   BACKEND_PID=$!
 
@@ -379,6 +420,7 @@ run_start_mode() {
   echo "SparkFlow mobile mode1 is ready"
   echo "Backend API (app network settings): ${public_backend_url}"
   echo "Backend health: ${local_backend_health_url}"
+  echo "RabbitMQ broker: ${CELERY_BROKER_URL}"
   echo "Metro / Expo bundler: http://${local_ip}:${EXPO_PORT}"
   echo "Tip 1: app 内网络设置填 8000，不要填 8081"
   echo "Tip 2: 真机打开项目请扫 Expo 二维码"
@@ -404,12 +446,19 @@ run_web_mode() {
   free_port "${EXPO_PORT}" "expo"
 
   ensure_local_postgres
+  ensure_local_rabbitmq
   run_backend_migrations
+  start_celery_worker
 
   echo "[dev-mobile] starting backend..."
   (
     cd "${BACKEND_DIR}"
-    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload --no-access-log
+    exec env \
+      APP_ENV="${APP_ENV}" \
+      CELERY_BROKER_URL="${CELERY_BROKER_URL}" \
+      CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND}" \
+      CELERY_TASK_ALWAYS_EAGER=false \
+      "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload --no-access-log
   ) &
   BACKEND_PID=$!
 
@@ -440,6 +489,7 @@ run_web_mode() {
   echo "SparkFlow mobile mode4 is ready"
   echo "Backend API (web app should use this): ${local_backend_url}"
   echo "Backend health: ${local_backend_health_url}"
+  echo "RabbitMQ broker: ${CELERY_BROKER_URL}"
   echo "Expo Web: http://127.0.0.1:${EXPO_PORT}"
   echo "Tip: 浏览器里调试业务接口时，应用内后端地址仍应填写 8000"
   echo "Press Ctrl+C to stop backend and expo."
@@ -464,12 +514,19 @@ run_simulator_mode() {
   free_port "${EXPO_PORT}" "expo"
 
   ensure_local_postgres
+  ensure_local_rabbitmq
   run_backend_migrations
+  start_celery_worker
 
   echo "[dev-mobile] starting backend..."
   (
     cd "${BACKEND_DIR}"
-    exec env APP_ENV="${APP_ENV}" "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload --no-access-log
+    exec env \
+      APP_ENV="${APP_ENV}" \
+      CELERY_BROKER_URL="${CELERY_BROKER_URL}" \
+      CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND}" \
+      CELERY_TASK_ALWAYS_EAGER=false \
+      "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload --no-access-log
   ) &
   BACKEND_PID=$!
 
@@ -513,6 +570,7 @@ run_simulator_mode() {
   echo "SparkFlow mobile mode3 is ready"
   echo "Backend API: ${public_backend_url}"
   echo "Backend health: ${local_backend_health_url}"
+  echo "RabbitMQ broker: ${CELERY_BROKER_URL}"
   echo "Tip: app 内网络设置填 127.0.0.1:8000"
   echo "Press Ctrl+C to stop backend and expo."
   echo "========================================"

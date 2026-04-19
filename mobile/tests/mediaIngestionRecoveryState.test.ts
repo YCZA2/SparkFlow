@@ -4,7 +4,7 @@ import test from 'node:test';
 import {
   isFailedMediaIngestionFragment,
   isProcessingMediaIngestionFragment,
-} from '../features/pipelines/mediaIngestionRecoveryState';
+} from '../features/tasks/mediaIngestionTaskRecoveryState';
 
 function buildFragment(overrides: Record<string, unknown> = {}) {
   return {

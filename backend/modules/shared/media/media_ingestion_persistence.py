@@ -75,7 +75,7 @@ class MediaIngestionPersistenceService:
         transcript_payload: dict,
         enrichment_payload: dict,
     ) -> dict:
-        """组装媒体导入流水线的稳定终态输出。"""
+        """组装媒体导入任务的稳定终态输出。"""
         source_context = input_payload.get("source_context") or {}
         fragment_id = input_payload["fragment_id"]
         local_fragment_id = input_payload.get("local_fragment_id")

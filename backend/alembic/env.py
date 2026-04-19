@@ -14,7 +14,7 @@ from alembic.script import ScriptDirectory
 
 from core.config import settings
 from models.database import Base
-from models import backup, fragment, media, pipeline, script, task, user, writing_context  # noqa: F401
+from models import backup, fragment, media, script, task, user, writing_context  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -7,7 +7,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from core import ResponseModel, deleted_response, require_role, success_response
+from core import ResponseModel, deleted_response, success_response
+from core.auth import require_role
 from modules.shared.infrastructure.container import get_db_session
 
 from .application import AdminUserCommandService, AdminUserQueryService

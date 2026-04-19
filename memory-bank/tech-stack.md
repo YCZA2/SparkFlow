@@ -120,7 +120,7 @@
 - 默认连接串：`postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/sparkflow`
 - ORM：SQLAlchemy
 - 迁移工具：Alembic
-- 后台任务表：`task_runs` / `task_step_runs`（`pipeline_runs` / `pipeline_step_runs` 仅保留 legacy 兼容查询）
+- 后台任务表：`task_runs` / `task_step_runs`
 
 ### 4.2 File storage
 

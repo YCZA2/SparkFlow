@@ -1,4 +1,4 @@
-"""文档导入用例——校验、存储、启动流水线。"""
+"""文档导入用例——校验、存储、启动任务。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from modules.shared.infrastructure.storage import (
 )
 from modules.shared.media.stored_file_payloads import stored_file_to_payload
 from modules.shared.ports import FileStorage
-from .pipeline_steps import PIPELINE_TYPE_DOCUMENT_IMPORT
+from .task_steps import TASK_TYPE_DOCUMENT_IMPORT
 from .schemas import DocumentImportResponse
 
 _FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
@@ -24,8 +24,8 @@ _FRAGMENT_SNAPSHOT_READER = FragmentSnapshotReader()
 class DocumentImportUseCase:
     """封装文档导入任务创建入口。"""
 
-    def __init__(self, *, pipeline_runner, file_storage: FileStorage) -> None:
-        self.pipeline_runner = pipeline_runner
+    def __init__(self, *, task_runner, file_storage: FileStorage) -> None:
+        self.task_runner = task_runner
         self.file_storage = file_storage
 
     async def import_document(
@@ -37,7 +37,7 @@ class DocumentImportUseCase:
         folder_id: str | None = None,
         local_fragment_id: str,
     ) -> DocumentImportResponse:
-        """校验文档、保存到对象存储、创建占位快照并启动解析流水线。"""
+        """校验文档、保存到对象存储、创建占位快照并启动解析任务。"""
         normalized_local_fragment_id = str(local_fragment_id or "").strip()
         if not normalized_local_fragment_id:
             raise ValidationError(
@@ -78,10 +78,10 @@ class DocumentImportUseCase:
             },
             server_patch={},
         )
-        run = await self.pipeline_runner.create_run(
+        run = await self.task_runner.create_run(
             run_id=None,
             user_id=user_id,
-            pipeline_type=PIPELINE_TYPE_DOCUMENT_IMPORT,
+            task_type=TASK_TYPE_DOCUMENT_IMPORT,
             input_payload={
                 "document_file": stored_file_to_payload(saved),
                 "source_filename": file.filename or filename,
@@ -94,7 +94,7 @@ class DocumentImportUseCase:
         )
         return DocumentImportResponse(
             task_id=run.id,
-            task_type=PIPELINE_TYPE_DOCUMENT_IMPORT,
+            task_type=TASK_TYPE_DOCUMENT_IMPORT,
             status_query_url=f"/api/tasks/{run.id}",
             local_fragment_id=normalized_local_fragment_id,
             source_filename=file.filename or filename,
@@ -124,6 +124,6 @@ class DocumentImportUseCase:
 def build_document_import_use_case(container) -> DocumentImportUseCase:
     """基于容器组装文档导入用例。"""
     return DocumentImportUseCase(
-        pipeline_runner=container.pipeline_runner,
+        task_runner=container.task_runner,
         file_storage=container.file_storage,
     )

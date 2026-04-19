@@ -112,6 +112,8 @@ bash scripts/dev-mobile.sh start
 它会同时启动：
 
 - 本机 PostgreSQL（`5432`）
+- 本机 RabbitMQ（`5672`）
+- Celery worker（媒体导入、转写、文档导入、脚本生成等后台任务）
 - 后端 FastAPI（`8000`）
 - Expo / Metro（`8081`）
 
@@ -132,6 +134,7 @@ npm run dev:mobile
 cp backend/.env.example backend/.env
 python3.12 -m venv backend/.venv
 backend/.venv/bin/pip install -r backend/requirements.txt
+brew install rabbitmq
 cd mobile && npm install
 ```
 
@@ -537,6 +540,13 @@ brew install postgresql@16
 brew services start postgresql@16
 ```
 
+后台任务还依赖本机 RabbitMQ；整套联调推荐直接运行 `npm run dev:mobile`，脚本会自动启动 RabbitMQ 和 Celery worker。若需要单独检查：
+
+```bash
+npm run dev:queue:status
+npm run dev:worker
+```
+
 当后端有 Alembic 新迁移（例如新增字段）时，先执行：
 
 ```bash
@@ -544,7 +554,7 @@ cd backend
 .venv/bin/alembic upgrade heads
 ```
 
-当前后台任务流水线依赖以下新表已经存在：
+当前后台任务依赖以下新表已经存在：
 
 - `task_runs`
 - `task_step_runs`

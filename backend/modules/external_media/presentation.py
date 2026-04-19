@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from core import ResponseModel, success_response
 from core.auth import get_current_user
-from modules.shared.media.audio_ingestion import build_media_ingestion_pipeline_service
+from modules.shared.media.audio_ingestion import build_media_ingestion_task_service
 from modules.shared.infrastructure.container import ServiceContainer, get_container, get_db_session
 from sqlalchemy.orm import Session
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/external-media", tags=["external_media"], respon
 
 def get_external_media_use_case(container: ServiceContainer = Depends(get_container)) -> ExternalMediaUseCase:
     return ExternalMediaUseCase(
-        ingestion_service=build_media_ingestion_pipeline_service(container),
+        ingestion_service=build_media_ingestion_task_service(container),
     )
 
 
@@ -24,7 +24,7 @@ def get_external_media_use_case(container: ServiceContainer = Depends(get_contai
     "/audio-imports",
     response_model=ResponseModel[ExternalAudioImportResponse],
     summary="导入外部媒体音频",
-    description="接收外部媒体分享链接并创建后台导入任务，解析、下载、转写与增强均由 pipeline 异步完成。",
+    description="接收外部媒体分享链接并创建后台导入任务，解析、下载、转写与增强均由 task 异步完成。",
 )
 async def import_external_audio(
     data: ExternalAudioImportRequest,

@@ -1,11 +1,11 @@
-interface PipelineResource {
+interface TaskResource {
   resource_type?: string | null;
   resource_id?: string | null;
 }
 
-interface PipelineLike {
+interface TaskLike {
   status?: string | null;
-  resource?: PipelineResource | null;
+  resource?: TaskResource | null;
 }
 
 interface ExternalAudioImportPayload {
@@ -42,17 +42,17 @@ export function isImportLinkReady(shareUrl: string): boolean {
   return buildExternalAudioImportPayload(shareUrl).share_url.length > 0;
 }
 
-export function resolveImportedFragmentId(taskFragmentId: string | null, pipeline?: PipelineLike | null): string | null {
-  /*优先读取 pipeline 回写的最终资源 id，失败时回落到任务初始 fragment_id。 */
+export function resolveImportedFragmentId(taskFragmentId: string | null, task?: TaskLike | null): string | null {
+  /*优先读取 task 回写的最终资源 id，失败时回落到任务初始 fragment_id。 */
   if (
-    pipeline &&
-    pipeline.status === 'succeeded' &&
-    pipeline.resource &&
-    (pipeline.resource.resource_type === 'fragment' ||
-      pipeline.resource.resource_type === 'local_fragment') &&
-    pipeline.resource.resource_id
+    task &&
+    task.status === 'succeeded' &&
+    task.resource &&
+    (task.resource.resource_type === 'fragment' ||
+      task.resource.resource_type === 'local_fragment') &&
+    task.resource.resource_id
   ) {
-    return pipeline.resource.resource_id;
+    return task.resource.resource_id;
   }
 
   return taskFragmentId || null;

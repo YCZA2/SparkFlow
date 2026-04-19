@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
-from core import settings
+from core.config import settings
 
 
 def build_engine(database_url: str | None = None, *, echo: bool | None = None) -> Engine:

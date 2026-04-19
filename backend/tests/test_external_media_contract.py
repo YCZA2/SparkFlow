@@ -15,7 +15,7 @@ async def test_import_audio_only_returns_task_handle() -> None:
     ingestion_service = SimpleNamespace(
         ingest_external_media=AsyncMock(
             return_value=SimpleNamespace(
-                pipeline_run_id="run-001",
+                task_run_id="run-001",
                 fragment_id="fragment-001",
                 source="voice",
                 audio_source="external_link",
@@ -57,7 +57,7 @@ async def test_import_audio_passes_folder_id_through_to_ingestion_service() -> N
     ingestion_service = SimpleNamespace(
         ingest_external_media=AsyncMock(
             return_value=SimpleNamespace(
-                pipeline_run_id="run-002",
+                task_run_id="run-002",
                 fragment_id="fragment-002",
                 source="voice",
                 audio_source="external_link",
@@ -92,7 +92,7 @@ async def test_import_audio_passes_local_fragment_id_through_to_ingestion_servic
     ingestion_service = SimpleNamespace(
         ingest_external_media=AsyncMock(
             return_value=SimpleNamespace(
-                pipeline_run_id="run-003",
+                task_run_id="run-003",
                 fragment_id="fragment-003",
                 source="voice",
                 audio_source="external_link",

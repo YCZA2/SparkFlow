@@ -217,13 +217,13 @@
 外键：
 - `methodology_entries_user_id_fkey`：`user_id` -> `users.id`
 
-## `pipeline_runs`
+## `task_runs`
 
 | 字段 | 类型 | 可为空 |
 | --- | --- | --- |
 | `id` | `VARCHAR` | `否` |
 | `user_id` | `VARCHAR` | `否` |
-| `pipeline_type` | `VARCHAR` | `否` |
+| `task_type` | `VARCHAR` | `否` |
 | `status` | `VARCHAR` | `否` |
 | `input_payload_json` | `TEXT` | `是` |
 | `output_payload_json` | `TEXT` | `是` |
@@ -231,55 +231,53 @@
 | `resource_id` | `VARCHAR` | `是` |
 | `error_message` | `TEXT` | `是` |
 | `current_step` | `VARCHAR` | `是` |
-| `next_retry_at` | `TIMESTAMP` | `是` |
+| `celery_root_id` | `VARCHAR` | `是` |
 | `finished_at` | `TIMESTAMP` | `是` |
 | `created_at` | `TIMESTAMP` | `否` |
 | `updated_at` | `TIMESTAMP` | `否` |
 
 索引：
-- `ix_pipeline_runs_pipeline_type_created_at`：`pipeline_type`、`created_at`（普通索引）
-- `ix_pipeline_runs_status_next_retry_at`：`status`、`next_retry_at`（普通索引）
-- `ix_pipeline_runs_user_id_created_at`：`user_id`、`created_at`（普通索引）
+- `ix_task_runs_task_type_created_at`：`task_type`、`created_at`（普通索引）
+- `ix_task_runs_status_created_at`：`status`、`created_at`（普通索引）
+- `ix_task_runs_user_id_created_at`：`user_id`、`created_at`（普通索引）
 
 唯一约束：
 - 无
 
 外键：
-- `pipeline_runs_user_id_fkey`：`user_id` -> `users.id`
+- `task_runs_user_id_fkey`：`user_id` -> `users.id`
 
-## `pipeline_step_runs`
+## `task_step_runs`
 
 | 字段 | 类型 | 可为空 |
 | --- | --- | --- |
 | `id` | `VARCHAR` | `否` |
-| `pipeline_run_id` | `VARCHAR` | `否` |
+| `task_run_id` | `VARCHAR` | `否` |
 | `step_name` | `VARCHAR` | `否` |
 | `step_order` | `INTEGER` | `否` |
 | `status` | `VARCHAR` | `否` |
 | `attempt_count` | `INTEGER` | `否` |
 | `max_attempts` | `INTEGER` | `否` |
+| `celery_task_id` | `VARCHAR` | `是` |
 | `input_payload_json` | `TEXT` | `是` |
 | `output_payload_json` | `TEXT` | `是` |
 | `error_message` | `TEXT` | `是` |
 | `external_ref_json` | `TEXT` | `是` |
-| `available_at` | `TIMESTAMP` | `否` |
 | `started_at` | `TIMESTAMP` | `是` |
 | `finished_at` | `TIMESTAMP` | `是` |
-| `lock_token` | `VARCHAR` | `是` |
-| `locked_at` | `TIMESTAMP` | `是` |
 | `created_at` | `TIMESTAMP` | `否` |
 | `updated_at` | `TIMESTAMP` | `否` |
 
 索引：
-- `ix_pipeline_step_runs_pipeline_run_id_step_order`：`pipeline_run_id`、`step_order`（普通索引）
-- `ix_pipeline_step_runs_status_available_at`：`status`、`available_at`（普通索引）
-- `uq_pipeline_step_runs_run_step`：`pipeline_run_id`、`step_name`（唯一索引）
+- `ix_task_step_runs_task_run_id_step_order`：`task_run_id`、`step_order`（普通索引）
+- `ix_task_step_runs_status_started_at`：`status`、`started_at`（普通索引）
+- `uq_task_step_runs_run_step`：`task_run_id`、`step_name`（唯一索引）
 
 唯一约束：
-- `uq_pipeline_step_runs_run_step`：`pipeline_run_id`、`step_name`
+- `uq_task_step_runs_run_step`：`task_run_id`、`step_name`
 
 外键：
-- `pipeline_step_runs_pipeline_run_id_fkey`：`pipeline_run_id` -> `pipeline_runs.id`
+- `task_step_runs_task_run_id_fkey`：`task_run_id` -> `task_runs.id`
 
 ## `scripts`
 

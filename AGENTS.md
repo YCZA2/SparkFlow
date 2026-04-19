@@ -51,10 +51,10 @@ If the change also updates repository conventions, development workflow, or agen
 
 - `backend/main.py`: FastAPI app entrypoint and runtime assembly
 - `backend/modules/*`: feature modules with presentation / schemas / application layering
-- `backend/modules/shared/`: shared infrastructure for ports, providers, storage, media ingestion, content helpers, and pipeline runtime
-- `backend/modules/pipelines/`: persistent pipeline status, step query, and retry APIs
+- `backend/modules/shared/`: shared infrastructure for ports, providers, storage, media ingestion, content helpers, and task runtime
+- `backend/modules/tasks/`: persistent task status, step query, and retry APIs
 - `backend/modules/knowledge/`: knowledge ingestion, chunking, indexing, search, and async processing
-- `backend/modules/shared/pipeline/pipeline_runtime.py`: DB-backed pipeline dispatcher / worker runtime
+- `backend/modules/shared/tasks/runtime.py`: Celery-backed task runner / recovery runtime
 - `backend/domains/*`: domain repositories and persistence logic
 - `backend/services/*`: provider integrations and service implementations
 - `backend/models/`: SQLAlchemy models and DB session setup
@@ -92,6 +92,7 @@ First-time local bootstrap before the command above:
 cp backend/.env.example backend/.env
 python3.12 -m venv backend/.venv
 backend/.venv/bin/pip install -r backend/requirements.txt
+brew install rabbitmq
 cd mobile && npm install
 ```
 
@@ -103,6 +104,8 @@ Important first-run notes:
 This starts:
 
 - local PostgreSQL on `5432`
+- local RabbitMQ on `5672`
+- Celery worker for async task queues
 - FastAPI backend on `8000`
 - Expo / Metro on `8081`
 
@@ -132,6 +135,14 @@ Manual database operations:
 bash scripts/postgres-local.sh start all
 bash scripts/postgres-local.sh status
 bash scripts/postgres-local.sh logs
+```
+
+Manual RabbitMQ / worker operations:
+
+```bash
+npm run dev:queue
+npm run dev:queue:status
+npm run dev:worker
 ```
 
 ### When native mobile changes are involved

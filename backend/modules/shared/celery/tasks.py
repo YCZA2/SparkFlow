@@ -12,7 +12,7 @@ from core.logging_config import get_logger
 from domains.tasks import repository as task_repository
 from models import TaskRun, TaskStepRun
 from modules.scripts.application import DailyPushUseCase
-from modules.scripts.daily_push_pipeline import build_daily_push_pipeline_service
+from modules.scripts.daily_push_task import build_daily_push_task_service
 from modules.scripts.writing_context_builder import refresh_fragment_methodology_entries_for_all_users
 from modules.shared.tasks.state import ensure_task_runtime
 from modules.shared.tasks.task_types import TaskExecutionContext, TaskExecutionError
@@ -372,7 +372,7 @@ async def _enqueue_daily_push_periodic_async() -> dict[str, Any]:
     runtime = ensure_task_runtime()
     with runtime.container.session_factory() as db:
         use_case = DailyPushUseCase(
-            pipeline_service=build_daily_push_pipeline_service(runtime.container),
+            pipeline_service=build_daily_push_task_service(runtime.container),
         )
         return await use_case.run_daily_job(db=db)
 

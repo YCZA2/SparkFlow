@@ -29,38 +29,38 @@ from modules.external_media.presentation import router as external_media_router
 from modules.exports.presentation import router as exports_router
 from modules.fragment_folders.presentation import router as fragment_folders_router
 from modules.fragments.presentation import router as fragments_router
-from modules.fragments.derivative_pipeline import (
-    PIPELINE_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
-    build_fragment_derivative_pipeline_service,
+from modules.fragments.derivative_task import (
+    TASK_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
+    build_fragment_derivative_task_service,
 )
 from modules.knowledge.presentation import router as knowledge_router
 from modules.media_assets.presentation import router as media_assets_router
 from modules.tasks.presentation import router as tasks_router
 from modules.scripts.application import DailyPushUseCase
-from modules.scripts.daily_push_pipeline import (
-    PIPELINE_TYPE_DAILY_PUSH_GENERATION,
-    build_daily_push_pipeline_service,
+from modules.scripts.daily_push_task import (
+    TASK_TYPE_DAILY_PUSH_GENERATION,
+    build_daily_push_task_service,
 )
-from modules.knowledge.rag_processing_pipeline import (
-    build_reference_script_processing_pipeline_service,
-    PIPELINE_TYPE_REFERENCE_SCRIPT_PROCESSING,
+from modules.knowledge.reference_script_task import (
+    build_reference_script_processing_task_service,
+    TASK_TYPE_REFERENCE_SCRIPT_PROCESSING,
 )
-from modules.scripts.rag_pipeline import (
-    build_rag_script_pipeline_service,
-    PIPELINE_TYPE_RAG_SCRIPT_GENERATION,
+from modules.scripts.rag_task import (
+    build_rag_script_task_service,
+    TASK_TYPE_RAG_SCRIPT_GENERATION,
 )
 from modules.scripts.presentation import router as scripts_router
 from modules.scripts.writing_context_builder import (
     refresh_fragment_methodology_entries_for_all_users,
 )
-from modules.document_import.pipeline_steps import (
+from modules.document_import.task_steps import (
     DocumentImportStepExecutor,
-    PIPELINE_TYPE_DOCUMENT_IMPORT,
+    TASK_TYPE_DOCUMENT_IMPORT,
 )
 from modules.document_import.presentation import router as document_import_router
 from modules.shared.media.audio_ingestion import (
-    build_media_ingestion_pipeline_service,
-    PIPELINE_TYPE_MEDIA_INGESTION,
+    build_media_ingestion_task_service,
+    TASK_TYPE_MEDIA_INGESTION,
 )
 from modules.shared.infrastructure.container import ServiceContainer, build_container
 from modules.shared.tasks.bootstrap import configure_task_runtime
@@ -356,7 +356,7 @@ def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:
     async def run_daily_push_job() -> None:
         with container.session_factory() as db:
             use_case = DailyPushUseCase(
-                pipeline_service=build_daily_push_pipeline_service(container),
+                pipeline_service=build_daily_push_task_service(container),
             )
             return await use_case.run_daily_job(db=db)
 

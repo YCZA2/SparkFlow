@@ -37,11 +37,6 @@ class TaskRun(Base):
     user = relationship("User")
     steps = relationship("TaskStepRun", back_populates="task_run", cascade="all, delete-orphan")
 
-    @property
-    def pipeline_type(self) -> str:
-        """向 legacy pipeline 兼容层暴露旧字段名。"""
-        return self.task_type
-
     def __repr__(self) -> str:
         return f"<TaskRun(id={self.id}, user_id={self.user_id}, task_type={self.task_type}, status={self.status})>"
 
@@ -74,11 +69,6 @@ class TaskStepRun(Base):
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     task_run = relationship("TaskRun", back_populates="steps")
-
-    @property
-    def pipeline_run_id(self) -> str:
-        """向 legacy pipeline 兼容层暴露旧字段名。"""
-        return self.task_run_id
 
     def __repr__(self) -> str:
         return f"<TaskStepRun(id={self.id}, task_run_id={self.task_run_id}, step_name={self.step_name}, status={self.status})>"

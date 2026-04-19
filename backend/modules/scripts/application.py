@@ -11,8 +11,8 @@ from utils.serialization import format_iso_datetime, parse_json_list
 from utils.time import get_local_day_bounds
 
 from domains.scripts import repository as script_repository
-from .daily_push_pipeline import DailyPushPipelineService, PIPELINE_TYPE_DAILY_PUSH_GENERATION
-from .rag_pipeline import RagScriptPipelineService
+from .daily_push_task import DailyPushTaskService, TASK_TYPE_DAILY_PUSH_GENERATION
+from .rag_task import RagScriptTaskService
 from .schemas import ScriptDetail, ScriptGenerationResponse, ScriptItem, ScriptListResponse
 
 VALID_SCRIPT_STATUSES = {"draft", "ready", "filmed"}
@@ -38,8 +38,8 @@ def map_script(script: Script) -> ScriptDetail:
 class RagScriptGenerationUseCase:
     """封装 RAG 脚本生成任务创建入口。"""
 
-    def __init__(self, *, pipeline_service: RagScriptPipelineService) -> None:
-        """装配 RAG 脚本生成流水线依赖。"""
+    def __init__(self, *, pipeline_service: RagScriptTaskService) -> None:
+        """装配 RAG 脚本生成任务依赖。"""
         self.pipeline_service = pipeline_service
 
     async def generate_async(
@@ -50,7 +50,7 @@ class RagScriptGenerationUseCase:
         topic: str,
         fragment_ids: list[str],
     ) -> ScriptGenerationResponse:
-        """创建基于主题和参考脚本 RAG 的异步脚本生成流水线。"""
+        """创建基于主题和参考脚本 RAG 的异步脚本生成任务。"""
         run = await self.pipeline_service.create_run(
             db=db,
             user_id=user_id,
@@ -127,9 +127,9 @@ class DailyPushUseCase:
     def __init__(
         self,
         *,
-        pipeline_service: DailyPushPipelineService,
+        pipeline_service: DailyPushTaskService,
     ) -> None:
-        """装配每日推盘依赖。"""
+        """装配每日推盘任务依赖。"""
         self.pipeline_service = pipeline_service
 
     async def trigger_for_user(
@@ -139,7 +139,7 @@ class DailyPushUseCase:
         user_id: str,
         force: bool = False,
     ) -> ScriptGenerationResponse:
-        """按当天碎片创建异步每日推盘流水线。"""
+        """按当天碎片创建异步每日推盘任务。"""
         run = await self.pipeline_service.create_run(
             db=db,
             user_id=user_id,
@@ -151,7 +151,7 @@ class DailyPushUseCase:
         )
         return ScriptGenerationResponse(
             task_id=run.id,
-            task_type=PIPELINE_TYPE_DAILY_PUSH_GENERATION,
+            task_type=TASK_TYPE_DAILY_PUSH_GENERATION,
             status_query_url=f"/api/tasks/{run.id}",
             status=run.status,
         )

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from core import ResponseModel, success_response
 from core.auth import get_current_user
-from modules.shared.media.audio_ingestion import build_media_ingestion_pipeline_service
+from modules.shared.media.audio_ingestion import build_media_ingestion_task_service
 from modules.shared.infrastructure.container import ServiceContainer, get_container, get_db_session
 
 from .application import TranscriptionUseCase
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/transcriptions", tags=["transcriptions"], respon
 def get_transcription_use_case(container: ServiceContainer = Depends(get_container)) -> TranscriptionUseCase:
     return TranscriptionUseCase(
         file_storage=container.file_storage,
-        ingestion_service=build_media_ingestion_pipeline_service(container),
+        ingestion_service=build_media_ingestion_task_service(container),
     )
 
 
@@ -26,7 +26,7 @@ def get_transcription_use_case(container: ServiceContainer = Depends(get_contain
     status_code=status.HTTP_200_OK,
     response_model=ResponseModel[AudioUploadResponse],
     summary="上传音频并启动转写",
-    description="上传音频文件后创建后台流水线；调用前必须先在本地创建占位 fragment，并传入 local_fragment_id。",
+    description="上传音频文件后创建后台任务；调用前必须先在本地创建占位 fragment，并传入 local_fragment_id。",
 )
 async def upload_audio(
     audio: UploadFile = File(..., description="音频文件"),

@@ -40,10 +40,11 @@ python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-2. Ensure local PostgreSQL is installed and running.
+2. Ensure local PostgreSQL and RabbitMQ are installed and running.
 
 ```bash
 APP_ENV=development bash ../scripts/postgres-local.sh start dev
+bash ../scripts/rabbitmq-local.sh start
 ```
 
 3. Fill in `backend/.env`.
@@ -52,18 +53,28 @@ APP_ENV=development bash ../scripts/postgres-local.sh start dev
 - If you only need to boot the backend, open the app shell, or debug non-AI pages locally, you may temporarily set `DASHSCOPE_API_KEY=test-dashscope-key`.
 - AI generation, transcription, embeddings, and other DashScope-backed flows still require a real key.
 
-4. Run migrations and start server:
+4. Run migrations, then start worker and server in two terminals:
 
 ```bash
 APP_ENV=development .venv/bin/alembic upgrade heads
-APP_ENV=development .venv/bin/uvicorn main:app --reload --no-access-log
 ```
 
-也可以拆开执行：
+Terminal A:
 
 ```bash
-.venv/bin/alembic upgrade heads
-.venv/bin/uvicorn main:app --reload --no-access-log
+APP_ENV=development CELERY_RESULT_BACKEND=rpc:// ../scripts/celery-worker.sh
+```
+
+Terminal B:
+
+```bash
+APP_ENV=development CELERY_RESULT_BACKEND=rpc:// .venv/bin/uvicorn main:app --reload --no-access-log
+```
+
+也可以不使用 helper，手动执行 worker：
+
+```bash
+APP_ENV=development CELERY_RESULT_BACKEND=rpc:// CELERY_TASK_ALWAYS_EAGER=false .venv/bin/celery -A celery_app:celery_app worker -Q transcription,fragment-derivative,document-import,script-generation,knowledge-processing,daily-push,default --pool=solo --concurrency=1 --loglevel=INFO
 ```
 
 如果你是从仓库根目录首次拉起整套移动端联调环境，建议先完成以下依赖引导，再运行 `bash scripts/dev-mobile.sh`：
@@ -71,6 +82,7 @@ APP_ENV=development .venv/bin/uvicorn main:app --reload --no-access-log
 ```bash
 python3.12 -m venv backend/.venv
 backend/.venv/bin/pip install -r backend/requirements.txt
+brew install rabbitmq
 cd mobile && npm install
 ```
 
@@ -112,11 +124,12 @@ Default local address: `http://127.0.0.1:8000`
 
 - 通过 `bash scripts/deploy-backend-aliyun.sh deploy` 复用 `ssh aliyun` + `rsync` 发布后端
 - 以 `systemd` 启动单个 `uvicorn` 进程：`--workers 1`
+- 异步任务由独立 Celery worker 消费 RabbitMQ，不在 API 进程内执行
 - 远端环境变量默认放在 `/home/ycza/.config/sparkflow/backend.env`
 - 远端用户可直接执行 `sparkflow-backend-restart` 或 `sfrestart` 重启服务并查看状态
 - `nginx` 在同域名下转发 `/api/*` 与 `/uploads/*`
 - PostgreSQL、Chroma 和本地上传目录都与应用同机部署
-- 因为应用启动时会自动拉起 APScheduler 和 pipeline dispatcher，当前不允许额外再开第二个 API worker
+- 因为 API 进程仍负责 APScheduler，当前不允许额外再开第二个 API worker；如需扩展后台吞吐，扩容 Celery worker
 
 移动端出包约定：
 
@@ -223,7 +236,7 @@ cd backend
    - `backend/modules/shared/media/audio_ingestion_use_case.py` 负责媒体导入入口编排，`backend/modules/shared/media/media_ingestion_steps.py` 负责 transcript-first 步骤执行，`backend/modules/shared/media/media_ingestion_persistence.py` 负责落库与终态输出。
    - `backend/modules/shared/media/audio_ingestion.py` 保留统一入口导出，供现有依赖平滑迁移。
    - `backend/modules/shared/tasks/runtime.py` 与 `backend/modules/shared/celery/*` 提供 Celery 任务运行时、步骤投递、重试与恢复。
-   - `backend/modules/fragments/derivative_pipeline.py` 负责 fragment 摘要、标签与向量的异步回填流水线。
+   - `backend/modules/fragments/derivative_task.py` 负责 fragment 摘要、标签与向量的异步回填任务。
 7. `modules/tasks`
    - 后台任务主查询层。
    - 负责 `task_runs` / `task_step_runs` 查询、步骤详情与手动重跑。
@@ -248,8 +261,8 @@ cd backend
 - `modules/fragment_folders/`: 碎片文件夹 CRUD 和基于 snapshot 的文件夹统计。
 - `modules/fragments/`: 当前只保留标签、相似检索、可视化和 fragment snapshot 详情 / 导出组装能力。
 - `modules/transcriptions/`: 音频上传与后台转写入口；主任务以 transcript 成功为准，摘要标签随后异步补齐。
-- `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接；请求入口只创建任务，解析链接、下载转 m4a、转写先在主流水线完成，摘要/标签/向量由后续衍生流水线回填。
-- `modules/scripts/`: 口播稿生成、脚本生成 pipeline 定义、上下文构建、结果回流、列表、详情、更新、删除、每日推盘；其中 daily push 现在通过备份快照 reader 聚合 fragment 真值。
+- `modules/external_media/`: 外部媒体音频导入，当前支持抖音分享链接；请求入口只创建任务，解析链接、下载转 m4a、转写先在主任务完成，摘要/标签/向量由后续衍生任务回填。
+- `modules/scripts/`: 口播稿生成、脚本生成任务定义、上下文构建、结果回流、列表、详情、更新、删除、每日推盘；其中 daily push 现在通过备份快照 reader 聚合 fragment 真值。
 - `modules/knowledge/`: 知识库文档创建、上传、搜索、删除；当前已按 `parsers / chunking / indexing / application` 拆层，文本型上传支持 `txt/docx/pdf/xlsx`。
 - `modules/debug_logs/`: 接收移动端调试日志，并通过结构化日志链路写入本地文件。
 - `modules/media_assets/`: 统一媒体资源上传、列表和删除。
@@ -260,8 +273,8 @@ cd backend
 当前 `modules/scripts/` 内部约定：
 
 - `application.py` 只保留查询、命令和每日推盘编排入口。
-- `rag_pipeline.py` 只负责 `rag_script_generation` 步骤定义与协调。
-- `daily_push_pipeline.py` 只负责 `daily_push_generation` 步骤定义与结果回流。
+- `rag_task.py` 只负责 `rag_script_generation` 步骤定义与协调。
+- `daily_push_task.py` 只负责 `daily_push_generation` 步骤定义与结果回流。
 - `writing_context_builder.py` 负责预置稳定内核、缓存方法论读取、相关素材召回，以及每日碎片方法论维护任务。
 - `rag_context_builder.py` 负责把三层上下文、大纲和当前碎片背景拼成最终提示词。
 - `persistence.py` 负责脚本幂等落库。
@@ -351,9 +364,20 @@ bash scripts/postgres-local.sh logs
 bash scripts/postgres-local.sh stop
 ```
 
+本地 RabbitMQ / Celery worker 相关命令：
+
+```bash
+bash scripts/rabbitmq-local.sh start
+bash scripts/rabbitmq-local.sh status
+bash scripts/rabbitmq-local.sh logs
+bash scripts/rabbitmq-local.sh stop
+bash scripts/celery-worker.sh
+```
+
 脚本行为约定：
 
 - `bash scripts/dev-mobile.sh` 会在 Alembic 之前自动确保本机 PostgreSQL 可用并补齐默认开发库
+- `bash scripts/dev-mobile.sh` 会自动确保本机 RabbitMQ 可用，并启动独立 Celery worker；本地默认使用 `CELERY_RESULT_BACKEND=rpc://`，避免额外依赖 Redis
 - `bash scripts/test-all.sh` 会在 pytest 之前自动确保 `sparkflow_test` 可用
 - 开发库是否跳过本机默认库初始化由 `DATABASE_URL` 控制；测试库是否跳过本机默认库初始化只由 `TEST_DATABASE_URL` 控制
 
@@ -369,12 +393,12 @@ bash scripts/postgres-local.sh stop
 - `POST /api/transcriptions` / `POST /api/external-media/audio-imports` / `POST /api/scripts/generation` / `POST /api/scripts/daily-push/trigger` / `POST /api/scripts/daily-push/force-trigger` 现在都会先创建 `task_runs`
 - `POST /api/knowledge/upload` 在 `reference_script` 场景下也会附带统一任务句柄
 - `GET /api/tasks/{task_id}` / `GET /api/tasks/{task_id}/steps` / `POST /api/tasks/{task_id}/retry` 提供统一后台任务观察与补偿入口
-- `POST /api/external-media/audio-imports` 不再同步解析或下载媒体；`resolve_external_media` / `download_media` 也属于 `media_ingestion` pipeline 步骤
+- `POST /api/external-media/audio-imports` 不再同步解析或下载媒体；`resolve_external_media` / `download_media` 也属于 `media_ingestion` task 步骤
 - `media_ingestion` 当前固定步骤为 `resolve_external_media`（按需）、`download_media`、`transcribe_audio`、`finalize_fragment`；`GET /api/tasks/{task_id}` 成功时允许 `summary=null`、`tags=[]`
-- transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` pipeline，异步执行摘要、标签和向量回填；该回填现在支持只有 `local_fragment_id`、没有 `Fragment` projection 的 local-first 路径，失败也不会回滚已成功的 ingest
+- transcript 落库后会最佳努力创建内部 `fragment_derivative_backfill` task，异步执行摘要、标签和向量回填；该回填现在支持只有 `local_fragment_id`、没有 `Fragment` projection 的 local-first 路径，失败也不会回滚已成功的 ingest
 - SparkFlow 后端先收集预置稳定内核、已缓存方法论、相关素材和可选碎片背景，再生成大纲与草稿
-- `rag_script_generation` pipeline 依次执行 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`
-- `task_runs` / `task_step_runs` 是后台状态事实源；`pipeline_runs` / `pipeline_step_runs` 仅保留历史 legacy runtime / 数据兼容
+- `rag_script_generation` task 依次执行 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`
+- `task_runs` / `task_step_runs` 是后台状态事实源
 - `agent_runs` 与 `/api/agent/*` 已移除，脚本生成公开链路完全收口到 `scripts + tasks`
 
 任务态客户端约定：
