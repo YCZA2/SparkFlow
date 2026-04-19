@@ -28,8 +28,8 @@ function SelectButton({
 }) {
   /*列表右上角操作保持轻量文本按钮，和备忘录“编辑”语义一致。 */
   return (
-    <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.selectButton}>
-      <Text style={[styles.selectAction, { color }]}>
+    <TouchableOpacity onPress={onPress} hitSlop={8} className="min-h-11 justify-center px-sf-xs">
+      <Text className="text-[17px] font-medium" style={{ color }}>
         {isSelectionMode ? '完成' : '编辑'}
       </Text>
     </TouchableOpacity>
@@ -136,7 +136,11 @@ export default function FolderDetailScreen() {
     <NotesListScreenShell
       backgroundColor={theme.colors.background}
       overlay={
-        <View pointerEvents="box-none" style={[styles.floatingHeader, { top: insets.top + 12 }]}>
+        <View
+          pointerEvents="box-none"
+          className="absolute left-sf-screen right-sf-screen flex-row items-center justify-between"
+          style={{ top: insets.top + 12 }}
+        >
           <BackButton onPress={handleBack} variant="circle" showText={false} />
           <SelectButton
             isSelectionMode={screen.selection.isSelectionMode}
@@ -149,22 +153,31 @@ export default function FolderDetailScreen() {
       bottomFadeHeight={insets.bottom + 108}
       bottomOverlay={
         screen.selection.isSelectionMode ? (
-          <View style={[styles.floatingFooter, { bottom: insets.bottom + 18 }]}>
+          <View
+            className="absolute left-0 right-0 z-10 px-sf-screen"
+            style={{ bottom: insets.bottom + 18 }}
+          >
             <Animated.View
               entering={FadeInDown.duration(160)}
               exiting={FadeOutDown.duration(120)}
+              className="rounded-[26px] border p-sf-sm"
               style={[
-                styles.selectionBar,
                 {
                   backgroundColor:
                     theme.name === 'dark' ? 'rgba(28,28,30,0.96)' : 'rgba(255,255,255,0.96)',
                   borderColor: theme.colors.border,
+                  borderWidth: StyleSheet.hairlineWidth,
+                  shadowColor: '#000000',
+                  shadowOffset: { width: 0, height: 12 },
+                  shadowOpacity: 0.12,
+                  shadowRadius: 22,
+                  elevation: 8,
                 },
               ]}
             >
               <TouchableOpacity
+                className="rounded-[20px] px-sf-lg py-[14px]"
                 style={[
-                  styles.generateButton,
                   {
                     backgroundColor:
                       screen.selection.selectedCount > 0 ? theme.colors.warning : theme.colors.textSubtle,
@@ -173,11 +186,11 @@ export default function FolderDetailScreen() {
                 onPress={screen.onGenerate}
                 activeOpacity={0.85}
               >
-                <View style={styles.generateContent}>
+                <View className="flex-row items-center gap-sf-sm">
                   <SymbolView name="sparkles" size={18} tintColor="#FFFFFF" />
-                  <Text style={styles.generateButtonText}>交给 AI 编导</Text>
+                  <Text className="text-base font-bold leading-5 text-white">交给 AI 编导</Text>
                 </View>
-                <Text style={styles.generateHint}>
+                <Text className="mt-[6px] text-xs leading-4 text-white/90">
                   已选 {screen.selection.selectedCount}/{screen.selection.maxSelection}
                 </Text>
               </TouchableOpacity>
@@ -207,12 +220,15 @@ export default function FolderDetailScreen() {
         )}
         renderSectionHeader={({ section }) => (
           <Pressable disabled={openFragmentId === null} onPress={handleDismissOpenSwipe}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{section.title}</Text>
+            <Text className="mb-sf-sm ml-sf-screen mt-sf-md text-[13px] font-bold leading-[18px] text-app-text dark:text-app-text-dark">
+              {section.title}
+            </Text>
           </Pressable>
         )}
         ListHeaderComponent={
           <Pressable
-            style={[styles.headerBlock, { paddingTop: insets.top + 66 }]}
+            className="px-sf-screen"
+            style={{ paddingTop: insets.top + 66 }}
             disabled={openFragmentId === null}
             onPress={handleDismissOpenSwipe}
           >
@@ -230,7 +246,7 @@ export default function FolderDetailScreen() {
         }
         ListFooterComponent={
           <Pressable
-            style={styles.listFooterDismissArea}
+            className="min-h-[120px] flex-1"
             disabled={openFragmentId === null}
             onPress={handleDismissOpenSwipe}
           />
@@ -251,77 +267,3 @@ export default function FolderDetailScreen() {
     </NotesListScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  headerBlock: {
-    paddingHorizontal: 16,
-  },
-  floatingHeader: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  selectButton: {
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  selectAction: {
-    fontSize: 17,
-    fontWeight: '500',
-  },
-  sectionTitle: {
-    marginTop: 12,
-    marginBottom: 8,
-    marginLeft: 16,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '700',
-  },
-  floatingFooter: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    zIndex: 12,
-    paddingHorizontal: 16,
-  },
-  selectionBar: {
-    borderRadius: 26,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 22,
-    elevation: 8,
-  },
-  generateButton: {
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  generateContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  generateButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: '700',
-  },
-  generateHint: {
-    marginTop: 6,
-    color: 'rgba(255,255,255,0.92)',
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  listFooterDismissArea: {
-    flex: 1,
-    minHeight: 120,
-  },
-});

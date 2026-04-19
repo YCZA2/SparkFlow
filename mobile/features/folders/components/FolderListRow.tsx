@@ -30,11 +30,11 @@ export function FolderListRow({
 
   return (
     <TouchableOpacity
+      className="mx-sf-screen flex-row items-center px-sf-screen py-[14px] bg-app-surface dark:bg-app-surface-dark"
       style={[
-        styles.folderCard,
         {
-          backgroundColor: theme.colors.surface,
           borderColor: theme.colors.border,
+          borderWidth: StyleSheet.hairlineWidth,
           borderTopLeftRadius: isFirstInSection ? 18 : 0,
           borderTopRightRadius: isFirstInSection ? 18 : 0,
           borderBottomLeftRadius: isLastInSection ? 18 : 0,
@@ -45,19 +45,22 @@ export function FolderListRow({
       onPress={() => onPress(folder)}
       activeOpacity={0.84}
     >
-      <View style={styles.folderLeading}>
+      <View className="w-7 items-start">
         <SymbolView name={icon} size={21} tintColor="#D4A21D" />
       </View>
-      <View style={styles.folderInfo}>
-        <Text style={[styles.folderName, { color: theme.colors.text }]} numberOfLines={1}>
+      <View className="ml-[6px] flex-1">
+        <Text
+          className="text-[17px] font-medium leading-[22px] text-app-text dark:text-app-text-dark"
+          numberOfLines={1}
+        >
           {folder.name}
         </Text>
-        <Text style={[styles.folderCount, { color: theme.colors.textSubtle }]}>
+        <Text className="mt-[2px] text-[13px] leading-[18px] text-app-text-subtle dark:text-app-text-subtle-dark">
           {countLabel ?? `${folder.fragment_count} 条内容`}
         </Text>
       </View>
-      <View style={styles.folderMeta}>
-        <Text style={[styles.folderCountValue, { color: theme.colors.textSubtle }]}>
+      <View className="flex-row items-center gap-[6px]">
+        <Text className="text-[17px] font-normal leading-[22px] text-app-text-subtle dark:text-app-text-subtle-dark">
           {countValue}
         </Text>
         <SymbolView name="chevron.right" size={15} tintColor={theme.colors.textSubtle} />
@@ -65,42 +68,3 @@ export function FolderListRow({
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  folderCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  folderLeading: {
-    width: 28,
-    alignItems: 'flex-start',
-  },
-  folderInfo: {
-    flex: 1,
-    marginLeft: 6,
-  },
-  folderName: {
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: '500',
-  },
-  folderCount: {
-    marginTop: 2,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  folderMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  folderCountValue: {
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: '400',
-  },
-});

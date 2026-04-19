@@ -8,9 +8,17 @@ interface BottomActionBarProps {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
+  className?: string;
+  contentClassName?: string;
 }
 
-export function BottomActionBar({ children, style, contentStyle }: BottomActionBarProps) {
+export function BottomActionBar({
+  children,
+  style,
+  contentStyle,
+  className,
+  contentClassName,
+}: BottomActionBarProps) {
   const theme = useAppTheme();
 
   return (
@@ -25,8 +33,11 @@ export function BottomActionBar({ children, style, contentStyle }: BottomActionB
         },
         style,
       ]}
+      className={className}
     >
-      <View style={[styles.content, contentStyle]}>{children}</View>
+      <View className={`pb-sf-sm pt-sf-md ${contentClassName ?? ''}`} style={contentStyle}>
+        {children}
+      </View>
     </SafeAreaView>
   );
 }
@@ -34,9 +45,5 @@ export function BottomActionBar({ children, style, contentStyle }: BottomActionB
 const styles = StyleSheet.create({
   safeArea: {
     borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  content: {
-    paddingTop: 12,
-    paddingBottom: 8,
   },
 });

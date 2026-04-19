@@ -1,3 +1,5 @@
+import { sparkFlowTheme } from './tailwind-tokens';
+
 export type ThemeName = 'light' | 'dark';
 
 export interface ThemeColors {
@@ -48,84 +50,38 @@ export interface AppTheme {
   };
 }
 
-const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-};
+const spacing = sparkFlowTheme.spacing;
 
 const layout = {
-  screenPadding: 16,
-  sectionGap: 24,
-  heroGap: 12,
-  cardGap: 12,
-  bottomBarPadding: 16,
+  screenPadding: sparkFlowTheme.spacing.screen,
+  sectionGap: sparkFlowTheme.spacing.section,
+  heroGap: sparkFlowTheme.spacing.hero,
+  cardGap: sparkFlowTheme.spacing.card,
+  bottomBarPadding: sparkFlowTheme.spacing.bottomBar,
 };
 
-const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  pill: 999,
-};
+const radius = sparkFlowTheme.radius;
 
+/*兼容旧 StyleSheet 调用；新增视觉 token 应优先进入 Tailwind theme。 */
 export const themes: Record<ThemeName, AppTheme> = {
   light: {
     name: 'light',
-    colors: {
-      background: '#F2F2F7',
-      surface: '#FFFFFF',
-      surfaceMuted: '#F7F7FA',
-      text: '#111111',
-      textMuted: '#666666',
-      textSubtle: '#8E8E93',
-      border: '#E5E5EA',
-      primary: '#007AFF',
-      success: '#34C759',
-      danger: '#FF3B30',
-      warning: '#FF9500',
-    },
+    colors: sparkFlowTheme.colors.light,
     spacing,
     layout,
     radius,
     shadow: {
-      card: {
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
-        shadowRadius: 4,
-        elevation: 2,
-      },
+      card: sparkFlowTheme.shadow.card,
     },
   },
   dark: {
     name: 'dark',
-    colors: {
-      background: '#000000',
-      surface: '#1C1C1E',
-      surfaceMuted: '#2C2C2E',
-      text: '#FFFFFF',
-      textMuted: '#D1D1D6',
-      textSubtle: '#8E8E93',
-      border: '#3A3A3C',
-      primary: '#0A84FF',
-      success: '#30D158',
-      danger: '#FF453A',
-      warning: '#FFD60A',
-    },
+    colors: sparkFlowTheme.colors.dark,
     spacing,
     layout,
     radius,
     shadow: {
-      card: {
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.2,
-        shadowRadius: 6,
-        elevation: 3,
-      },
+      card: sparkFlowTheme.shadow.cardDark,
     },
   },
 };

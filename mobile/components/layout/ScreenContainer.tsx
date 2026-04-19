@@ -19,6 +19,8 @@ interface ScreenContainerProps {
   padded?: boolean;
   includeBottomInset?: boolean;
   keyboardAvoiding?: boolean;
+  className?: string;
+  contentClassName?: string;
   contentContainerStyle?: StyleProp<ViewStyle>;
   style?: StyleProp<ViewStyle>;
 }
@@ -30,6 +32,8 @@ export function ScreenContainer({
   padded = false,
   includeBottomInset = false,
   keyboardAvoiding = false,
+  className,
+  contentClassName,
   contentContainerStyle,
   style,
 }: ScreenContainerProps) {
@@ -39,6 +43,7 @@ export function ScreenContainer({
 
   const content = scrollable ? (
     <ScrollView
+      className={contentClassName}
       contentContainerStyle={[
         styles.scrollContent,
         { paddingHorizontal, paddingBottom },
@@ -51,8 +56,8 @@ export function ScreenContainer({
     </ScrollView>
   ) : (
     <View
+      className={`flex-1 ${contentClassName ?? ''}`}
       style={[
-        styles.content,
         { paddingHorizontal, paddingBottom },
         contentContainerStyle,
       ]}
@@ -65,6 +70,7 @@ export function ScreenContainer({
     <SafeAreaView
       edges={['top', 'left', 'right']}
       style={[styles.safeArea, { backgroundColor: theme.colors.background }, style]}
+      className={className}
     >
       {content}
       {footer}

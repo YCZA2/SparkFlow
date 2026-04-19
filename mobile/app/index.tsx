@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, RefreshControl, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -111,9 +111,13 @@ export default function FoldersScreen() {
       <NotesListScreenShell
         backgroundColor={theme.colors.background}
         overlay={
-          <View pointerEvents="box-none" style={[styles.floatingHeader, { top: insets.top + 12 }]}>
+          <View
+            pointerEvents="box-none"
+            className="absolute left-sf-screen right-sf-screen flex-row items-center justify-between"
+            style={{ top: insets.top + 12 }}
+          >
             <HomeMenuButton onPress={toggle} color={theme.colors.text} />
-            <View style={styles.headerRightActions}>
+            <View className="flex-row gap-[10px]">
               <HomeHeaderCircleButton
                 icon="folder.badge.plus"
                 onPress={() => setShowCreateDialog(true)}
@@ -136,7 +140,11 @@ export default function FoldersScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => {
             if (item.kind === 'section') {
-              return <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{item.title}</Text>;
+              return (
+                <Text className="mx-sf-screen mb-[10px] mt-sf-md text-sm font-bold leading-5 text-app-text dark:text-app-text-dark">
+                  {item.title}
+                </Text>
+              );
             }
 
             return (
@@ -152,7 +160,7 @@ export default function FoldersScreen() {
             );
           }}
           ListHeaderComponent={
-            <View style={[styles.headerBlock, { paddingTop: insets.top + 66 }]}>
+            <View className="px-sf-screen" style={{ paddingTop: insets.top + 66 }}>
               <NotesListHero title="文件夹" subtitle={`${homeList.total} 个文件夹`} variant="large" />
             </View>
           }
@@ -190,29 +198,3 @@ export default function FoldersScreen() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  headerBlock: {
-    paddingHorizontal: 16,
-  },
-  floatingHeader: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerRightActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  sectionTitle: {
-    marginTop: 12,
-    marginBottom: 10,
-    marginHorizontal: 16,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '700',
-  },
-});

@@ -84,6 +84,9 @@ export default (): ExpoConfig => {
       },
       predictiveBackGestureEnabled: false,
     },
+    web: {
+      bundler: 'metro',
+    },
     plugins: [
       'expo-router',
       'expo-font',

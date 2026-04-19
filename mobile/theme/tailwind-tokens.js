@@ -1,0 +1,125 @@
+const sparkFlowTheme = {
+  colors: {
+    light: {
+      background: '#F2F2F7',
+      surface: '#FFFFFF',
+      surfaceMuted: '#F7F7FA',
+      text: '#111111',
+      textMuted: '#666666',
+      textSubtle: '#8E8E93',
+      border: '#E5E5EA',
+      primary: '#007AFF',
+      success: '#34C759',
+      danger: '#FF3B30',
+      warning: '#FF9500',
+    },
+    dark: {
+      background: '#000000',
+      surface: '#1C1C1E',
+      surfaceMuted: '#2C2C2E',
+      text: '#FFFFFF',
+      textMuted: '#D1D1D6',
+      textSubtle: '#8E8E93',
+      border: '#3A3A3C',
+      primary: '#0A84FF',
+      success: '#30D158',
+      danger: '#FF453A',
+      warning: '#FFD60A',
+    },
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 24,
+    screen: 16,
+    section: 24,
+    hero: 12,
+    card: 12,
+    bottomBar: 16,
+  },
+  radius: {
+    sm: 8,
+    md: 12,
+    lg: 16,
+    card: 18,
+    pill: 999,
+  },
+  shadow: {
+    card: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    cardDark: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+  },
+};
+
+/*把运行时数值 token 转成 Tailwind 接受的 px 字符串。 */
+function px(value) {
+  return `${value}px`;
+}
+
+module.exports = {
+  sparkFlowTheme,
+  tailwindThemeExtension: {
+    colors: {
+      app: {
+        background: sparkFlowTheme.colors.light.background,
+        'background-dark': sparkFlowTheme.colors.dark.background,
+        surface: sparkFlowTheme.colors.light.surface,
+        'surface-dark': sparkFlowTheme.colors.dark.surface,
+        'surface-muted': sparkFlowTheme.colors.light.surfaceMuted,
+        'surface-muted-dark': sparkFlowTheme.colors.dark.surfaceMuted,
+        text: sparkFlowTheme.colors.light.text,
+        'text-dark': sparkFlowTheme.colors.dark.text,
+        'text-muted': sparkFlowTheme.colors.light.textMuted,
+        'text-muted-dark': sparkFlowTheme.colors.dark.textMuted,
+        'text-subtle': sparkFlowTheme.colors.light.textSubtle,
+        'text-subtle-dark': sparkFlowTheme.colors.dark.textSubtle,
+        border: sparkFlowTheme.colors.light.border,
+        'border-dark': sparkFlowTheme.colors.dark.border,
+        primary: sparkFlowTheme.colors.light.primary,
+        'primary-dark': sparkFlowTheme.colors.dark.primary,
+        success: sparkFlowTheme.colors.light.success,
+        'success-dark': sparkFlowTheme.colors.dark.success,
+        danger: sparkFlowTheme.colors.light.danger,
+        'danger-dark': sparkFlowTheme.colors.dark.danger,
+        warning: sparkFlowTheme.colors.light.warning,
+        'warning-dark': sparkFlowTheme.colors.dark.warning,
+      },
+    },
+    spacing: {
+      'sf-xs': px(sparkFlowTheme.spacing.xs),
+      'sf-sm': px(sparkFlowTheme.spacing.sm),
+      'sf-md': px(sparkFlowTheme.spacing.md),
+      'sf-lg': px(sparkFlowTheme.spacing.lg),
+      'sf-xl': px(sparkFlowTheme.spacing.xl),
+      'sf-screen': px(sparkFlowTheme.spacing.screen),
+      'sf-section': px(sparkFlowTheme.spacing.section),
+      'sf-hero': px(sparkFlowTheme.spacing.hero),
+      'sf-card': px(sparkFlowTheme.spacing.card),
+      'sf-bottom-bar': px(sparkFlowTheme.spacing.bottomBar),
+    },
+    borderRadius: {
+      'sf-sm': px(sparkFlowTheme.radius.sm),
+      'sf-md': px(sparkFlowTheme.radius.md),
+      'sf-lg': px(sparkFlowTheme.radius.lg),
+      'sf-card': px(sparkFlowTheme.radius.card),
+      'sf-pill': px(sparkFlowTheme.radius.pill),
+    },
+    boxShadow: {
+      card: '0px 1px 4px rgba(0, 0, 0, 0.08)',
+      'card-dark': '0px 1px 6px rgba(0, 0, 0, 0.20)',
+    },
+  },
+};

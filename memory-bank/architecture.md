@@ -1,6 +1,6 @@
 # SparkFlow Architecture
 
-> 最后更新：2026-04-09
+> 最后更新：2026-04-19
 
 本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为本机 PostgreSQL 服务。
 
@@ -25,6 +25,7 @@
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
 - 仓库本轮也完成了一次大规模命名清理：旧的 remote-first / local-draft 兼容层统一下沉为 `legacy*` 语义；凡仍映射旧库或旧协议的字段，都明确标记为 legacy cloud-binding / legacy snapshot，而不再伪装成当前领域真值。
 - 这意味着后续新增实现默认应直接接入 local-first 实体、`backup_status / entity_version` 与 `/api/backups/*`；只有升级迁移或历史兼容路径，才允许继续使用 `legacy*` 模块和字段。
+- 移动端 UI 样式开始从 `StyleSheet + useAppTheme/tokens` 渐进迁移到 NativeWind：Tailwind token 现在由 `mobile/theme/tailwind-tokens.js` 驱动，`theme/tokens.ts` 只保留为旧 StyleSheet 调用的兼容镜像；首页、文件夹页、成稿列表与核心列表卡片已作为第一批迁移范围。
 
 ## 1. Overall
 
@@ -141,6 +142,7 @@ flowchart TD
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
 - `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用；其中 `features/scripts/store/*` 现在承接 script 的 **local-first 真值**，`detail/*` 通过共享 editor 底座实现本地正文编辑、来源碎片抽屉与拍摄跳转。
 - `components/layout/*` 当前补齐了 `NotesListScreenShell / NotesListHero / NotesScreenStateView`，首页、文件夹页、成稿页统一复用同一层 notes 风格列表壳层；页面本身只保留各自的数据源、交互和导航逻辑。
+- `tailwind.config.js` / `global.css` 是移动端新增 UI 样式入口；新 UI 优先使用 NativeWind `className` 和 Tailwind token，复杂动画、富文本编辑器、录音、拍摄等高交互区域可继续保留 `StyleSheet`。
 
 ### 3.4 Local Persistence
 

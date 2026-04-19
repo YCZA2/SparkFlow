@@ -1,8 +1,7 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleProp, View, ViewStyle } from 'react-native';
 
 import { Text } from '@/components/Themed';
-import { useAppTheme } from '@/theme/useAppTheme';
 
 interface ScreenHeaderProps {
   title: string;
@@ -10,64 +9,41 @@ interface ScreenHeaderProps {
   eyebrow?: string;
   leading?: React.ReactNode;
   trailing?: React.ReactNode;
+  className?: string;
+  style?: StyleProp<ViewStyle>;
 }
 
-export function ScreenHeader({ title, subtitle, eyebrow, leading, trailing }: ScreenHeaderProps) {
-  const theme = useAppTheme();
-
+export function ScreenHeader({
+  title,
+  subtitle,
+  eyebrow,
+  leading,
+  trailing,
+  className,
+  style,
+}: ScreenHeaderProps) {
+  /*共享页头先接入 NativeWind，同时保留 style 兼容旧调用方。 */
   return (
-    <View style={[styles.container, { marginBottom: theme.layout.sectionGap }]}>
-      <View style={styles.row}>
-        {leading ? <View style={styles.leading}>{leading}</View> : null}
-        <View style={styles.copy}>
+    <View className={`mb-sf-section pt-sf-md ${className ?? ''}`} style={style}>
+      <View className="flex-row items-start justify-between gap-sf-md">
+        {leading ? <View className="mr-sf-md pt-sf-xs">{leading}</View> : null}
+        <View className="flex-1">
           {eyebrow ? (
-            <Text style={[styles.eyebrow, { color: theme.colors.primary }]}>{eyebrow}</Text>
+            <Text className="mb-sf-sm text-xs font-bold uppercase tracking-[0.8px] text-app-primary dark:text-app-primary-dark">
+              {eyebrow}
+            </Text>
           ) : null}
-          <Text style={[styles.title, { color: theme.colors.text }]}>{title}</Text>
+          <Text className="text-[28px] font-bold leading-[34px] text-app-text dark:text-app-text-dark">
+            {title}
+          </Text>
           {subtitle ? (
-            <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]}>{subtitle}</Text>
+            <Text className="mt-sf-sm text-sm leading-5 text-app-text-subtle dark:text-app-text-subtle-dark">
+              {subtitle}
+            </Text>
           ) : null}
         </View>
-        {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
+        {trailing ? <View className="pt-sf-xs">{trailing}</View> : null}
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    paddingTop: 12,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  copy: {
-    flex: 1,
-  },
-  leading: {
-    paddingTop: 4,
-    marginRight: 12,
-  },
-  trailing: {
-    paddingTop: 4,
-  },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '700',
-  },
-  subtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-});

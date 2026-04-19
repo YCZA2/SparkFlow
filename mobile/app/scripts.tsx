@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, RefreshControl, View } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -95,9 +95,9 @@ export default function ScriptsScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         ListHeaderComponent={
-          <View style={[styles.headerBlock, { paddingTop: insets.top + 12 }]}>
+          <View className="px-sf-screen" style={{ paddingTop: insets.top + 12 }}>
             <BackButton color={theme.colors.text} variant="circle" showText={false} />
-            <NotesListHero title={title} subtitle={subtitle} containerStyle={styles.heroBlock} />
+            <NotesListHero title={title} subtitle={subtitle} className="mb-[14px] mt-[18px]" />
           </View>
         }
         ListEmptyComponent={<ScreenState icon="📄" title={emptyTitle} message={emptyMessage} />}
@@ -114,13 +114,3 @@ export default function ScriptsScreen() {
     </NotesListScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  headerBlock: {
-    paddingHorizontal: 16,
-  },
-  heroBlock: {
-    marginTop: 18,
-    marginBottom: 14,
-  },
-});

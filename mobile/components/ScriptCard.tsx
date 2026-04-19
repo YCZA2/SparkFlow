@@ -51,10 +51,9 @@ export function ScriptCard({ script, onPress, isFirst = false, isLast = false }:
 
   return (
     <TouchableOpacity
+      className="mx-sf-screen px-sf-screen py-sf-md bg-app-surface dark:bg-app-surface-dark"
       style={[
-        styles.card,
         {
-          backgroundColor: theme.colors.surface,
           borderTopLeftRadius: isFirst ? 18 : 0,
           borderTopRightRadius: isFirst ? 18 : 0,
           borderBottomLeftRadius: isLast ? 18 : 0,
@@ -65,31 +64,46 @@ export function ScriptCard({ script, onPress, isFirst = false, isLast = false }:
       onPress={() => onPress(script)}
       activeOpacity={0.7}
     >
-      <View style={styles.titleRow}>
-        <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={1}>
+      <View className="flex-row items-center gap-sf-sm">
+        <Text
+          className="flex-1 text-[17px] font-medium leading-[22px] text-app-text dark:text-app-text-dark"
+          numberOfLines={1}
+        >
           {displayTitle}
         </Text>
-        <Text style={[styles.chevron, { color: theme.colors.textSubtle }]}>›</Text>
+        <Text className="text-[22px] font-light leading-[22px] text-app-text-subtle dark:text-app-text-subtle-dark">
+          ›
+        </Text>
       </View>
 
-      <Text style={[styles.timeInline, { color: theme.colors.textSubtle }]}>
+      <Text className="mt-[2px] text-[13px] leading-[18px] text-app-text-subtle dark:text-app-text-subtle-dark">
         {script.created_at ? formatDate(script.created_at) : '刚刚更新'}
       </Text>
 
       {previewText ? (
-        <Text style={[styles.preview, { color: theme.colors.textSubtle }]} numberOfLines={2}>
+        <Text
+          className="mt-[2px] text-[13px] leading-[18px] text-app-text-subtle dark:text-app-text-subtle-dark"
+          numberOfLines={2}
+        >
           {previewText}
         </Text>
       ) : null}
 
-      <View style={styles.footerRow}>
-        <View style={styles.tagsRow}>
-          <View style={[styles.tag, { backgroundColor: modeColor + '18' }]}>
-            <Text style={[styles.tagText, { color: modeColor }]}>{modeLabel}</Text>
+      <View className="mt-[10px]">
+        <View className="flex-row flex-wrap gap-[6px]">
+          <View className="rounded-sf-pill px-sf-sm py-[5px]" style={{ backgroundColor: modeColor + '18' }}>
+            <Text className="text-xs font-medium" style={{ color: modeColor }}>
+              {modeLabel}
+            </Text>
           </View>
           {script.is_daily_push && (
-            <View style={[styles.tag, { backgroundColor: `${theme.colors.warning}18` }]}>
-              <Text style={[styles.tagText, { color: theme.colors.warning }]}>每日推盘</Text>
+            <View
+              className="rounded-sf-pill px-sf-sm py-[5px]"
+              style={{ backgroundColor: `${theme.colors.warning}18` }}
+            >
+              <Text className="text-xs font-medium" style={{ color: theme.colors.warning }}>
+                每日推盘
+              </Text>
             </View>
           )}
         </View>
@@ -97,54 +111,3 @@ export function ScriptCard({ script, onPress, isFirst = false, isLast = false }:
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    marginHorizontal: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  title: {
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '500',
-    lineHeight: 22,
-  },
-  chevron: {
-    fontSize: 22,
-    lineHeight: 22,
-    fontWeight: '300',
-  },
-  timeInline: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 2,
-  },
-  preview: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 2,
-  },
-  footerRow: {
-    marginTop: 10,
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  tag: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  tagText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-});

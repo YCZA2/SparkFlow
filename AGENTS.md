@@ -14,7 +14,7 @@ The repository currently contains an Expo / React Native mobile app and a FastAP
 
 ## Stack
 
-- Mobile: Expo + React Native + TypeScript + expo-router
+- Mobile: Expo + React Native + TypeScript + expo-router + NativeWind
 - Backend: FastAPI + SQLAlchemy + Alembic
 - Database: PostgreSQL, with local development defaulting to a local PostgreSQL service
 - Scheduling: APScheduler
@@ -74,6 +74,7 @@ If the change also updates repository conventions, development workflow, or agen
 - `mobile/app/import-link.tsx`: Douyin share-link import screen
 - `mobile/features/imports/`: external-link import requests, payloads, and task-state helpers
 - `mobile/app.config.ts`: Expo runtime config entrypoint for app environment, default API address, bundle identity, and developer tools gating
+- `mobile/tailwind.config.js` + `mobile/global.css`: NativeWind / Tailwind style entrypoints and design token utilities
 - `mobile/scripts/run-state-tests.mjs`: state-test runner for mobile pure-state suites
 
 ## Development Workflow
@@ -261,6 +262,7 @@ http://<your-lan-ip>:8000
 - File storage must continue through the unified object-storage abstraction; local development may use `FILE_STORAGE_PROVIDER=local`, while production is designed around private OSS plus signed URLs. Do not expose disk paths or `storage_path` / `audio_path` as external contract fields
 - The bottom `+` action on the home screen and folder screen means “open the import sheet”; when adding external import abilities, extend that sheet instead of reverting `+` to direct navigation
 - Under `mobile/features`, TypeScript source files are the only source of truth for state helpers. Do not commit `.js` or `.d.ts` build output there. Pure state tests belong in `mobile/tests/*.test.ts` and run through `mobile/scripts/run-state-tests.mjs`
+- New mobile UI should prefer NativeWind `className` utilities and Tailwind tokens from `mobile/tailwind.config.js`. Keep `StyleSheet.create` for animation-heavy, computed, or third-party-constrained styles, and treat `mobile/theme/tokens.ts` as a compatibility mirror rather than the source for new design tokens.
 - The shipping product is now an authenticated workspace app: unauthenticated users must not enter business screens, and the mobile local SQLite DB, body files, audio cache, image staging, and backup queue must all be isolated by `user_id`
 - Any async task that writes back to local SQLite or the file system must be bound to the current `user_id + session_version + workspace_epoch` scope; after account switch, logout, or session invalidation, old tasks may only remain frozen in their original workspace and must not write into the current account
 - `POST /api/auth/token` is only for local development and testing. The shipping login flow uses email + password authentication, and auth-related work must not restore the old “auto-enter with a test user” behavior

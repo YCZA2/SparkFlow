@@ -119,10 +119,9 @@ export function FragmentCard({
 
   return (
     <TouchableOpacity
+      className="mx-sf-screen px-sf-screen py-sf-md bg-app-surface dark:bg-app-surface-dark"
       style={[
-        styles.container,
         {
-          backgroundColor: theme.colors.surface,
           borderTopLeftRadius: isFirstInSection ? 18 : 0,
           borderTopRightRadius: isFirstInSection ? 18 : 0,
           borderBottomLeftRadius: isLastInSection ? 18 : 0,
@@ -133,40 +132,51 @@ export function FragmentCard({
       onPress={() => onPress?.(fragment)}
       activeOpacity={0.82}
     >
-      <View style={styles.content}>
-        <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={1}>
+      <View className="gap-[2px]">
+        <View className="flex-row items-center gap-sf-md">
+          <Text
+            className="flex-1 text-[17px] font-medium leading-[22px] text-app-text dark:text-app-text-dark"
+            numberOfLines={1}
+          >
             {getTitle(fragment)}
           </Text>
           {!selectable ? (
-            <Text style={[styles.countChevron, { color: theme.colors.textSubtle }]}>›</Text>
+            <Text className="text-[22px] font-light leading-[22px] text-app-text-subtle dark:text-app-text-subtle-dark">
+              ›
+            </Text>
           ) : null}
           {selectable ? (
             <View
+              className="h-[22px] w-[22px] items-center justify-center rounded-full border-[1.5px]"
               style={[
-                styles.checkbox,
                 {
                   borderColor: selected ? theme.colors.primary : theme.colors.border,
                   backgroundColor: selected ? theme.colors.primary : theme.colors.surface,
                 },
               ]}
             >
-              {selected ? <Text style={styles.checkmark}>✓</Text> : null}
+              {selected ? <Text className="text-[11px] font-bold text-white">✓</Text> : null}
             </View>
           ) : null}
         </View>
 
-        <View style={styles.metaRow}>
-          <Text style={[styles.time, { color: theme.colors.textSubtle }]}>
+        <View className="mt-[2px] flex-row items-center gap-[6px]">
+          <Text className="min-w-10 text-[13px] text-app-text-subtle dark:text-app-text-subtle-dark">
             {formatTimeLabel(fragment.created_at)}
           </Text>
-          <Text style={[styles.preview, { color: theme.colors.textSubtle }]} numberOfLines={1}>
+          <Text
+            className="flex-1 text-[13px] leading-[18px] text-app-text-subtle dark:text-app-text-subtle-dark"
+            numberOfLines={1}
+          >
             {getPreview(fragment)}
           </Text>
         </View>
 
-        <View style={styles.footerRow}>
-          <Text style={[styles.source, { color: theme.colors.textSubtle }]} numberOfLines={1}>
+        <View className="flex-row items-center gap-sf-sm">
+          <Text
+            className="text-xs leading-4 text-app-text-subtle dark:text-app-text-subtle-dark"
+            numberOfLines={1}
+          >
             {isFailed
               ? `${getSourceLabel(fragment.source)} · 转录失败`
               : isProcessing
@@ -178,70 +188,3 @@ export function FragmentCard({
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginHorizontal: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  content: {
-    gap: 2,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  title: {
-    flex: 1,
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: '500',
-  },
-  countChevron: {
-    fontSize: 22,
-    lineHeight: 22,
-    fontWeight: '300',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-  },
-  time: {
-    fontSize: 13,
-    minWidth: 40,
-    color: '#8E8E93',
-  },
-  preview: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#8E8E93',
-  },
-  source: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#C7C7CC',
-  },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-});
