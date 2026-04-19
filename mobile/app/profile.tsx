@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -31,8 +31,8 @@ function MenuItem({
 }) {
   return (
     <TouchableOpacity
+      className="flex-row items-center px-sf-lg py-[14px]"
       style={[
-        styles.menuItem,
         {
           borderBottomColor: tone.colors.border,
           borderBottomWidth: hideBorder ? 0 : 1,
@@ -42,16 +42,16 @@ function MenuItem({
       onPress={onPress}
       disabled={disabled}
     >
-      <Text style={styles.menuIcon}>{icon}</Text>
-      <View style={styles.menuContent}>
-        <Text style={[styles.menuTitle, { color: tone.colors.text }]}>{title}</Text>
+      <Text className="mr-sf-md w-7 text-center text-[22px]">{icon}</Text>
+      <View className="flex-1">
+        <Text className="text-base text-app-text dark:text-app-text-dark">{title}</Text>
         {subtitle ? (
-          <Text style={[styles.menuSubtitle, { color: tone.colors.textSubtle }]}>
+          <Text className="mt-[2px] text-[13px] text-app-text-subtle dark:text-app-text-subtle-dark">
             {subtitle}
           </Text>
         ) : null}
       </View>
-      <Text style={[styles.menuArrow, { color: tone.colors.textSubtle }]}>›</Text>
+      <Text className="ml-sf-sm text-xl text-app-text-subtle dark:text-app-text-subtle-dark">›</Text>
     </TouchableOpacity>
   );
 }
@@ -113,30 +113,29 @@ export default function ProfileScreen() {
   return (
     <ScreenContainer>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerClassName="pb-sf-section"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.pagePadding}>
+        <View className="px-sf-screen">
           <ScreenHeader
             title="创作工作台"
             subtitle="查看你的身份、稿件入口和基础设置。"
           />
 
           <View
+            className="mb-sf-lg flex-row items-center rounded-sf-lg bg-app-surface p-5 dark:bg-app-surface-dark"
             style={[
-              styles.userCard,
               theme.shadow.card,
-              { backgroundColor: theme.colors.surface },
             ]}
           >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>👤</Text>
+            <View className="h-16 w-16 items-center justify-center rounded-full bg-app-primary-dark">
+              <Text className="text-[32px]">👤</Text>
             </View>
-            <View style={styles.userInfo}>
-              <Text style={[styles.userName, { color: theme.colors.text }]}>
+            <View className="ml-sf-lg flex-1">
+              <Text className="mb-sf-xs text-xl font-semibold text-app-text dark:text-app-text-dark">
                 {isAuthenticated ? user?.nickname || user?.email?.split('@')[0] || '用户' : '未登录'}
               </Text>
-              <Text style={[styles.userId, { color: theme.colors.textSubtle }]}>
+              <Text className="text-[13px] text-app-text-subtle dark:text-app-text-subtle-dark">
                 {isAuthenticated
                   ? user?.email || user?.user_id
                   : error || '请先登录后使用'}
@@ -145,10 +144,9 @@ export default function ProfileScreen() {
           </View>
 
           <View
+            className="mb-sf-lg overflow-hidden rounded-sf-lg bg-app-surface dark:bg-app-surface-dark"
             style={[
-              styles.menuSection,
               theme.shadow.card,
-              { backgroundColor: theme.colors.surface },
             ]}
           >
             <MenuItem
@@ -169,10 +167,9 @@ export default function ProfileScreen() {
           </View>
 
           <View
+            className="mb-sf-lg overflow-hidden rounded-sf-lg bg-app-surface dark:bg-app-surface-dark"
             style={[
-              styles.menuSection,
               theme.shadow.card,
-              { backgroundColor: theme.colors.surface },
             ]}
           >
             <MenuItem
@@ -240,10 +237,9 @@ export default function ProfileScreen() {
           </View>
 
           <View
+            className="mb-sf-lg overflow-hidden rounded-sf-lg bg-app-surface dark:bg-app-surface-dark"
             style={[
-              styles.menuSection,
               theme.shadow.card,
-              { backgroundColor: theme.colors.surface },
             ]}
           >
             <MenuItem
@@ -260,73 +256,3 @@ export default function ProfileScreen() {
     </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  scrollContent: {
-    paddingBottom: 24,
-  },
-  pagePadding: {
-    paddingHorizontal: 16,
-  },
-  userCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 16,
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#0A84FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 32,
-  },
-  userInfo: {
-    marginLeft: 16,
-    flex: 1,
-  },
-  userName: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  userId: {
-    fontSize: 13,
-  },
-  menuSection: {
-    marginBottom: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  menuIcon: {
-    fontSize: 22,
-    marginRight: 12,
-    width: 28,
-    textAlign: 'center',
-  },
-  menuContent: {
-    flex: 1,
-  },
-  menuTitle: {
-    fontSize: 16,
-  },
-  menuSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  menuArrow: {
-    fontSize: 20,
-    marginLeft: 8,
-  },
-});

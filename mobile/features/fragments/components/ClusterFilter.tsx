@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { ScrollView, TouchableOpacity } from 'react-native';
 
 import { Text } from '@/components/Themed';
 import { getClusterColor } from '@/features/fragments/fragmentCloud';
@@ -16,10 +16,10 @@ export function ClusterFilter({ clusters, activeClusterId, onSelect }: ClusterFi
   const theme = useAppTheme();
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-[10px] pr-sf-md">
       <TouchableOpacity
+        className="rounded-sf-pill border px-[14px] py-[10px]"
         style={[
-          styles.filterChip,
           {
             backgroundColor: activeClusterId === 'all' ? theme.colors.primary : theme.colors.surface,
             borderColor: activeClusterId === 'all' ? theme.colors.primary : theme.colors.border,
@@ -29,10 +29,8 @@ export function ClusterFilter({ clusters, activeClusterId, onSelect }: ClusterFi
         activeOpacity={0.85}
       >
         <Text
-          style={[
-            styles.filterChipText,
-            { color: activeClusterId === 'all' ? '#FFFFFF' : theme.colors.text },
-          ]}
+          className="text-sm font-semibold"
+          style={{ color: activeClusterId === 'all' ? '#FFFFFF' : theme.colors.text }}
         >
           全部
         </Text>
@@ -41,8 +39,8 @@ export function ClusterFilter({ clusters, activeClusterId, onSelect }: ClusterFi
       {clusters.map((cluster) => (
         <TouchableOpacity
           key={cluster.id}
+          className="rounded-sf-pill border px-[14px] py-[10px]"
           style={[
-            styles.filterChip,
             {
               backgroundColor:
                 activeClusterId === cluster.id
@@ -58,10 +56,8 @@ export function ClusterFilter({ clusters, activeClusterId, onSelect }: ClusterFi
           activeOpacity={0.85}
         >
           <Text
-            style={[
-              styles.filterChipText,
-              { color: activeClusterId === cluster.id ? '#FFFFFF' : theme.colors.text },
-            ]}
+            className="text-sm font-semibold"
+            style={{ color: activeClusterId === cluster.id ? '#FFFFFF' : theme.colors.text }}
           >
             {cluster.label} · {cluster.fragment_count}
           </Text>
@@ -70,20 +66,3 @@ export function ClusterFilter({ clusters, activeClusterId, onSelect }: ClusterFi
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  filterRow: {
-    gap: 10,
-    paddingRight: 12,
-  },
-  filterChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  filterChipText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-});

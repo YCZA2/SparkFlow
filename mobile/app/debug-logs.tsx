@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { ScreenState } from '@/components/ScreenState';
@@ -39,7 +39,7 @@ export default function DebugLogsScreen() {
     /*生产包不暴露调试日志页，防止误把开发诊断入口带进正式环境。 */
     return (
       <ScreenContainer>
-        <View style={[styles.gatedContainer, { backgroundColor: theme.colors.background }]}>
+        <View className="flex-1 bg-app-background dark:bg-app-background-dark">
           <ScreenState
             icon="🔒"
             title="当前环境不可用"
@@ -59,7 +59,8 @@ export default function DebugLogsScreen() {
         subtitle="这里会自动记录 JS 异常、API 错误和 console.error，便于排查真机问题。"
         trailing={
           <Pressable
-            style={[styles.clearButton, { borderColor: theme.colors.border }]}
+            className="rounded-sf-pill border px-[14px] py-sf-sm"
+            style={{ borderColor: theme.colors.border }}
             onPress={() => {
               Alert.alert('清空日志', '确定要清空当前本地错误日志吗？', [
                 { text: '取消', style: 'cancel' },
@@ -67,47 +68,47 @@ export default function DebugLogsScreen() {
               ]);
             }}
           >
-            <Text style={[styles.clearButtonText, { color: theme.colors.text }]}>清空</Text>
+            <Text className="text-[13px] font-semibold text-app-text dark:text-app-text-dark">清空</Text>
           </Pressable>
         }
       />
 
       {logs.length === 0 ? (
         <View
+          className="mt-sf-md rounded-[20px] border bg-app-surface p-5 dark:bg-app-surface-dark"
           style={[
-            styles.emptyCard,
             theme.shadow.card,
-            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            { borderColor: theme.colors.border },
           ]}
         >
-          <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>暂无日志</Text>
-          <Text style={[styles.emptySubtitle, { color: theme.colors.textSubtle }]}>
+          <Text className="text-lg font-bold text-app-text dark:text-app-text-dark">暂无日志</Text>
+          <Text className="mt-sf-sm text-sm leading-5 text-app-text-subtle dark:text-app-text-subtle-dark">
             当前没有捕获到错误。后续如果页面报错、接口失败或出现红屏，这里会留下记录。
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.logList} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerClassName="gap-sf-md pb-8" showsVerticalScrollIndicator={false}>
           {logs.map((log) => (
             <View
               key={log.id}
+              className="rounded-[18px] border bg-app-surface p-sf-lg dark:bg-app-surface-dark"
               style={[
-                styles.logCard,
                 theme.shadow.card,
-                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                { borderColor: theme.colors.border },
               ]}
             >
-              <View style={styles.logHeader}>
-                <Text style={[styles.levelText, { color: theme.colors.danger }]}>
+              <View className="flex-row justify-between gap-sf-md">
+                <Text className="text-xs font-extrabold uppercase tracking-[0.8px] text-app-danger dark:text-app-danger-dark">
                   {log.level.toUpperCase()}
                 </Text>
-                <Text style={[styles.timeText, { color: theme.colors.textSubtle }]}>
+                <Text className="text-xs text-app-text-subtle dark:text-app-text-subtle-dark">
                   {formatTimestamp(log.timestamp)}
                 </Text>
               </View>
-              <Text style={[styles.sourceText, { color: theme.colors.primary }]}>{log.source}</Text>
-              <Text style={[styles.messageText, { color: theme.colors.text }]}>{log.message}</Text>
+              <Text className="mt-sf-sm text-[13px] font-bold text-app-primary dark:text-app-primary-dark">{log.source}</Text>
+              <Text className="mt-sf-sm text-[15px] leading-[22px] text-app-text dark:text-app-text-dark">{log.message}</Text>
               {log.context ? (
-                <Text style={[styles.contextText, { color: theme.colors.textSubtle }]}>
+                <Text className="mt-[10px] font-mono text-xs leading-[18px] text-app-text-subtle dark:text-app-text-subtle-dark">
                   {formatContext(log.context)}
                 </Text>
               ) : null}
@@ -118,72 +119,3 @@ export default function DebugLogsScreen() {
     </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  gatedContainer: {
-    flex: 1,
-  },
-  clearButton: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  clearButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  emptyCard: {
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 20,
-    marginTop: 12,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  emptySubtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  logList: {
-    gap: 12,
-    paddingBottom: 32,
-  },
-  logCard: {
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 16,
-  },
-  logHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  levelText: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  timeText: {
-    fontSize: 12,
-  },
-  sourceText: {
-    marginTop: 8,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  messageText: {
-    marginTop: 8,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  contextText: {
-    marginTop: 10,
-    fontSize: 12,
-    lineHeight: 18,
-    fontFamily: 'SpaceMono',
-  },
-});

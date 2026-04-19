@@ -6,7 +6,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -77,62 +76,60 @@ export default function ImportAudioScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      className="flex-1 bg-app-background dark:bg-app-background-dark"
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Stack.Screen options={{ title: '导入音频' }} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.colors.text }]}>把本地音频收进灵感库</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]}>
+      <ScrollView contentContainerClassName="p-5 pb-8">
+        <View className="mb-sf-lg">
+          <Text className="text-[28px] font-bold text-app-text dark:text-app-text-dark">把本地音频收进灵感库</Text>
+          <Text className="mt-sf-sm text-sm leading-5 text-app-text-subtle dark:text-app-text-subtle-dark">
             选取手机里的音频文件，上传后会自动转写文案并生成摘要标签。
           </Text>
         </View>
 
         <View
+          className="rounded-[24px] border bg-app-surface p-[18px] dark:bg-app-surface-dark"
           style={[
-            styles.card,
             theme.shadow.card,
-            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            { borderColor: theme.colors.border },
           ]}
         >
           {/*文件选取区域：未选时显示提示文案，已选时显示文件名。*/}
           <Pressable
             onPress={handlePickFile}
             disabled={isUploading}
+            className="items-center gap-[10px] rounded-[14px] border border-dashed bg-app-surface-muted px-sf-lg py-sf-section dark:bg-app-surface-muted-dark"
             style={[
-              styles.filePicker,
-              { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceMuted },
+              { borderColor: theme.colors.border },
             ]}
           >
             <SymbolView name="doc.badge.plus" size={28} tintColor={theme.colors.primary} />
             <Text
-              style={[
-                styles.filePickerText,
-                { color: pickedFile ? theme.colors.text : theme.colors.textSubtle },
-              ]}
+              className="text-center text-[15px] font-semibold"
+              style={{ color: pickedFile ? theme.colors.text : theme.colors.textSubtle }}
               numberOfLines={2}
             >
               {pickedFile ? pickedFile.name : '点击选取音频文件'}
             </Text>
             {pickedFile && (
-              <Text style={[styles.fileMimeText, { color: theme.colors.textSubtle }]}>
+              <Text className="text-xs text-app-text-subtle dark:text-app-text-subtle-dark">
                 {pickedFile.mimeType}
               </Text>
             )}
           </Pressable>
 
-          <View style={styles.tipBlock}>
-            <Text style={[styles.tipTitle, { color: theme.colors.text }]}>支持的格式</Text>
-            <Text style={[styles.tipText, { color: theme.colors.textSubtle }]}>
+          <View className="mt-sf-lg border-t border-slate-400/30 pt-sf-lg">
+            <Text className="text-sm font-bold text-app-text dark:text-app-text-dark">支持的格式</Text>
+            <Text className="mt-[6px] text-[13px] leading-[19px] text-app-text-subtle dark:text-app-text-subtle-dark">
               支持 M4A、MP3、WAV、AAC、OGG 等常见音频格式。文件大小建议不超过 200MB。
             </Text>
           </View>
 
           <Pressable
+            className="mt-sf-section items-center justify-center rounded-[14px] py-[15px]"
             style={[
-              styles.submitButton,
               { backgroundColor: canSubmit ? theme.colors.primary : theme.colors.textSubtle },
             ]}
             onPress={handleSubmit}
@@ -141,7 +138,7 @@ export default function ImportAudioScreen() {
             {isUploading ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text style={styles.submitButtonText}>开始导入并提取文案</Text>
+              <Text className="text-[15px] font-bold text-white">开始导入并提取文案</Text>
             )}
           </Pressable>
         </View>
@@ -149,74 +146,3 @@ export default function ImportAudioScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 32,
-  },
-  header: {
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  subtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  card: {
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 18,
-  },
-  filePicker: {
-    borderWidth: 1,
-    borderRadius: 14,
-    borderStyle: 'dashed',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    gap: 10,
-  },
-  filePickerText: {
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  fileMimeText: {
-    fontSize: 12,
-  },
-  tipBlock: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(148, 163, 184, 0.35)',
-  },
-  tipTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  tipText: {
-    marginTop: 6,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  submitButton: {
-    marginTop: 24,
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-});

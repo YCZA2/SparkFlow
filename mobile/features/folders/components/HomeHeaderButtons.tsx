@@ -17,7 +17,13 @@ export function HomeHeaderCircleButton({
   disabled?: boolean;
 }) {
   return (
-    <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.headerButton} disabled={disabled}>
+    <TouchableOpacity
+      onPress={onPress}
+      hitSlop={8}
+      className="h-11 w-11 items-center justify-center rounded-full border border-app-border bg-white/90"
+      style={[buttonShadow, { borderWidth: StyleSheet.hairlineWidth }]}
+      disabled={disabled}
+    >
       <SymbolView name={icon} size={20} tintColor={tintColor} />
     </TouchableOpacity>
   );
@@ -32,40 +38,25 @@ export function HomeMenuButton({
   color: string;
 }) {
   return (
-    <TouchableOpacity onPress={onPress} hitSlop={8} style={styles.headerButton}>
-      <View style={styles.hamburger}>
-        <View style={[styles.hamburgerLine, { backgroundColor: color }]} />
-        <View style={[styles.hamburgerLine, { backgroundColor: color }]} />
-        <View style={[styles.hamburgerLine, { backgroundColor: color }]} />
+    <TouchableOpacity
+      onPress={onPress}
+      hitSlop={8}
+      className="h-11 w-11 items-center justify-center rounded-full border border-app-border bg-white/90"
+      style={[buttonShadow, { borderWidth: StyleSheet.hairlineWidth }]}
+    >
+      <View className="h-[14px] w-[18px] justify-between">
+        <View className="h-[2.2px] w-[18px] rounded-[1.1px]" style={{ backgroundColor: color }} />
+        <View className="h-[2.2px] w-[18px] rounded-[1.1px]" style={{ backgroundColor: color }} />
+        <View className="h-[2.2px] w-[18px] rounded-[1.1px]" style={{ backgroundColor: color }} />
       </View>
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
-  headerButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E5EA',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  hamburger: {
-    width: 18,
-    height: 14,
-    justifyContent: 'space-between',
-  },
-  hamburgerLine: {
-    width: 18,
-    height: 2.2,
-    borderRadius: 1.1,
-  },
-});
+const buttonShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.08,
+  shadowRadius: 16,
+  elevation: 4,
+};

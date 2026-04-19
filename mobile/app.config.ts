@@ -55,6 +55,7 @@ export default (): ExpoConfig => {
     slug: identity.slug,
     version: '1.0.0',
     orientation: 'portrait',
+    platforms: ['ios', 'android'],
     icon: './assets/images/icon.png',
     scheme: identity.scheme,
     userInterfaceStyle: 'automatic',
@@ -84,13 +85,9 @@ export default (): ExpoConfig => {
       },
       predictiveBackGestureEnabled: false,
     },
-    web: {
-      bundler: 'metro',
-    },
     plugins: [
       'expo-router',
       'expo-font',
-      'expo-web-browser',
       './plugins/withTsinghuaPodsource.js',
       'expo-asset',
       'expo-audio',

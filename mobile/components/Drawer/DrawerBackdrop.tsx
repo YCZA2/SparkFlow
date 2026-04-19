@@ -3,7 +3,7 @@
  * 半透明背景，点击关闭抽屉
  */
 import React from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 interface DrawerBackdropProps {
@@ -15,20 +15,9 @@ export function DrawerBackdrop({ onPress }: DrawerBackdropProps) {
     <Animated.View
       entering={FadeIn.duration(200)}
       exiting={FadeOut.duration(150)}
-      style={styles.container}
+      className="absolute inset-0 z-[1000] bg-black/40"
     >
-      <Pressable style={styles.pressable} onPress={onPress} />
+      <Pressable className="flex-1" onPress={onPress} />
     </Animated.View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.38)',
-    zIndex: 1000,
-  },
-  pressable: {
-    flex: 1,
-  },
-});

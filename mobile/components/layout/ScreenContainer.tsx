@@ -4,7 +4,6 @@ import {
   Platform,
   ScrollView,
   StyleProp,
-  StyleSheet,
   View,
   ViewStyle,
 } from 'react-native';
@@ -45,7 +44,7 @@ export function ScreenContainer({
     <ScrollView
       className={contentClassName}
       contentContainerStyle={[
-        styles.scrollContent,
+        { flexGrow: 1 },
         { paddingHorizontal, paddingBottom },
         contentContainerStyle,
       ]}
@@ -69,8 +68,8 @@ export function ScreenContainer({
   const body = (
     <SafeAreaView
       edges={['top', 'left', 'right']}
-      style={[styles.safeArea, { backgroundColor: theme.colors.background }, style]}
-      className={className}
+      style={[{ backgroundColor: theme.colors.background }, style]}
+      className={`flex-1 ${className ?? ''}`}
     >
       {content}
       {footer}
@@ -84,24 +83,9 @@ export function ScreenContainer({
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.keyboard}
+      className="flex-1"
     >
       {body}
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  keyboard: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  content: {
-    flex: 1,
-  },
-});

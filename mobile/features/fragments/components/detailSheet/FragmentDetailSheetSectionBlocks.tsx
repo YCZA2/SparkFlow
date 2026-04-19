@@ -16,7 +16,6 @@ import {
   Section,
   ToolRow,
 } from './FragmentDetailSheetPrimitives';
-import { fragmentDetailSheetStyles as styles } from './fragmentDetailSheetStyles';
 import type { FragmentDetailSheetProps } from './types';
 
 /*单独渲染原文与音频区块，确保说话人分段可以直接回放。 */
@@ -31,7 +30,7 @@ export function AudioTranscriptSection({
   return (
     <Section title="原文与音频">
       {hasAudio ? (
-        <View style={styles.audioSection}>
+        <View className="mb-sf-xs">
           <FragmentAudioPlayerControls
             isReady={player.isReady}
             isPlaying={player.isPlaying}
@@ -51,7 +50,7 @@ export function AudioTranscriptSection({
 
       {!hasAudio ? (
         <InfoCard>
-          <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>
+          <Text className="text-sm leading-[22px] text-app-text-subtle dark:text-app-text-subtle-dark">
             这条碎片没有可播放的音频。
           </Text>
         </InfoCard>
@@ -131,8 +130,8 @@ export function MetadataSection({
     <Section title="碎片信息">
       {content.summary ? (
         <InfoCard>
-          <Text style={[styles.infoLabel, { color: theme.colors.textSubtle }]}>AI 摘要</Text>
-          <Text style={[styles.summaryText, { color: theme.colors.text }]}>{content.summary}</Text>
+          <Text className="text-xs font-semibold leading-4 text-app-text-subtle dark:text-app-text-subtle-dark">AI 摘要</Text>
+          <Text className="mt-sf-sm text-base leading-6 text-app-text dark:text-app-text-dark">{content.summary}</Text>
         </InfoCard>
       ) : null}
 
@@ -146,11 +145,11 @@ export function MetadataSection({
 
       {tags.length > 0 ? (
         <InfoCard>
-          <Text style={[styles.infoLabel, { color: theme.colors.textSubtle }]}>标签</Text>
-          <View style={styles.tagsWrap}>
+          <Text className="text-xs font-semibold leading-4 text-app-text-subtle dark:text-app-text-subtle-dark">标签</Text>
+          <View className="mt-sf-sm flex-row flex-wrap gap-sf-sm">
             {tags.map((tag) => (
-              <View key={tag} style={[styles.tag, { backgroundColor: theme.colors.surfaceMuted }]}>
-                <Text style={[styles.tagText, { color: theme.colors.text }]}>{tag}</Text>
+              <View key={tag} className="rounded-sf-pill bg-app-surface-muted px-[10px] py-[6px] dark:bg-app-surface-muted-dark">
+                <Text className="text-xs font-semibold leading-4 text-app-text dark:text-app-text-dark">{tag}</Text>
               </View>
             ))}
           </View>
@@ -170,16 +169,15 @@ export function DangerSection({ actions }: Pick<FragmentDetailSheetProps, 'actio
         activeOpacity={0.82}
         onPress={actions.onDelete}
         disabled={actions.isDeleting}
+        className="items-center justify-center rounded-[18px] border py-sf-lg bg-app-surface dark:bg-app-surface-dark"
         style={[
-          styles.deleteButton,
           {
-            backgroundColor: theme.colors.surface,
             borderColor: theme.colors.danger,
             opacity: actions.isDeleting ? 0.65 : 1,
           },
         ]}
       >
-        <Text style={[styles.deleteText, { color: theme.colors.danger }]}>
+        <Text className="text-[15px] font-bold leading-5 text-app-danger dark:text-app-danger-dark">
           {actions.isDeleting ? '删除中...' : '删除这条碎片'}
         </Text>
       </TouchableOpacity>

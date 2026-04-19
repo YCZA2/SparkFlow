@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 
 import { ScreenState } from '@/components/ScreenState';
@@ -20,7 +20,7 @@ export default function ApiTestScreen() {
     return (
       <>
         <Stack.Screen options={{ title: 'API 测试' }} />
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View className="flex-1 bg-app-background dark:bg-app-background-dark">
           <ScreenState
             icon="🔒"
             title="当前环境不可用"
@@ -37,51 +37,50 @@ export default function ApiTestScreen() {
     <>
       <Stack.Screen options={{ title: 'API 测试' }} />
       <ScrollView
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-        contentContainerStyle={styles.content}
+        className="flex-1 bg-app-background dark:bg-app-background-dark"
+        contentContainerClassName="p-sf-lg pb-10"
       >
-        <Text style={[styles.title, { color: theme.colors.text }]}>API 服务测试</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
+        <Text className="mb-sf-xs text-[28px] font-bold text-app-text dark:text-app-text-dark">API 服务测试</Text>
+        <Text className="mb-sf-lg text-sm text-app-text-muted dark:text-app-text-muted-dark">
           验证 `services/` 模块所有 API
         </Text>
 
-        <View style={[styles.infoBox, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.infoLabel, { color: theme.colors.textMuted }]}>后端地址:</Text>
-          <Text style={[styles.infoValue, { color: theme.colors.text }]}>
+        <View className="mb-sf-lg flex-row items-center rounded-sf-sm bg-app-surface p-sf-md dark:bg-app-surface-dark" style={theme.shadow.card}>
+          <Text className="mr-sf-sm text-sm text-app-text-muted dark:text-app-text-muted-dark">后端地址:</Text>
+          <Text className="flex-1 text-sm font-medium text-app-text dark:text-app-text-dark">
             {backendUrl || '加载中...'}
           </Text>
         </View>
 
         <TouchableOpacity
-          style={[
-            styles.runAllButton,
-            { backgroundColor: isRunningAll ? theme.colors.textSubtle : theme.colors.primary },
-          ]}
+          className="mb-5 items-center rounded-[10px] py-[14px]"
+          style={{ backgroundColor: isRunningAll ? theme.colors.textSubtle : theme.colors.primary }}
           onPress={runAllTests}
           disabled={isRunningAll}
         >
           {isRunningAll ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.runAllButtonText}>运行全部测试</Text>
+            <Text className="text-base font-semibold text-white">运行全部测试</Text>
           )}
         </TouchableOpacity>
 
-        <View style={styles.testList}>
+        <View className="gap-sf-md">
           {tests.map((test) => (
             <TestResultCard key={test.name} test={test} />
           ))}
         </View>
 
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>单项测试</Text>
-        <View style={styles.singleTestButtons}>
+        <Text className="mb-sf-md mt-sf-section text-base font-semibold text-app-text dark:text-app-text-dark">单项测试</Text>
+        <View className="flex-row flex-wrap gap-sf-sm">
           {actions.map((action) => (
             <TouchableOpacity
               key={action.label}
-              style={[styles.singleTestBtn, { backgroundColor: theme.colors.success }]}
+              className="rounded-sf-sm px-sf-lg py-[10px]"
+              style={{ backgroundColor: theme.colors.success }}
               onPress={action.run}
             >
-              <Text style={styles.singleTestBtnText}>{action.label}</Text>
+              <Text className="text-sm font-medium text-white">{action.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -89,73 +88,3 @@ export default function ApiTestScreen() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  infoBox: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  infoLabel: {
-    fontSize: 14,
-    marginRight: 8,
-  },
-  infoValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    flex: 1,
-  },
-  runAllButton: {
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  runAllButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  testList: {
-    gap: 12,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 24,
-    marginBottom: 12,
-  },
-  singleTestButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  singleTestBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  singleTestBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-});

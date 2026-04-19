@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, TextInput, TouchableOpacity, View } from 'react-native';
 import { Stack } from 'expo-router';
 
 import { BottomActionBar } from '@/components/layout/BottomActionBar';
@@ -43,8 +43,8 @@ export default function GenerateScreen() {
       footer={
         <BottomActionBar>
           <TouchableOpacity
+            className="items-center justify-center rounded-sf-md py-[14px]"
             style={[
-              styles.generateButton,
               {
                 backgroundColor: screen.canGenerate
                   ? theme.colors.primary
@@ -56,16 +56,16 @@ export default function GenerateScreen() {
             activeOpacity={0.85}
           >
             {screen.generator.status === 'loading' ? (
-              <View style={styles.generatingRow}>
+              <View className="flex-row items-center gap-sf-sm">
                 <ActivityIndicator color="#FFFFFF" />
-                <Text style={styles.generateButtonText}>AI 正在编写…</Text>
+                <Text className="text-base font-bold text-white">AI 正在编写…</Text>
               </View>
             ) : (
-              <Text style={styles.generateButtonText}>生成口播稿</Text>
+              <Text className="text-base font-bold text-white">生成口播稿</Text>
             )}
           </TouchableOpacity>
           {screen.generator.error ? (
-            <Text style={[styles.errorText, { color: theme.colors.danger }]}>
+            <Text className="mt-sf-sm text-center text-[13px] text-app-danger dark:text-app-danger-dark">
               {screen.generator.error}
             </Text>
           ) : null}
@@ -83,13 +83,13 @@ export default function GenerateScreen() {
         subtitle="先给这组素材一个主题，AI 会按 SOP 和 few-shot 参考整理成可直接拍摄的口播稿。"
       />
 
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>主题</Text>
+      <View className="mb-sf-section gap-sf-md">
+        <Text className="text-base font-bold text-app-text dark:text-app-text-dark">主题</Text>
         <View
+          className="rounded-sf-md border bg-app-surface p-[14px] dark:bg-app-surface-dark"
           style={[
-            styles.topicCard,
             theme.shadow.card,
-            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            { borderColor: theme.colors.border },
           ]}
         >
           <TextInput
@@ -97,16 +97,16 @@ export default function GenerateScreen() {
             onChangeText={screen.setTopic}
             placeholder="例如：为什么稳定输出比追热点更重要"
             placeholderTextColor={theme.colors.textSubtle}
-            style={[styles.topicInput, { color: theme.colors.text }]}
+            className="py-0 text-base font-semibold text-app-text dark:text-app-text-dark"
           />
-          <Text style={[styles.topicHint, { color: theme.colors.textSubtle }]}>
+          <Text className="mt-[10px] text-[13px] leading-[18px] text-app-text-subtle dark:text-app-text-subtle-dark">
             主题用于驱动大纲选择和参考示例检索，你可以在推荐主题基础上继续细化。
           </Text>
         </View>
       </View>
 
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+      <View className="mb-sf-section gap-sf-md">
+        <Text className="text-base font-bold text-app-text dark:text-app-text-dark">
           {screen.selectedSummary}
         </Text>
 
@@ -116,13 +116,12 @@ export default function GenerateScreen() {
           screen.fragments.map((fragment) => (
             <View
               key={fragment.id}
+              className="rounded-sf-md bg-app-surface p-[14px] dark:bg-app-surface-dark"
               style={[
-                styles.fragmentCard,
                 theme.shadow.card,
-                { backgroundColor: theme.colors.surface },
               ]}
             >
-              <Text style={[styles.fragmentText, { color: theme.colors.text }]}>
+              <Text className="text-sm leading-5 text-app-text dark:text-app-text-dark">
                 {screen.getFragmentDisplayText(fragment)}
               </Text>
             </View>
@@ -132,58 +131,3 @@ export default function GenerateScreen() {
     </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  section: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  fragmentCard: {
-    borderRadius: 12,
-    padding: 14,
-  },
-  fragmentText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  topicCard: {
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-  },
-  topicInput: {
-    fontSize: 16,
-    fontWeight: '600',
-    paddingVertical: 0,
-  },
-  topicHint: {
-    marginTop: 10,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  generateButton: {
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-  },
-  generatingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  generateButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  errorText: {
-    marginTop: 8,
-    fontSize: 13,
-    textAlign: 'center',
-  },
-});

@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Modal,
   Pressable,
-  StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -32,21 +31,20 @@ function ActionCard({
     <TouchableOpacity
       activeOpacity={0.82}
       onPress={onPress}
+      className="flex-row items-center rounded-[22px] border bg-app-surface p-sf-lg dark:bg-app-surface-dark"
       style={[
-        styles.actionCard,
         theme.shadow.card,
         {
-          backgroundColor: theme.colors.surface,
           borderColor: theme.colors.border,
         },
       ]}
     >
-      <View style={[styles.actionIcon, { backgroundColor: theme.colors.surfaceMuted }]}>
+      <View className="mr-[14px] h-11 w-11 items-center justify-center rounded-[14px] bg-app-surface-muted dark:bg-app-surface-muted-dark">
         <SymbolView name={icon} size={22} tintColor={theme.colors.primary} />
       </View>
-      <View style={styles.actionBody}>
-        <Text style={[styles.actionTitle, { color: theme.colors.text }]}>{title}</Text>
-        <Text style={[styles.actionSubtitle, { color: theme.colors.textSubtle }]}>
+      <View className="mr-[10px] flex-1">
+        <Text className="text-base font-bold text-app-text dark:text-app-text-dark">{title}</Text>
+        <Text className="mt-sf-xs text-[13px] leading-[18px] text-app-text-subtle dark:text-app-text-subtle-dark">
           {subtitle}
         </Text>
       </View>
@@ -83,29 +81,28 @@ export function ImportActionSheet() {
 
   return (
     <Modal animationType="none" visible={isOpen} transparent statusBarTranslucent onRequestClose={close}>
-      <View style={styles.modalRoot}>
-        <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={StyleSheet.absoluteFill}>
-          <Pressable style={styles.backdrop} onPress={close} />
+      <View className="flex-1 justify-end">
+        <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} className="absolute inset-0">
+          <Pressable className="flex-1 bg-slate-950/30" onPress={close} />
         </Animated.View>
 
         <Animated.View
           entering={SlideInDown.duration(220)}
           exiting={SlideOutDown.duration(180)}
+          className="rounded-t-[28px] bg-app-background px-5 pt-sf-md dark:bg-app-background-dark"
           style={[
-            styles.sheet,
             {
-              backgroundColor: theme.colors.background,
               paddingBottom: insets.bottom + 20,
             },
           ]}
         >
-          <View style={[styles.handle, { backgroundColor: theme.colors.border }]} />
-          <Text style={[styles.sheetTitle, { color: theme.colors.text }]}>导入灵感</Text>
-          <Text style={[styles.sheetSubtitle, { color: theme.colors.textSubtle }]}>
+          <View className="mb-[14px] h-[5px] w-11 self-center rounded-sf-pill bg-app-border dark:bg-app-border-dark" />
+          <Text className="text-2xl font-bold text-app-text dark:text-app-text-dark">导入灵感</Text>
+          <Text className="mt-[6px] text-sm leading-5 text-app-text-subtle dark:text-app-text-subtle-dark">
             支持从外部内容继续沉淀到当前碎片库。
           </Text>
 
-          <View style={styles.actions}>
+          <View className="mt-5 gap-sf-md">
             <ActionCard
               icon="doc.badge.plus"
               title="导入文件"
@@ -124,68 +121,3 @@ export function ImportActionSheet() {
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  modalRoot: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.28)',
-  },
-  sheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 44,
-    height: 5,
-    borderRadius: 999,
-    marginBottom: 14,
-  },
-  sheetTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  sheetSubtitle: {
-    marginTop: 6,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  actions: {
-    marginTop: 20,
-    gap: 12,
-  },
-  actionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 22,
-    padding: 16,
-  },
-  actionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  actionBody: {
-    flex: 1,
-    marginRight: 10,
-  },
-  actionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  actionSubtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-});

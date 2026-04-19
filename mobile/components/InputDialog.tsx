@@ -67,39 +67,32 @@ export function InputDialog({
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.overlay}
+        className="flex-1 items-center justify-center"
       >
         <TouchableOpacity
-          style={styles.backdrop}
+          className="absolute inset-0 bg-black/40"
           activeOpacity={1}
           onPress={onCancel}
         />
         <View
+          className="z-[1] w-[280px] overflow-hidden rounded-sf-lg bg-app-surface dark:bg-app-surface-dark"
           style={[
-            styles.container,
             {
-              backgroundColor: theme.colors.surface,
-              borderRadius: theme.radius.lg,
             },
           ]}
         >
           {/* 标题 */}
           <Text
-            style={[
-              styles.title,
-              { color: theme.colors.text },
-            ]}
+            className="px-5 pb-sf-lg pt-5 text-center text-[17px] font-semibold text-app-text dark:text-app-text-dark"
           >
             {title}
           </Text>
 
           {/* 输入框 */}
           <TextInput
+            className="mx-sf-lg mb-sf-lg h-10 rounded-sf-sm border px-sf-md text-base bg-app-surface-muted text-app-text dark:bg-app-surface-muted-dark dark:text-app-text-dark"
             style={[
-              styles.input,
               {
-                backgroundColor: theme.colors.surfaceMuted,
-                color: theme.colors.text,
                 borderColor: theme.colors.border,
               },
             ]}
@@ -112,38 +105,33 @@ export function InputDialog({
           />
 
           {/* 按钮组 */}
-          <View style={styles.buttonRow}>
+          <View className="flex-row border-t" style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border }}>
             <TouchableOpacity
-              style={styles.button}
+              className="flex-1 items-center justify-center py-sf-md"
               onPress={onCancel}
               activeOpacity={0.7}
             >
               <Text
-                style={[
-                  styles.buttonText,
-                  { color: theme.colors.textSubtle },
-                ]}
+                className="text-[17px] font-normal text-app-text-subtle dark:text-app-text-subtle-dark"
               >
                 {cancelText}
               </Text>
             </TouchableOpacity>
             <View
-              style={[
-                styles.divider,
-                { backgroundColor: theme.colors.border },
-              ]}
+              style={{
+                width: StyleSheet.hairlineWidth,
+                backgroundColor: theme.colors.border,
+              }}
             />
             <TouchableOpacity
-              style={styles.button}
+              className="flex-1 items-center justify-center py-sf-md"
               onPress={handleConfirm}
               activeOpacity={0.7}
               disabled={!text.trim()}
             >
               <Text
-                style={[
-                  styles.buttonText,
-                  { color: text.trim() ? theme.colors.primary : theme.colors.textSubtle },
-                ]}
+                className="text-[17px] font-normal"
+                style={{ color: text.trim() ? theme.colors.primary : theme.colors.textSubtle }}
               >
                 {confirmText}
               </Text>
@@ -154,56 +142,3 @@ export function InputDialog({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-  },
-  container: {
-    width: 280,
-    overflow: 'hidden',
-    zIndex: 1,
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: '600',
-    textAlign: 'center',
-    paddingTop: 20,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-  },
-  input: {
-    height: 40,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    fontSize: 16,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#C8C7CC',
-  },
-  divider: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: '#C8C7CC',
-  },
-  button: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: {
-    fontSize: 17,
-    fontWeight: '400',
-  },
-});

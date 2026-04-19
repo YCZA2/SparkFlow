@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { StyleProp, View, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppTheme } from '@/theme/useAppTheme';
@@ -24,16 +24,13 @@ export function BottomActionBar({
   return (
     <SafeAreaView
       edges={['bottom', 'left', 'right']}
+      className={`border-t px-sf-bottom-bar bg-app-surface dark:bg-app-surface-dark ${className ?? ''}`}
       style={[
-        styles.safeArea,
         {
-          backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
-          paddingHorizontal: theme.layout.bottomBarPadding,
         },
         style,
       ]}
-      className={className}
     >
       <View className={`pb-sf-sm pt-sf-md ${contentClassName ?? ''}`} style={contentStyle}>
         {children}
@@ -41,9 +38,3 @@ export function BottomActionBar({
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-});

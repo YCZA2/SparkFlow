@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
+import { LayoutChangeEvent, Pressable, View } from 'react-native';
 
 import { Text } from '@/components/Themed';
 import { useAppTheme } from '@/theme/useAppTheme';
@@ -61,8 +61,8 @@ export function FragmentAudioPlayerControls({
 
   return (
     <View
+      className="rounded-[18px] bg-app-surface px-4 py-3 dark:bg-app-surface-dark"
       style={[
-        styles.card,
         theme.shadow.card,
         {
           backgroundColor: theme.colors.surface,
@@ -76,13 +76,19 @@ export function FragmentAudioPlayerControls({
       <Pressable
         onLayout={handleTrackLayout}
         onPress={(event) => handleTrackPress(event.nativeEvent.locationX)}
-        style={styles.trackHitArea}
+        className="py-1.5"
         disabled={disabled}
       >
-        <View style={[styles.track, { backgroundColor: theme.colors.border }]}>
+        <View className="relative h-1.5 justify-center rounded-full" style={{ backgroundColor: theme.colors.border }}>
           <View
             style={[
-              styles.trackFill,
+              {
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                borderRadius: 999,
+              },
               {
                 width: `${progress * 100}%`,
                 backgroundColor: theme.colors.text,
@@ -91,7 +97,15 @@ export function FragmentAudioPlayerControls({
           />
           <View
             style={[
-              styles.thumb,
+              {
+                position: 'absolute',
+                top: -6,
+                marginLeft: -8,
+                width: 16,
+                height: 16,
+                borderRadius: 8,
+                borderWidth: 1,
+              },
               {
                 left: `${progress * 100}%`,
                 backgroundColor: theme.colors.surface,
@@ -102,28 +116,37 @@ export function FragmentAudioPlayerControls({
         </View>
       </Pressable>
 
-      <View style={[styles.timeRow, compact && styles.compactTimeRow]}>
-        <Text style={[styles.timeText, { color: theme.colors.text }]}>{formatClock(positionMs)}</Text>
-        <Pressable onPress={onChangeRate} disabled={disabled} style={styles.rateButton}>
-          <Text style={[styles.rateText, { color: theme.colors.text }]}>{playbackRate.toFixed(1)}x</Text>
+      <View className="mb-3 mt-1 flex-row items-center justify-between" style={compact ? { marginBottom: 10 } : null}>
+        <Text className="text-sm font-semibold leading-[18px] text-app-text dark:text-app-text-dark">
+          {formatClock(positionMs)}
+        </Text>
+        <Pressable onPress={onChangeRate} disabled={disabled} className="min-w-14 items-center">
+          <Text className="text-[15px] font-bold leading-[18px] text-app-text dark:text-app-text-dark">
+            {playbackRate.toFixed(1)}x
+          </Text>
         </Pressable>
-        <Text style={[styles.timeText, { color: theme.colors.text }]}>-{formatClock(remainingMs)}</Text>
+        <Text className="text-sm font-semibold leading-[18px] text-app-text dark:text-app-text-dark">
+          -{formatClock(remainingMs)}
+        </Text>
       </View>
 
-      <View style={[styles.controlsRow, compact && styles.compactControlsRow]}>
+      <View className="flex-row items-center justify-center gap-4" style={compact ? { gap: 12 } : null}>
         <Pressable
           onPress={() => void onSkipBackward()}
           disabled={disabled}
-          style={[
-            styles.secondaryButton,
-            compact && styles.compactSecondaryButton,
-            {
-              backgroundColor: theme.colors.surfaceMuted,
-              opacity: disabled ? 0.45 : 1,
-            },
-          ]}
+          className="items-center justify-center rounded-full bg-app-surface-muted dark:bg-app-surface-muted-dark"
+          style={{
+            backgroundColor: theme.colors.surfaceMuted,
+            opacity: disabled ? 0.45 : 1,
+            width: compact ? 48 : 54,
+            height: compact ? 48 : 54,
+            borderRadius: compact ? 24 : 27,
+          }}
         >
-          <Text style={[styles.secondaryButtonText, compact && styles.compactSecondaryButtonText, { color: theme.colors.text }]}>
+          <Text
+            className="font-bold text-app-text dark:text-app-text-dark"
+            style={{ fontSize: compact ? 16 : 18, lineHeight: compact ? 18 : 20 }}
+          >
             -15
           </Text>
         </Pressable>
@@ -131,16 +154,25 @@ export function FragmentAudioPlayerControls({
         <Pressable
           onPress={onTogglePlay}
           disabled={disabled || !isReady}
-          style={[
-            styles.primaryButton,
-            compact && styles.compactPrimaryButton,
-            {
-              backgroundColor: theme.colors.text,
-              opacity: disabled || !isReady ? 0.45 : 1,
-            },
-          ]}
+          className="items-center justify-center rounded-full bg-app-text dark:bg-app-text-dark"
+          style={{
+            backgroundColor: theme.colors.text,
+            opacity: disabled || !isReady ? 0.45 : 1,
+            width: compact ? 64 : 74,
+            height: compact ? 64 : 74,
+            borderRadius: compact ? 32 : 37,
+          }}
         >
-          <Text style={[styles.primaryButtonText, compact && styles.compactPrimaryButtonText, { color: theme.colors.surface }]}>
+          <Text
+            className="font-bold text-app-surface dark:text-app-surface-dark"
+            style={[
+              {
+                color: theme.colors.surface,
+                fontSize: compact ? 16 : 18,
+                lineHeight: compact ? 18 : 20,
+              },
+            ]}
+          >
             {playLabel}
           </Text>
         </Pressable>
@@ -148,16 +180,19 @@ export function FragmentAudioPlayerControls({
         <Pressable
           onPress={() => void onSkipForward()}
           disabled={disabled}
-          style={[
-            styles.secondaryButton,
-            compact && styles.compactSecondaryButton,
-            {
-              backgroundColor: theme.colors.surfaceMuted,
-              opacity: disabled ? 0.45 : 1,
-            },
-          ]}
+          className="items-center justify-center rounded-full bg-app-surface-muted dark:bg-app-surface-muted-dark"
+          style={{
+            backgroundColor: theme.colors.surfaceMuted,
+            opacity: disabled ? 0.45 : 1,
+            width: compact ? 48 : 54,
+            height: compact ? 48 : 54,
+            borderRadius: compact ? 24 : 27,
+          }}
         >
-          <Text style={[styles.secondaryButtonText, compact && styles.compactSecondaryButtonText, { color: theme.colors.text }]}>
+          <Text
+            className="font-bold text-app-text dark:text-app-text-dark"
+            style={{ fontSize: compact ? 16 : 18, lineHeight: compact ? 18 : 20 }}
+          >
             +15
           </Text>
         </Pressable>
@@ -165,105 +200,3 @@ export function FragmentAudioPlayerControls({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {},
-  trackHitArea: {
-    paddingVertical: 6,
-  },
-  track: {
-    height: 6,
-    borderRadius: 999,
-    overflow: 'visible',
-    justifyContent: 'center',
-  },
-  trackFill: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 999,
-  },
-  thumb: {
-    position: 'absolute',
-    top: -6,
-    marginLeft: -8,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  compactTimeRow: {
-    marginBottom: 10,
-  },
-  timeText: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '600',
-  },
-  rateButton: {
-    minWidth: 56,
-    alignItems: 'center',
-  },
-  rateText: {
-    fontSize: 15,
-    lineHeight: 18,
-    fontWeight: '700',
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  compactControlsRow: {
-    gap: 12,
-  },
-  secondaryButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  compactSecondaryButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  secondaryButtonText: {
-    fontSize: 18,
-    lineHeight: 20,
-    fontWeight: '700',
-  },
-  compactSecondaryButtonText: {
-    fontSize: 16,
-  },
-  primaryButton: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  compactPrimaryButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-  },
-  primaryButtonText: {
-    fontSize: 18,
-    lineHeight: 20,
-    fontWeight: '700',
-  },
-  compactPrimaryButtonText: {
-    fontSize: 16,
-  },
-});

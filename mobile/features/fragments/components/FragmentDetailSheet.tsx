@@ -3,7 +3,6 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -31,36 +30,35 @@ export function FragmentDetailSheet({
 
   return (
     <Modal animationType="none" visible={visible} transparent statusBarTranslucent onRequestClose={actions.onClose}>
-      <View style={styles.modalRoot}>
-        <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={StyleSheet.absoluteFill}>
-          <Pressable style={styles.backdrop} onPress={actions.onClose} />
+      <View className="flex-1 justify-end">
+        <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} className="absolute inset-0">
+          <Pressable className="flex-1 bg-slate-950/30" onPress={actions.onClose} />
         </Animated.View>
 
         <Animated.View
           entering={SlideInDown.duration(220)}
           exiting={SlideOutDown.duration(180)}
+          className="max-h-[88%] rounded-t-[28px] bg-app-background px-5 pt-sf-md dark:bg-app-background-dark"
           style={[
-            styles.sheet,
             {
-              backgroundColor: theme.colors.background,
               paddingBottom: insets.bottom + 20,
             },
           ]}
         >
-          <View style={[styles.handle, { backgroundColor: theme.colors.border }]} />
-          <View style={styles.sheetHeader}>
+          <View className="mb-[14px] h-[5px] w-11 self-center rounded-sf-pill bg-app-border dark:bg-app-border-dark" />
+          <View className="flex-row items-start justify-between gap-sf-md">
             <View>
-              <Text style={[styles.sheetTitle, { color: theme.colors.text }]}>更多内容</Text>
-              <Text style={[styles.sheetSubtitle, { color: theme.colors.textSubtle }]}>
+              <Text className="text-2xl font-bold text-app-text dark:text-app-text-dark">更多内容</Text>
+              <Text className="mt-[6px] text-sm leading-5 text-app-text-subtle dark:text-app-text-subtle-dark">
                 原文、音频、整理工具和碎片信息都收在这里。
               </Text>
             </View>
-            <TouchableOpacity style={styles.closeButton} onPress={actions.onClose} hitSlop={8}>
+            <TouchableOpacity className="h-8 w-8 items-center justify-center" onPress={actions.onClose} hitSlop={8}>
               <SymbolView name="xmark" size={16} tintColor={theme.colors.textSubtle} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={styles.sheetContent} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerClassName="gap-5 pt-5" showsVerticalScrollIndicator={false}>
             <FragmentDetailSheetSections
               content={content}
               metadata={metadata}
@@ -75,53 +73,3 @@ export function FragmentDetailSheet({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  modalRoot: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.28)',
-  },
-  sheet: {
-    maxHeight: '88%',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 44,
-    height: 5,
-    borderRadius: 999,
-    marginBottom: 14,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  sheetTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  sheetSubtitle: {
-    marginTop: 6,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sheetContent: {
-    paddingTop: 20,
-    gap: 20,
-  },
-});

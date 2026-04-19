@@ -6,7 +6,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   TextInput,
   View,
 } from 'react-native';
@@ -88,27 +87,27 @@ export default function ImportLinkScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      className="flex-1 bg-app-background dark:bg-app-background-dark"
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Stack.Screen options={{ title: '导入链接' }} />
 
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.colors.text }]}>把抖音内容收进灵感库</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="p-5 pb-8">
+        <View className="mb-sf-lg">
+          <Text className="text-[28px] font-bold text-app-text dark:text-app-text-dark">把抖音内容收进灵感库</Text>
+          <Text className="mt-sf-sm text-sm leading-5 text-app-text-subtle dark:text-app-text-subtle-dark">
             当前仅支持抖音分享链接。提交后会走后台任务解析音频、转写文案并生成摘要标签。
           </Text>
         </View>
 
         <View
+          className="rounded-[24px] border bg-app-surface p-[18px] dark:bg-app-surface-dark"
           style={[
-            styles.card,
             theme.shadow.card,
-            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            { borderColor: theme.colors.border },
           ]}
         >
-          <Text style={[styles.label, { color: theme.colors.text }]}>抖音分享链接</Text>
+          <Text className="mb-[10px] text-[15px] font-bold text-app-text dark:text-app-text-dark">抖音分享链接</Text>
           <TextInput
             value={shareUrl}
             onChangeText={setShareUrl}
@@ -119,19 +118,19 @@ export default function ImportLinkScreen() {
             multiline
             editable={!isSubmitting}
             textAlignVertical="top"
-            style={[styles.input, { color: theme.colors.text }]}
+            className="min-h-[140px] text-base leading-6 text-app-text dark:text-app-text-dark"
           />
 
-          <View style={styles.tipBlock}>
-            <Text style={[styles.tipTitle, { color: theme.colors.text }]}>如何复制链接</Text>
-            <Text style={[styles.tipText, { color: theme.colors.textSubtle }]}>
+          <View className="mt-sf-lg border-t border-slate-400/30 pt-sf-lg">
+            <Text className="text-sm font-bold text-app-text dark:text-app-text-dark">如何复制链接</Text>
+            <Text className="mt-[6px] text-[13px] leading-[19px] text-app-text-subtle dark:text-app-text-subtle-dark">
               打开抖音视频，点击分享，再选择“复制链接”。粘贴后直接提交即可。
             </Text>
           </View>
 
           <Pressable
+            className="mt-sf-section items-center justify-center rounded-[14px] py-[15px]"
             style={[
-              styles.submitButton,
               {
                 backgroundColor: canSubmit ? theme.colors.primary : theme.colors.textSubtle,
               },
@@ -142,7 +141,7 @@ export default function ImportLinkScreen() {
             {isSubmitting ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text style={styles.submitButtonText}>开始导入并提取文案</Text>
+              <Text className="text-[15px] font-bold text-white">开始导入并提取文案</Text>
             )}
           </Pressable>
         </View>
@@ -150,67 +149,3 @@ export default function ImportLinkScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 32,
-  },
-  header: {
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  subtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  card: {
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 18,
-  },
-  label: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 10,
-  },
-  input: {
-    minHeight: 140,
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  tipBlock: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(148, 163, 184, 0.35)',
-  },
-  tipTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  tipText: {
-    marginTop: 6,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  submitButton: {
-    marginTop: 24,
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-});

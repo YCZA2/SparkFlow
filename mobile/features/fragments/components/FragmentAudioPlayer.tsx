@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppTheme } from '@/theme/useAppTheme';
@@ -38,10 +38,9 @@ export function FragmentAudioPlayer({
 
   return (
     <View
+      className="border-t bg-app-background px-sf-screen pt-sf-sm dark:bg-app-background-dark"
       style={[
-        styles.wrapper,
         {
-          backgroundColor: theme.colors.background,
           paddingBottom: Math.max(insets.bottom, 12),
           borderTopColor: theme.colors.border,
         },
@@ -63,11 +62,3 @@ export function FragmentAudioPlayer({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrapper: {
-    borderTopWidth: 1,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-});

@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { TouchableOpacity, View } from 'react-native';
 
 import { Text } from '@/components/Themed';
 import {
@@ -28,26 +28,26 @@ export function FragmentDetailCard({
   const theme = useAppTheme();
 
   return (
-    <View style={[styles.detailCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-      <View style={styles.detailHeader}>
-        <View style={styles.detailTitleWrap}>
+    <View className="rounded-[18px] bg-app-surface p-sf-lg dark:bg-app-surface-dark" style={theme.shadow.card}>
+      <View className="flex-row justify-between gap-sf-md">
+        <View className="flex-1 flex-row items-start gap-[10px]">
           <View
+            className="mt-[6px] h-sf-md w-sf-md rounded-full"
             style={[
-              styles.detailSwatch,
               { backgroundColor: getClusterColor(point.cluster_id, theme.colors.textSubtle) },
             ]}
           />
-          <View style={styles.detailTitleBlock}>
-            <Text style={[styles.detailTitle, { color: theme.colors.text }]}>{getPointTitle(point)}</Text>
-            <Text style={[styles.detailMeta, { color: theme.colors.textSubtle }]}>
+          <View className="flex-1">
+            <Text className="text-lg font-bold leading-6 text-app-text dark:text-app-text-dark">{getPointTitle(point)}</Text>
+            <Text className="mt-[6px] text-xs text-app-text-subtle dark:text-app-text-subtle-dark">
               {point.created_at ? point.created_at.slice(0, 10) : '无时间'}
               {point.cluster_id ? ` · 主题 ${point.cluster_id}` : ' · 未分类'}
             </Text>
           </View>
         </View>
         <TouchableOpacity
+          className="self-start rounded-sf-pill px-sf-md py-[10px]"
           style={[
-            styles.selectToggle,
             {
               backgroundColor: isSelected ? theme.colors.primary : theme.colors.surfaceMuted,
             },
@@ -55,134 +55,40 @@ export function FragmentDetailCard({
           onPress={onToggleSelected}
           activeOpacity={0.85}
         >
-          <Text style={[styles.selectToggleText, { color: isSelected ? '#FFFFFF' : theme.colors.text }]}>
+          <Text className="text-xs font-bold" style={{ color: isSelected ? '#FFFFFF' : theme.colors.text }}>
             {isSelected ? '已加入待生成' : '加入待生成'}
           </Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={[styles.detailBody, { color: theme.colors.textMuted }]}>{getPointBody(point)}</Text>
+      <Text className="mt-sf-lg text-sm leading-[21px] text-app-text-muted dark:text-app-text-muted-dark">{getPointBody(point)}</Text>
 
       {point.tags?.length ? (
-        <View style={styles.tagRow}>
+        <View className="mt-[14px] flex-row flex-wrap gap-sf-sm">
           {point.tags.map((tag) => (
-            <View key={tag} style={[styles.tagChip, { backgroundColor: theme.colors.surfaceMuted }]}>
-              <Text style={[styles.tagText, { color: theme.colors.text }]}>{tag}</Text>
+            <View key={tag} className="rounded-sf-pill bg-app-surface-muted px-[10px] py-[6px] dark:bg-app-surface-muted-dark">
+              <Text className="text-xs font-semibold text-app-text dark:text-app-text-dark">{tag}</Text>
             </View>
           ))}
         </View>
       ) : null}
 
-      <View style={styles.detailActions}>
+      <View className="mt-[18px] flex-row gap-[10px]">
         <TouchableOpacity
-          style={[styles.primaryAction, { backgroundColor: theme.colors.primary }]}
+          className="flex-1 items-center justify-center rounded-sf-md bg-app-primary py-[14px] dark:bg-app-primary-dark"
           onPress={onGenerate}
           activeOpacity={0.85}
         >
-          <Text style={styles.primaryActionText}>用已选碎片生成</Text>
+          <Text className="text-sm font-bold text-white">用已选碎片生成</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.secondaryAction, { backgroundColor: theme.colors.surfaceMuted }]}
+          className="flex-1 items-center justify-center rounded-sf-md bg-app-surface-muted py-[14px] dark:bg-app-surface-muted-dark"
           onPress={onViewDetail}
           activeOpacity={0.85}
         >
-          <Text style={[styles.secondaryActionText, { color: theme.colors.text }]}>查看碎片详情</Text>
+          <Text className="text-sm font-bold text-app-text dark:text-app-text-dark">查看碎片详情</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  detailCard: {
-    borderRadius: 18,
-    padding: 16,
-  },
-  detailHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  detailTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    flex: 1,
-    gap: 10,
-  },
-  detailSwatch: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginTop: 6,
-  },
-  detailTitleBlock: {
-    flex: 1,
-  },
-  detailTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    lineHeight: 24,
-  },
-  detailMeta: {
-    fontSize: 12,
-    marginTop: 6,
-  },
-  selectToggle: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignSelf: 'flex-start',
-  },
-  selectToggleText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  detailBody: {
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 16,
-  },
-  tagRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 14,
-  },
-  tagChip: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  tagText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  detailActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 18,
-  },
-  primaryAction: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryActionText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  secondaryAction: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryActionText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-});

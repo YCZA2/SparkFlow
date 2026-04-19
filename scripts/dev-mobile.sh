@@ -30,7 +30,6 @@ print_usage() {
 用法：
   bash scripts/dev-mobile.sh           # 模式1：启动前后端联调（默认，LAN 模式）
   bash scripts/dev-mobile.sh start     # 模式1：启动前后端联调（LAN 模式）
-  bash scripts/dev-mobile.sh web       # 模式4：启动前后端联调（Expo Web）
   bash scripts/dev-mobile.sh simulator # 模式3：启动前后端联调（iOS Simulator）
   bash scripts/dev-mobile.sh build     # 模式2：执行 iOS 重建，不启动前后端
   bash scripts/dev-mobile.sh install   # 模式5：仅安装已有 iOS .app 到设备
@@ -39,10 +38,9 @@ print_usage() {
 说明：
   模式1 适合：只改 JS / TS / 样式 / 页面逻辑，LAN 模式便于真机测试。
   模式3 适合：只改 JS / TS / 样式 / 页面逻辑，使用本地 iOS Simulator 调试。
-  模式4 适合：调试 Web 端页面或浏览器交互，使用 Expo Web 本地开发。
   模式2 适合：改了原生配置、插件、Pod、Info.plist、AppDelegate 后，需要重新 Build。
   模式5 适合：build 已成功但安装真机失败时，复用已有 .app 仅重试安装。
-  执行完模式2或模式5后，再执行模式1、模式3或模式4即可开始联调。
+  执行完模式2或模式5后，再执行模式1或模式3即可开始联调。
 USAGE
 }
 
@@ -431,74 +429,6 @@ run_start_mode() {
   wait "${EXPO_PID}"
 }
 
-run_web_mode() {
-  # Web 联调模式保持后端与数据库一并启动，方便浏览器直接连本地 API。
-  local local_backend_url local_backend_health_url backend_ready
-
-  trap cleanup EXIT INT TERM
-
-  local_backend_url="http://127.0.0.1:${BACKEND_PORT}"
-  local_backend_health_url="http://127.0.0.1:${BACKEND_PORT}/health"
-  export APP_DEFAULT_API_BASE_URL="${local_backend_url}"
-
-  echo "[dev-mobile] mode4: starting backend + expo web..."
-  free_port "${BACKEND_PORT}" "backend"
-  free_port "${EXPO_PORT}" "expo"
-
-  ensure_local_postgres
-  ensure_local_rabbitmq
-  run_backend_migrations
-  start_celery_worker
-
-  echo "[dev-mobile] starting backend..."
-  (
-    cd "${BACKEND_DIR}"
-    exec env \
-      APP_ENV="${APP_ENV}" \
-      CELERY_BROKER_URL="${CELERY_BROKER_URL}" \
-      CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND}" \
-      CELERY_TASK_ALWAYS_EAGER=false \
-      "${BACKEND_PYTHON}" -m uvicorn main:app --host "${BACKEND_HOST}" --port "${BACKEND_PORT}" --reload --no-access-log
-  ) &
-  BACKEND_PID=$!
-
-  echo "[dev-mobile] waiting backend readiness check: HEAD ${local_backend_health_url}"
-  backend_ready=0
-  for _ in $(seq 1 30); do
-    # 开发启动只需要确认 FastAPI 已监听端口，避免 GET /health 触发外部依赖深度探活。
-    if curl -fsSI "${local_backend_health_url}" >/dev/null 2>&1; then
-      backend_ready=1
-      break
-    fi
-    sleep 1
-  done
-
-  if [[ "${backend_ready}" -ne 1 ]]; then
-    echo "[dev-mobile] backend readiness check timeout, but continue to start expo web."
-  fi
-
-  echo "[dev-mobile] starting expo (Web mode)..."
-  (
-    cd "${MOBILE_DIR}"
-    exec env APP_ENV="${APP_ENV}" APP_DEFAULT_API_BASE_URL="${APP_DEFAULT_API_BASE_URL}" npx expo start --web --port "${EXPO_PORT}"
-  ) &
-  EXPO_PID=$!
-
-  echo
-  echo "========================================"
-  echo "SparkFlow mobile mode4 is ready"
-  echo "Backend API (web app should use this): ${local_backend_url}"
-  echo "Backend health: ${local_backend_health_url}"
-  echo "RabbitMQ broker: ${CELERY_BROKER_URL}"
-  echo "Expo Web: http://127.0.0.1:${EXPO_PORT}"
-  echo "Tip: 浏览器里调试业务接口时，应用内后端地址仍应填写 8000"
-  echo "Press Ctrl+C to stop backend and expo."
-  echo "========================================"
-  echo
-
-  wait "${EXPO_PID}"
-}
-
 run_simulator_mode() {
   local local_ip public_backend_url local_backend_health_url backend_ready metro_ready
 
@@ -650,10 +580,6 @@ case "${MODE}" in
   start)
     ensure_start_mode_deps
     run_start_mode
-    ;;
-  web)
-    ensure_start_mode_deps
-    run_web_mode
     ;;
   simulator)
     ensure_start_mode_deps

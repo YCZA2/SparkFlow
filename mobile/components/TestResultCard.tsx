@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { Text } from '@/components/Themed';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { TestResult } from '@/hooks/useApiTestSuite';
@@ -34,19 +34,23 @@ export function TestResultCard({ test }: { test: TestResult }) {
   const theme = useAppTheme();
 
   return (
-    <View style={[styles.card, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-      <View style={styles.header}>
-        <Text style={styles.icon}>{getStatusIcon(test.status)}</Text>
-        <Text style={[styles.name, { color: getStatusColor(test.status, theme) }]}>{test.name}</Text>
-        {test.status === 'running' ? <ActivityIndicator size="small" style={styles.runningIndicator} /> : null}
+    <View className="rounded-sf-md bg-app-surface p-sf-lg dark:bg-app-surface-dark" style={theme.shadow.card}>
+      <View className="mb-sf-sm flex-row items-center">
+        <Text className="mr-sf-sm text-xl">{getStatusIcon(test.status)}</Text>
+        <Text className="flex-1 text-[15px] font-semibold" style={{ color: getStatusColor(test.status, theme) }}>
+          {test.name}
+        </Text>
+        {test.status === 'running' ? <ActivityIndicator size="small" className="ml-sf-sm" /> : null}
       </View>
 
       {test.message ? (
-        <Text style={[styles.message, { color: theme.colors.textMuted }]}>{test.message}</Text>
+        <Text className="mt-sf-xs pl-7 text-[13px] text-app-text-muted dark:text-app-text-muted-dark">
+          {test.message}
+        </Text>
       ) : null}
 
       {test.data ? (
-        <Text style={[styles.data, { color: theme.colors.textSubtle, backgroundColor: theme.colors.surfaceMuted }]}>
+        <Text className="ml-7 mt-sf-sm rounded px-sf-sm py-sf-sm font-mono text-[11px] text-app-text-subtle bg-app-surface-muted dark:text-app-text-subtle-dark dark:bg-app-surface-muted-dark">
           {JSON.stringify(test.data, null, 2).substring(0, 200)}
           {JSON.stringify(test.data, null, 2).length > 200 ? '...' : ''}
         </Text>
@@ -54,40 +58,3 @@ export function TestResultCard({ test }: { test: TestResult }) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    padding: 16,
-    borderRadius: 12,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  icon: {
-    fontSize: 20,
-    marginRight: 8,
-  },
-  name: {
-    fontSize: 15,
-    fontWeight: '600',
-    flex: 1,
-  },
-  runningIndicator: {
-    marginLeft: 8,
-  },
-  message: {
-    fontSize: 13,
-    marginTop: 4,
-    paddingLeft: 28,
-  },
-  data: {
-    fontSize: 11,
-    marginTop: 8,
-    marginLeft: 28,
-    padding: 8,
-    borderRadius: 4,
-    fontFamily: 'monospace',
-  },
-});

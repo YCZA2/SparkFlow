@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
-  StyleSheet,
   TextInput,
   TouchableOpacity,
   View,
@@ -40,7 +39,7 @@ export default function NetworkSettingsScreen() {
     return (
       <>
         <Stack.Screen options={{ title: '网络设置' }} />
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View className="flex-1 bg-app-background dark:bg-app-background-dark">
           <ScreenState
             icon="🔒"
             title="当前环境不可用"
@@ -88,33 +87,27 @@ export default function NetworkSettingsScreen() {
     <>
       <Stack.Screen options={{ title: '网络设置' }} />
       <ScrollView
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-        contentContainerStyle={styles.content}
+        className="flex-1 bg-app-background dark:bg-app-background-dark"
+        contentContainerClassName="p-sf-lg pb-10"
       >
-        <View style={[styles.section, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>当前配置</Text>
-          <Text style={[styles.currentUrl, { color: theme.colors.textSubtle }]}>{currentUrl}</Text>
+        <View className="mb-sf-lg rounded-sf-md bg-app-surface p-sf-lg dark:bg-app-surface-dark" style={theme.shadow.card}>
+          <Text className="mb-sf-md text-[17px] font-semibold text-app-text dark:text-app-text-dark">当前配置</Text>
+          <Text className="font-mono text-[15px] text-app-text-subtle dark:text-app-text-subtle-dark">{currentUrl}</Text>
           {diagnostics?.deviceIp ? (
-            <Text style={[styles.deviceIp, { color: theme.colors.textSubtle }]}>
+            <Text className="mt-sf-xs text-[13px] text-app-text-subtle dark:text-app-text-subtle-dark">
               本机 IP: {diagnostics.deviceIp}
             </Text>
           ) : null}
         </View>
 
-        <View style={[styles.section, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>后端地址</Text>
-          <Text style={[styles.hint, { color: theme.colors.textSubtle }]}>
+        <View className="mb-sf-lg rounded-sf-md bg-app-surface p-sf-lg dark:bg-app-surface-dark" style={theme.shadow.card}>
+          <Text className="mb-sf-md text-[17px] font-semibold text-app-text dark:text-app-text-dark">后端地址</Text>
+          <Text className="mb-sf-sm text-[13px] text-app-text-subtle dark:text-app-text-subtle-dark">
             格式: http://IP地址:端口号
           </Text>
           <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.colors.surfaceMuted,
-                color: theme.colors.text,
-                borderColor: theme.colors.border,
-              },
-            ]}
+            className="h-11 rounded-sf-sm border bg-app-surface-muted px-sf-md font-mono text-[15px] text-app-text dark:bg-app-surface-muted-dark dark:text-app-text-dark"
+            style={{ borderColor: theme.colors.border }}
             value={inputUrl}
             onChangeText={setInputUrl}
             placeholder="http://192.168.1.100:8000"
@@ -123,79 +116,80 @@ export default function NetworkSettingsScreen() {
             autoCorrect={false}
           />
 
-          <View style={styles.buttonRow}>
+          <View className="mt-sf-md flex-row gap-sf-md">
             <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.colors.primary }]}
+              className="h-11 flex-1 items-center justify-center rounded-sf-sm"
+              style={{ backgroundColor: theme.colors.primary }}
               onPress={handleTest}
               disabled={isTesting}
             >
               {isTesting ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.buttonText}>测试连接</Text>
+                <Text className="text-[15px] font-semibold text-white">测试连接</Text>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.colors.success }]}
+              className="h-11 flex-1 items-center justify-center rounded-sf-sm"
+              style={{ backgroundColor: theme.colors.success }}
               onPress={handleSave}
             >
-              <Text style={styles.buttonText}>保存</Text>
+              <Text className="text-[15px] font-semibold text-white">保存</Text>
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity
-            style={[styles.button, styles.fullButton, { backgroundColor: theme.colors.primary }]}
+            className="mt-sf-sm h-11 items-center justify-center rounded-sf-sm"
+            style={{ backgroundColor: theme.colors.primary }}
             onPress={autoDiscover}
             disabled={isAutoDiscovering}
           >
             {isAutoDiscovering ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={styles.buttonText}>自动发现后端</Text>
+              <Text className="text-[15px] font-semibold text-white">自动发现后端</Text>
             )}
           </TouchableOpacity>
 
           {testResult ? (
             <Text
-              style={[
-                styles.testResult,
-                { color: testResult.success ? theme.colors.success : theme.colors.danger },
-              ]}
+              className="mt-sf-md text-sm leading-5"
+              style={{ color: testResult.success ? theme.colors.success : theme.colors.danger }}
             >
               {testResult.message}
             </Text>
           ) : null}
         </View>
 
-        <View style={[styles.section, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>可能的后端地址</Text>
-          <Text style={[styles.hint, { color: theme.colors.textSubtle }]}>
+        <View className="mb-sf-lg rounded-sf-md bg-app-surface p-sf-lg dark:bg-app-surface-dark" style={theme.shadow.card}>
+          <Text className="mb-sf-md text-[17px] font-semibold text-app-text dark:text-app-text-dark">可能的后端地址</Text>
+          <Text className="mb-sf-sm text-[13px] text-app-text-subtle dark:text-app-text-subtle-dark">
             点击选择以下地址进行测试：
           </Text>
           {possibleUrls.map((url, index) => (
             <TouchableOpacity
               key={url}
+              className="flex-row items-center justify-between border-b py-sf-md"
               style={[
-                styles.urlItem,
                 { borderBottomColor: theme.colors.border },
-                index === possibleUrls.length - 1 && styles.urlItemLast,
+                index === possibleUrls.length - 1 && { borderBottomWidth: 0 },
               ]}
               onPress={() => setInputUrl(url)}
             >
-              <Text style={[styles.urlText, { color: theme.colors.text }]}>{url}</Text>
-              <Text style={[styles.urlArrow, { color: theme.colors.textSubtle }]}>›</Text>
+              <Text className="font-mono text-[15px] text-app-text dark:text-app-text-dark">{url}</Text>
+              <Text className="text-xl text-app-text-subtle dark:text-app-text-subtle-dark">›</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={[styles.section, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>常见问题</Text>
-          <View style={styles.faqItem}>
-            <Text style={[styles.faqQuestion, { color: theme.colors.text }]}>
+        <View className="mb-sf-lg rounded-sf-md bg-app-surface p-sf-lg dark:bg-app-surface-dark" style={theme.shadow.card}>
+          <Text className="mb-sf-md text-[17px] font-semibold text-app-text dark:text-app-text-dark">常见问题</Text>
+          <View className="mt-sf-sm">
+            <Text className="mb-sf-sm text-[15px] font-medium text-app-text dark:text-app-text-dark">
               如何找到正确的后端地址？
             </Text>
-            <Text style={[styles.faqAnswer, { color: theme.colors.textSubtle }]}>
+            <Text className="text-sm leading-5 text-app-text-subtle dark:text-app-text-subtle-dark">
               1. 确保后端服务已启动（uvicorn main:app --reload）{'\n'}
               2. 确保手机和电脑连接同一 WiFi{'\n'}
               3. 查看电脑的网络 IP 地址{'\n'}
@@ -204,111 +198,10 @@ export default function NetworkSettingsScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-          <Text style={[styles.resetText, { color: theme.colors.textSubtle }]}>恢复默认地址</Text>
+        <TouchableOpacity className="items-center py-sf-lg" onPress={handleReset}>
+          <Text className="text-[15px] text-app-text-subtle dark:text-app-text-subtle-dark">恢复默认地址</Text>
         </TouchableOpacity>
       </ScrollView>
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  section: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  currentUrl: {
-    fontSize: 15,
-    fontFamily: 'monospace',
-  },
-  deviceIp: {
-    fontSize: 13,
-    marginTop: 4,
-  },
-  hint: {
-    fontSize: 13,
-    marginBottom: 8,
-  },
-  input: {
-    height: 44,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    fontSize: 15,
-    fontFamily: 'monospace',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
-  },
-  button: {
-    flex: 1,
-    height: 44,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fullButton: {
-    marginTop: 8,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  testResult: {
-    marginTop: 12,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  urlItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  urlItemLast: {
-    borderBottomWidth: 0,
-  },
-  urlText: {
-    fontSize: 15,
-    fontFamily: 'monospace',
-  },
-  urlArrow: {
-    fontSize: 20,
-  },
-  faqItem: {
-    marginTop: 8,
-  },
-  faqQuestion: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  faqAnswer: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  resetButton: {
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  resetText: {
-    fontSize: 15,
-  },
-});

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, TouchableOpacity, View } from 'react-native';
 import { Text } from '@/components/Themed';
 import { useAppTheme } from '@/theme/useAppTheme';
 
@@ -28,32 +28,37 @@ export function ScreenState({
   const actionColor = tone === 'danger' ? theme.colors.danger : theme.colors.primary;
 
   return (
-    <View style={styles.container}>
-      {icon ? <Text style={[styles.icon, { color: theme.colors.textSubtle }]}>{icon}</Text> : null}
-      <Text style={[styles.title, { color: theme.colors.text }]}>{title}</Text>
+    <View className="flex-1 items-center justify-center px-8">
+      {icon ? (
+        <Text className="mb-sf-lg text-[52px] text-app-text-subtle dark:text-app-text-subtle-dark">
+          {icon}
+        </Text>
+      ) : null}
+      <Text className="mb-sf-sm text-center text-lg font-semibold text-app-text dark:text-app-text-dark">
+        {title}
+      </Text>
       {message ? (
-        <Text style={[styles.message, { color: theme.colors.textSubtle }]}>{message}</Text>
+        <Text className="text-center text-sm leading-5 text-app-text-subtle dark:text-app-text-subtle-dark">
+          {message}
+        </Text>
       ) : null}
       {actionLabel && onAction ? (
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: actionColor }]}
+          className="mt-5 min-w-40 items-center rounded-[10px] px-5 py-sf-md"
+          style={{ backgroundColor: actionColor }}
           onPress={onAction}
           activeOpacity={0.85}
         >
-          <Text style={styles.buttonText}>{actionLabel}</Text>
+          <Text className="text-[15px] font-semibold text-white">{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
       {secondaryActionLabel && onSecondaryAction ? (
         <TouchableOpacity
-          style={[
-            styles.button,
-            styles.secondaryButton,
-            { backgroundColor: theme.colors.surfaceMuted },
-          ]}
+          className="mt-sf-md min-w-40 items-center rounded-[10px] px-5 py-sf-md bg-app-surface-muted dark:bg-app-surface-muted-dark"
           onPress={onSecondaryAction}
           activeOpacity={0.85}
         >
-          <Text style={[styles.secondaryButtonText, { color: theme.colors.text }]}>
+          <Text className="text-[15px] font-semibold text-app-text dark:text-app-text-dark">
             {secondaryActionLabel}
           </Text>
         </TouchableOpacity>
@@ -66,58 +71,11 @@ export function LoadingState({ message = '加载中...' }: { message?: string })
   const theme = useAppTheme();
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 items-center justify-center px-8">
       <ActivityIndicator size="large" color={theme.colors.primary} />
-      <Text style={[styles.message, styles.loadingMessage, { color: theme.colors.textSubtle }]}>
+      <Text className="mt-sf-sm text-center text-sm leading-5 text-app-text-subtle dark:text-app-text-subtle-dark">
         {message}
       </Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  icon: {
-    fontSize: 52,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  message: {
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  loadingMessage: {
-    marginTop: 8,
-  },
-  button: {
-    minWidth: 160,
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  secondaryButton: {
-    marginTop: 12,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});

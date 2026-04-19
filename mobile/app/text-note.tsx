@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, View } from 'react-native';
 import { type Href, Stack, useLocalSearchParams } from 'expo-router';
 
 import { ScreenState } from '@/components/ScreenState';
@@ -69,7 +69,7 @@ export default function TextNoteScreen() {
 
   if (error) {
     return (
-      <View style={[styles.stateContainer, { backgroundColor: theme.colors.background }]}>
+      <View className="flex-1 items-center justify-center bg-app-background dark:bg-app-background-dark">
         <Stack.Screen options={{ title: '写下灵感', headerShown: false }} />
         <ScreenState
           icon="⚠️"
@@ -87,17 +87,9 @@ export default function TextNoteScreen() {
   }
 
   return (
-    <View style={[styles.stateContainer, { backgroundColor: theme.colors.background }]}>
+    <View className="flex-1 items-center justify-center bg-app-background dark:bg-app-background-dark">
       <Stack.Screen options={{ title: '写下灵感', headerShown: false }} />
       <ActivityIndicator size="large" color={theme.colors.primary} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  stateContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

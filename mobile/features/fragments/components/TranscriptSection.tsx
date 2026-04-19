@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Text } from '@/components/Themed';
 import { SpeakerTimelineList } from '@/features/fragments/components/SpeakerTimelineList';
@@ -28,8 +28,10 @@ export function TranscriptSection({
   const hasSpeakerSegments = Boolean(speakerSegments && speakerSegments.length > 0);
 
   return (
-    <View style={[styles.section, dense && styles.sectionDense]}>
-      <Text style={[styles.title, dense && styles.titleDense]}>语音原文</Text>
+    <View className={dense ? 'gap-[10px]' : 'gap-sf-md'}>
+      <Text className={dense ? 'text-lg font-bold leading-6' : 'text-[22px] font-bold leading-[30px]'}>
+        语音原文
+      </Text>
       {hasSpeakerSegments ? (
         <SpeakerTimelineList
           segments={speakerSegments ?? []}
@@ -40,32 +42,10 @@ export function TranscriptSection({
           onSegmentPress={onSegmentPress}
         />
       ) : (
-        <Text style={styles.transcriptText}>
+        <Text className="text-[15px] leading-6">
           {transcript || '暂无转写内容'}
         </Text>
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  section: {
-    gap: 12,
-  },
-  sectionDense: {
-    gap: 10,
-  },
-  title: {
-    fontSize: 22,
-    lineHeight: 30,
-    fontWeight: '700',
-  },
-  titleDense: {
-    fontSize: 18,
-    lineHeight: 24,
-  },
-  transcriptText: {
-    fontSize: 15,
-    lineHeight: 24,
-  },
-});

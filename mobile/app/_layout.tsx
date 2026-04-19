@@ -5,9 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import '../global.css';
 import 'react-native-reanimated';
-import { PaperProvider } from 'react-native-paper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
 
 import { LoadingState } from '@/components/ScreenState';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -105,44 +103,41 @@ function RootLayoutNav() {
 
   if (!session.isAuthenticated) {
     return (
-      <PaperProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack
-            screenOptions={{
-              headerBackTitle: '返回',
-              headerLeft: () => <BackButton />,
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack
+          screenOptions={{
+            headerBackTitle: '返回',
+            headerLeft: () => <BackButton />,
+          }}
+        >
+          <Stack.Screen
+            name="login"
+            options={{
+              headerShown: false,
+              title: '登录',
             }}
-          >
-            <Stack.Screen
-              name="login"
-              options={{
-                headerShown: false,
-                title: '登录',
-              }}
-            />
-          </Stack>
-        </ThemeProvider>
-      </PaperProvider>
+          />
+        </Stack>
+      </ThemeProvider>
     );
   }
 
   return (
-    <GestureHandlerRootView style={styles.gestureRoot}>
-      <PaperProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack
-            screenOptions={{
-              headerBackTitle: '返回',
-              headerLeft: () => <BackButton />,
+    <GestureHandlerRootView className="flex-1">
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack
+          screenOptions={{
+            headerBackTitle: '返回',
+            headerLeft: () => <BackButton />,
+          }}
+        >
+          <Stack.Screen
+            name="index"
+            options={{
+              headerShown: false,
+              title: '返回',
             }}
-          >
-            <Stack.Screen
-              name="index"
-              options={{
-                headerShown: false,
-                title: '返回',
-              }}
-            />
+          />
           <Stack.Screen
             name="profile"
             options={{
@@ -207,13 +202,6 @@ function RootLayoutNav() {
         {isOpen && <DrawerBackdrop onPress={close} />}
         {isOpen && <Drawer />}
       </ThemeProvider>
-    </PaperProvider>
     </GestureHandlerRootView>
   );
 }
-
-const styles = StyleSheet.create({
-  gestureRoot: {
-    flex: 1,
-  },
-});

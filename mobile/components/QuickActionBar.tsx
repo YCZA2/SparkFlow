@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { TouchableOpacity, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { useRouter, usePathname } from 'expo-router';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
@@ -101,29 +101,33 @@ export function QuickActionBar() {
   }
 
   return (
-    <View style={[styles.floatingFooter, { bottom: insets.bottom + 20 }]}>
+    <View className="absolute left-0 right-0 z-[100] items-center" style={{ bottom: insets.bottom + 20 }}>
       <Animated.View
         entering={FadeInDown.duration(160)}
         exiting={FadeOutDown.duration(120)}
+        className="min-w-[208px] flex-row items-center justify-between gap-[14px] rounded-sf-pill border px-sf-lg py-sf-sm"
         style={[
-          styles.quickActionPill,
           {
             backgroundColor: theme.name === 'dark' ? '#1C1C1E' : '#FFFFFF',
             borderColor: theme.colors.border,
+            shadowColor: '#000000',
+            shadowOffset: { width: 0, height: 10 },
             shadowOpacity: theme.name === 'dark' ? 0.3 : 0.12,
+            shadowRadius: 24,
+            elevation: 8,
           },
         ]}
       >
         {quickActions.map((action) => (
           <TouchableOpacity
             key={action.key}
-            style={styles.quickActionButton}
+            className="h-[52px] w-[52px] items-center justify-center rounded-full"
             onPress={action.onPress}
             activeOpacity={0.78}
           >
             <View
+              className="h-10 w-10 items-center justify-center rounded-full"
               style={[
-                styles.quickActionIconShell,
                 action.active
                   ? {
                       backgroundColor: '#FFF4CC',
@@ -143,42 +147,3 @@ export function QuickActionBar() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  floatingFooter: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 100,
-  },
-  quickActionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    minWidth: 208,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 24,
-    elevation: 8,
-  },
-  quickActionButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickActionIconShell: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

@@ -3,7 +3,7 @@
  * 从 profile.tsx 提取的用户信息和菜单项
  */
 import React from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 
@@ -34,23 +34,23 @@ function MenuItem({
 }) {
   return (
     <TouchableOpacity
+      className="flex-row items-center px-sf-lg py-[14px]"
       style={[
-        styles.menuItem,
         { borderBottomColor: tone.colors.border, borderBottomWidth: hideBorder ? 0 : 1 },
       ]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <Text style={styles.menuIcon}>{icon}</Text>
-      <View style={styles.menuContent}>
-        <Text style={[styles.menuTitle, { color: tone.colors.text }]}>{title}</Text>
+      <Text className="mr-sf-md w-[26px] text-center text-xl">{icon}</Text>
+      <View className="flex-1">
+        <Text className="text-[15px] font-medium text-app-text dark:text-app-text-dark">{title}</Text>
         {subtitle ? (
-          <Text style={[styles.menuSubtitle, { color: tone.colors.textSubtle }]}>
+          <Text className="mt-[2px] text-xs text-app-text-subtle dark:text-app-text-subtle-dark">
             {subtitle}
           </Text>
         ) : null}
       </View>
-      <Text style={[styles.menuArrow, { color: tone.colors.textSubtle }]}>›</Text>
+      <Text className="ml-sf-sm text-lg text-app-text-subtle dark:text-app-text-subtle-dark">›</Text>
     </TouchableOpacity>
   );
 }
@@ -71,32 +71,29 @@ export function DrawerContent({ closeDrawer }: DrawerContentProps) {
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: theme.colors.surface }]}
-      contentContainerStyle={styles.scrollContent}
+      className="flex-1 bg-app-surface dark:bg-app-surface-dark"
+      contentContainerClassName="p-sf-lg pb-8"
       showsVerticalScrollIndicator={false}
     >
       {/* 用户信息卡片 */}
       <View
-        style={[
-          styles.userCard,
-          { backgroundColor: theme.colors.background, borderRadius: 16 },
-        ]}
+        className="mb-sf-lg flex-row items-center rounded-sf-lg bg-app-background p-sf-lg dark:bg-app-background-dark"
       >
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>👤</Text>
+        <View className="h-14 w-14 items-center justify-center rounded-full bg-app-primary-dark">
+          <Text className="text-[28px]">👤</Text>
         </View>
-        <View style={styles.userInfo}>
-          <Text style={[styles.userName, { color: theme.colors.text }]}>
+        <View className="ml-[14px] flex-1">
+          <Text className="mb-sf-xs text-lg font-semibold text-app-text dark:text-app-text-dark">
             {isAuthenticated ? user?.nickname || '测试博主' : '未登录'}
           </Text>
-          <Text style={[styles.userId, { color: theme.colors.textSubtle }]}>
+          <Text className="text-xs text-app-text-subtle dark:text-app-text-subtle-dark">
             {isAuthenticated ? `ID: ${user?.user_id}` : '点击登录'}
           </Text>
         </View>
       </View>
 
       {/* 菜单区块 1 */}
-      <View style={[styles.menuSection, { borderRadius: 16 }]}>
+      <View className="mb-sf-md overflow-hidden rounded-sf-lg bg-black/[0.02] dark:bg-white/[0.04]">
         <MenuItem
           icon="📚"
           title="我的方法论"
@@ -117,7 +114,7 @@ export function DrawerContent({ closeDrawer }: DrawerContentProps) {
       </View>
 
       {developerToolsEnabled ? (
-        <View style={[styles.menuSection, { borderRadius: 16 }]}>
+        <View className="mb-sf-md overflow-hidden rounded-sf-lg bg-black/[0.02] dark:bg-white/[0.04]">
           <MenuItem
             icon="🌐"
             title="网络设置"
@@ -137,7 +134,7 @@ export function DrawerContent({ closeDrawer }: DrawerContentProps) {
       ) : null}
 
       {/* 菜单区块 3 */}
-      <View style={[styles.menuSection, { borderRadius: 16 }]}>
+      <View className="mb-sf-md overflow-hidden rounded-sf-lg bg-black/[0.02] dark:bg-white/[0.04]">
         <MenuItem
           icon="ℹ️"
           title="关于"
@@ -152,74 +149,3 @@ export function DrawerContent({ closeDrawer }: DrawerContentProps) {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  userCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    marginBottom: 16,
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#0A84FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 28,
-  },
-  userInfo: {
-    marginLeft: 14,
-    flex: 1,
-  },
-  userName: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  userId: {
-    fontSize: 12,
-  },
-  menuSection: {
-    marginBottom: 12,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  menuIcon: {
-    fontSize: 20,
-    marginRight: 12,
-    width: 26,
-    textAlign: 'center',
-  },
-  menuContent: {
-    flex: 1,
-  },
-  menuTitle: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  menuSubtitle: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  menuArrow: {
-    fontSize: 18,
-    marginLeft: 8,
-  },
-});

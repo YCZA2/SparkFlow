@@ -3,7 +3,6 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -32,18 +31,18 @@ function ToolRow({
     <TouchableOpacity
       activeOpacity={0.82}
       onPress={onPress}
+      className="mb-[10px] flex-row items-center gap-sf-md rounded-[18px] border bg-app-surface px-[14px] py-[14px] dark:bg-app-surface-dark"
       style={[
-        styles.toolRow,
         theme.shadow.card,
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+        { borderColor: theme.colors.border },
       ]}
     >
-      <View style={[styles.toolIcon, { backgroundColor: theme.colors.surfaceMuted }]}>
+      <View className="h-[34px] w-[34px] items-center justify-center rounded-full bg-app-surface-muted dark:bg-app-surface-muted-dark">
         <SymbolView name={icon} size={18} tintColor={theme.colors.primary} />
       </View>
-      <View style={styles.toolCopy}>
-        <Text style={[styles.toolTitle, { color: theme.colors.text }]}>{title}</Text>
-        <Text style={[styles.toolSubtitle, { color: theme.colors.textSubtle }]}>{subtitle}</Text>
+      <View className="flex-1">
+        <Text className="text-[15px] font-semibold text-app-text dark:text-app-text-dark">{title}</Text>
+        <Text className="mt-[2px] text-xs leading-[18px] text-app-text-subtle dark:text-app-text-subtle-dark">{subtitle}</Text>
       </View>
       <SymbolView name="chevron.right" size={16} tintColor={theme.colors.textSubtle} />
     </TouchableOpacity>
@@ -54,7 +53,7 @@ function InfoCard({ children }: { children: React.ReactNode }) {
   /*统一只读信息卡片样式，避免抽屉和正文主舞台互相打架。 */
   const theme = useAppTheme();
   return (
-    <View style={[styles.infoCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
+    <View className="rounded-[18px] bg-app-surface p-[14px] dark:bg-app-surface-dark" style={theme.shadow.card}>
       {children}
     </View>
   );
@@ -63,8 +62,8 @@ function InfoCard({ children }: { children: React.ReactNode }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   /*统一抽屉区块标题与内容间距。 */
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+    <View className="mb-[22px]">
+      <Text className="mb-[10px] text-[13px] font-bold uppercase tracking-[0.4px] text-[#8C8478]">{title}</Text>
       {children}
     </View>
   );
@@ -106,39 +105,39 @@ export function ScriptDetailSheet({
 
   return (
     <Modal animationType="none" visible={visible} transparent statusBarTranslucent onRequestClose={actions.onClose}>
-      <View style={styles.modalRoot}>
-        <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={StyleSheet.absoluteFill}>
-          <Pressable style={styles.backdrop} onPress={actions.onClose} />
+      <View className="flex-1 justify-end">
+        <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} className="absolute inset-0">
+          <Pressable className="flex-1 bg-black/30" onPress={actions.onClose} />
         </Animated.View>
 
         <Animated.View
           entering={SlideInDown.duration(220)}
           exiting={SlideOutDown.duration(180)}
+          className="max-h-[82%] rounded-t-[28px] bg-app-background px-5 pt-sf-md dark:bg-app-background-dark"
           style={[
-            styles.sheet,
-            { backgroundColor: theme.colors.background, paddingBottom: insets.bottom + 20 },
+            { paddingBottom: insets.bottom + 20 },
           ]}
         >
-          <View style={[styles.handle, { backgroundColor: theme.colors.border }]} />
-          <View style={styles.sheetHeader}>
+          <View className="mb-[14px] h-[5px] w-11 self-center rounded-sf-pill bg-app-border dark:bg-app-border-dark" />
+          <View className="mb-[18px] flex-row items-start justify-between gap-sf-lg">
             <View>
-              <Text style={[styles.sheetTitle, { color: theme.colors.text }]}>更多内容</Text>
-              <Text style={[styles.sheetSubtitle, { color: theme.colors.textSubtle }]}>
+              <Text className="text-lg font-bold text-app-text dark:text-app-text-dark">更多内容</Text>
+              <Text className="mt-sf-xs text-[13px] leading-[18px] text-app-text-subtle dark:text-app-text-subtle-dark">
                 来源碎片、生成信息和拍摄入口都收在这里。
               </Text>
             </View>
-            <TouchableOpacity style={styles.closeButton} onPress={actions.onClose} hitSlop={8}>
+            <TouchableOpacity className="h-8 w-8 items-center justify-center rounded-full" onPress={actions.onClose} hitSlop={8}>
               <SymbolView name="xmark" size={16} tintColor={theme.colors.textSubtle} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={styles.sheetContent} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerClassName="pb-sf-sm" showsVerticalScrollIndicator={false}>
             <Section title="成稿信息">
               <InfoCard>
-                <Text style={[styles.infoRow, { color: theme.colors.text }]}>模式：{modeLabel(metadata.mode)}</Text>
-                <Text style={[styles.infoRow, { color: theme.colors.text }]}>生成类型：{generationLabel(metadata.generationKind)}</Text>
-                <Text style={[styles.infoRow, { color: theme.colors.text }]}>拍摄状态：{metadata.isFilmed ? '已拍摄' : '未拍摄'}</Text>
-                <Text style={[styles.infoRow, { color: theme.colors.textSubtle }]}>
+                <Text className="text-sm leading-[22px] text-app-text dark:text-app-text-dark">模式：{modeLabel(metadata.mode)}</Text>
+                <Text className="text-sm leading-[22px] text-app-text dark:text-app-text-dark">生成类型：{generationLabel(metadata.generationKind)}</Text>
+                <Text className="text-sm leading-[22px] text-app-text dark:text-app-text-dark">拍摄状态：{metadata.isFilmed ? '已拍摄' : '未拍摄'}</Text>
+                <Text className="text-sm leading-[22px] text-app-text-subtle dark:text-app-text-subtle-dark">
                   创建时间：{metadata.createdAt ? formatDate(metadata.createdAt) : '-'}
                 </Text>
               </InfoCard>
@@ -166,7 +165,7 @@ export function ScriptDetailSheet({
                 ))
               ) : (
                 <InfoCard>
-                  <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>
+                  <Text className="text-sm leading-[22px] text-app-text-subtle dark:text-app-text-subtle-dark">
                     当前没有可回溯的来源碎片。
                   </Text>
                 </InfoCard>
@@ -178,106 +177,3 @@ export function ScriptDetailSheet({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  modalRoot: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.28)',
-  },
-  sheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    maxHeight: '82%',
-  },
-  handle: {
-    width: 44,
-    height: 5,
-    borderRadius: 999,
-    alignSelf: 'center',
-    marginBottom: 14,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 16,
-    marginBottom: 18,
-  },
-  sheetTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  sheetSubtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sheetContent: {
-    paddingBottom: 8,
-  },
-  section: {
-    marginBottom: 22,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    marginBottom: 10,
-    color: '#8C8478',
-  },
-  infoCard: {
-    borderRadius: 18,
-    padding: 14,
-  },
-  infoRow: {
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  emptyText: {
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  toolRow: {
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 10,
-  },
-  toolIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toolCopy: {
-    flex: 1,
-  },
-  toolTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  toolSubtitle: {
-    marginTop: 2,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-});

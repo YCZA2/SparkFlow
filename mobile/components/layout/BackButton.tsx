@@ -52,47 +52,28 @@ export function BackButton({
       onPress={handlePress}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       activeOpacity={0.6}
+      className={
+        variant === 'circle'
+          ? 'h-11 w-11 items-center justify-center rounded-full border'
+          : 'min-h-11 min-w-11 flex-row items-center py-sf-xs pr-sf-sm'
+      }
       style={[
-        styles.container,
-        variant === 'circle' ? styles.circleContainer : null,
         variant === 'circle'
           ? {
               backgroundColor:
                 theme.name === 'dark' ? theme.colors.surfaceMuted : 'rgba(255,255,255,0.88)',
               borderColor: theme.colors.border,
+              borderWidth: StyleSheet.hairlineWidth,
             }
           : null,
       ]}
     >
       <SymbolView name="chevron.left" size={22} tintColor={tintColor} />
       {showText && variant === 'plain' ? (
-        <Text style={[styles.text, { color: tintColor }]}>{text}</Text>
+        <Text className="ml-[2px] text-[17px] font-normal" style={{ color: tintColor }}>
+          {text}
+        </Text>
       ) : null}
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-    paddingRight: 8,
-    minWidth: 44,
-    minHeight: 44,
-  },
-  circleContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    paddingVertical: 0,
-    paddingRight: 0,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  text: {
-    fontSize: 17,
-    fontWeight: '400',
-    marginLeft: 2,
-  },
-});

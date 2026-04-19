@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutChangeEvent, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { LayoutChangeEvent, TouchableOpacity, View } from 'react-native';
 
 import { Text } from '@/components/Themed';
 import {
@@ -42,50 +42,59 @@ export function CloudCanvas({
   onClearVisible,
   onPressPoint,
 }: CloudCanvasProps) {
+  /*渲染灵感云图外壳和静态装饰，点位坐标继续保留运行时样式。 */
   const theme = useAppTheme();
 
   return (
-    <View style={[styles.cloudCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-      <View style={styles.cloudHeader}>
+    <View
+      className="rounded-sf-card bg-app-surface p-4 dark:bg-app-surface-dark"
+      style={[theme.shadow.card, { backgroundColor: theme.colors.surface }]}
+    >
+      <View className="flex-row justify-between gap-3">
         <View>
-          <Text style={[styles.cloudTitle, { color: theme.colors.text }]}>
+          <Text className="text-lg font-bold text-app-text dark:text-app-text-dark">
             {activeClusterId === 'all' ? '全量灵感分布' : '当前主题视图'}
           </Text>
-          <Text style={[styles.cloudSubtitle, { color: theme.colors.textSubtle }]}>
+          <Text className="mt-1.5 max-w-[220px] text-[13px] leading-[18px] text-app-text-subtle dark:text-app-text-subtle-dark">
             当前显示 {filteredPoints.length} 个点位
             {clustersLength === 0 ? '，数据还不够多，暂时只展示分布。' : '，点越大代表 z 轴越靠前。'}
           </Text>
         </View>
-        <View style={styles.cloudActions}>
+        <View className="items-end gap-2">
           <TouchableOpacity
-            style={[styles.smallAction, { backgroundColor: theme.colors.surfaceMuted }]}
+            className="rounded-full bg-app-surface-muted px-3 py-2 dark:bg-app-surface-muted-dark"
             onPress={onSelectVisible}
             activeOpacity={0.85}
           >
-            <Text style={[styles.smallActionText, { color: theme.colors.text }]}>全选当前</Text>
+            <Text className="text-xs font-semibold text-app-text dark:text-app-text-dark">全选当前</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.smallAction, { backgroundColor: theme.colors.surfaceMuted }]}
+            className="rounded-full bg-app-surface-muted px-3 py-2 dark:bg-app-surface-muted-dark"
             onPress={onClearVisible}
             activeOpacity={0.85}
           >
-            <Text style={[styles.smallActionText, { color: theme.colors.text }]}>清空当前</Text>
+            <Text className="text-xs font-semibold text-app-text dark:text-app-text-dark">清空当前</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View
-        style={[
-          styles.cloudCanvas,
-          {
-            backgroundColor: theme.colors.surfaceMuted,
-            borderColor: theme.colors.border,
-          },
-        ]}
+        className="mt-4 overflow-hidden rounded-[22px] border bg-app-surface-muted dark:bg-app-surface-muted-dark"
+        style={{
+          height: CLOUD_HEIGHT,
+          backgroundColor: theme.colors.surfaceMuted,
+          borderColor: theme.colors.border,
+        }}
         onLayout={onLayout}
       >
-        <View style={[styles.backgroundOrb, { backgroundColor: theme.colors.background }]} />
-        <View style={[styles.backgroundOrbSecondary, { backgroundColor: theme.colors.surface }]} />
+        <View
+          className="absolute right-[-40px] top-[-30px] h-[220px] w-[220px] rounded-full"
+          style={{ opacity: 0.45, backgroundColor: theme.colors.background }}
+        />
+        <View
+          className="absolute bottom-[-30px] left-[-20px] h-[180px] w-[180px] rounded-full"
+          style={{ opacity: 0.65, backgroundColor: theme.colors.surface }}
+        />
 
         {filteredPoints.map((point) => {
           const isFocused = point.id === focusedPointId;
@@ -97,20 +106,18 @@ export function CloudCanvas({
           return (
             <TouchableOpacity
               key={point.id}
-              style={[
-                styles.point,
-                {
-                  width: size,
-                  height: size,
-                  borderRadius: size / 2,
-                  left: position.left,
-                  top: position.top,
-                  backgroundColor: color,
-                  opacity: 0.62 + ((point.z + 1) / 2) * 0.28,
-                  borderColor: isFocused ? '#FFFFFF' : theme.colors.background,
-                  borderWidth: isFocused || isSelected ? 2 : 0,
-                },
-              ]}
+              className="absolute"
+              style={{
+                width: size,
+                height: size,
+                borderRadius: size / 2,
+                left: position.left,
+                top: position.top,
+                backgroundColor: color,
+                opacity: 0.62 + ((point.z + 1) / 2) * 0.28,
+                borderColor: isFocused ? '#FFFFFF' : theme.colors.background,
+                borderWidth: isFocused || isSelected ? 2 : 0,
+              }}
               onPress={() => onPressPoint(point.id)}
               activeOpacity={0.9}
             />
@@ -118,76 +125,9 @@ export function CloudCanvas({
         })}
       </View>
 
-      <Text style={[styles.selectionHint, { color: theme.colors.textSubtle }]}>
+      <Text className="mt-3 text-xs text-app-text-subtle dark:text-app-text-subtle-dark">
         已在待生成列表中选中 {selectedCount} 条，其中当前筛选下 {visibleSelectedCount} 条
       </Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  cloudCard: {
-    borderRadius: 18,
-    padding: 16,
-  },
-  cloudHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  cloudTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  cloudSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 6,
-    maxWidth: 220,
-  },
-  cloudActions: {
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  smallAction: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  smallActionText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  cloudCanvas: {
-    height: CLOUD_HEIGHT,
-    borderRadius: 22,
-    marginTop: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  backgroundOrb: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    right: -40,
-    top: -30,
-    opacity: 0.45,
-  },
-  backgroundOrbSecondary: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    left: -20,
-    bottom: -30,
-    opacity: 0.65,
-  },
-  point: {
-    position: 'absolute',
-  },
-  selectionHint: {
-    fontSize: 12,
-    marginTop: 12,
-  },
-});

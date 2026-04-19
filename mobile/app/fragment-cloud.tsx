@@ -8,7 +8,6 @@ import { CloudCanvas } from '@/features/fragments/components/CloudCanvas';
 import { ClusterFilter } from '@/features/fragments/components/ClusterFilter';
 import { FragmentDetailCard } from '@/features/fragments/components/FragmentDetailCard';
 import { useFragmentCloudScreen } from '@/features/fragments/useFragmentCloudScreen';
-import { fragmentCloudScreenStyles as styles } from '@/features/fragments/fragmentCloudScreenStyles';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 export default function FragmentCloudScreen() {
@@ -17,7 +16,7 @@ export default function FragmentCloudScreen() {
 
   if (screen.isLoading && !screen.visualization) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View className="flex-1 bg-app-background dark:bg-app-background-dark">
         <Stack.Screen options={{ title: '灵感云图' }} />
         <LoadingState message="正在整理你的灵感向量..." />
       </View>
@@ -26,7 +25,7 @@ export default function FragmentCloudScreen() {
 
   if (screen.error && !screen.visualization) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View className="flex-1 bg-app-background dark:bg-app-background-dark">
         <Stack.Screen options={{ title: '灵感云图' }} />
         <ScreenState
           icon="⚠️"
@@ -43,7 +42,7 @@ export default function FragmentCloudScreen() {
 
   if (screen.points.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View className="flex-1 bg-app-background dark:bg-app-background-dark">
         <Stack.Screen options={{ title: '灵感云图' }} />
         <ScreenState
           icon="☁️"
@@ -57,33 +56,45 @@ export default function FragmentCloudScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View className="flex-1 bg-app-background dark:bg-app-background-dark">
       <Stack.Screen options={{ title: '灵感云图' }} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={[styles.heroCard, theme.shadow.card, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.kicker, { color: theme.colors.textSubtle }]}>SparkFlow Visualization</Text>
-          <Text style={[styles.heroTitle, { color: theme.colors.text }]}>把零散灵感看成一片主题云</Text>
-          <Text style={[styles.heroDesc, { color: theme.colors.textMuted }]}>点击点位看详情，按主题筛选，再带着选中的碎片继续生成口播稿。</Text>
+      <ScrollView
+        contentContainerClassName="gap-sf-screen px-sf-screen pb-8 pt-sf-screen"
+        showsVerticalScrollIndicator={false}
+      >
+        <View
+          className="rounded-sf-card px-[18px] py-[18px] dark:bg-app-surface-dark"
+          style={[theme.shadow.card, { backgroundColor: theme.colors.surface }]}
+        >
+          <Text className="text-[12px] uppercase tracking-[1px] text-app-text-subtle dark:text-app-text-subtle-dark">
+            SparkFlow Visualization
+          </Text>
+          <Text className="mt-[10px] text-[28px] font-bold leading-[34px] text-app-text dark:text-app-text-dark">
+            把零散灵感看成一片主题云
+          </Text>
+          <Text className="mt-[10px] text-sm leading-5 text-app-text-muted dark:text-app-text-muted-dark">
+            点击点位看详情，按主题筛选，再带着选中的碎片继续生成口播稿。
+          </Text>
 
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: theme.colors.surfaceMuted }]}>
-              <Text style={[styles.statValue, { color: theme.colors.text }]}>
+          <View className="mt-4 flex-row gap-2.5">
+            <View className="flex-1 rounded-[14px] bg-app-surface-muted p-3 dark:bg-app-surface-muted-dark">
+              <Text className="text-[22px] font-bold text-app-text dark:text-app-text-dark">
                 {screen.stats?.total_fragments ?? screen.points.length}
               </Text>
-              <Text style={[styles.statLabel, { color: theme.colors.textSubtle }]}>已上图碎片</Text>
+              <Text className="mt-1.5 text-xs text-app-text-subtle dark:text-app-text-subtle-dark">已上图碎片</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: theme.colors.surfaceMuted }]}>
-              <Text style={[styles.statValue, { color: theme.colors.text }]}>
+            <View className="flex-1 rounded-[14px] bg-app-surface-muted p-3 dark:bg-app-surface-muted-dark">
+              <Text className="text-[22px] font-bold text-app-text dark:text-app-text-dark">
                 {screen.stats?.clustered_fragments ?? 0}
               </Text>
-              <Text style={[styles.statLabel, { color: theme.colors.textSubtle }]}>已成主题</Text>
+              <Text className="mt-1.5 text-xs text-app-text-subtle dark:text-app-text-subtle-dark">已成主题</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: theme.colors.surfaceMuted }]}>
-              <Text style={[styles.statValue, { color: theme.colors.text }]}>
+            <View className="flex-1 rounded-[14px] bg-app-surface-muted p-3 dark:bg-app-surface-muted-dark">
+              <Text className="text-[22px] font-bold text-app-text dark:text-app-text-dark">
                 {screen.stats?.uncategorized_fragments ?? 0}
               </Text>
-              <Text style={[styles.statLabel, { color: theme.colors.textSubtle }]}>待积累</Text>
+              <Text className="mt-1.5 text-xs text-app-text-subtle dark:text-app-text-subtle-dark">待积累</Text>
             </View>
           </View>
         </View>

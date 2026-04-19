@@ -4,7 +4,7 @@
  */
 
 import React, { Component, ReactNode } from 'react';
-import { StyleSheet, TouchableOpacity } from 'react-native';
+import { TouchableOpacity } from 'react-native';
 import { Text, View } from './Themed';
 
 interface Props {
@@ -58,14 +58,17 @@ export class ErrorBoundary extends Component<Props, State> {
 
       // 默认错误 UI
       return (
-        <View style={styles.container}>
-          <Text style={styles.emoji}>😵</Text>
-          <Text style={styles.title}>出错了</Text>
-          <Text style={styles.message}>
+        <View className="flex-1 items-center justify-center p-5">
+          <Text className="mb-sf-lg text-[64px]">😵</Text>
+          <Text className="mb-sf-sm text-2xl font-bold text-app-text dark:text-app-text-dark">出错了</Text>
+          <Text className="mb-sf-section text-center text-sm text-app-text-muted dark:text-app-text-muted-dark">
             {this.state.error?.message || '发生了未知错误'}
           </Text>
-          <TouchableOpacity style={styles.button} onPress={this.handleRetry}>
-            <Text style={styles.buttonText}>点击重试</Text>
+          <TouchableOpacity
+            className="rounded-sf-sm bg-app-primary px-sf-section py-sf-md dark:bg-app-primary-dark"
+            onPress={this.handleRetry}
+          >
+            <Text className="text-base font-semibold text-white">点击重试</Text>
           </TouchableOpacity>
         </View>
       );
@@ -74,41 +77,6 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  emoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  message: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  button: {
-    backgroundColor: '#2f95dc',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
 
 /**
  * 便捷 Hook：在函数组件中使用错误边界

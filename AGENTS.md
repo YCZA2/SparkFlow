@@ -127,7 +127,6 @@ Additional local modes:
 
 ```bash
 npm run dev:mobile:simulator
-npm run dev:mobile:web
 ```
 
 Manual database operations:
@@ -252,6 +251,7 @@ http://<your-lan-ip>:8000
 - Reuse existing scripts and utilities before adding new entrypoints
 - Reuse `scripts/mobile-release.sh` and the existing npm aliases for mobile build / submission flows instead of duplicating EAS profile names, platform flags, or `APP_ENV` mappings in new docs or scripts
 - Environment configuration is intentionally limited to `development` and `production`: the backend uses `APP_ENV + .env/.env.<env>`, and the mobile app uses Expo runtime config; do not leak fixed LAN addresses, debug-only entrypoints, or manual network overrides into production behavior
+- The mobile app only targets iOS and Android native builds. Do not add Expo Web-specific scripts, dependencies, or browser-only compatibility work unless the product scope changes explicitly.
 - If a change alters product behavior, user-facing flows, API contracts, operational steps, or development workflow, you must update the corresponding documentation in the same pass. Before editing docs, scan the existing Markdown files in the relevant area such as root docs, `memory-bank/`, and feature-level `README.md` files so the change lands in the right source of truth instead of creating drift or duplicate guidance
 - Backend tests must stay layered: smoke / contract tests that do not need DB access or startup side effects should avoid PostgreSQL by default, while tests that depend on `db_session_factory`, `app`, `async_client`, or real lifespan behavior must be marked `integration`
 - Keep comments concise. Every function must have a brief Chinese comment describing its responsibility or intent; for non-obvious or project-specific logic, also explain the key constraint or reason, but avoid line-by-line restatement

@@ -2,6 +2,8 @@
 
 SparkFlow 的 Expo / React Native 移动端工程。
 
+当前项目只面向 iOS / Android 原生端，不维护 Expo Web 构建、浏览器运行时兼容层或 web 导出流程。
+
 ## 今日进展（2026-04-01）
 
 - 移动端配置已收口到 Expo runtime config：当前只区分 `development` 与 `production`，通过 `mobile/app.config.ts` 下发 `appEnv`、`defaultApiBaseUrl` 与 `enableDeveloperTools`。
@@ -124,7 +126,7 @@ bash scripts/dev-mobile.sh start
 脚本会自动注入：
 
 - `APP_ENV=development`
-- `APP_DEFAULT_API_BASE_URL=http://<你的局域网 IP>:8000`（LAN 模式）或 `http://127.0.0.1:8000`（simulator/web）
+- `APP_DEFAULT_API_BASE_URL=http://<你的局域网 IP>:8000`（LAN 模式）或 `http://127.0.0.1:8000`（simulator）
 
 也可以用 npm 别名：
 

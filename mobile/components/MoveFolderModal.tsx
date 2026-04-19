@@ -4,7 +4,6 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -63,34 +62,33 @@ export function MoveFolderModal({
 
   return (
     <Modal animationType="none" visible={visible} transparent statusBarTranslucent onRequestClose={onClose}>
-      <View style={styles.modalRoot}>
+      <View className="flex-1 justify-end">
         <Animated.View
           entering={FadeIn.duration(160)}
           exiting={FadeOut.duration(120)}
-          style={StyleSheet.absoluteFill}
+          className="absolute inset-0"
         >
-          <Pressable style={styles.backdrop} onPress={onClose} />
+          <Pressable className="flex-1 bg-slate-950/30" onPress={onClose} />
         </Animated.View>
 
         <Animated.View
           entering={SlideInDown.duration(220)}
           exiting={SlideOutDown.duration(180)}
+          className="max-h-[70%] rounded-t-[28px] bg-app-background px-5 pt-sf-md dark:bg-app-background-dark"
           style={[
-            styles.sheet,
             {
-              backgroundColor: theme.colors.background,
               paddingBottom: insets.bottom + 16,
             },
           ]}
         >
-          <View style={[styles.handle, { backgroundColor: theme.colors.border }]} />
-          <Text style={[styles.title, { color: theme.colors.text }]}>移动到</Text>
+          <View className="mb-sf-lg h-[5px] w-11 self-center rounded-sf-pill bg-app-border dark:bg-app-border-dark" />
+          <Text className="mb-sf-md text-xl font-bold text-app-text dark:text-app-text-dark">移动到</Text>
 
           {isLoading ? (
-            <ActivityIndicator style={styles.loader} color={theme.colors.primary} />
+            <ActivityIndicator className="my-8" color={theme.colors.primary} />
           ) : (
             <ScrollView
-              style={styles.list}
+              className="grow-0"
               showsVerticalScrollIndicator={false}
               bounces={false}
             >
@@ -112,7 +110,7 @@ export function MoveFolderModal({
                 />
               ))}
               {folders.length === 0 && (
-                <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>
+                <Text className="py-5 text-center text-sm text-app-text-subtle dark:text-app-text-subtle-dark">
                   暂无文件夹，可在碎片列表页新建
                 </Text>
               )}
@@ -138,7 +136,7 @@ function FolderRow({ name, isCurrent, isNone = false, onPress, theme }: FolderRo
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.75}
-      style={[styles.folderRow, { borderBottomColor: theme.colors.border }]}
+      className="flex-row items-center gap-sf-md border-b border-app-border py-[14px] dark:border-app-border-dark"
     >
       <SymbolView
         name={isNone ? 'tray' : 'folder'}
@@ -146,13 +144,11 @@ function FolderRow({ name, isCurrent, isNone = false, onPress, theme }: FolderRo
         tintColor={isCurrent ? theme.colors.primary : theme.colors.textSubtle}
       />
       <Text
-        style={[
-          styles.folderName,
-          {
-            color: isCurrent ? theme.colors.primary : theme.colors.text,
-            fontWeight: isCurrent ? '600' : '400',
-          },
-        ]}
+        className="flex-1 text-base"
+        style={{
+          color: isCurrent ? theme.colors.primary : theme.colors.text,
+          fontWeight: isCurrent ? '600' : '400',
+        }}
       >
         {name}
       </Text>
@@ -162,55 +158,3 @@ function FolderRow({ name, isCurrent, isNone = false, onPress, theme }: FolderRo
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  modalRoot: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.28)',
-  },
-  sheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    maxHeight: '70%',
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 44,
-    height: 5,
-    borderRadius: 999,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  loader: {
-    marginVertical: 32,
-  },
-  list: {
-    flexGrow: 0,
-  },
-  folderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  folderName: {
-    flex: 1,
-    fontSize: 16,
-  },
-  emptyText: {
-    fontSize: 14,
-    paddingVertical: 20,
-    textAlign: 'center',
-  },
-});
