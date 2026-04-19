@@ -78,7 +78,7 @@ def read_fragment_snapshot_text(snapshot: FragmentSnapshot) -> str:
 
 
 def serialize_fragment_snapshot(snapshot: FragmentSnapshot) -> dict[str, Any]:
-    """把快照 DTO 序列化为可写入 pipeline 输入的字典。"""
+    """把快照 DTO 序列化为可写入任务输入的字典。"""
     payload = asdict(snapshot)
     payload["created_at"] = snapshot.created_at.isoformat()
     payload["updated_at"] = snapshot.updated_at.isoformat()
@@ -87,7 +87,7 @@ def serialize_fragment_snapshot(snapshot: FragmentSnapshot) -> dict[str, Any]:
 
 
 def hydrate_fragment_snapshot(item: dict[str, Any], *, user_id: str) -> FragmentSnapshot | None:
-    """把 pipeline 输入中的字典恢复为标准快照 DTO。"""
+    """把任务输入中的字典恢复为标准快照 DTO。"""
     snapshot_id = str(item.get("id") or "").strip()
     if not snapshot_id:
         return None

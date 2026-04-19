@@ -27,7 +27,7 @@ interface PickedFile {
 
 /**
  承接从手机文件系统选取音频文件并上传转写，上传完成后立即返回碎片列表。
- 转录进度由碎片列表的 media_pipeline_status 展示，无需在此页等待。
+ 转录进度由碎片列表的媒体任务状态展示，无需在此页等待。
  */
 export default function ImportAudioScreen() {
   const router = useRouter();

@@ -61,7 +61,7 @@ export function useGenerateScreen(): GenerateScreenState {
   }, [fragments, topic]);
 
   /**
-   提交脚本生成任务，并在 pipeline 成功后跳转详情页。
+   提交脚本生成任务，并在任务成功后跳转详情页。
    */
   const generate = useCallback(async () => {
     if (ids.length === 0) {

@@ -31,16 +31,16 @@ test('isImportLinkReady only accepts non-empty links', () => {
   assert.equal(isImportLinkReady('https://v.douyin.com/demo'), true);
 });
 
-test('resolveImportedFragmentId prefers pipeline resource when available', () => {
+test('resolveImportedFragmentId prefers task resource when available', () => {
   assert.equal(
     resolveImportedFragmentId('fragment-task', {
       status: 'succeeded',
       resource: {
         resource_type: 'fragment',
-        resource_id: 'fragment-pipeline',
+        resource_id: 'fragment-task',
       },
     }),
-    'fragment-pipeline'
+    'fragment-task'
   );
 });
 
@@ -50,7 +50,7 @@ test('resolveImportedFragmentId falls back to task fragment id', () => {
       status: 'failed',
       resource: {
         resource_type: 'fragment',
-        resource_id: 'fragment-pipeline',
+        resource_id: 'fragment-task',
       },
     }),
     'fragment-task'

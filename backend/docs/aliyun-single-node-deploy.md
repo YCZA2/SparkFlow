@@ -8,7 +8,7 @@
 - `systemd + nginx + PostgreSQL + FastAPI`
 - 文件存储先使用 `FILE_STORAGE_PROVIDER=local`
 - Chroma 与 uploads 保存在应用目录下
-- 仅启动 `1` 个 `uvicorn` worker，避免 scheduler / pipeline dispatcher 重复执行
+- 仅启动 `1` 个 `uvicorn` worker，避免 scheduler 重复执行；异步任务由独立 Celery worker 承载
 - 默认通过本机 `ssh aliyun` + `rsync` 发布，不依赖服务器额外配置 GitHub 凭据
 
 ## 服务器准备

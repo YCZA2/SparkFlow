@@ -372,7 +372,7 @@ async def _enqueue_daily_push_periodic_async() -> dict[str, Any]:
     runtime = ensure_task_runtime()
     with runtime.container.session_factory() as db:
         use_case = DailyPushUseCase(
-            pipeline_service=build_daily_push_task_service(runtime.container),
+            task_service=build_daily_push_task_service(runtime.container),
         )
         return await use_case.run_daily_job(db=db)
 

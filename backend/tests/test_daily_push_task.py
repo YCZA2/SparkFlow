@@ -158,7 +158,7 @@ async def test_daily_push_task_marks_failed_when_llm_fails(
     auth_headers_factory,
     app,
 ) -> None:
-    """LLM 生成失败时应把 pipeline 标记为失败。"""
+    """LLM 生成失败时应把任务标记为失败。"""
     now = datetime.now(timezone.utc)
     fragment_ids = await _push_fragment_backups(
         async_client,
@@ -186,7 +186,7 @@ async def test_daily_push_task_marks_failed_when_llm_fails(
 
 
 @pytest.mark.asyncio
-async def test_scheduler_daily_push_job_enqueues_pipeline(async_client, auth_headers_factory, app) -> None:
+async def test_scheduler_daily_push_job_enqueues_task(async_client, auth_headers_factory, app) -> None:
     """scheduler 应复用同一条异步每日推盘任务。"""
     yesterday = datetime.now(timezone.utc) - timedelta(days=1)
     fragment_ids = await _push_fragment_backups(

@@ -38,9 +38,9 @@ def map_script(script: Script) -> ScriptDetail:
 class RagScriptGenerationUseCase:
     """封装 RAG 脚本生成任务创建入口。"""
 
-    def __init__(self, *, pipeline_service: RagScriptTaskService) -> None:
+    def __init__(self, *, task_service: RagScriptTaskService) -> None:
         """装配 RAG 脚本生成任务依赖。"""
-        self.pipeline_service = pipeline_service
+        self.task_service = task_service
 
     async def generate_async(
         self,
@@ -51,7 +51,7 @@ class RagScriptGenerationUseCase:
         fragment_ids: list[str],
     ) -> ScriptGenerationResponse:
         """创建基于主题和参考脚本 RAG 的异步脚本生成任务。"""
-        run = await self.pipeline_service.create_run(
+        run = await self.task_service.create_run(
             db=db,
             user_id=user_id,
             topic=topic,
@@ -127,10 +127,10 @@ class DailyPushUseCase:
     def __init__(
         self,
         *,
-        pipeline_service: DailyPushTaskService,
+        task_service: DailyPushTaskService,
     ) -> None:
         """装配每日推盘任务依赖。"""
-        self.pipeline_service = pipeline_service
+        self.task_service = task_service
 
     async def trigger_for_user(
         self,
@@ -140,7 +140,7 @@ class DailyPushUseCase:
         force: bool = False,
     ) -> ScriptGenerationResponse:
         """按当天碎片创建异步每日推盘任务。"""
-        run = await self.pipeline_service.create_run(
+        run = await self.task_service.create_run(
             db=db,
             user_id=user_id,
             reference_time=None,
@@ -158,4 +158,4 @@ class DailyPushUseCase:
 
     async def run_daily_job(self, *, db: Session) -> dict:
         """为所有用户入队每日推盘调度任务。"""
-        return await self.pipeline_service.enqueue_for_all_users(db=db)
+        return await self.task_service.enqueue_for_all_users(db=db)

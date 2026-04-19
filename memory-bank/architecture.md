@@ -11,16 +11,16 @@
 - 正式移动包现在默认移除 `网络设置 / API 测试 / 错误日志` 等开发入口；即使深链直达调试页，也只会显示拒绝态而不会暴露调试动作。
 - `fragments / folders` 的 phase 1 local-first 主链路已经落地：移动端本地 SQLite + `body.html` 为真值，远端只承担自动备份与显式恢复。
 - 后端已经补齐 `backups` 模块、`device session` 单设备在线约束，以及面向本地快照的转写 / 外链导入 / 脚本生成请求入口。
-- `media_ingestion` 已改成 transcript-first：上传录音和外链导入都会在 transcript 落库后立刻结束主 pipeline，摘要 / 标签 / 向量由单独的 fragment derivative pipeline 异步回填。
+- `media_ingestion` 已改成 transcript-first：上传录音和外链导入都会在 transcript 落库后立刻结束主任务，摘要 / 标签 / 向量由单独的 `fragment_derivative_backfill` 任务异步回填。
 - 向量检索链路已补齐对当前 Chroma 版本的兼容：`list_collections()` 返回字符串集合名时，namespace 检查、相似检索和文档枚举都按同一适配层处理。
 - 移动端已经补齐 backup queue、显式恢复、本地媒体缓存重建、音频 `object_key` 持久化与恢复链路。
 - `scripts` 本轮也切入 local-first：脚本生成成功后会立即落本地 SQLite + `body.html` 文件，后续详情编辑、回收站、恢复冲突副本与拍摄状态都以本地为真值；后端 `scripts` 表只保留生成初稿与兼容查询投影，不再反向覆盖本地正文。
-- `daily_push` 已切到“后端定时 + 备份快照输入”模式：调度器与手动补跑都从 `backup_records` 中读取 fragment snapshot，再交给 daily-push pipeline 生成脚本，不再把历史 `fragments` 表当作推盘输入真值。
+- `daily_push` 已切到“后端定时 + 备份快照输入”模式：调度器与手动补跑都从 `backup_records` 中读取 fragment snapshot，再交给 `daily_push_generation` 任务生成脚本，不再把历史 `fragments` 表当作推盘输入真值。
 - 后端本轮已经正式下线 `fragments / fragment_tags / fragment_blocks` 旧投影表：标签聚合、导出、文件夹计数、录音导入和外链导入全部改为直接读写 `backup_records` 中的 fragment snapshot。
 - `transcriptions` 与 `external_media` 现在都要求客户端先创建本地 placeholder，并显式传入 `local_fragment_id`；后端不再兜底创建远端 fragment 业务记录。
 - 服务端生成字段现在直接补写回 fragment snapshot：`transcript`、`speaker_segments`、`summary`、`tags`、`audio_object_key` 及音频访问地址都会写入 `backup_records`，但不会覆盖客户端拥有的 `body_html / plain_text_snapshot / folder_id / content_state / is_filmed`。
 - `knowledge` 后端本轮补齐了文本型知识 ingestion：`txt/docx/pdf/xlsx` 统一走 `parsers -> chunking -> indexing -> application` 四层，默认仍写入 Chroma，但对上已通过独立知识索引接口解耦，后续可替换为 LightRAG 等底层引擎。
-- `document_import` 后端新增文档导入碎片能力：`txt/md/docx/pdf/xlsx` 文件上传后通过 `document_import` pipeline 异步解析为纯文本，转为 HTML 写入 fragment snapshot 的 `body_html`，随后自动触发 `fragment_derivative_backfill` 补齐摘要、标签和向量。文档解析逻辑已从知识库 `parsers.py` 提升为共享模块 `modules/shared/content/document_parsers.py`，供知识库与文档导入复用。
+- `document_import` 后端新增文档导入碎片能力：`txt/md/docx/pdf/xlsx` 文件上传后通过 `document_import` 任务异步解析为纯文本，转为 HTML 写入 fragment snapshot 的 `body_html`，随后自动触发 `fragment_derivative_backfill` 补齐摘要、标签和向量。文档解析逻辑已从知识库 `parsers.py` 提升为共享模块 `modules/shared/content/document_parsers.py`，供知识库与文档导入复用。
 - 脚本生成三层上下文本轮调整为“预置稳定内核 + 缓存方法论 + 实时相关素材召回”：稳定内核当前不再按用户素材动态生成，碎片方法论改由每日后台维护任务在阈值达标后静默刷新。
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
 - 仓库本轮也完成了一次大规模命名清理：旧的 remote-first / local-draft 兼容层统一下沉为 `legacy*` 语义；凡仍映射旧库或旧协议的字段，都明确标记为 legacy cloud-binding / legacy snapshot，而不再伪装成当前领域真值。
@@ -45,7 +45,7 @@ flowchart LR
     LLM["LLM Provider<br/>Qwen<br/>轻量摘要/标签增强"]
     EMB["Embedding Provider<br/>Qwen"]
     SCH["APScheduler<br/>daily push + writing context cron"]
-    PIPE["Pipeline Dispatcher<br/>DB-backed worker"]
+    TASK["Celery Task Worker<br/>task_runs / task_step_runs"]
 
     U --> M
     M --> S
@@ -60,7 +60,7 @@ flowchart LR
     API --> LLM
     API --> EMB
     API --> SCH
-    API --> PIPE
+    API --> TASK
 ```
 
 ## 2. Repository Shape
@@ -167,7 +167,7 @@ flowchart TD
 - `script.source_fragment_ids` 只表示首次生成来源，script 不会重新进入 fragment 检索、聚类、每日推盘选材或下一轮脚本生成输入
 - 移动端在收到“设备会话已失效”后会停止自动补 token，转入本地只读态，并要求用户在 `profile.tsx` 显式重新连接当前设备
 - 录音上传、外链导入、脚本生成、备份队列冲刷和显式恢复现在都绑定统一 `TaskExecutionScope(user_id + session_version + workspace_epoch)`；一旦账号切换、登出或会话失效，飞行中的旧任务会停止回写当前工作区，并留在原工作区等待下次恢复
-- `scripts` 额外维护了按工作区隔离的 pending task 注册表；App 启动并挂载工作区后，会先恢复本地 `pending|failed` 备份，再根据保存的 `task_id` 重查媒体任务和脚本生成终态；个别本地字段名仍保留 `pipeline*` 仅作兼容
+- `scripts` 额外维护了按工作区隔离的 pending task 注册表；App 启动并挂载工作区后，会先恢复本地 `pending|failed` 备份，再根据保存的 `task_id` 重查媒体任务和脚本生成终态；个别媒体本地列名仍保留 `media_pipeline_*` 作为存量 SQLite 字段
 
 ### 3.5 Backup Snapshot And File Sync
 
@@ -206,7 +206,7 @@ flowchart TD
 - 后端如果要理解前端真值，读取到的永远是“**截止当前时刻，已经成功上传到服务端**”的 snapshot
 - 还停留在设备本地、尚未 flush 成功、或上传失败的改动，对后端都是不可见的
 - 因此 snapshot-driven 后端能力的语义是“基于最近已同步真值运行”，不是“基于设备瞬时最新状态运行”
-- 每日推盘已经按这套方式落地：调度器和手动补跑都从 `backup_records` 提取 fragment snapshot，再交给 daily-push pipeline 生成脚本，不再把历史 `fragments` 表当作输入真值
+- 每日推盘已经按这套方式落地：调度器和手动补跑都从 `backup_records` 提取 fragment snapshot，再交给 `daily_push_generation` 任务生成脚本，不再把历史 `fragments` 表当作输入真值
 
 当前推荐的后端分层口径是：
 
@@ -352,7 +352,7 @@ flowchart TD
 - STT: 默认 `DashScope` 录音文件识别，支持说话人分离。
 - Embedding: 默认 `Qwen text-embedding-v2`。
 - Vector DB: 默认 `ChromaDB`。
-- Workflow Provider: 当前保留通用 `workflow_provider` 端口与 `DifyWorkflowProvider` 实现，供未来外挂工作流或实验性链路复用；当前主脚本生成链路已经收口到后端 `RagScriptPipelineService`。
+- Workflow Provider: 当前保留通用 `workflow_provider` 端口与 `DifyWorkflowProvider` 实现，供未来外挂工作流或实验性链路复用；当前主脚本生成链路已经收口到后端 `RagScriptTaskService`。
 - Knowledge Index Store: 当前知识库索引通过独立 `knowledge_index_store` 抽象接入；默认实现仍由 `AppVectorStore` 适配 Chroma，未来若切换 LightRAG，目标是只替换这一层。
 - 当前脚本生成输入收敛为 `topic` + `fragment_ids`：后端先构建三层写作上下文，再生成 SOP 大纲并拼装草稿。其中：
 - `稳定内核层` 当前使用系统预置文案，不再在生成链路里按用户历史碎片或知识库动态生成。
@@ -409,9 +409,9 @@ sequenceDiagram
     participant API as /api/transcriptions
     participant FS as Local Audio Storage
     participant DB as PostgreSQL
-    participant PIPE as Pipeline Worker
+    participant TASK as Task Worker
     participant STT as STT
-    participant DERIV as Derivative Pipeline
+    participant DERIV as Derivative Task
     participant LLM as Summary/Tags
     participant VDB as ChromaDB
 
@@ -420,10 +420,10 @@ sequenceDiagram
     API->>API: audio_ingestion.ingest_audio(upload)
     API->>DB: seed fragment snapshot + task_runs + task_step_runs
     API-->>App: task_id + fragment_id
-    PIPE->>STT: transcribe(audio)
-    PIPE->>DB: persist transcript + speaker_segments
-    PIPE->>DB: mark media_ingestion succeeded
-    PIPE->>DB: enqueue fragment_derivative_backfill(best effort)
+    TASK->>STT: transcribe(audio)
+    TASK->>DB: persist transcript + speaker_segments
+    TASK->>DB: mark media_ingestion succeeded
+    TASK->>DB: enqueue fragment_derivative_backfill(best effort)
     DERIV->>LLM: generate summary/tags
     DERIV->>DB: patch fragment snapshot(summary/tags)
     DERIV->>VDB: upsert fragment embedding
@@ -443,7 +443,7 @@ sequenceDiagram
     participant App as Client
     participant API as /api/external-media/audio-imports
     participant DB as PostgreSQL
-    participant PIPE as Pipeline Worker
+    participant TASK as Task Worker
     participant Provider as ExternalMediaProvider
     participant FF as ffmpeg
     participant FS as uploads/external_media
@@ -453,18 +453,18 @@ sequenceDiagram
     API->>API: audio_ingestion.ingest_external_media(external_link)
     API->>DB: create task_runs + task_step_runs
     API-->>App: task_id + fragment_id
-    PIPE->>Provider: resolve_audio(...)
+    TASK->>Provider: resolve_audio(...)
     Provider->>FF: extract m4a from remote video url
     FF-->>Provider: temp m4a path
-    PIPE->>FS: save imported audio
-    PIPE->>DB: update fragment audio metadata
-    PIPE->>DB: transcribe / finalize transcript
-    PIPE->>DB: enqueue derivative backfill(best effort)
+    TASK->>FS: save imported audio
+    TASK->>DB: update fragment audio metadata
+    TASK->>DB: transcribe / finalize transcript
+    TASK->>DB: enqueue derivative backfill(best effort)
 ```
 
 关键点：
 
-- 当前接口只创建本地 fragment 对应的服务端快照和后台任务，外链解析、下载转码与 transcript 落库在 `media_ingestion` pipeline 中异步执行，摘要/标签/向量随后异步补齐。
+- 当前接口只创建本地 fragment 对应的服务端快照和后台任务，外链解析、下载转码与 transcript 落库在 `media_ingestion` 任务中异步执行，摘要/标签/向量随后异步补齐。
 - `folder_id` 为可选字段；若从某个文件夹页发起导入，预创建 fragment 会直接归入该文件夹。
 - 对外接口按多平台抽象设计，但 v1 只有抖音 provider。
 - 导入文件统一保存到对象存储 `audio/imported/...` 命名空间，输出格式固定为 `m4a`。
@@ -477,9 +477,9 @@ sequenceDiagram
     participant API as /api/imports/document
     participant FS as File Storage
     participant DB as PostgreSQL
-    participant PIPE as Pipeline Worker
+    participant TASK as Task Worker
     participant PARSER as document_parsers
-    participant DERIV as Derivative Pipeline
+    participant DERIV as Derivative Task
     participant LLM as Summary/Tags
     participant VDB as ChromaDB
 
@@ -488,13 +488,13 @@ sequenceDiagram
     API->>DB: seed fragment snapshot(source=document_import, content_state=empty)
     API->>DB: create task_runs + task_step_runs
     API-->>App: task_id + file_size
-    PIPE->>FS: read_bytes(document file)
-    PIPE->>PARSER: parse_uploaded_text(txt/md/docx/pdf/xlsx)
-    PARSER-->>PIPE: plain_text
-    PIPE->>PIPE: convert_markdown_to_basic_html(plain_text)
-    PIPE->>DB: patch fragment snapshot(body_html + plain_text_snapshot + content_state=body_present)
-    PIPE->>DB: mark document_import succeeded
-    PIPE->>DB: enqueue fragment_derivative_backfill(best effort)
+    TASK->>FS: read_bytes(document file)
+    TASK->>PARSER: parse_uploaded_text(txt/md/docx/pdf/xlsx)
+    PARSER-->>TASK: plain_text
+    TASK->>TASK: convert_markdown_to_basic_html(plain_text)
+    TASK->>DB: patch fragment snapshot(body_html + plain_text_snapshot + content_state=body_present)
+    TASK->>DB: mark document_import succeeded
+    TASK->>DB: enqueue fragment_derivative_backfill(best effort)
     DERIV->>LLM: generate summary/tags
     DERIV->>DB: patch fragment snapshot(summary/tags)
     DERIV->>VDB: upsert fragment embedding
@@ -505,11 +505,11 @@ sequenceDiagram
 - 文档导入前，客户端必须先创建本地占位 fragment（`content_state=empty`），并传入 `local_fragment_id`。
 - 支持格式：`.txt`、`.md`、`.docx`、`.pdf`、`.xlsx`；文件大小上限 20MB。
 - 文档文件保存到对象存储 `documents/{user_id}/{fragment_id}/{filename}` 命名空间。
-- `document_import` pipeline 包含 3 个步骤：`parse_document`（解析文件为纯文本）、`write_fragment_body`（纯文本转 HTML 写入 snapshot）、`finalize_import`（触发衍生回填）。
+- `document_import` 任务包含 3 个步骤：`parse_document`（解析文件为纯文本）、`write_fragment_body`（纯文本转 HTML 写入 snapshot）、`finalize_import`（触发衍生回填）。
 - Markdown 文件的原始文本通过 `convert_markdown_to_basic_html()` 保留标题、列表、引用等结构；其他格式的纯文本按段落包裹 `<p>` 标签。
 - 解析完成后自动触发 `fragment_derivative_backfill`，异步补齐摘要、标签和向量，与音频导入链路的回填行为一致。
 - 文档解析逻辑位于 `modules/shared/content/document_parsers.py`，与知识库模块共享；知识库模块的 `parsers.py` 已改为从此共享模块导入。
-### 5.3 Script Generation Pipeline
+### 5.4 Script Generation Task
 
 ```mermaid
 sequenceDiagram
@@ -518,20 +518,19 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant VDB as VectorStore
     participant WEB as WebSearchProvider
-    participant PIPE as Pipeline Worker
-    participant WFP as Workflow Provider
+    participant TASK as Task Worker
+    participant LLM as LLM Provider
     participant SCRIPT as scripts repository
 
-    App->>API: POST fragment_ids + mode + query_hint?
+    App->>API: POST topic + fragment_ids
     API->>DB: create task_runs + task_step_runs
     API-->>App: task_id + status
-    PIPE->>VDB: query_knowledge_docs(...)
-    PIPE->>WEB: optional search(...)
-    PIPE->>WFP: submit workflow run
-    PIPE->>WFP: poll workflow run
-    WFP-->>PIPE: outputs(title/outline/draft/...)
-    PIPE->>SCRIPT: create script(body_html=normalized_html)
-    PIPE->>DB: mark pipeline succeeded + resource(script_id)
+    TASK->>VDB: query_knowledge_docs(...)
+    TASK->>WEB: optional search(...)
+    TASK->>LLM: generate outline + draft
+    LLM-->>TASK: outputs(title/outline/draft/...)
+    TASK->>SCRIPT: create script(body_html=normalized_html)
+    TASK->>DB: mark task succeeded + resource(script_id)
     App->>API: GET /api/tasks/{task_id}
     API-->>App: script_id + latest status
 ```
@@ -540,23 +539,23 @@ sequenceDiagram
 
 - 外挂工作流 provider 只负责远程执行步骤，不直接访问 PostgreSQL、ChromaDB 或业务表。
 - fragments、knowledge hits 和可选 web hits 都由 SparkFlow 后端先收集。
-- SparkFlow 后端向内部 task pipeline 传递稳定内核、方法论、相关素材、SOP 大纲和可选碎片背景；客户端主路径统一消费 `task_id` 和 `/api/tasks/*`。
+- SparkFlow 后端向内部 task runtime 传递稳定内核、方法论、相关素材、SOP 大纲和可选碎片背景；客户端主路径统一消费 `task_id` 和 `/api/tasks/*`。
 - `task_runs` / `task_step_runs` 是后台状态唯一事实源；`agent_runs` 与 `/api/agent/*` 已移除。
 
-### 5.4 Script Generation Notes
+### 5.5 Script Generation Notes
 
 ```mermaid
 sequenceDiagram
     participant App as Mobile
     participant API as /api/scripts/generation
     participant API as /api/scripts/generation
-    participant PIPE as /api/tasks/{task_id}
+    participant TASK_API as /api/tasks/{task_id}
     participant SCRIPT as /api/scripts/{script_id}
 
     App->>API: 创建脚本任务
     API-->>App: task_id
-    App->>PIPE: 轮询直到 succeeded
-    PIPE-->>App: resource.script_id
+    App->>TASK_API: 轮询直到 succeeded
+    TASK_API-->>App: resource.script_id
     App->>SCRIPT: 读取脚本详情
     SCRIPT-->>App: script detail
 ```
@@ -566,9 +565,9 @@ sequenceDiagram
 - `POST /api/scripts/generation` 只负责创建任务，不再同步返回 `Script`。
 - 客户端应统一经由 `/api/tasks/{task_id}` 读取最终 `script_id`，再跳转脚本详情。
 - 当前生成链路使用 `topic` 作为大纲生成和相关素材召回的统一驱动输入；稳定内核当前走系统预置，碎片方法论只读取缓存条目，离线维护任务每日检测碎片总量与增量后决定是否重算。
-- pipeline 关键步骤为 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`。
+- 脚本生成任务关键步骤为 `generate_outline`、`retrieve_examples`、`generate_script_draft`、`persist_script`。
 
-### 5.5 Fragment Visualization
+### 5.6 Fragment Visualization
 
 ```mermaid
 sequenceDiagram
@@ -590,7 +589,7 @@ sequenceDiagram
 - 实现位于 `backend/modules/fragments/visualization.py`。
 - 首版走轻量 PCA + 聚类，不依赖重型 3D 栈。
 
-### 5.6 Daily Push
+### 5.7 Daily Push
 
 ```mermaid
 sequenceDiagram
@@ -598,23 +597,23 @@ sequenceDiagram
     participant UseCase as DailyPushUseCase
     participant DB as PostgreSQL
     participant VDB as VectorStore
-    participant PIPE as Pipeline Runner
+    participant TASK as Task Runner
     participant LLM as LLM Provider
 
     Scheduler->>UseCase: run_daily_job()
     UseCase->>DB: load yesterday fragments
     UseCase->>VDB: semantic relatedness check
-    UseCase->>PIPE: create daily_push_generation run
-    PIPE->>LLM: generate draft/title
-    LLM-->>PIPE: daily push result
-    PIPE->>DB: save ready daily push script
+    UseCase->>TASK: create daily_push_generation run
+    TASK->>LLM: generate draft/title
+    LLM-->>TASK: daily push result
+    TASK->>DB: save ready daily push script
 ```
 
 关键点：
 
 - scheduler 在 FastAPI lifespan 内启动与停止。
 - 手动触发接口已存在：`/api/scripts/daily-push/trigger` 和 `/api/scripts/daily-push/force-trigger`，当前返回异步 `task_id` / `task_type` / `status_query_url`。
-- 每日推盘当前和脚本生成一样，统一走后端直连 LLM + pipeline 编排；摘要/标签增强沿用同一组基础 provider。
+- 每日推盘当前和脚本生成一样，统一走后端直连 LLM + task runtime 编排；摘要/标签增强沿用同一组基础 provider。
 - 当前后端链路已完成，但首页“每日灵感卡片”还没有稳定接入到实际主页面。
 
 ## 6. Current API Surface

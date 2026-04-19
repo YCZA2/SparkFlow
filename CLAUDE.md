@@ -93,13 +93,13 @@ backend/
 ├── main.py                  # FastAPI entry point
 ├── modules/                 # Feature modules (presentation / application layers)
 │   ├── fragments/           # Fragment APIs, orchestration, mapper, services
-│   ├── scripts/             # Script generation + pipeline definitions
-│   ├── pipelines/           # Pipeline status & retry APIs
+│   ├── scripts/             # Script generation + task definitions
+│   ├── tasks/               # Task status, steps & retry APIs
 │   ├── transcriptions/      # Voice upload and transcription
 │   ├── backups/             # Auto-backup + explicit restore
 │   ├── external_media/      # External link imports (TikTok adapter)
 │   ├── knowledge/           # Knowledge base APIs
-│   └── shared/              # Pipeline runtime, provider factories, storage, vector store
+│   └── shared/              # Task runtime, provider factories, storage, vector store
 ├── domains/                 # Domain repositories and persistence
 ├── services/                # Provider adapters (Dify, DashScope, Qwen, ChromaDB, external_media)
 ├── models/database.py       # Engine / session setup
@@ -125,7 +125,7 @@ mobile/
    - Stable core: system preset values and themes
    - Methodology: cached fragment distillation + uploaded materials + preset templates
    - Related materials: dynamic recall from historical scripts, fragments, and knowledge docs
-4. **Daily Auto-Aggregation** → ≥3 related fragments from yesterday → `daily_push_generation` pipeline run
+4. **Daily Auto-Aggregation** → ≥3 related fragments from yesterday → `daily_push_generation` task run
 5. **Teleprompter Recording** → overlay teleprompter on camera → save video to local photos
 
 ## Database Schema (Key Tables)

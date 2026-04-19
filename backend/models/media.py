@@ -15,7 +15,7 @@ class KnowledgeDoc(Base):
 
     存储用户上传的高赞文案、语言习惯文档或参考脚本，用于风格模仿和 RAG 生成
     doc_type 取值：'high_likes' | 'language_habit' | 'reference_script'
-    reference_script 类型通过异步 pipeline 提取风格描述并分块向量化
+    reference_script 类型通过异步任务提取风格描述并分块向量化
     """
     __tablename__ = "knowledge_docs"
 

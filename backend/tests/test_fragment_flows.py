@@ -97,7 +97,7 @@ async def test_fragments_similarity_and_visualization(async_client, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_import_external_audio_only_creates_pipeline_in_request_phase(async_client, auth_headers_factory, app, external_media_provider, db_session_factory) -> None:
+async def test_import_external_audio_only_creates_task_in_request_phase(async_client, auth_headers_factory, app, external_media_provider, db_session_factory) -> None:
     """外链导入请求阶段只创建 local-first 任务，不同步解析媒体。"""
     await app.state.container.task_dispatcher.stop()
     app.state.container.task_runner.dispatcher.wake_up = lambda: None
@@ -155,7 +155,7 @@ async def test_import_external_audio_assigns_fragment_to_requested_folder(
 
 
 @pytest.mark.asyncio
-async def test_import_external_audio_runs_full_async_pipeline(
+async def test_import_external_audio_runs_full_async_task(
     async_client,
     auth_headers_factory,
     external_media_provider,
@@ -227,7 +227,7 @@ async def test_import_external_audio_runs_full_async_pipeline(
 
 
 @pytest.mark.asyncio
-async def test_import_external_audio_marks_pipeline_failed_for_invalid_link(async_client, auth_headers_factory, external_media_provider) -> None:
+async def test_import_external_audio_marks_task_failed_for_invalid_link(async_client, auth_headers_factory, external_media_provider) -> None:
     """不支持的链接应在后台步骤里失败且不触发重试。"""
     external_media_provider.queue_error(
         ValidationError(

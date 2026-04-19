@@ -24,7 +24,7 @@ def upgrade() -> None:
     """按当前模型定义一次性创建完整 schema。"""
     # 中文注释：仅加载 ORM 元数据，避免导入 models 聚合入口时触发业务层循环依赖。
     from models.database import Base
-    from models import backup, fragment, media, pipeline, script, task, user, writing_context  # noqa: F401
+    from models import backup, fragment, media, script, task, user, writing_context  # noqa: F401
     bind = op.get_bind()
     Base.metadata.create_all(bind)
 
@@ -32,6 +32,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     """删除当前 baseline 创建的全部表。"""
     from models.database import Base
-    from models import backup, fragment, media, pipeline, script, task, user, writing_context  # noqa: F401
+    from models import backup, fragment, media, script, task, user, writing_context  # noqa: F401
     bind = op.get_bind()
     Base.metadata.drop_all(bind)

@@ -29,7 +29,7 @@ export function isProcessingMediaIngestionFragment(
     | 'media_pipeline_run_id'
   >
 ): boolean {
-  /*媒体 placeholder 在正文未回写前，优先按本地 pipeline 状态展示处理中。 */
+  /*媒体 placeholder 在正文未回写前，优先按本地任务状态展示处理中。 */
   const body = (fragment.plain_text_snapshot ?? '').trim();
   const transcript = (fragment.transcript ?? '').trim();
   if (body || transcript) {

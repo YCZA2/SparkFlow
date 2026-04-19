@@ -16,19 +16,18 @@ function buildPendingScriptTasksKey(userId: string): string {
 }
 
 async function readPendingScriptTasks(userId: string): Promise<PendingScriptTask[]> {
-  const legacyKey = `@script_pipeline_tasks:${sanitizeWorkspaceId(userId)}`;
-  const raw = (await AsyncStorage.getItem(buildPendingScriptTasksKey(userId))) ?? (await AsyncStorage.getItem(legacyKey));
+  const raw = await AsyncStorage.getItem(buildPendingScriptTasksKey(userId));
   if (!raw) {
     return [];
   }
   try {
-    const parsed = JSON.parse(raw) as Array<{ taskRunId?: string; pipelineRunId?: string; kind?: string; createdAt?: string }>;
+    const parsed = JSON.parse(raw) as Array<{ taskRunId?: string; kind?: string; createdAt?: string }>;
     if (!Array.isArray(parsed)) {
       return [];
     }
     const normalized: PendingScriptTask[] = parsed
       .map((item) => ({
-        taskRunId: String(item.taskRunId ?? item.pipelineRunId ?? '').trim(),
+        taskRunId: String(item.taskRunId ?? '').trim(),
         kind: (item.kind === 'daily_push' ? 'daily_push' : 'manual') as PendingScriptTaskKind,
         createdAt: String(item.createdAt ?? ''),
       }))

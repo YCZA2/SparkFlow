@@ -18,14 +18,14 @@ router = APIRouter(prefix="/api/scripts", tags=["scripts"], responses={401: {"de
 def get_rag_script_generation_use_case(container: ServiceContainer = Depends(get_container)) -> RagScriptGenerationUseCase:
     """构建 RAG 脚本生成用例。"""
     return RagScriptGenerationUseCase(
-        pipeline_service=build_rag_script_task_service(container),
+        task_service=build_rag_script_task_service(container),
     )
 
 
 def get_daily_push_use_case(container: ServiceContainer = Depends(get_container)) -> DailyPushUseCase:
     """构建每日推盘用例。"""
     return DailyPushUseCase(
-        pipeline_service=build_daily_push_task_service(container),
+        task_service=build_daily_push_task_service(container),
     )
 
 

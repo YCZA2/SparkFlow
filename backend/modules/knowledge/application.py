@@ -188,7 +188,7 @@ class KnowledgeUseCase:
             source_mime_type=source_mime_type,
             chunk_count=len(chunks),
         )
-        return await self._launch_reference_script_pipeline(
+        return await self._launch_reference_script_task(
             db=db, doc=doc, user_id=user_id, plain_text=plain_text
         )
 
@@ -216,7 +216,7 @@ class KnowledgeUseCase:
         )
 
         if updated.doc_type == "reference_script":
-            return await self._launch_reference_script_pipeline(
+            return await self._launch_reference_script_task(
                 db=db, doc=updated, user_id=user_id, plain_text=plain_text
             )
 
@@ -244,7 +244,7 @@ class KnowledgeUseCase:
                 processing_error=str(exc),
             )
 
-    async def _launch_reference_script_pipeline(
+    async def _launch_reference_script_task(
         self,
         *,
         db: Session,

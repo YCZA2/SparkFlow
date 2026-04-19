@@ -53,5 +53,5 @@ class DailyPushSnapshotReader:
 
     @staticmethod
     def serialize_snapshots(snapshots: list[DailyPushFragmentSnapshot]) -> list[dict[str, Any]]:
-        """把快照 DTO 转成可写入 pipeline 输入的纯字典。"""
+        """把快照 DTO 转成可写入任务输入的纯字典。"""
         return [serialize_fragment_snapshot(snapshot) for snapshot in snapshots]

@@ -142,7 +142,7 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
 
 @pytest.mark.asyncio
 async def test_upload_audio_with_local_fragment_id_succeeds_without_projection(async_client, auth_headers_factory, app, db_session_factory) -> None:
-    """local-first 主路径应仅依赖 pipeline 与逻辑 ID，不要求旧 projection 行。"""
+    """local-first 主路径应仅依赖任务与逻辑 ID，不要求旧 projection 行。"""
     response = await async_client.post(
         "/api/transcriptions",
         headers=await _auth_headers(async_client, auth_headers_factory),
@@ -206,7 +206,7 @@ async def test_upload_audio_succeeds_when_derivative_enqueue_fails(async_client,
 
 @pytest.mark.asyncio
 async def test_upload_audio_marks_failed_when_stt_crashes(async_client, auth_headers_factory, app, db_session_factory) -> None:
-    """STT 异常时应让 pipeline 失败，并保留排障所需 placeholder snapshot。"""
+    """STT 异常时应让任务失败，并保留排障所需 placeholder snapshot。"""
     app.state.container.stt_provider = SimpleNamespace(
         transcribe=AsyncMock(side_effect=RuntimeError("stt boom")),
         health_check=AsyncMock(return_value=True),
@@ -294,7 +294,7 @@ async def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(async_
 
 @pytest.mark.asyncio
 async def test_upload_audio_marks_failed_when_transcription_is_cancelled(async_client, auth_headers_factory, app, db_session_factory) -> None:
-    """取消异常也应让 pipeline 进入失败终态。"""
+    """取消异常也应让任务进入失败终态。"""
     app.state.container.stt_provider = SimpleNamespace(
         transcribe=AsyncMock(side_effect=asyncio.CancelledError()),
         health_check=AsyncMock(return_value=True),

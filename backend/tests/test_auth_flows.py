@@ -135,7 +135,7 @@ async def test_task_detail_is_scoped_to_current_user(async_client, db_session_fa
     with db_session_factory() as db:
         run = task_repository.create_run(
             db=db,
-            run_id="pipeline-run-owner-only",
+            run_id="task-run-owner-only",
             user_id=owner["user"]["user_id"],
             task_type="media_ingestion",
             input_payload={"source": "test"},

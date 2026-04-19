@@ -1,4 +1,4 @@
-"""RAG 脚本生成 pipeline 任务态测试。"""
+"""RAG 脚本生成任务态测试。"""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ pytestmark = pytest.mark.integration
 
 
 async def _auth_headers(async_client, auth_headers_factory) -> dict[str, str]:
-    """生成脚本 pipeline 测试使用的鉴权请求头。"""
+    """生成脚本任务测试使用的鉴权请求头。"""
     return await auth_headers_factory(async_client)
 
 
@@ -194,12 +194,12 @@ async def test_rag_script_generation_missing_topic_returns_validation_error(
 
 
 @pytest.mark.asyncio
-async def test_rag_script_generation_pipeline_fails_when_llm_returns_empty_draft(
+async def test_rag_script_generation_task_fails_when_llm_returns_empty_draft(
     async_client,
     auth_headers_factory,
     app,
 ) -> None:
-    """LLM 返回空草稿时 pipeline 应标记为失败。"""
+    """LLM 返回空草稿时任务应标记为失败。"""
     llm_provider = app.state.container.llm_provider
     call_index = 0
 

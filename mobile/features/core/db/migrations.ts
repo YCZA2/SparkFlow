@@ -322,7 +322,7 @@ export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Prom
     `);
   }
 
-  // Version 9: 为媒体导入型 fragment 补充本地 pipeline 运行态，供失败提示与刷新重试复用
+  // Version 9: 为媒体导入型 fragment 补充本地任务运行态，供失败提示与刷新重试复用
   if (currentVersion < 9) {
     await database.execAsync(`
       ALTER TABLE fragments ADD COLUMN media_pipeline_run_id TEXT;

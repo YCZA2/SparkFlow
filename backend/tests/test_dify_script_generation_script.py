@@ -19,7 +19,7 @@ def test_extract_response_data_reads_standard_response_wrapper() -> None:
     assert extract_response_data({"data": {"id": "x"}}) == {"id": "x"}
 
 
-def test_is_terminal_status_matches_pipeline_end_states() -> None:
+def test_is_terminal_status_matches_task_end_states() -> None:
     """终态判断应覆盖成功、失败和取消。"""
     assert is_terminal_status("succeeded") is True
     assert is_terminal_status("failed") is True

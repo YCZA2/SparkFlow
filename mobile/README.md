@@ -19,6 +19,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - `fragment` 与 `script` 继续是两个独立领域对象：碎片负责素材沉淀与生成输入，成稿负责派生正文与拍摄消费；两者共享 editor / `body_html` / 导出与媒体能力，但不共享生命周期语义。
 - 本轮清理已经移除旧的 `localFragmentSyncQueue / localDraftStore / remoteFragments / remoteBodyDrafts` 主链路依赖，兼容层命名统一改成 `legacy*`。
 - 以后在移动端新增代码时，`server_id / sync_status / remote_id` 只允许作为 legacy cloud-binding 兼容字段出现，不能再被当作当前领域模型的核心语义。
+- 移动端 UI 已开始渐进迁移到 NativeWind：`tailwind.config.js` 承载新的设计 token，`global.css` 在根布局导入；首页、文件夹页、成稿列表及核心列表卡片已经优先使用 `className`，复杂编辑器、录音、拍摄和动画组件仍保留 `StyleSheet`。
 
 ## 目录说明
 
@@ -29,6 +30,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - `types/`: 共享 TypeScript 类型
 - `utils/`: 工具方法（网络配置、日期等）
 - `constants/`: 常量与接口地址
+- `tailwind.config.js` / `global.css`: NativeWind 样式入口与 Tailwind token 配置
 
 ## 当前移动端已接入的内容能力
 
@@ -70,6 +72,8 @@ SparkFlow 的 Expo / React Native 移动端工程。
 补充约定：
 - SQLite 物理列仍保留 `server_id / sync_status / remote_id` 以兼容旧库，但 Drizzle 层属性名已经切到 `legacyServerBindingId / legacyCloudBindingStatus / legacyRemoteId`；新增代码不要再把这些字段当本地真值主语义。
 - 兼容旧缓存、旧正文草稿、旧云端绑定时，命名统一使用 `legacy*` / `compat*`；不要再新增 `remote*`、`server*`、`localDraft*` 这类会混淆主链路语义的名字。
+- 新增 UI 默认使用 NativeWind `className` 和 Tailwind token；仅在动画、复杂运行时计算样式、第三方组件限制或迁移中的兼容层里继续使用 `StyleSheet.create`。
+- `mobile/theme/tokens.ts` 继续服务旧 `useAppTheme()` 调用，但新颜色、间距、圆角和阴影应先进入 `mobile/theme/tailwind-tokens.js`，再由 `tailwind.config.js` 暴露为 utility class。
 
 当前 fragments / folders / scripts 读写规则：
 
@@ -394,7 +398,7 @@ http://192.168.31.157:8000
 - 脚本详情直接编辑 `body_html`，并保留“一键去拍摄”入口消费当前最新正文
 - 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
 - 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`
-- 录音上传和外链导入都会先创建本地 placeholder fragment，再在 pipeline 成功后把 `transcript` 种成可编辑正文，并将 `summary / tags / 音频元数据` 一并 patch 回写到本地实体
+- 录音上传和外链导入都会先创建本地 placeholder fragment，再在任务成功后把 `transcript` 种成可编辑正文，并将 `summary / tags / 音频元数据` 一并 patch 回写到本地实体
 - 手动脚本生成前会先显式执行一次 `flushBackupQueue()`；如果本地正文还没成功同步，客户端会阻断生成，避免后端基于旧 snapshot 出稿
 - local-first 语音上传成功后的主状态查询统一走 `task_id -> GET /api/tasks/{task_id}`；旧的 `GET /api/transcriptions/{fragment_id}` 兼容查询接口已移除
 

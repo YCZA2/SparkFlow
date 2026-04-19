@@ -72,13 +72,13 @@ test('resolveFragmentEntityUpdate bumps updatedAt and entityVersion after actual
   assert.equal(result.nextRow.lastModifiedDeviceId, 'device-b');
 });
 
-test('resolveFragmentEntityUpdate keeps content version stable for media pipeline status change', () => {
+test('resolveFragmentEntityUpdate keeps content version stable for media task status change', () => {
   const current = buildFragmentRow();
 
   const result = resolveFragmentEntityUpdate({
     current: current as any,
     patch: {
-      media_pipeline_run_id: 'pipeline-001',
+      media_pipeline_run_id: 'task-001',
       media_pipeline_status: 'failed',
       media_pipeline_error_message: '语音转写失败',
     },
@@ -88,7 +88,7 @@ test('resolveFragmentEntityUpdate keeps content version stable for media pipelin
 
   assert.equal(result.nextRow.updatedAt, current.updatedAt);
   assert.equal(result.nextRow.entityVersion, current.entityVersion);
-  assert.equal(result.nextRow.mediaPipelineRunId, 'pipeline-001');
+  assert.equal(result.nextRow.mediaPipelineRunId, 'task-001');
   assert.equal(result.nextRow.mediaPipelineStatus, 'failed');
   assert.equal(result.nextRow.mediaPipelineErrorMessage, '语音转写失败');
 });

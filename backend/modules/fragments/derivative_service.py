@@ -82,7 +82,7 @@ class FragmentDerivativeService:
         effective_text: str | None = None,
         body_html: str | None = None,
     ) -> tuple[str | None, list[str]]:
-        """在无 projection 行时，基于 snapshot 或 pipeline 文本补齐摘要标签并同步向量。"""
+        """在无 projection 行时，基于 snapshot 或任务文本补齐摘要标签并同步向量。"""
         from modules.shared.content.content_html import extract_plain_text_from_html
 
         normalized_text = (effective_text or extract_plain_text_from_html(body_html or "")).strip()

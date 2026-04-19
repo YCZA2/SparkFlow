@@ -356,7 +356,7 @@ def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:
     async def run_daily_push_job() -> None:
         with container.session_factory() as db:
             use_case = DailyPushUseCase(
-                pipeline_service=build_daily_push_task_service(container),
+                task_service=build_daily_push_task_service(container),
             )
             return await use_case.run_daily_job(db=db)
 
