@@ -36,9 +36,9 @@ export async function syncMediaIngestionTaskState(
       assertTaskScopeActive(options.scope);
     }
     const nextFragment = await updateLocalFragmentEntity(fragmentId, {
-      media_pipeline_run_id: task.id,
-      media_pipeline_status: task.status,
-      media_pipeline_error_message: task.error_message ?? null,
+      media_task_run_id: task.id,
+      media_task_status: task.status,
+      media_task_error_message: task.error_message ?? null,
     });
     markFragmentsStale();
     return nextFragment;
@@ -52,31 +52,31 @@ export async function syncMediaIngestionTaskState(
   const patch = resolveMediaIngestionFragmentPatch({ current, output });
   const nextFragment = await updateLocalFragmentEntity(fragmentId, {
     ...patch,
-    media_pipeline_run_id: task.id,
-    media_pipeline_status: task.status,
-    media_pipeline_error_message: null,
+    media_task_run_id: task.id,
+    media_task_status: task.status,
+    media_task_error_message: null,
   });
 
   markFragmentsStale();
   return nextFragment;
 }
 
-export async function retryFailedMediaIngestionFragment(fragment: Pick<Fragment, 'id' | 'media_pipeline_run_id'>) {
+export async function retryFailedMediaIngestionFragment(fragment: Pick<Fragment, 'id' | 'media_task_run_id'>) {
   /*列表刷新命中失败态时，直接复用后端 retry 接口重新驱动媒体转写。 */
-  const runId = fragment.media_pipeline_run_id?.trim();
+  const runId = fragment.media_task_run_id?.trim();
   if (!runId) {
     return null;
   }
 
   await updateLocalFragmentEntity(fragment.id, {
-    media_pipeline_status: 'queued',
-    media_pipeline_error_message: null,
+    media_task_status: 'queued',
+    media_task_error_message: null,
   });
   const retriedRun = await retryTaskRun(runId, { strategy: 'from_failed_step' });
   await updateLocalFragmentEntity(fragment.id, {
-    media_pipeline_run_id: retriedRun.id,
-    media_pipeline_status: retriedRun.status,
-    media_pipeline_error_message: retriedRun.error_message ?? null,
+    media_task_run_id: retriedRun.id,
+    media_task_status: retriedRun.status,
+    media_task_error_message: retriedRun.error_message ?? null,
   });
 
   const terminalRun = await waitForTaskTerminal(retriedRun.id, { timeoutMs: 180_000 });

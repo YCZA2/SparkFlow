@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const LATEST_SCHEMA_VERSION = 9;
+const LATEST_SCHEMA_VERSION = 10;
 
 /*创建本地镜像所需的 SQLite 表与索引。 */
 export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Promise<void> {
@@ -328,6 +328,59 @@ export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Prom
       ALTER TABLE fragments ADD COLUMN media_pipeline_run_id TEXT;
       ALTER TABLE fragments ADD COLUMN media_pipeline_status TEXT;
       ALTER TABLE fragments ADD COLUMN media_pipeline_error_message TEXT;
+    `);
+  }
+
+  // Version 10: 把媒体任务字段从 pipeline 命名迁移为 task 命名，统一当前领域语义
+  if (currentVersion < 10) {
+    await database.execAsync(`
+      CREATE TABLE fragments_v10 (
+        id TEXT PRIMARY KEY NOT NULL,
+        folder_id TEXT,
+        source TEXT NOT NULL,
+        audio_source TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        summary TEXT,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        plain_text_snapshot TEXT NOT NULL DEFAULT '',
+        body_file_uri TEXT,
+        transcript TEXT,
+        speaker_segments_json TEXT,
+        audio_object_key TEXT,
+        audio_file_uri TEXT,
+        audio_file_url TEXT,
+        audio_file_expires_at TEXT,
+        media_task_run_id TEXT,
+        media_task_status TEXT,
+        media_task_error_message TEXT,
+        deleted_at TEXT,
+        is_filmed INTEGER NOT NULL DEFAULT 0,
+        filmed_at TEXT,
+        backup_status TEXT NOT NULL DEFAULT 'pending',
+        last_backup_at TEXT,
+        entity_version INTEGER NOT NULL DEFAULT 1,
+        last_modified_device_id TEXT,
+        content_state TEXT,
+        cached_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      INSERT INTO fragments_v10
+        SELECT
+          id, folder_id, source, audio_source, created_at, updated_at,
+          summary, tags_json, plain_text_snapshot, body_file_uri, transcript,
+          speaker_segments_json, audio_object_key, audio_file_uri, audio_file_url,
+          audio_file_expires_at, media_pipeline_run_id, media_pipeline_status,
+          media_pipeline_error_message, deleted_at, is_filmed, filmed_at,
+          backup_status, last_backup_at, entity_version, last_modified_device_id,
+          content_state, cached_at
+        FROM fragments;
+
+      DROP TABLE fragments;
+      ALTER TABLE fragments_v10 RENAME TO fragments;
+
+      CREATE INDEX IF NOT EXISTS fragments_folder_id_idx ON fragments(folder_id);
+      CREATE INDEX IF NOT EXISTS fragments_updated_at_idx ON fragments(updated_at DESC);
     `);
   }
 

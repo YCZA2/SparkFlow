@@ -69,9 +69,9 @@ export interface Fragment {
   content_state?: 'empty' | 'transcript_only' | 'body_present';
   media_assets?: MediaAsset[];
   audio_object_key?: string | null;
-  media_pipeline_run_id?: string | null;
-  media_pipeline_status?: TaskStatus | null;
-  media_pipeline_error_message?: string | null;
+  media_task_run_id?: string | null;
+  media_task_status?: TaskStatus | null;
+  media_task_error_message?: string | null;
   backup_status?: 'pending' | 'synced' | 'failed';
   entity_version?: number;
   last_backup_at?: string | null;

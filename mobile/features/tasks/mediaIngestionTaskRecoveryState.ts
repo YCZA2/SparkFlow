@@ -7,14 +7,14 @@ function isMediaFragment(fragment: Pick<Fragment, 'source' | 'audio_source'>): b
 export function isFailedMediaIngestionFragment(
   fragment: Pick<
     Fragment,
-    'source' | 'audio_source' | 'media_pipeline_run_id' | 'media_pipeline_status'
+    'source' | 'audio_source' | 'media_task_run_id' | 'media_task_status'
   >
 ): boolean {
   /*只有媒体导入类碎片且已有失败 run_id 时，才允许列表刷新触发重试。 */
   return (
     isMediaFragment(fragment) &&
-    Boolean(fragment.media_pipeline_run_id) &&
-    fragment.media_pipeline_status === 'failed'
+    Boolean(fragment.media_task_run_id) &&
+    fragment.media_task_status === 'failed'
   );
 }
 
@@ -25,8 +25,8 @@ export function isProcessingMediaIngestionFragment(
     | 'audio_source'
     | 'plain_text_snapshot'
     | 'transcript'
-    | 'media_pipeline_status'
-    | 'media_pipeline_run_id'
+    | 'media_task_status'
+    | 'media_task_run_id'
   >
 ): boolean {
   /*媒体 placeholder 在正文未回写前，优先按本地任务状态展示处理中。 */
@@ -39,8 +39,8 @@ export function isProcessingMediaIngestionFragment(
     return false;
   }
   return (
-    fragment.media_pipeline_status === 'queued' ||
-    fragment.media_pipeline_status === 'running' ||
-    (Boolean(fragment.media_pipeline_run_id) && !fragment.media_pipeline_status)
+    fragment.media_task_status === 'queued' ||
+    fragment.media_task_status === 'running' ||
+    (Boolean(fragment.media_task_run_id) && !fragment.media_task_status)
   );
 }

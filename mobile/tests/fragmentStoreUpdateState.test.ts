@@ -78,9 +78,9 @@ test('resolveFragmentEntityUpdate keeps content version stable for media task st
   const result = resolveFragmentEntityUpdate({
     current: current as any,
     patch: {
-      media_pipeline_run_id: 'task-001',
-      media_pipeline_status: 'failed',
-      media_pipeline_error_message: '语音转写失败',
+      media_task_run_id: 'task-001',
+      media_task_status: 'failed',
+      media_task_error_message: '语音转写失败',
     },
     plainTextSnapshot: current.plainTextSnapshot,
     bodyFileUri: current.bodyFileUri,
@@ -88,7 +88,7 @@ test('resolveFragmentEntityUpdate keeps content version stable for media task st
 
   assert.equal(result.nextRow.updatedAt, current.updatedAt);
   assert.equal(result.nextRow.entityVersion, current.entityVersion);
-  assert.equal(result.nextRow.mediaPipelineRunId, 'task-001');
-  assert.equal(result.nextRow.mediaPipelineStatus, 'failed');
-  assert.equal(result.nextRow.mediaPipelineErrorMessage, '语音转写失败');
+  assert.equal(result.nextRow.mediaTaskRunId, 'task-001');
+  assert.equal(result.nextRow.mediaTaskStatus, 'failed');
+  assert.equal(result.nextRow.mediaTaskErrorMessage, '语音转写失败');
 });

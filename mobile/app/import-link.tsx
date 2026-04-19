@@ -57,9 +57,9 @@ export default function ImportLinkScreen() {
       const taskId = task.task_id;
       assertTaskScopeActive(scope);
       await updateLocalFragmentEntity(localFragment.id, {
-        media_pipeline_run_id: taskId,
-        media_pipeline_status: 'queued',
-        media_pipeline_error_message: null,
+        media_task_run_id: taskId,
+        media_task_status: 'queued',
+        media_task_error_message: null,
       });
       const taskRun = await waitForTaskTerminal(taskId, {
         timeoutMs: 180_000,

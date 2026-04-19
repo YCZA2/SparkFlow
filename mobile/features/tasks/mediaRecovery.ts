@@ -38,21 +38,21 @@ export async function recoverPendingMediaTasks(scope: TaskExecutionScope): Promi
   const rows = await database
     .select({
       id: fragmentsTable.id,
-      mediaPipelineRunId: fragmentsTable.mediaPipelineRunId,
-      mediaPipelineStatus: fragmentsTable.mediaPipelineStatus,
+      mediaTaskRunId: fragmentsTable.mediaTaskRunId,
+      mediaTaskStatus: fragmentsTable.mediaTaskStatus,
     })
     .from(fragmentsTable)
     .where(isNull(fragmentsTable.deletedAt));
 
   const pendingRows = rows.filter(
     (row) =>
-      Boolean(row.mediaPipelineRunId) &&
-      row.mediaPipelineStatus !== 'succeeded'
+      Boolean(row.mediaTaskRunId) &&
+      row.mediaTaskStatus !== 'succeeded'
   );
 
   await Promise.allSettled(
     pendingRows.map(async (row) => {
-      await recoverSingleMediaTask(row.id, row.mediaPipelineRunId as string, scope);
+      await recoverSingleMediaTask(row.id, row.mediaTaskRunId as string, scope);
     })
   );
 }

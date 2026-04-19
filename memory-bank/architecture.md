@@ -134,7 +134,7 @@ flowchart TD
 - `features/recording/components/*` 负责录音页的 UI 壳层、按钮组与样式，路由文件只保留参数接入与页面装配。
 - `features/editor/useEditorSession.ts` 当前只负责组装共享正文会话协议；hydration、保存生命周期、图片插入和运行时 ref 同步已经拆到内部 helper / 子 hook，避免 fragment 与 script 两端继续往主 hook 堆副作用。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
-- `features/fragments/store/*` 现在承接 fragment 的 **local-first 真值**：列表、详情、编辑和删除统一读写本地 SQLite / 文件系统；主链路集中在 `localEntityStore` 与 `runtime`，`legacyMigration*` 相关文件只在升级时负责接住旧缓存与旧正文草稿。
+- `features/fragments/store/*` 现在承接 fragment 的 **local-first 真值**：列表、详情、编辑和删除统一读写本地 SQLite / 文件系统；主链路集中在 `localEntityStore`、`runtime` 与共享 update helpers。旧缓存、旧正文草稿和旧云端绑定的升级兼容，现已收敛到 `features/core/db/migrations.ts` 与显式 `legacy*` 字段，不再单独保留 `legacyMigration*` 模块。
 - `features/core/db/schema.ts` 仍映射旧 SQLite 物理列名，但 Drizzle 属性名已经显式标成 `legacy*` 语义，避免在实现层误把云端绑定字段当成本地真值。
 - `features/core/files/*` 当前已把工作区路径约束与文件读写/staging helper 拆开，避免单个 runtime 文件继续膨胀。
 - `features/fragments/detail/*` 保留 `resource / 编辑会话 / sheet / screen actions` 四层，但资源层已经改成优先读取本地实体，不再把远端详情当作首屏真值。
@@ -167,7 +167,7 @@ flowchart TD
 - `script.source_fragment_ids` 只表示首次生成来源，script 不会重新进入 fragment 检索、聚类、每日推盘选材或下一轮脚本生成输入
 - 移动端在收到“设备会话已失效”后会停止自动补 token，转入本地只读态，并要求用户在 `profile.tsx` 显式重新连接当前设备
 - 录音上传、外链导入、脚本生成、备份队列冲刷和显式恢复现在都绑定统一 `TaskExecutionScope(user_id + session_version + workspace_epoch)`；一旦账号切换、登出或会话失效，飞行中的旧任务会停止回写当前工作区，并留在原工作区等待下次恢复
-- `scripts` 额外维护了按工作区隔离的 pending task 注册表；App 启动并挂载工作区后，会先恢复本地 `pending|failed` 备份，再根据保存的 `task_id` 重查媒体任务和脚本生成终态；个别媒体本地列名仍保留 `media_pipeline_*` 作为存量 SQLite 字段
+- `scripts` 额外维护了按工作区隔离的 pending task 注册表；App 启动并挂载工作区后，会先恢复本地 `pending|failed` 备份，再根据保存的 `task_id` 重查媒体任务和脚本生成终态；fragment 媒体导入任务当前统一使用 `media_task_*` 本地字段承接 run_id、状态与错误信息
 
 ### 3.5 Backup Snapshot And File Sync
 

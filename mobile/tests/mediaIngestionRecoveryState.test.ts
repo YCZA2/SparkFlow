@@ -13,8 +13,8 @@ function buildFragment(overrides: Record<string, unknown> = {}) {
     audio_source: 'upload',
     plain_text_snapshot: '',
     transcript: null,
-    media_pipeline_run_id: 'run-001',
-    media_pipeline_status: 'queued',
+    media_task_run_id: 'run-001',
+    media_task_status: 'queued',
     ...overrides,
   };
 }
@@ -28,7 +28,7 @@ test('isProcessingMediaIngestionFragment returns false once body text exists', (
     isProcessingMediaIngestionFragment(
       buildFragment({
         plain_text_snapshot: '已经有正文',
-        media_pipeline_status: 'running',
+        media_task_status: 'running',
       }) as any
     ),
     false
@@ -39,7 +39,7 @@ test('isFailedMediaIngestionFragment only marks failed media fragments with run 
   assert.equal(
     isFailedMediaIngestionFragment(
       buildFragment({
-        media_pipeline_status: 'failed',
+        media_task_status: 'failed',
       }) as any
     ),
     true
@@ -47,8 +47,8 @@ test('isFailedMediaIngestionFragment only marks failed media fragments with run 
   assert.equal(
     isFailedMediaIngestionFragment(
       buildFragment({
-        media_pipeline_status: 'failed',
-        media_pipeline_run_id: null,
+        media_task_status: 'failed',
+        media_task_run_id: null,
       }) as any
     ),
     false

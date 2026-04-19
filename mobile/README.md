@@ -67,13 +67,14 @@ SparkFlow 的 Expo / React Native 移动端工程。
 
 - `mobile/features/core/db/`：SQLite 连接、schema、迁移和 Drizzle 查询入口
 - `mobile/features/core/files/`：fragment / script 正文文件和图片/音频 staging 文件管理；当前已按 `runtimePaths.native.ts`（工作区与路径约束）和 `runtimeFs.native.ts`（文件读写与 staging 操作）拆分
-- `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `localEntityStore / legacyMigration / runtime` 拆分职责；主链路统一从 `store/index.ts` 读取本地实体能力，legacy 运行时逻辑集中在迁移主文件中，只有少量纯工具函数独立保留给迁移测试复用
+- `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `localEntityStore / runtime / shared update helpers` 拆分职责；主链路统一从 `store/index.ts` 读取本地实体能力。旧缓存、旧正文草稿和旧云端绑定的升级兼容，现已收敛到 `mobile/features/core/db/migrations.ts` 与显式 `legacy*` 字段，而不是单独的 `legacyMigration*` 模块
 - `mobile/features/scripts/store/`：scripts 本地数据入口，负责成稿真值、lineage、回收站、冲突副本和恢复合并
 - `mobile/features/editor/html.ts`：唯一 HTML / 纯文本快照 helper 真值源，fragment 与 script 共用
 
 补充约定：
 - SQLite 物理列仍保留 `server_id / sync_status / remote_id` 以兼容旧库，但 Drizzle 层属性名已经切到 `legacyServerBindingId / legacyCloudBindingStatus / legacyRemoteId`；新增代码不要再把这些字段当本地真值主语义。
 - 兼容旧缓存、旧正文草稿、旧云端绑定时，命名统一使用 `legacy*` / `compat*`；不要再新增 `remote*`、`server*`、`localDraft*` 这类会混淆主链路语义的名字。
+- `media_task_*` 是当前移动端 fragment 媒体导入任务状态的正式本地字段，会参与任务恢复、失败提示和重试；旧本地库里的 `media_pipeline_*` 会在 SQLite migration 中自动迁移到新列名。
 - 新增 UI 默认使用 NativeWind `className` 和 Tailwind token；仅在动画、复杂运行时计算样式、第三方组件限制或迁移中的兼容层里继续使用 `StyleSheet.create`。
 - `mobile/theme/tokens.ts` 继续服务旧 `useAppTheme()` 调用，但新颜色、间距、圆角和阴影应先进入 `mobile/theme/tailwind-tokens.js`，再由 `tailwind.config.js` 暴露为 utility class。
 

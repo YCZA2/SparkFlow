@@ -244,9 +244,9 @@ export function useAudioUpload() {
         audio_object_key: response.audio_object_key ?? undefined,
         audio_file_url: response.audio_file_url,
         audio_file_expires_at: response.audio_file_expires_at,
-        media_pipeline_run_id: taskId,
-        media_pipeline_status: 'queued',
-        media_pipeline_error_message: null,
+        media_task_run_id: taskId,
+        media_task_status: 'queued',
+        media_task_error_message: null,
       });
       const nextResult = {
         task_id: taskId,

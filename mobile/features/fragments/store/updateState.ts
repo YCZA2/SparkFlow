@@ -30,9 +30,9 @@ interface ResolveFragmentEntityUpdateResult {
     tagsJson: string;
     plainTextSnapshot: string;
     transcript: string | null;
-    mediaPipelineRunId: string | null;
-    mediaPipelineStatus: string | null;
-    mediaPipelineErrorMessage: string | null;
+    mediaTaskRunId: string | null;
+    mediaTaskStatus: string | null;
+    mediaTaskErrorMessage: string | null;
     speakerSegmentsJson: string | null;
     audioObjectKey: string | null;
     audioFileUrl: string | null;
@@ -82,18 +82,18 @@ export function resolveFragmentEntityUpdate(input: ResolveFragmentEntityUpdateIn
     tagsJson: patch.tags === undefined ? current.tagsJson : serializeFragmentTags(patch.tags),
     plainTextSnapshot,
     transcript: patch.transcript === undefined ? current.transcript : patch.transcript,
-    mediaPipelineRunId:
-      patch.media_pipeline_run_id === undefined
-        ? current.mediaPipelineRunId
-        : patch.media_pipeline_run_id,
-    mediaPipelineStatus:
-      patch.media_pipeline_status === undefined
-        ? current.mediaPipelineStatus
-        : patch.media_pipeline_status,
-    mediaPipelineErrorMessage:
-      patch.media_pipeline_error_message === undefined
-        ? current.mediaPipelineErrorMessage
-        : patch.media_pipeline_error_message,
+    mediaTaskRunId:
+      patch.media_task_run_id === undefined
+        ? current.mediaTaskRunId
+        : patch.media_task_run_id,
+    mediaTaskStatus:
+      patch.media_task_status === undefined
+        ? current.mediaTaskStatus
+        : patch.media_task_status,
+    mediaTaskErrorMessage:
+      patch.media_task_error_message === undefined
+        ? current.mediaTaskErrorMessage
+        : patch.media_task_error_message,
     speakerSegmentsJson:
       patch.speaker_segments === undefined
         ? current.speakerSegmentsJson
@@ -157,9 +157,9 @@ export function resolveFragmentEntityUpdate(input: ResolveFragmentEntityUpdateIn
   const didChangeAnyField =
     didMeaningfullyChange ||
     hasValueChanged(current.updatedAt, nextRow.updatedAt) ||
-    hasValueChanged(current.mediaPipelineRunId, nextRow.mediaPipelineRunId) ||
-    hasValueChanged(current.mediaPipelineStatus, nextRow.mediaPipelineStatus) ||
-    hasValueChanged(current.mediaPipelineErrorMessage, nextRow.mediaPipelineErrorMessage) ||
+    hasValueChanged(current.mediaTaskRunId, nextRow.mediaTaskRunId) ||
+    hasValueChanged(current.mediaTaskStatus, nextRow.mediaTaskStatus) ||
+    hasValueChanged(current.mediaTaskErrorMessage, nextRow.mediaTaskErrorMessage) ||
     hasValueChanged(current.backupStatus, nextRow.backupStatus) ||
     hasValueChanged(current.entityVersion, nextRow.entityVersion) ||
     hasValueChanged(current.lastBackupAt, nextRow.lastBackupAt) ||

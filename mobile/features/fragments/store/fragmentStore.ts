@@ -100,8 +100,8 @@ function isSameFragmentList(a: Fragment[], b: Fragment[]): boolean {
       (fragment, index) =>
         fragment.id === b[index]?.id &&
         fragment.updated_at === b[index]?.updated_at &&
-        fragment.media_pipeline_status === b[index]?.media_pipeline_status &&
-        fragment.media_pipeline_error_message === b[index]?.media_pipeline_error_message
+        fragment.media_task_status === b[index]?.media_task_status &&
+        fragment.media_task_error_message === b[index]?.media_task_error_message
     )
   );
 }

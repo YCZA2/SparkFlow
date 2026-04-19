@@ -84,7 +84,7 @@ function getTitle(fragment: Fragment): string {
 function getPreview(fragment: Fragment): string {
   /*从正文提取预览（跳过首行标题），避免标题和预览重复。 */
   if (isFailedMediaIngestionFragment(fragment)) {
-    return truncate(getCleanText(fragment.media_pipeline_error_message) || '下拉刷新后会自动重试', 42);
+    return truncate(getCleanText(fragment.media_task_error_message) || '下拉刷新后会自动重试', 42);
   }
 
   if (isProcessingMediaIngestionFragment(fragment)) {
