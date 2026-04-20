@@ -310,7 +310,8 @@ cd backend
 - `uploads/`: `local` 文件存储 provider 的对象根目录，配置层会固定解析到 `backend/uploads/`，不依赖启动 cwd。
 - `chroma_data/`: 本地 ChromaDB 数据目录，相对路径同样固定解析到 `backend/chroma_data/`。
 - 当前 Chroma 版本的 `list_collections()` 可能直接返回集合名字符串；应用适配层已统一支持字符串和对象结构，避免 namespace 存在性检查误判。
-- `runtime_logs/`: 运行时日志目录，当前包含后端全量日志、错误日志和移动端错误日志文件。
+- `runtime_logs/`: 运行时日志目录，当前按 `backend/`、`access/`、`mobile/` 分组落盘。
+- `scripts/organize_runtime_logs.py`: 迁移旧根目录日志到新结构；旧 `backend*.log*` 会归档到 `runtime_logs/legacy/`，旧 `mobile-debug.log*` 会迁到 `runtime_logs/mobile/`。
 
 ## Coding Conventions
 
@@ -423,11 +424,13 @@ bash scripts/celery-worker.sh
 运行时日志现在会同时：
 
 - 开发态控制台默认只显示应用 `WARNING+`，并关闭 Uvicorn 内建 access log
-- 后端全量业务日志写入 [`backend/runtime_logs/backend.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend.log)
-- 后端 `ERROR` 及以上日志额外写入 [`backend/runtime_logs/backend-error.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend-error.log)
+- 后端业务日志写入 [`backend/runtime_logs/backend/backend.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend/backend.log)
+- 后端业务 `ERROR` 及以上日志额外写入 [`backend/runtime_logs/backend/backend-error.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend/backend-error.log)
+- HTTP 访问日志写入 [`backend/runtime_logs/access/access.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/access/access.log)
+- HTTP 访问失败日志额外写入 [`backend/runtime_logs/access/access-error.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/access/access-error.log)
 - 移动端上报的调试日志保存在 App 内错误日志页中
-- 移动端调试日志通过专用 file handler 写入 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
-- 三类日志文件都按本地午夜切分并默认保留最近 7 天
+- 移动端调试日志通过专用 file handler 写入 [`backend/runtime_logs/mobile/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile/mobile-debug.log)
+- 四类日志文件都按本地午夜切分并默认保留最近 7 天
 
 后端接收接口：
 
@@ -449,16 +452,33 @@ bash scripts/dev-mobile.sh
 3. 复现问题后，Codex 可以直接读取日志文件：
 
 ```bash
-tail -n 100 backend/runtime_logs/backend.log
-tail -n 100 backend/runtime_logs/backend-error.log
-tail -n 100 backend/runtime_logs/mobile-debug.log
+tail -n 100 backend/runtime_logs/backend/backend.log
+tail -n 100 backend/runtime_logs/backend/backend-error.log
+tail -n 100 backend/runtime_logs/access/access.log
+tail -n 100 backend/runtime_logs/access/access-error.log
+tail -n 100 backend/runtime_logs/mobile/mobile-debug.log
 ```
+
+如果仓库里还留有改造前平铺在 `runtime_logs/` 根目录的旧日志，可以执行一次整理脚本：
+
+```bash
+cd backend
+.venv/bin/python scripts/organize_runtime_logs.py
+```
+
+说明：
+
+- 旧 `mobile-debug.log*` 会迁到 `runtime_logs/mobile/`
+- 旧 `backend.log*` / `backend-error.log*` 会迁到 `runtime_logs/legacy/`
+- 之所以归档到 `legacy/`，是因为这些历史文件里可能混有旧版 access 日志，不再适合作为新 `backend/` 目录下的纯业务日志继续使用
 
 排查建议：
 
-- 先看 [`backend/runtime_logs/backend-error.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend-error.log) 找 5xx、未处理异常和 `http_request_failed`
-- 再看 [`backend/runtime_logs/backend.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend.log) 关联 `http_request_completed`、业务事件和 request-id
-- 移动端真机/模拟器异常最后看 [`backend/runtime_logs/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile-debug.log)
+- 先看 [`backend/runtime_logs/backend/backend-error.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend/backend-error.log) 找未处理异常和业务报错
+- 再看 [`backend/runtime_logs/access/access-error.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/access/access-error.log) 找 5xx、`http_request_failed` 和对应 request-id
+- 然后看 [`backend/runtime_logs/access/access.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/access/access.log) 关联完整请求链路
+- 最后看 [`backend/runtime_logs/backend/backend.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/backend/backend.log) 关联业务事件细节
+- 移动端真机/模拟器异常再看 [`backend/runtime_logs/mobile/mobile-debug.log`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/backend/runtime_logs/mobile/mobile-debug.log)
 
 这样真机/模拟器上的 JS 异常、`console.error`、接口错误就不需要手动复制给 Codex。
 

@@ -30,12 +30,16 @@ def _flush_logger_handlers(*logger_names: str) -> None:
 
 def test_backend_logs_are_written_to_split_files(tmp_path, monkeypatch) -> None:
     """普通日志和错误日志应分别写入对应文件。"""
-    all_log_path = tmp_path / "backend.log"
-    error_log_path = tmp_path / "backend-error.log"
-    mobile_log_path = tmp_path / "mobile-debug.log"
+    all_log_path = tmp_path / "backend" / "backend.log"
+    error_log_path = tmp_path / "backend" / "backend-error.log"
+    access_log_path = tmp_path / "access" / "access.log"
+    access_error_log_path = tmp_path / "access" / "access-error.log"
+    mobile_log_path = tmp_path / "mobile" / "mobile-debug.log"
 
     monkeypatch.setattr(settings, "BACKEND_LOG_PATH", str(all_log_path))
     monkeypatch.setattr(settings, "BACKEND_ERROR_LOG_PATH", str(error_log_path))
+    monkeypatch.setattr(settings, "ACCESS_LOG_PATH", str(access_log_path))
+    monkeypatch.setattr(settings, "ACCESS_ERROR_LOG_PATH", str(access_error_log_path))
     monkeypatch.setattr(settings, "MOBILE_DEBUG_LOG_PATH", str(mobile_log_path))
 
     configure_logging()
@@ -77,12 +81,16 @@ def test_backend_logs_are_written_to_split_files(tmp_path, monkeypatch) -> None:
 
 def test_access_logger_only_writes_to_file(tmp_path, monkeypatch, capsys) -> None:
     """访问日志应只写文件，不额外污染控制台输出。"""
-    all_log_path = tmp_path / "backend.log"
-    error_log_path = tmp_path / "backend-error.log"
-    mobile_log_path = tmp_path / "mobile-debug.log"
+    all_log_path = tmp_path / "backend" / "backend.log"
+    error_log_path = tmp_path / "backend" / "backend-error.log"
+    access_log_path = tmp_path / "access" / "access.log"
+    access_error_log_path = tmp_path / "access" / "access-error.log"
+    mobile_log_path = tmp_path / "mobile" / "mobile-debug.log"
 
     monkeypatch.setattr(settings, "BACKEND_LOG_PATH", str(all_log_path))
     monkeypatch.setattr(settings, "BACKEND_ERROR_LOG_PATH", str(error_log_path))
+    monkeypatch.setattr(settings, "ACCESS_LOG_PATH", str(access_log_path))
+    monkeypatch.setattr(settings, "ACCESS_ERROR_LOG_PATH", str(access_error_log_path))
     monkeypatch.setattr(settings, "MOBILE_DEBUG_LOG_PATH", str(mobile_log_path))
 
     configure_logging()
@@ -100,8 +108,9 @@ def test_access_logger_only_writes_to_file(tmp_path, monkeypatch, capsys) -> Non
     assert "http_request_completed" not in captured.out
     assert "http_request_completed" not in captured.err
 
-    records = [json.loads(line) for line in all_log_path.read_text(encoding="utf-8").strip().splitlines()]
-    assert records[-1]["event"] == "http_request_completed"
+    access_records = [json.loads(line) for line in access_log_path.read_text(encoding="utf-8").strip().splitlines()]
+    assert access_records[-1]["event"] == "http_request_completed"
+    assert not all_log_path.exists() or "http_request_completed" not in all_log_path.read_text(encoding="utf-8")
 
     access_logger = logging.getLogger(ACCESS_LOGGER_NAME)
     assert access_logger.propagate is False
@@ -110,12 +119,16 @@ def test_access_logger_only_writes_to_file(tmp_path, monkeypatch, capsys) -> Non
 
 def test_third_party_info_logs_are_quiet_on_console(tmp_path, monkeypatch, capsys) -> None:
     """第三方 INFO 应被压低，应用 warning/error 仍保留控制台可见性。"""
-    all_log_path = tmp_path / "backend.log"
-    error_log_path = tmp_path / "backend-error.log"
-    mobile_log_path = tmp_path / "mobile-debug.log"
+    all_log_path = tmp_path / "backend" / "backend.log"
+    error_log_path = tmp_path / "backend" / "backend-error.log"
+    access_log_path = tmp_path / "access" / "access.log"
+    access_error_log_path = tmp_path / "access" / "access-error.log"
+    mobile_log_path = tmp_path / "mobile" / "mobile-debug.log"
 
     monkeypatch.setattr(settings, "BACKEND_LOG_PATH", str(all_log_path))
     monkeypatch.setattr(settings, "BACKEND_ERROR_LOG_PATH", str(error_log_path))
+    monkeypatch.setattr(settings, "ACCESS_LOG_PATH", str(access_log_path))
+    monkeypatch.setattr(settings, "ACCESS_ERROR_LOG_PATH", str(access_error_log_path))
     monkeypatch.setattr(settings, "MOBILE_DEBUG_LOG_PATH", str(mobile_log_path))
 
     configure_logging()
@@ -135,12 +148,16 @@ def test_third_party_info_logs_are_quiet_on_console(tmp_path, monkeypatch, capsy
 
 def test_logger_exception_does_not_emit_pretty_exception_warning(tmp_path, monkeypatch, recwarn) -> None:
     """开发态 console renderer 记录异常时不应再出现 structlog warning。"""
-    all_log_path = tmp_path / "backend.log"
-    error_log_path = tmp_path / "backend-error.log"
-    mobile_log_path = tmp_path / "mobile-debug.log"
+    all_log_path = tmp_path / "backend" / "backend.log"
+    error_log_path = tmp_path / "backend" / "backend-error.log"
+    access_log_path = tmp_path / "access" / "access.log"
+    access_error_log_path = tmp_path / "access" / "access-error.log"
+    mobile_log_path = tmp_path / "mobile" / "mobile-debug.log"
 
     monkeypatch.setattr(settings, "BACKEND_LOG_PATH", str(all_log_path))
     monkeypatch.setattr(settings, "BACKEND_ERROR_LOG_PATH", str(error_log_path))
+    monkeypatch.setattr(settings, "ACCESS_LOG_PATH", str(access_log_path))
+    monkeypatch.setattr(settings, "ACCESS_ERROR_LOG_PATH", str(access_error_log_path))
     monkeypatch.setattr(settings, "MOBILE_DEBUG_LOG_PATH", str(mobile_log_path))
     monkeypatch.setattr(settings, "LOG_JSON", False)
 
@@ -156,12 +173,16 @@ def test_logger_exception_does_not_emit_pretty_exception_warning(tmp_path, monke
 
 def test_log_timestamp_uses_app_timezone(tmp_path, monkeypatch) -> None:
     """日志时间戳应跟随应用时区输出偏移量。"""
-    all_log_path = tmp_path / "backend.log"
-    error_log_path = tmp_path / "backend-error.log"
-    mobile_log_path = tmp_path / "mobile-debug.log"
+    all_log_path = tmp_path / "backend" / "backend.log"
+    error_log_path = tmp_path / "backend" / "backend-error.log"
+    access_log_path = tmp_path / "access" / "access.log"
+    access_error_log_path = tmp_path / "access" / "access-error.log"
+    mobile_log_path = tmp_path / "mobile" / "mobile-debug.log"
 
     monkeypatch.setattr(settings, "BACKEND_LOG_PATH", str(all_log_path))
     monkeypatch.setattr(settings, "BACKEND_ERROR_LOG_PATH", str(error_log_path))
+    monkeypatch.setattr(settings, "ACCESS_LOG_PATH", str(access_log_path))
+    monkeypatch.setattr(settings, "ACCESS_ERROR_LOG_PATH", str(access_error_log_path))
     monkeypatch.setattr(settings, "MOBILE_DEBUG_LOG_PATH", str(mobile_log_path))
     monkeypatch.setattr(settings, "APP_TIMEZONE", "UTC")
 

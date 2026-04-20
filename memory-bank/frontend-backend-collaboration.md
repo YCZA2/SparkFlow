@@ -140,7 +140,7 @@ SparkFlow 当前以后端模块内 `schemas.py` 作为 API contract 单一事实
 ### 日志协作
 
 - 前端复现异常后，优先查看 App 内错误日志页。
-- 后端可直接读取 `backend/runtime_logs/mobile-debug.log` 辅助定位。
+- 后端可直接读取 `backend/runtime_logs/mobile/mobile-debug.log` 辅助定位，必要时再结合 `backend/runtime_logs/access/access.log` 对请求链路做交叉检查。
 - 不要只发截图，至少同步接口名、请求参数、设备环境、复现步骤。
 
 ## 7. 变更管理

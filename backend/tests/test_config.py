@@ -30,21 +30,25 @@ def test_upload_dir_is_resolved_from_backend_dir(monkeypatch) -> None:
 
 def test_runtime_log_path_is_resolved_from_backend_dir(monkeypatch) -> None:
     """日志路径在 .env 中使用相对值时也不受 cwd 影响。"""
-    monkeypatch.setenv("MOBILE_DEBUG_LOG_PATH", "./runtime_logs/mobile-debug.log")
+    monkeypatch.setenv("MOBILE_DEBUG_LOG_PATH", "./runtime_logs/mobile/mobile-debug.log")
     settings = Settings()
     assert (
         settings.MOBILE_DEBUG_LOG_PATH
-        == f"{BACKEND_DIR}/runtime_logs/mobile-debug.log"
+        == f"{BACKEND_DIR}/runtime_logs/mobile/mobile-debug.log"
     )
 
 
 def test_backend_log_paths_are_resolved_from_backend_dir(monkeypatch) -> None:
     """后端日志路径在 .env 中使用相对值时也不受 cwd 影响。"""
-    monkeypatch.setenv("BACKEND_LOG_PATH", "./runtime_logs/backend.log")
-    monkeypatch.setenv("BACKEND_ERROR_LOG_PATH", "./runtime_logs/backend-error.log")
+    monkeypatch.setenv("BACKEND_LOG_PATH", "./runtime_logs/backend/backend.log")
+    monkeypatch.setenv("BACKEND_ERROR_LOG_PATH", "./runtime_logs/backend/backend-error.log")
+    monkeypatch.setenv("ACCESS_LOG_PATH", "./runtime_logs/access/access.log")
+    monkeypatch.setenv("ACCESS_ERROR_LOG_PATH", "./runtime_logs/access/access-error.log")
     settings = Settings()
-    assert settings.BACKEND_LOG_PATH == f"{BACKEND_DIR}/runtime_logs/backend.log"
-    assert settings.BACKEND_ERROR_LOG_PATH == f"{BACKEND_DIR}/runtime_logs/backend-error.log"
+    assert settings.BACKEND_LOG_PATH == f"{BACKEND_DIR}/runtime_logs/backend/backend.log"
+    assert settings.BACKEND_ERROR_LOG_PATH == f"{BACKEND_DIR}/runtime_logs/backend/backend-error.log"
+    assert settings.ACCESS_LOG_PATH == f"{BACKEND_DIR}/runtime_logs/access/access.log"
+    assert settings.ACCESS_ERROR_LOG_PATH == f"{BACKEND_DIR}/runtime_logs/access/access-error.log"
 
 
 def test_app_env_defaults_to_development(monkeypatch) -> None:

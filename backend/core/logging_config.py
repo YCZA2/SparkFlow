@@ -175,10 +175,10 @@ def _configure_access_logger(shared_processors: list[structlog.types.Processor])
         shared_processors=shared_processors,
         paths=[
             (
-                settings.BACKEND_LOG_PATH,
+                settings.ACCESS_LOG_PATH,
                 getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
             ),
-            (settings.BACKEND_ERROR_LOG_PATH, logging.ERROR),
+            (settings.ACCESS_ERROR_LOG_PATH, logging.ERROR),
         ],
     )
 

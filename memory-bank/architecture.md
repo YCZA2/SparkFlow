@@ -381,9 +381,12 @@ flowchart TD
 - 知识库向量 namespace: `knowledge_{user_id}`
 - 后台任务表：`task_runs` / `task_step_runs`
 - 碎片音频对象元数据：`audio_storage_provider` / `audio_bucket` / `audio_object_key`
-- 后端全量业务日志文件: `runtime_logs/backend.log`
-- 后端错误日志文件: `runtime_logs/backend-error.log`
-- 移动端调试日志文件: `runtime_logs/mobile-debug.log`
+- 后端业务日志文件: `runtime_logs/backend/backend.log`
+- 后端错误业务日志文件: `runtime_logs/backend/backend-error.log`
+- HTTP 访问日志文件: `runtime_logs/access/access.log`
+- HTTP 访问错误日志文件: `runtime_logs/access/access-error.log`
+- 移动端调试日志文件: `runtime_logs/mobile/mobile-debug.log`
+- 历史混合日志归档目录: `runtime_logs/legacy/`
 - 每日推盘调度时间：使用 `APP_TIMEZONE`，默认 `Asia/Shanghai`，时间点由 `DAILY_PUSH_HOUR` / `DAILY_PUSH_MINUTE` 控制
 - 每日写作上下文维护时间：使用 `APP_TIMEZONE`，默认 `Asia/Shanghai`，时间点由 `WRITING_CONTEXT_SCHEDULER_HOUR` / `WRITING_CONTEXT_SCHEDULER_MINUTE` 控制
 
@@ -391,9 +394,11 @@ flowchart TD
 
 - HTTP 请求入口统一绑定 `request_id`，并通过 `structlog` 输出结构化日志。
 - 关键后台链路日志字段至少包含 `event`、`request_id`、`path`、`module`，核心转写链路额外补 `fragment_id`、`user_id`、`provider`、`attempt`。
-- 后端主日志会同时输出到控制台，并通过独立 file handler 写入 `runtime_logs/backend.log`。
-- 后端 `ERROR` 及以上日志会额外写入 `runtime_logs/backend-error.log`，便于单独排查失败链路。
-- 移动端调试日志通过独立 file handler 写入 `runtime_logs/mobile-debug.log`，但字段格式与主日志链路保持一致。
+- 后端主日志会同时输出到控制台，并通过独立 file handler 写入 `runtime_logs/backend/backend.log`。
+- 后端 `ERROR` 及以上日志会额外写入 `runtime_logs/backend/backend-error.log`，便于单独排查失败链路。
+- HTTP 访问日志与访问失败日志会分流到 `runtime_logs/access/access.log` 和 `runtime_logs/access/access-error.log`，避免任务轮询把业务日志淹没。
+- 移动端调试日志通过独立 file handler 写入 `runtime_logs/mobile/mobile-debug.log`，但字段格式与主日志链路保持一致。
+- 改造前平铺在 `runtime_logs/` 根目录的旧 `backend*.log*` 会通过维护脚本迁到 `runtime_logs/legacy/`，避免与新结构混用。
 - 后端自动化测试已切换到 `pytest`。
 - 后端测试现按两层运行：轻量 smoke / contract 测试不依赖 PostgreSQL，依赖数据库或真实应用启动副作用的测试统一标记为 `integration`。
 - OpenAPI 契约 smoke 校验通过 `Schemathesis` 直接消费 `/openapi.json`，其中公开无状态端点走轻量基线，认证等依赖数据库的契约单独保留在 integration 测试里。
@@ -712,7 +717,7 @@ sequenceDiagram
 
 - 新接口优先新增或更新模块内 `schemas.py`，不要只在聊天里约定字段。
 - 涉及状态流转的接口，联调时必须覆盖“处理中 / 成功 / 失败”三个方向。
-- 联调问题优先结合 `backend/runtime_logs/mobile-debug.log` 与后端接口日志排查，而不是只看前端截图。
+- 联调问题优先结合 `backend/runtime_logs/mobile/mobile-debug.log` 与 `backend/runtime_logs/access/access.log` 排查，而不是只看前端截图。
 - 启动方式、环境假设或模块边界发生变化时，文档必须与代码同一轮更新。
 
 更完整的执行细则见 [`memory-bank/frontend-backend-collaboration.md`](/Users/hujiahui/Desktop/VibeCoding/SparkFlow/memory-bank/frontend-backend-collaboration.md)。

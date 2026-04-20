@@ -230,16 +230,24 @@ class Settings(BaseSettings):
         description="运行时日志目录"
     )
     MOBILE_DEBUG_LOG_PATH: str = Field(
-        default=os.path.join(BACKEND_DIR, "runtime_logs", "mobile-debug.log"),
+        default=os.path.join(BACKEND_DIR, "runtime_logs", "mobile", "mobile-debug.log"),
         description="移动端调试日志文件路径"
     )
     BACKEND_LOG_PATH: str = Field(
-        default=os.path.join(BACKEND_DIR, "runtime_logs", "backend.log"),
-        description="后端全量业务日志文件路径"
+        default=os.path.join(BACKEND_DIR, "runtime_logs", "backend", "backend.log"),
+        description="后端业务日志文件路径"
     )
     BACKEND_ERROR_LOG_PATH: str = Field(
-        default=os.path.join(BACKEND_DIR, "runtime_logs", "backend-error.log"),
-        description="后端错误日志文件路径"
+        default=os.path.join(BACKEND_DIR, "runtime_logs", "backend", "backend-error.log"),
+        description="后端错误业务日志文件路径"
+    )
+    ACCESS_LOG_PATH: str = Field(
+        default=os.path.join(BACKEND_DIR, "runtime_logs", "access", "access.log"),
+        description="HTTP 访问日志文件路径"
+    )
+    ACCESS_ERROR_LOG_PATH: str = Field(
+        default=os.path.join(BACKEND_DIR, "runtime_logs", "access", "access-error.log"),
+        description="HTTP 访问错误日志文件路径"
     )
     MAX_UPLOAD_SIZE: int = Field(
         default=50 * 1024 * 1024,  # 50MB
@@ -313,6 +321,8 @@ class Settings(BaseSettings):
         "MOBILE_DEBUG_LOG_PATH",
         "BACKEND_LOG_PATH",
         "BACKEND_ERROR_LOG_PATH",
+        "ACCESS_LOG_PATH",
+        "ACCESS_ERROR_LOG_PATH",
         mode="before",
     )
     @classmethod
@@ -353,6 +363,8 @@ class Settings(BaseSettings):
             os.path.dirname(os.path.abspath(self.MOBILE_DEBUG_LOG_PATH)),
             os.path.dirname(os.path.abspath(self.BACKEND_LOG_PATH)),
             os.path.dirname(os.path.abspath(self.BACKEND_ERROR_LOG_PATH)),
+            os.path.dirname(os.path.abspath(self.ACCESS_LOG_PATH)),
+            os.path.dirname(os.path.abspath(self.ACCESS_ERROR_LOG_PATH)),
         ]
         for directory in directories:
             if directory and not os.path.exists(directory):

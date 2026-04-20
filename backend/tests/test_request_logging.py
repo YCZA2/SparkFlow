@@ -24,14 +24,18 @@ def _flush_request_log_handlers() -> None:
                 flush()
 
 
-async def test_http_request_completed_is_written_to_backend_log(tmp_path, monkeypatch) -> None:
+async def test_http_request_completed_is_written_to_access_log(tmp_path, monkeypatch) -> None:
     """正常请求应写入结构化完成态 access 日志。"""
-    all_log_path = tmp_path / "backend.log"
-    error_log_path = tmp_path / "backend-error.log"
-    mobile_log_path = tmp_path / "mobile-debug.log"
+    all_log_path = tmp_path / "backend" / "backend.log"
+    error_log_path = tmp_path / "backend" / "backend-error.log"
+    access_log_path = tmp_path / "access" / "access.log"
+    access_error_log_path = tmp_path / "access" / "access-error.log"
+    mobile_log_path = tmp_path / "mobile" / "mobile-debug.log"
 
     monkeypatch.setattr(settings, "BACKEND_LOG_PATH", str(all_log_path))
     monkeypatch.setattr(settings, "BACKEND_ERROR_LOG_PATH", str(error_log_path))
+    monkeypatch.setattr(settings, "ACCESS_LOG_PATH", str(access_log_path))
+    monkeypatch.setattr(settings, "ACCESS_ERROR_LOG_PATH", str(access_error_log_path))
     monkeypatch.setattr(settings, "MOBILE_DEBUG_LOG_PATH", str(mobile_log_path))
     configure_logging()
 
@@ -43,7 +47,7 @@ async def test_http_request_completed_is_written_to_backend_log(tmp_path, monkey
     assert response.status_code == 200
     _flush_request_log_handlers()
 
-    records = [json.loads(line) for line in all_log_path.read_text(encoding="utf-8").strip().splitlines()]
+    records = [json.loads(line) for line in access_log_path.read_text(encoding="utf-8").strip().splitlines()]
     access_records = [record for record in records if record["event"] == "http_request_completed"]
 
     assert len(access_records) == 1
@@ -56,12 +60,16 @@ async def test_http_request_completed_is_written_to_backend_log(tmp_path, monkey
 
 async def test_http_request_failed_is_written_to_error_log(tmp_path, monkeypatch) -> None:
     """未处理异常应写入失败态 access 日志和错误日志文件。"""
-    all_log_path = tmp_path / "backend.log"
-    error_log_path = tmp_path / "backend-error.log"
-    mobile_log_path = tmp_path / "mobile-debug.log"
+    all_log_path = tmp_path / "backend" / "backend.log"
+    error_log_path = tmp_path / "backend" / "backend-error.log"
+    access_log_path = tmp_path / "access" / "access.log"
+    access_error_log_path = tmp_path / "access" / "access-error.log"
+    mobile_log_path = tmp_path / "mobile" / "mobile-debug.log"
 
     monkeypatch.setattr(settings, "BACKEND_LOG_PATH", str(all_log_path))
     monkeypatch.setattr(settings, "BACKEND_ERROR_LOG_PATH", str(error_log_path))
+    monkeypatch.setattr(settings, "ACCESS_LOG_PATH", str(access_log_path))
+    monkeypatch.setattr(settings, "ACCESS_ERROR_LOG_PATH", str(access_error_log_path))
     monkeypatch.setattr(settings, "MOBILE_DEBUG_LOG_PATH", str(mobile_log_path))
     configure_logging()
 
@@ -79,8 +87,13 @@ async def test_http_request_failed_is_written_to_error_log(tmp_path, monkeypatch
     assert response.status_code == 500
     _flush_request_log_handlers()
 
+    access_error_records = [
+        json.loads(line)
+        for line in access_error_log_path.read_text(encoding="utf-8").strip().splitlines()
+    ]
     error_records = [json.loads(line) for line in error_log_path.read_text(encoding="utf-8").strip().splitlines()]
+    access_error_events = [record["event"] for record in access_error_records]
     error_events = [record["event"] for record in error_records]
 
-    assert "http_request_failed" in error_events
+    assert "http_request_failed" in access_error_events
     assert "unhandled_exception" in error_events
