@@ -252,6 +252,7 @@ http://<your-lan-ip>:8000
 - Do not reintroduce fragment-level task-state compatibility fields or `agent_runs`; task progress must stay on `task_runs` and `task_step_runs`
 - When adding new mobile entities that need remote persistence, integrate with `/api/backups/*` and local `entity_version` / `backup_status` first; do not default to “create a backend business row first”
 - Reuse existing scripts and utilities before adding new entrypoints
+- Before implementing new logic, first check whether the repository already has an equivalent service, hook, helper, abstraction, or workflow that should be reused; for non-trivial domain logic, also evaluate mature open-source libraries before writing a custom implementation
 - Reuse `scripts/mobile-release.sh` and the existing npm aliases for mobile build / submission flows instead of duplicating EAS profile names, platform flags, or `APP_ENV` mappings in new docs or scripts
 - Environment configuration is intentionally limited to `development` and `production`: the backend uses `APP_ENV + .env/.env.<env>`, and the mobile app uses Expo runtime config; do not leak fixed LAN addresses, debug-only entrypoints, or manual network overrides into production behavior
 - The mobile app only targets iOS and Android native builds. Do not add Expo Web-specific scripts, dependencies, or browser-only compatibility work unless the product scope changes explicitly.
