@@ -8,15 +8,10 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { consumePendingFragmentCleanup } from '@/features/fragments/cleanup/runtime';
 import { useAudioCaptureSession } from '@/features/recording/AudioCaptureProvider';
 import { useAppTheme } from '@/theme/useAppTheme';
+import { formatTodayLabel } from '@/utils/date';
 
 import { ActionButton, HeaderCircleButton, SecondaryPill } from './RecordAudioScreenControls';
 import { recordAudioStyles as styles } from './recordAudioStyles';
-
-/*格式化录音页当天标题，保持和设计稿里的日期表达一致。 */
-function formatTodayLabel() {
-  const today = new Date();
-  return `${today.getMonth() + 1}月${today.getDate()}日`;
-}
 
 /*承接录音页交互和布局，让 route 文件只负责参数接入。 */
 export function RecordAudioScreen({ folderId }: { folderId?: string }) {

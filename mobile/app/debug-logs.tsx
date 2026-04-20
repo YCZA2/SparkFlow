@@ -8,14 +8,7 @@ import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { useDebugLogs } from '@/providers/DebugLogProvider';
 import { useAppTheme } from '@/theme/useAppTheme';
-
-function formatTimestamp(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
-}
+import { formatFullTimestamp } from '@/utils/date';
 
 function formatContext(context: Record<string, unknown> | undefined): string {
   if (!context) {
@@ -101,7 +94,7 @@ export default function DebugLogsScreen() {
                   {log.level.toUpperCase()}
                 </Text>
                 <Text className="text-xs text-app-text-subtle dark:text-app-text-subtle-dark">
-                  {formatTimestamp(log.timestamp)}
+                  {formatFullTimestamp(log.timestamp)}
                 </Text>
               </View>
               <Text className="mt-sf-sm text-[13px] font-bold text-app-primary dark:text-app-primary-dark">{log.source}</Text>

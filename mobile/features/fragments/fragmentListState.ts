@@ -1,4 +1,5 @@
 import type { Fragment } from '@/types/fragment';
+import { formatDateSectionLabel } from '@/utils/date';
 
 export interface FragmentSection {
   title: string;
@@ -19,7 +20,7 @@ export function buildFragmentSections(fragments: Fragment[]): FragmentSection[] 
   );
 
   for (const fragment of sortedFragments) {
-    const key = getSectionLabel(resolveFragmentSortDate(fragment));
+    const key = formatDateSectionLabel(resolveFragmentSortDate(fragment));
     const current = sectionMap.get(key) ?? [];
     current.push(fragment);
     sectionMap.set(key, current);
@@ -33,23 +34,4 @@ export function buildFragmentSections(fragments: Fragment[]): FragmentSection[] 
         Date.parse(resolveFragmentSortDate(right)) - Date.parse(resolveFragmentSortDate(left))
     ),
   }));
-}
-
-function getSectionLabel(dateString: string): string {
-  /*把创建时间映射为列表分组标题，保持首页与文件夹页一致。 */
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return '更早';
-
-  const today = new Date();
-  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const diffDays = Math.round((current.getTime() - target.getTime()) / 86400000);
-
-  if (diffDays === 0) return '今天';
-  if (diffDays === 1) return '昨天';
-  if (date.getFullYear() === today.getFullYear()) {
-    return `${date.getMonth() + 1}月${date.getDate()}日`;
-  }
-
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }

@@ -11,6 +11,7 @@ import {
 } from '@/features/editor/html';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { Fragment } from '@/types/fragment';
+import { formatClockTime } from '@/utils/date';
 
 interface FragmentCardProps {
   fragment: Fragment;
@@ -19,17 +20,6 @@ interface FragmentCardProps {
   selected?: boolean;
   isFirstInSection?: boolean;
   isLastInSection?: boolean;
-}
-
-function formatTimeLabel(dateString: string): string {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) {
-    return '--:--';
-  }
-
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
 }
 
 function getCleanText(value: string | null | undefined): string {
@@ -162,7 +152,7 @@ export function FragmentCard({
 
         <View className="mt-[2px] flex-row items-center gap-[6px]">
           <Text className="min-w-10 text-[13px] text-app-text-subtle dark:text-app-text-subtle-dark">
-            {formatTimeLabel(fragment.created_at)}
+            {formatClockTime(fragment.created_at)}
           </Text>
           <Text
             className="flex-1 text-[13px] leading-[18px] text-app-text-subtle dark:text-app-text-subtle-dark"

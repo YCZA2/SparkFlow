@@ -68,33 +68,20 @@ export function useFolders(): UseFoldersReturn {
     try {
       const deviceId = await getOrCreateDeviceId();
       await createLocalFolder(name, deviceId);
-      await query.refetch();
-    } catch (err) {
-      throw err; // 向上抛出错误以便调用方处理
     } finally {
       setIsCreating(false);
     }
-  }, [query]);
+  }, []);
 
   const renameFolder = useCallback(async (id: string, name: string) => {
-    try {
-      const deviceId = await getOrCreateDeviceId();
-      await updateLocalFolder(id, { name }, deviceId);
-      await query.refetch();
-    } catch (err) {
-      throw err;
-    }
-  }, [query]);
+    const deviceId = await getOrCreateDeviceId();
+    await updateLocalFolder(id, { name }, deviceId);
+  }, []);
 
   const removeFolder = useCallback(async (id: string) => {
-    try {
-      const deviceId = await getOrCreateDeviceId();
-      await deleteLocalFolder(id, deviceId);
-      await query.refetch();
-    } catch (err) {
-      throw err;
-    }
-  }, [query]);
+    const deviceId = await getOrCreateDeviceId();
+    await deleteLocalFolder(id, deviceId);
+  }, []);
 
   return {
     folders,

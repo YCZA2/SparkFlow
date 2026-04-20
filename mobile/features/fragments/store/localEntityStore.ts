@@ -42,7 +42,7 @@ export async function createLocalFragmentEntity(input: {
     updatedAt: now,
     summary: input.summary ?? null,
     tagsJson: JSON.stringify(input.tags ?? []),
-    plainTextSnapshot: normalizedBody.replace(/<[^>]+>/g, ' ').trim(),
+    plainTextSnapshot: extractPlainTextFromHtml(normalizedBody),
     bodyFileUri: getFragmentBodyFile(id).uri,
     transcript: input.transcript ?? null,
     mediaTaskRunId: null,
