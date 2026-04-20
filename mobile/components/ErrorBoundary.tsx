@@ -4,8 +4,7 @@
  */
 
 import React, { Component, ReactNode } from 'react';
-import { TouchableOpacity } from 'react-native';
-import { Text, View } from './Themed';
+import { TouchableOpacity, Text, View } from 'react-native';
 
 interface Props {
   children: ReactNode;

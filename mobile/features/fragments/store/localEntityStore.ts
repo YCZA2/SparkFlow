@@ -16,7 +16,7 @@ import {
   stagePendingImage,
 } from './shared';
 import { resolveFragmentEntityUpdate, type FragmentEntityPatch } from './updateState';
-import { useFragmentStore } from './fragmentStore';
+import { invalidateFragmentQueries } from '../queries';
 
 export async function createLocalFragmentEntity(input: {
   folderId?: string | null;
@@ -67,25 +67,21 @@ export async function createLocalFragmentEntity(input: {
   if (!fragment) {
     throw new Error('创建本地 fragment 失败');
   }
+  await invalidateFragmentQueries();
   return fragment;
 }
 
 export async function listLocalFragmentEntities(folderId?: string | null): Promise<Fragment[]> {
+  /*碎片列表直接读取 SQLite 真值，不再额外维护第二层内存缓存。 */
   const rows = await readFragmentRows(folderId);
   const mediaRowsByFragmentId = await loadMediaRowsByFragmentIds(rows.map((row) => row.id));
-  const fragments = await Promise.all(
+  return await Promise.all(
     rows.map(async (row) => await mapLocalEntityRowToFragment(row, mediaRowsByFragmentId.get(row.id) ?? []))
   );
-  useFragmentStore.getState().setList(folderId ?? null, fragments);
-  useFragmentStore.getState().batchUpdateDetails(fragments);
-  return fragments;
 }
 
 export async function readLocalFragmentEntity(fragmentId: string): Promise<Fragment | null> {
-  const cached = useFragmentStore.getState().getDetail(fragmentId);
-  if (cached) {
-    return cached;
-  }
+  /*单条碎片详情直接读取本地真值，避免 query 之外再堆一层缓存。 */
   const database = await getLocalDatabase();
   const rows = await database
     .select()
@@ -97,9 +93,7 @@ export async function readLocalFragmentEntity(fragmentId: string): Promise<Fragm
     return null;
   }
   const mediaRowsByFragmentId = await loadMediaRowsByFragmentIds([fragmentId]);
-  const fragment = await mapLocalEntityRowToFragment(row, mediaRowsByFragmentId.get(fragmentId) ?? []);
-  useFragmentStore.getState().setDetail(fragmentId, fragment);
-  return fragment;
+  return await mapLocalEntityRowToFragment(row, mediaRowsByFragmentId.get(fragmentId) ?? []);
 }
 
 /*按 local-first 语义更新 fragment 真值，只在真实业务变更时推进排序时间和版本。 */
@@ -137,12 +131,8 @@ export async function updateLocalFragmentEntity(
     .update(fragmentsTable)
     .set(resolvedUpdate.nextRow)
     .where(eq(fragmentsTable.id, id));
-  useFragmentStore.getState().deleteDetail(id);
   const nextFragment = await readLocalFragmentEntity(id);
-  if (nextFragment) {
-    /*本地真值更新后同步刷新所有已缓存列表，避免详情返回和任务回写依赖额外下拉刷新。 */
-    useFragmentStore.getState().syncFragmentInLists(nextFragment);
-  }
+  await invalidateFragmentQueries();
   return nextFragment;
 }
 
@@ -192,7 +182,7 @@ export async function stageLocalFragmentPendingImage(
     lastModifiedDeviceId: null,
   });
 
-  useFragmentStore.getState().deleteDetail(fragmentId);
+  await invalidateFragmentQueries();
   return pendingAsset;
 }
 
@@ -200,14 +190,12 @@ export async function deleteLocalFragmentEntity(
   id: string,
   options?: { deviceId?: string | null }
 ): Promise<void> {
-  /*删除本地 fragment 后同步剔除详情和列表缓存，避免当前页闪空或残留旧卡片。 */
+  /*删除本地 fragment 后统一失效查询，让列表与详情回到当前 SQLite 真值。 */
   await updateLocalFragmentEntity(id, {
     deleted_at: new Date().toISOString(),
     backup_status: 'pending',
     last_modified_device_id: options?.deviceId ?? null,
   });
-  useFragmentStore.getState().deleteDetail(id);
-  useFragmentStore.getState().removeFragmentFromLists(id);
 }
 
 export async function markLocalFragmentFilmed(

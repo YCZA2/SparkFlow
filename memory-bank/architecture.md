@@ -1,6 +1,6 @@
 # SparkFlow Architecture
 
-> 最后更新：2026-04-19
+> 最后更新：2026-04-20
 
 本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为本机 PostgreSQL 服务。
 
@@ -25,7 +25,9 @@
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
 - 仓库本轮也完成了一次大规模命名清理：项目仍处于开发期且没有老用户，移动端旧本地库、旧备份 payload 和旧 remote-first 投影不再保留升级路径，字段直接使用当前领域语义。
 - 这意味着后续新增实现默认应直接接入 local-first 实体、`backup_status / entity_version` 与 `/api/backups/*`；除第三方版本或运行环境适配外，不再新增历史升级命名。
-- 移动端 UI 样式开始从 `StyleSheet + useAppTheme/tokens` 渐进迁移到 NativeWind：Tailwind token 现在由 `mobile/theme/tailwind-tokens.js` 驱动，`theme/tokens.ts` 只保留为迁移中的 StyleSheet 调用镜像；首页、文件夹页、成稿列表与核心列表卡片已作为第一批迁移范围。
+- 移动端 `fragment / script / folder` 的异步读取已统一收口到 React Query：查询 key 绑定 `user_id + session_version + workspace_epoch`，queryFn 直接读取本地 SQLite / 文件系统；`Zustand` 只保留 UI / session 运行态，不再承载实体列表或详情缓存。
+- 移动端 UI 样式约定现已收口到 NativeWind 默认：`tailwind-tokens` 是主题真值，`Themed/Colors` 旧层已移除，`useAppTheme()` 仅保留给富文本编辑器、录音/拍摄、复杂动画和第三方样式桥接场景。
+- `modules/shared/content/document_parsers.py` 现已完全依赖 `python-docx`、`pypdf`、`openpyxl` 解析 `txt/md/docx/pdf/xlsx`，不再保留 PDF/XLSX 的手写 fallback 解析路径。
 
 ## 1. Overall
 
@@ -134,21 +136,22 @@ flowchart TD
 - `ImportActionSheetProvider` 承载底部 `+` 导入抽屉开关与当前文件夹上下文。
 - `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
 - `features/tasks/taskQuery.ts` 统一提供 `useTaskRunQuery`、`useTaskRunTerminalConsumer`、QueryObserver 轮询和任务 UI phase 映射；task query key 现在绑定 `user_id + session_version + workspace_epoch + task_id`，避免不同会话复用旧缓存。
+- `features/core/query/workspace.ts` 统一提供工作区隔离 query scope 与 query key 组装；`features/fragments/queries.ts`、`features/scripts/queries.ts`、`features/folders/queries.ts` 负责 list/detail 查询、局部写回和统一 invalidation。
 - `features/tasks/taskRecoveryRegistry.ts` 负责后台任务恢复 observer 的作用域键与去重注册表，供工作区恢复和页面 handoff 共用。
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
 - `features/editor/*` 提供共享正文编辑底座：`contentBodyService` 负责 DOM 级 HTML 解析、标题/预览提取和 asset 引用收集，`html.ts` 保留格式化与桥接 helper，fragment 与 script 详情统一复用这套协议，但不合并成统一业务实体。
 - `features/recording/components/*` 负责录音页的 UI 壳层、按钮组与样式，路由文件只保留参数接入与页面装配。
 - `features/editor/useEditorSession.ts` 当前只负责组装共享正文会话协议；hydration、保存生命周期、图片插入和运行时 ref 同步已经拆到内部 helper / 子 hook，避免 fragment 与 script 两端继续往主 hook 堆副作用。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
-- `features/fragments/store/*` 现在承接 fragment 的 **local-first 真值**：列表、详情、编辑和删除统一读写本地 SQLite / 文件系统；主链路集中在 `localEntityStore`、`runtime` 与共享 update helpers。本地 SQLite 迁移改为当前基线重建，旧开发库可通过重装 App 或清库恢复。
+- `features/fragments/store/*` 现在只承接 fragment 的 **local-first 真值写入与运行时初始化**：主链路集中在 `localEntityStore`、`runtime` 与共享 update helpers；list/detail 主读取改由 `features/fragments/queries.ts` 通过 React Query 统一承接。
 - `features/core/db/schema.ts` 只描述当前本地表结构；媒体备份键使用 `backup_object_key`，编辑器保存态使用 `save_state`，待落盘正文使用 `pending_body_html`。
 - `features/core/files/*` 当前已把工作区路径约束与文件读写/staging helper 拆开，避免单个 runtime 文件继续膨胀。
 - `features/fragments/detail/*` 保留 `resource / 编辑会话 / sheet / screen actions` 四层，但资源层已经改成优先读取本地实体，不再把远端详情当作首屏真值。
 - `features/fragments/components/detailSheet/*` 现在承接碎片更多抽屉的 section 组合与只读展示逻辑；内部已进一步拆成 primitives / section blocks / styles，`detail/fragmentDetailSheetState.ts` 负责 related scripts 计数和抽屉载荷组装，避免 `useFragmentDetailScreen` 同时维护 UI 拼装与页面动作。
 - `features/imports/*` 负责外部链接导入请求与任务态辅助逻辑。
-- `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用；其中 `features/scripts/store/*` 现在承接 script 的 **local-first 真值**，`detail/*` 通过共享 editor 底座实现本地正文编辑、来源碎片抽屉与拍摄跳转。
+- `features/scripts/*` 负责口播稿生成、列表、详情状态和每日推盘 API 调用；其中 `features/scripts/store/*` 只承接 script 的 **local-first 真值写入**，list/detail 读取与 invalidation 统一收口到 `features/scripts/queries.ts`，`detail/*` 通过共享 editor 底座实现本地正文编辑、来源碎片抽屉与拍摄跳转。
 - `components/layout/*` 当前补齐了 `NotesListScreenShell / NotesListHero / NotesScreenStateView`，首页、文件夹页、成稿页统一复用同一层 notes 风格列表壳层；页面本身只保留各自的数据源、交互和导航逻辑。
-- `tailwind.config.js` / `global.css` 是移动端新增 UI 样式入口；新 UI 优先使用 NativeWind `className` 和 Tailwind token，复杂动画、富文本编辑器、录音、拍摄等高交互区域可继续保留 `StyleSheet`。
+- `tailwind.config.js` / `global.css` 是移动端默认 UI 样式入口；常规页面与常规组件统一使用 NativeWind `className` 和 Tailwind token，复杂动画、富文本编辑器、录音、拍摄等高交互区域可继续保留 `StyleSheet`。
 
 ### 3.4 Local Persistence
 
@@ -160,6 +163,7 @@ flowchart TD
 
 当前移动端 fragments / folders / scripts 主流程采用**local-first 架构**：
 - **设备本地 SQLite + 文件系统是当前阶段的真值来源**
+- React Query 是 `fragment / folder / script / task` 的统一异步读取层；query key 显式绑定 `user_id + session_version + workspace_epoch`，实体变更后统一通过 invalidation 触发重读本地真值
 - 远端只负责自动备份与显式恢复，不再承担 fragments / folders / scripts 的主读取路径
 - 编辑与删除先更新本地实体，再由 backup queue 批量推送快照和 tombstone
 - AI 生成、转写、外链导入继续走后端，但输入来自客户端上传的本地快照或媒体文件；手动脚本生成发起前会先显式执行一次 `flushBackupQueue()`，确保后端读取到最新已同步 fragment snapshot；script 生成成功后会立刻回写本地 script 真值
@@ -379,7 +383,7 @@ flowchart TD
 - fragment snapshot 的 `transcript` 保存机器转写原文，`body_html` 保存唯一正式正文的 HTML，`plain_text_snapshot` 保存派生纯文本快照
 - 非语音碎片必须直接写入 `body_html`，不再把 `transcript` 当作正式正文来源
 - 移动端碎片详情正文改为 `react-native-enriched` 原生富文本输入；前端运行时与本地草稿统一消费 HTML 快照，AI patch 本期停用
-- 移动端碎片详情采用**local-first 分层缓存策略**：`features/fragments/store/*` 统一管理本地实体；detail resource 负责组合这些本地数据为当前展示态，远端仅承担备份与恢复
+- 移动端碎片详情采用**local-first + query-backed resource**：`features/fragments/store/*` 负责本地真值写入，`features/fragments/queries.ts` 负责详情/列表读取与 invalidation；detail resource 只组合当前 query 数据为展示态，远端仅承担备份与恢复
 - 详情编辑会话的纯逻辑已下沉到 `editorSessionState.ts`、`bodySessionState.ts` 和 `fragmentSaveController.ts`：`editorSessionState.ts` 负责 session reducer、基线解析、自动保存触发条件与图片 fallback 规则，`bodySessionState.ts` 继续承载 Markdown 快照构建、远端刷新判定、AI fallback patch 和乐观展示态合成，`fragmentSaveController.ts` 保证自动保存只串行提交最后一版快照
 - `scripts.body_html` / `knowledge_docs.body_markdown` 分别保存脚本 HTML 正文与知识库 Markdown 正文
 - 媒体资源表：`media_assets` / `content_media_links`，对象元数据保存 `storage_provider` / `bucket` / `object_key`
@@ -520,6 +524,7 @@ sequenceDiagram
 - Markdown 文件的原始文本通过 `convert_markdown_to_basic_html()` 保留标题、列表、引用等结构；其他格式的纯文本按段落包裹 `<p>` 标签。
 - 解析完成后自动触发 `fragment_derivative_backfill`，异步补齐摘要、标签和向量，与音频导入链路的回填行为一致。
 - 文档解析逻辑位于 `modules/shared/content/document_parsers.py`，与知识库模块共享；知识库模块的 `parsers.py` 已改为从此共享模块导入。
+- PDF / XLSX 解析默认依赖 `pypdf` 与 `openpyxl`，运行时缺失依赖或文件损坏时直接返回统一 `ValidationError`，不再回退到手写解析逻辑。
 ### 5.4 Script Generation Task
 
 ```mermaid

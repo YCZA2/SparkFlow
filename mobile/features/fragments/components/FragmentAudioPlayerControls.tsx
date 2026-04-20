@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { LayoutChangeEvent, Pressable, View } from 'react-native';
+import { LayoutChangeEvent, Pressable, View, Text } from 'react-native';
 
-import { Text } from '@/components/Themed';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 function formatClock(totalMs: number): string {

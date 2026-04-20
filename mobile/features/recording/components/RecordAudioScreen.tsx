@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { ActivityIndicator, Alert, Pressable, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, View, Text } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { Text } from '@/components/Themed';
 import { consumePendingFragmentCleanupDirectly } from '@/features/fragments/cleanup/runtime';
 import { useAudioCaptureSession } from '@/features/recording/AudioCaptureProvider';
 import { useAppTheme } from '@/theme/useAppTheme';

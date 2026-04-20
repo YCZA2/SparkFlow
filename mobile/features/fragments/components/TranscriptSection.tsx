@@ -1,7 +1,6 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
 
-import { Text } from '@/components/Themed';
 import { SpeakerTimelineList } from '@/features/fragments/components/SpeakerTimelineList';
 import type { SpeakerSegment } from '@/types/fragment';
 

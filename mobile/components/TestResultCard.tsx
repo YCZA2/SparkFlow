@@ -1,6 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, View } from 'react-native';
-import { Text } from '@/components/Themed';
+import { ActivityIndicator, View, Text } from 'react-native';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { TestResult } from '@/hooks/useApiTestSuite';
 

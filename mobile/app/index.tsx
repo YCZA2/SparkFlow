@@ -1,12 +1,11 @@
 import React, { useCallback } from 'react';
-import { FlatList, RefreshControl, View } from 'react-native';
+import { FlatList, RefreshControl, View, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
-import { Text } from '@/components/Themed';
 import { InputDialog } from '@/components/InputDialog';
 import { NotesListHero } from '@/components/layout/NotesListHero';
 import {

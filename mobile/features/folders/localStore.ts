@@ -1,5 +1,6 @@
 import { and, count, desc, eq, isNull } from 'drizzle-orm';
 
+import { invalidateFolderQueries } from '@/features/folders/queries';
 import { getLocalDatabase } from '@/features/core/db/database';
 import { fragmentFoldersTable, fragmentsTable } from '@/features/core/db/schema';
 import type { FragmentFolder } from '@/types/folder';
@@ -67,7 +68,9 @@ export async function createLocalFolder(name: string, deviceId?: string | null):
     .from(fragmentFoldersTable)
     .where(eq(fragmentFoldersTable.id, id))
     .limit(1);
-  return await mapFolderRow(rows[0]);
+  const folder = await mapFolderRow(rows[0]);
+  await invalidateFolderQueries();
+  return folder;
 }
 
 /*重命名文件夹：本地先写、递增版本号，由备份队列异步同步远端。 */
@@ -105,7 +108,9 @@ export async function updateLocalFolder(
   if (!updated[0]) {
     return null;
   }
-  return await mapFolderRow(updated[0]);
+  const folder = await mapFolderRow(updated[0]);
+  await invalidateFolderQueries();
+  return folder;
 }
 
 /*软删除文件夹：设置 deletedAt 并进入备份队列，远端最终也会收到 delete 操作。 */
@@ -134,4 +139,5 @@ export async function deleteLocalFolder(
       lastModifiedDeviceId: deviceId ?? null,
     })
     .where(eq(fragmentFoldersTable.id, id));
+  await invalidateFolderQueries();
 }

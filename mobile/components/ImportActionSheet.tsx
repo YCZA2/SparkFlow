@@ -1,16 +1,10 @@
 import React from 'react';
-import {
-  Modal,
-  Pressable,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Modal, Pressable, TouchableOpacity, View, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Text } from '@/components/Themed';
 import { useImportActionSheet } from '@/providers/ImportActionSheetProvider';
 import { useAppTheme } from '@/theme/useAppTheme';
 

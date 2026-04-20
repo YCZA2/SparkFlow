@@ -1,11 +1,10 @@
 import React from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { ScreenState } from '@/components/ScreenState';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ScreenHeader } from '@/components/layout/ScreenHeader';
-import { Text } from '@/components/Themed';
 import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { useDebugLogs } from '@/providers/DebugLogProvider';
 import { useAppTheme } from '@/theme/useAppTheme';

@@ -1,7 +1,8 @@
 import { setDatabaseWorkspace } from '@/features/core/db/database';
 import { setFileRuntimeWorkspace } from '@/features/core/files/runtime';
-import { clearFragmentStoreCache, resetFragmentStoreRuntime } from '@/features/fragments/store';
-import { clearScriptStoreCache, resetScriptStoreRuntime } from '@/features/scripts/store';
+import { clearWorkspaceQueryCache } from '@/features/core/query/workspace';
+import { resetFragmentStoreRuntime } from '@/features/fragments/store';
+import { resetScriptStoreRuntime } from '@/features/scripts/store';
 
 let workspaceEpoch = 0;
 
@@ -12,8 +13,7 @@ async function applyWorkspace(userId: string | null): Promise<void> {
   setFileRuntimeWorkspace(userId);
   resetFragmentStoreRuntime();
   resetScriptStoreRuntime();
-  clearFragmentStoreCache();
-  clearScriptStoreCache();
+  clearWorkspaceQueryCache();
 }
 
 export async function activateUserWorkspace(userId: string): Promise<void> {

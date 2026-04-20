@@ -1,13 +1,10 @@
-let scriptsShouldRefresh = false;
+import { invalidateFolderQueries } from '@/features/folders/queries';
 
-/*在生成、拍摄或本地迁移完成后标记成稿列表待刷新。 */
+/*在生成、拍摄或本地迁移完成后失效成稿和首页统计查询。 */
 export function markScriptsStale(): void {
-  scriptsShouldRefresh = true;
-}
-
-/*页面聚焦时消费一次成稿刷新标记，避免重复触发列表重载。 */
-export function consumeScriptsStale(): boolean {
-  const shouldRefresh = scriptsShouldRefresh;
-  scriptsShouldRefresh = false;
-  return shouldRefresh;
+  /*成稿变化也会影响首页系统区统计，因此联动失效文件夹查询。 */
+  void Promise.allSettled([
+    import('./queries').then(async ({ invalidateScriptQueries }) => await invalidateScriptQueries()),
+    invalidateFolderQueries(),
+  ]);
 }

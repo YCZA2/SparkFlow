@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react';
-
-import { listLocalScriptsBySourceFragment } from '@/features/scripts/store';
+import { useLocalScriptListQuery } from '@/features/scripts/queries';
 import type { Fragment } from '@/types/fragment';
 
 /*统计当前碎片关联的本地成稿数量，供更多抽屉展示下游关系。 */
@@ -9,36 +7,15 @@ export function useRelatedScriptsCount(
   updatedAt?: string | null,
   isSheetOpen?: boolean
 ) {
-  const [relatedScriptsCount, setRelatedScriptsCount] = useState(0);
+  /*抽屉里的关联成稿计数也复用 query 数据，避免再维护一套 effect + state。 */
+  const query = useLocalScriptListQuery({
+    sourceFragmentId: fragmentId ?? null,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    const nextFragmentId = fragmentId ?? null;
-
-    if (!nextFragmentId) {
-      setRelatedScriptsCount(0);
-      return;
-    }
-
-    void (async () => {
-      try {
-        const scripts = await listLocalScriptsBySourceFragment(nextFragmentId);
-        if (!cancelled) {
-          setRelatedScriptsCount(scripts.length);
-        }
-      } catch {
-        if (!cancelled) {
-          setRelatedScriptsCount(0);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fragmentId, isSheetOpen, updatedAt]);
-
-  return relatedScriptsCount;
+  if (!fragmentId) {
+    return 0;
+  }
+  return query.data?.length ?? 0;
 }
 
 /*把 fragment 真值映射成抽屉内容载荷，供 UI section 直接消费。 */

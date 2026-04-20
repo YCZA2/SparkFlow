@@ -19,8 +19,8 @@ import {
   stageLocalFragmentPendingImage,
   updateLocalFragmentEntity,
 } from '@/features/fragments/store';
-import { useFragmentStore } from '@/features/fragments/store/fragmentStore';
 import type { Fragment } from '@/types/fragment';
+import { setFragmentDetailQueryData } from '@/features/fragments/queries';
 
 // ============================================================================
 // 类型定义
@@ -45,8 +45,9 @@ function buildEditorDocumentFromFragment(fragment: Fragment): EditorSourceDocume
 }
 
 function resolveCachedBodyHtml(fragmentId: string | null, fragment: Fragment | null): string | null {
+  /*详情基线优先读当前页面 fragment 快照，不再依赖额外实体 store。 */
   if (!fragmentId || !fragment) return null;
-  return useFragmentStore.getState().getDetail(fragmentId)?.body_html ?? null;
+  return fragment.body_html ?? null;
 }
 
 // ============================================================================
@@ -84,6 +85,7 @@ export function useFragmentBodySession({
       });
 
       if (updatedFragment) {
+        setFragmentDetailQueryData(updatedFragment);
         await commitOptimisticFragment(updatedFragment);
         return;
       }
@@ -97,6 +99,7 @@ export function useFragmentBodySession({
         snapshot,
         mediaAssets
       );
+      setFragmentDetailQueryData(optimisticFragment);
       await commitOptimisticFragment(optimisticFragment);
     },
     [commitOptimisticFragment, fragment]

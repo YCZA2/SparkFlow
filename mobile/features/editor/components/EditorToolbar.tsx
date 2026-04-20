@@ -1,8 +1,7 @@
 import React from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
-import { Text } from '@/components/Themed';
 import type {
   EditorCapabilities,
   EditorCommand,

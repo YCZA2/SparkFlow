@@ -1,7 +1,6 @@
 import React from 'react';
-import { StyleProp, View, ViewStyle } from 'react-native';
+import { StyleProp, View, ViewStyle, Text } from 'react-native';
 
-import { Text } from '@/components/Themed';
 
 interface ScreenHeaderProps {
   title: string;

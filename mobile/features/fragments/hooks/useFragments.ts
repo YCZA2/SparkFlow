@@ -1,128 +1,62 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useMemo } from 'react';
 
 import {
-  fetchFragmentVisualization,
-} from '@/features/fragments/api';
-import {
   deleteLocalFragmentEntity,
-  listLocalFragmentEntities,
   readLocalFragmentEntity,
 } from '@/features/fragments/store';
-import { useFragmentStore, useFragmentList } from '@/features/fragments/store/fragmentStore';
-import { consumeFragmentsStale } from '@/features/fragments/refreshSignal';
 import {
   isFailedMediaIngestionFragment,
   retryFailedMediaIngestionFragment,
 } from '@/features/tasks/mediaIngestionTaskRecovery';
 import type {
   Fragment,
-  FragmentVisualizationResponse,
 } from '@/types/fragment';
 import { getErrorMessage } from '@/utils/error';
+import {
+  useFragmentVisualizationQuery,
+  useLocalFragmentListQuery,
+  useSelectedFragmentsQuery,
+} from '@/features/fragments/queries';
 
 interface UseFragmentsOptions {
   folderId?: string | null;
 }
 
 export function useFragments({ folderId }: UseFragmentsOptions = {}) {
-  /*列表页只消费本地真值，并在失效标记后重新读取本地列表。 */
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /*列表页统一通过 React Query 读取本地真值，并复用标准 refetch 语义。 */
   const resolvedFolderId =
     typeof folderId === 'string' && folderId.trim() && folderId !== '__all__'
       ? folderId
       : undefined;
-
-  const cachedFragments = useFragmentList(resolvedFolderId ?? null) ?? [];
-  const fragments = useMemo(() => cachedFragments, [cachedFragments]);
-
-  const loadFragments = useCallback(
-    async (mode: 'load' | 'refresh' | 'silent' = 'load'): Promise<void> => {
-      const isSilent = mode === 'silent';
-      if (mode === 'refresh') {
-        setIsRefreshing(true);
-      } else if (!isSilent) {
-        setIsLoading(true);
-      }
-
-      try {
-        let nextItems = await listLocalFragmentEntities(resolvedFolderId);
-        useFragmentStore.getState().setList(resolvedFolderId ?? null, nextItems);
-
-        if (mode === 'refresh') {
-          const failedItems = nextItems.filter(isFailedMediaIngestionFragment);
-          if (failedItems.length > 0) {
-            await Promise.allSettled(
-              failedItems.map(async (fragment) => {
-                await retryFailedMediaIngestionFragment(fragment);
-              })
-            );
-            nextItems = await listLocalFragmentEntities(resolvedFolderId);
-            useFragmentStore.getState().setList(resolvedFolderId ?? null, nextItems);
-          }
-        }
-        setError(null);
-      } catch (err) {
-        const nextError = getErrorMessage(err, '加载失败');
-        setError(nextError);
-      } finally {
-        if (mode === 'refresh') {
-          setIsRefreshing(false);
-        }
-        if (!isSilent) {
-          setIsLoading(false);
-        }
-      }
-    },
-    [resolvedFolderId]
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const hydrate = async () => {
-      const nextItems = await listLocalFragmentEntities(resolvedFolderId);
-      if (cancelled) return;
-      useFragmentStore.getState().setList(resolvedFolderId ?? null, nextItems);
-      setError(null);
-      setIsLoading(false);
-    };
-
-    void hydrate();
-
-    /*Zustand 自动响应式，无需手动订阅*/
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadFragments, resolvedFolderId]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (consumeFragmentsStale()) {
-        void loadFragments('load');
-      }
-    }, [loadFragments])
-  );
+  const query = useLocalFragmentListQuery(resolvedFolderId);
+  const fragments = useMemo(() => query.data ?? [], [query.data]);
 
   return {
     fragments,
-    isLoading,
-    isRefreshing,
-    error,
+    isLoading: query.isPending,
+    isRefreshing: query.isRefetching,
+    error: query.error ? getErrorMessage(query.error, '加载失败') : null,
     total: fragments.length,
-    fetchFragments: useCallback(async () => {
-      await loadFragments('load');
-    }, [loadFragments]),
-    refreshFragments: useCallback(async () => {
-      await loadFragments('refresh');
-    }, [loadFragments]),
+    fetchFragments: async () => {
+      await query.refetch();
+    },
+    refreshFragments: async () => {
+      if (fragments.some(isFailedMediaIngestionFragment)) {
+        await Promise.allSettled(
+          fragments
+            .filter(isFailedMediaIngestionFragment)
+            .map(async (fragment) => {
+              await retryFailedMediaIngestionFragment(fragment);
+            })
+        );
+      }
+      await query.refetch();
+    },
   };
 }
 
 export function useSelectedFragments(fragmentIds?: string | string[]) {
+  /*生成页把已选碎片也统一挂到 React Query，避免再手写批量加载模板代码。 */
   const ids = useMemo(() => {
     if (!fragmentIds) return [];
     if (Array.isArray(fragmentIds)) {
@@ -136,90 +70,27 @@ export function useSelectedFragments(fragmentIds?: string | string[]) {
       .map((value) => value.trim())
       .filter(Boolean);
   }, [fragmentIds]);
-
-  const [fragments, setFragments] = useState<Fragment[]>([]);
-  const [isLoading, setIsLoading] = useState(ids.length > 0);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      if (ids.length === 0) {
-        setFragments([]);
-        setIsLoading(false);
-        setError(null);
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        setError(null);
-        const detailList = await Promise.all(
-          ids.map(async (id) => {
-            const fragment = await readLocalFragmentEntity(id);
-            if (!fragment) {
-              throw new Error(`碎片不存在: ${id}`);
-            }
-            return fragment;
-          })
-        );
-        if (!cancelled) {
-          setFragments(detailList);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(getErrorMessage(err, '读取碎片失败'));
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [ids]);
+  const query = useSelectedFragmentsQuery(ids);
 
   return {
     ids,
-    fragments,
-    isLoading,
-    error,
+    fragments: query.data ?? [],
+    isLoading: ids.length > 0 ? query.isPending : false,
+    error: query.error ? getErrorMessage(query.error, '读取碎片失败') : null,
   };
 }
 
 export function useFragmentVisualization() {
-  const [visualization, setVisualization] = useState<FragmentVisualizationResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadVisualization = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await fetchFragmentVisualization();
-      setVisualization(response);
-    } catch (err) {
-      setError(getErrorMessage(err, '读取灵感云图失败'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadVisualization();
-  }, [loadVisualization]);
+  /*灵感云图查询改为 React Query 语义，统一 loading/error/refetch 行为。 */
+  const query = useFragmentVisualizationQuery();
 
   return {
-    visualization,
-    isLoading,
-    error,
-    reloadVisualization: loadVisualization,
+    visualization: query.data ?? null,
+    isLoading: query.isPending,
+    error: query.error ? getErrorMessage(query.error, '读取灵感云图失败') : null,
+    reloadVisualization: async () => {
+      await query.refetch();
+    },
   };
 }
 

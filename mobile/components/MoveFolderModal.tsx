@@ -1,17 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  ScrollView,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, TouchableOpacity, View, Text } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 
-import { Text } from '@/components/Themed';
 import { listLocalFolders } from '@/features/folders/localStore';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { AppTheme } from '@/theme/tokens';

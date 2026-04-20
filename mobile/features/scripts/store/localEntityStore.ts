@@ -6,7 +6,7 @@ import { extractPlainTextFromHtml, normalizeBodyHtml } from '@/features/editor/h
 import { scriptsTable } from '@/features/core/db/schema';
 import type { Script, ScriptCopyReason } from '@/types/script';
 
-import { useScriptStore } from './scriptStore';
+import { invalidateScriptQueries } from '../queries';
 import {
   buildLocalScriptInsertRow,
   buildScriptCopyTitle,
@@ -17,10 +17,6 @@ import {
   serializeSourceFragmentIds,
   type ScriptRow,
 } from './shared';
-
-function buildScriptListCacheKey(sourceFragmentId?: string | null): string | null {
-  return sourceFragmentId ? `source:${sourceFragmentId}` : null;
-}
 
 /*把远端脚本详情落成本地 script 真值，供生成成功后的详情和列表秒开。 */
 export async function upsertLocalScriptEntity(script: Script, options?: { backupStatus?: 'pending' | 'synced' | 'failed' }): Promise<Script> {
@@ -40,6 +36,7 @@ export async function upsertLocalScriptEntity(script: Script, options?: { backup
   if (!next) {
     throw new Error('写入本地 script 失败');
   }
+  await invalidateScriptQueries();
   return next;
 }
 
@@ -48,23 +45,17 @@ export async function listLocalScriptEntities(options?: {
   sourceFragmentId?: string | null;
   includeTrashed?: boolean;
 }): Promise<Script[]> {
+  /*脚本列表直接读取 SQLite 真值，不再附带额外内存镜像。 */
   const rows = await readScriptRows({
     sourceFragmentId: options?.sourceFragmentId,
     includeTrashed: options?.includeTrashed,
   });
-  const scripts = await Promise.all(rows.map(async (row) => await mapLocalScriptRowToScript(row)));
-  const cacheKey = buildScriptListCacheKey(options?.sourceFragmentId);
-  useScriptStore.getState().setList(cacheKey, scripts);
-  useScriptStore.getState().batchUpdateDetails(scripts);
-  return scripts;
+  return await Promise.all(rows.map(async (row) => await mapLocalScriptRowToScript(row)));
 }
 
 /*读取单条本地 script，缺失时返回 null。 */
 export async function readLocalScriptEntity(scriptId: string): Promise<Script | null> {
-  const cached = useScriptStore.getState().getDetail(scriptId);
-  if (cached) {
-    return cached;
-  }
+  /*单条成稿详情直接读取本地真值，避免 query 外还有第二层缓存。 */
   const database = await getLocalDatabase();
   const rows = await database
     .select()
@@ -75,9 +66,7 @@ export async function readLocalScriptEntity(scriptId: string): Promise<Script | 
   if (!row) {
     return null;
   }
-  const script = await mapLocalScriptRowToScript(row);
-  useScriptStore.getState().setDetail(scriptId, script);
-  return script;
+  return await mapLocalScriptRowToScript(row);
 }
 
 /*按 local-first 语义更新 script 真值，并统一推进备份队列状态。 */
@@ -143,9 +132,9 @@ export async function updateLocalScriptEntity(
     })
     .where(eq(scriptsTable.id, id));
 
-  useScriptStore.getState().deleteDetail(id);
-  useScriptStore.getState().deleteList(null);
-  return await readLocalScriptEntity(id);
+  const nextScript = await readLocalScriptEntity(id);
+  await invalidateScriptQueries();
+  return nextScript;
 }
 
 /*为恢复冲突或手动另存为副本创建新的本地 script。 */
@@ -179,6 +168,7 @@ export async function createLocalScriptCopy(
   if (!next) {
     throw new Error('创建本地 script 副本失败');
   }
+  await invalidateScriptQueries();
   return next;
 }
 

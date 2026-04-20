@@ -21,7 +21,8 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - `fragment` 与 `script` 继续是两个独立领域对象：碎片负责素材沉淀与生成输入，成稿负责派生正文与拍摄消费；两者共享 editor / `body_html` / 导出与媒体能力，但不共享生命周期语义。
 - 当前项目仍处于无老用户开发阶段，移动端不保留历史本地 SQLite 升级链、旧备份 payload 或旧远端投影补水；旧开发数据需要通过重装 App / 清库重建。
 - 新增代码使用当前 local-first 领域命名，例如 `backup_object_key / pending_body_html / save_state`；不要再引入旧 remote-first 语义字段。
-- 移动端 UI 已开始渐进迁移到 NativeWind：`tailwind.config.js` 承载新的设计 token，`global.css` 在根布局导入；首页、文件夹页、成稿列表及核心列表卡片已经优先使用 `className`，复杂编辑器、录音、拍摄和动画组件仍保留 `StyleSheet`。
+- `fragment / script / folder` 的 list/detail 异步读取现已统一到 React Query：查询 key 绑定 `user_id + session_version + workspace_epoch`，queryFn 直接读取本地 SQLite / 文件系统；实体变更后统一通过 invalidation 刷新，不再维护额外内存 cache store。
+- 移动端 UI 现已默认采用 NativeWind：`tailwind.config.js` 承载设计 token，`global.css` 在根布局导入；`Themed/Colors` 旧层已移除，`useAppTheme()` 只保留给富文本编辑器、录音、拍摄、复杂动画和第三方样式桥接场景。
 
 ## 目录说明
 
@@ -40,6 +41,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 远端快照、待同步正文、待上传图片不再混放在 `AsyncStorage`；`AsyncStorage` 仅保留 token、用户信息、后端地址和少量轻量配置
 - 当前不再自动使用测试用户进入主流程；正式登录采用邮箱密码认证，`/api/auth/token` 仅用于本地开发联调
 - `AppQueryProvider` 已接入根布局：移动端远端 task 状态统一通过 React Query / QueryObserver 轮询，页面与恢复流程不再各自手写 `while + setTimeout`
+- `features/fragments/queries.ts`、`features/scripts/queries.ts`、`features/folders/queries.ts` 现在承接本地 list/detail query、局部写回和统一 invalidation；旧的 fragment/script 列表缓存 store 已删除。
 - `AppSessionProvider` 现在会在工作区挂载、前后台切换和定时保活时同时补跑 `flushBackupQueue()` 与 `recoverWorkspaceTaskState()`；页面发起的导入 / 脚本任务也会立即交给工作区恢复层托管，离开当前页后仍能继续落本地真值
 - “写下灵感”文本链路当前直接创建本地 fragment 实体；编辑完成后只标记待备份，不再先建远端 fragment 空壳。
 - 录音与外链导入同样遵循这条约束：必须先有本地 fragment 实体，再调用 `/api/transcriptions` 或 `/api/external-media/audio-imports`。
@@ -63,15 +65,17 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - `fragment` 与 `script` 都可以进入拍摄页；拍摄完成后会记录本地 `is_filmed / filmed_at`，默认不在列表卡片展示，只用于详情与后续筛选。
 - 移动端正文输入统一使用 `react-native-enriched` 原生富文本；fragment 支持标题、列表、引用、粗体、斜体和图片，script 支持相同文本格式但不支持图片和“更多”抽屉；Android 与 iOS 16+ 默认通过系统原生编辑菜单触发格式操作。
 - 碎片详情里的正文基线解析、自动保存队列、AI fallback patch、图片 fallback 插入和素材去重都已下沉为独立 session helper / reducer，纯状态回归统一由 `mobile/tests/*.test.ts` 覆盖。
-- fragments 列表现在统一从 SQLite 本地真值读取；首页与文件夹页共享同一套“本地秒开 + 标记 stale 后重新读库”的策略。
+- fragments / folders / scripts 列表与详情现在统一从 React Query + SQLite 本地真值读取；页面刷新和任务完成后的回流统一依赖 query invalidation，而不是自管 `isLoading / isRefreshing / stale flag` 模板代码。
 - 知识库移动端仍是占位入口，还没有完整的 Markdown 编辑和素材管理 UI。
 
 ## 本地数据层说明
 
 - `mobile/features/core/db/`：SQLite 连接、schema、迁移和 Drizzle 查询入口
 - `mobile/features/core/files/`：fragment / script 正文文件和图片/音频 staging 文件管理；当前已按 `runtimePaths.native.ts`（工作区与路径约束）和 `runtimeFs.native.ts`（文件读写与 staging 操作）拆分
+- `mobile/features/core/query/workspace.ts`：工作区隔离 query scope 与统一 query key 入口
 - `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `localEntityStore / runtime / shared update helpers` 拆分职责；主链路统一从 `store/index.ts` 读取本地实体能力
 - `mobile/features/scripts/store/`：scripts 本地数据入口，负责成稿真值、lineage、回收站、冲突副本和恢复合并
+- `mobile/features/fragments/queries.ts` / `mobile/features/scripts/queries.ts` / `mobile/features/folders/queries.ts`：本地 list/detail query、局部 query data 写回与统一 invalidation 入口
 - `mobile/features/editor/html.ts`：唯一 HTML / 纯文本快照 helper 真值源，fragment 与 script 共用
 - `mobile/features/tasks/taskQuery.ts`：统一任务查询 hook、终态消费 hook、QueryObserver 轮询和 UI phase 映射；脚本生成、抖音导入、录音转写回写和工作区恢复共用这套语义
 - `mobile/features/tasks/taskRecoveryRegistry.ts`：统一约束后台任务恢复的作用域键和 observer 去重，避免页面 handoff、工作区恢复和前后台补跑重复追踪同一 task
@@ -80,11 +84,13 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - SQLite 迁移当前采用开发期基线重建策略；`user_version` 低于当前版本时会重建本地表，不迁移历史开发数据。
 - `media_task_*` 是当前移动端 fragment 媒体导入任务状态的正式本地字段，会参与任务恢复、失败提示和重试。
 - 新增 UI 默认使用 NativeWind `className` 和 Tailwind token；仅在动画、复杂运行时计算样式或第三方组件限制里继续使用 `StyleSheet.create`。
+- `Themed/Colors` 旧样式包装层已删除；普通页面不要再新建兼容主题组件。
 - `mobile/theme/tokens.ts` 继续服务迁移中的 `useAppTheme()` 调用，但新颜色、间距、圆角和阴影应先进入 `mobile/theme/tailwind-tokens.js`，再由 `tailwind.config.js` 暴露为 utility class。
 
 当前 fragments / folders / scripts 读写规则：
 
 - 列表页和详情页都只读本地 SQLite + `body.html`
+- 异步读取统一通过 React Query 组织：`fragment / folder / script` 变更后只做 query invalidation，不再同步第二层内存列表/详情缓存
 - 编辑、删除、创建文件夹都会先修改本地实体并增加 `entity_version`
 - 图片、音频等大对象先存本地 staging，再由 `/api/backups/assets` 补传
 - 远端备份统一通过 `features/backups/queue.ts` 扫描 `backup_status=pending|failed` 的实体批量推送；当前 snapshot 已覆盖 fragment / folder / media_asset / script

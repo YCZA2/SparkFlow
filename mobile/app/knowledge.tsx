@@ -1,9 +1,8 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
 import { Stack } from 'expo-router';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { Text } from '@/components/Themed';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 export default function KnowledgePlaceholderScreen() {

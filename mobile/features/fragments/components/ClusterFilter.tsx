@@ -1,7 +1,6 @@
 import React from 'react';
-import { ScrollView, TouchableOpacity } from 'react-native';
+import { ScrollView, TouchableOpacity, Text } from 'react-native';
 
-import { Text } from '@/components/Themed';
 import { getClusterColor } from '@/features/fragments/fragmentCloud';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { FragmentVisualizationCluster } from '@/types/fragment';

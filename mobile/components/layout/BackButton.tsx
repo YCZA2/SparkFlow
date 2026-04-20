@@ -1,9 +1,8 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity } from 'react-native';
+import { StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { useRouter } from 'expo-router';
 
-import { Text } from '@/components/Themed';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 interface BackButtonProps {

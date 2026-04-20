@@ -1,7 +1,6 @@
 import React from 'react';
-import { LayoutChangeEvent, TouchableOpacity, View } from 'react-native';
+import { LayoutChangeEvent, TouchableOpacity, View, Text } from 'react-native';
 
-import { Text } from '@/components/Themed';
 import {
   CLOUD_HEIGHT,
   getClusterColor,

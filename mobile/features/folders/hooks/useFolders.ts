@@ -1,16 +1,14 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { getOrCreateDeviceId } from '@/features/auth/device';
 import {
   createLocalFolder,
   deleteLocalFolder,
-  listLocalFolders,
   updateLocalFolder,
 } from '@/features/folders/localStore';
-import { listLocalFragmentEntities } from '@/features/fragments/store';
-import { countLocalScriptEntities } from '@/features/scripts/store';
 import type { FragmentFolder } from '@/types/folder';
 import { getErrorMessage } from '@/utils/error';
+import { useFolderListQuery } from '@/features/folders/queries';
 
 export interface UseFoldersReturn {
   /** 文件夹列表 */
@@ -41,71 +39,25 @@ export interface UseFoldersReturn {
   removeFolder: (id: string) => Promise<void>;
 }
 
-async function fetchFoldersData(): Promise<{
-  folders: FragmentFolder[];
-  allFragmentsCount: number;
-  allScriptsCount: number;
-}> {
-  /*并发查询文件夹列表、碎片数量和成稿数量，供 fetchFolders/refreshFolders 共用。 */
-  const [localFolders, localFragments, localScriptsCount] = await Promise.all([
-    listLocalFolders(),
-    listLocalFragmentEntities(),
-    countLocalScriptEntities(),
-  ]);
-  return {
-    folders: localFolders,
-    allFragmentsCount: localFragments.length,
-    allScriptsCount: localScriptsCount,
-  };
-}
-
 /**
  * 文件夹列表管理 Hook
  * 同时获取文件夹列表和全部碎片数量（用于"全部"虚拟文件夹）
  */
 export function useFolders(): UseFoldersReturn {
-  const [folders, setFolders] = useState<FragmentFolder[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const query = useFolderListQuery();
   const [isCreating, setIsCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [total, setTotal] = useState(0);
-  const [allFragmentsCount, setAllFragmentsCount] = useState(0);
-  const [allScriptsCount, setAllScriptsCount] = useState(0);
-
-  const applyFoldersData = useCallback(
-    (data: { folders: FragmentFolder[]; allFragmentsCount: number; allScriptsCount: number }) => {
-      /*将查询结果统一写入 state，避免 fetch/refresh 两条路径各自维护。 */
-      setFolders(data.folders);
-      setTotal(data.folders.length);
-      setAllFragmentsCount(data.allFragmentsCount);
-      setAllScriptsCount(data.allScriptsCount);
-    },
-    []
-  );
+  const folders = useMemo(() => query.data?.folders ?? [], [query.data?.folders]);
+  const allFragmentsCount = query.data?.allFragmentsCount ?? 0;
+  const allScriptsCount = query.data?.allScriptsCount ?? 0;
+  const total = folders.length;
 
   const fetchFolders = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      applyFoldersData(await fetchFoldersData());
-    } catch (err) {
-      setError(getErrorMessage(err, '获取文件夹列表失败'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [applyFoldersData]);
+    await query.refetch();
+  }, [query]);
 
   const refreshFolders = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      applyFoldersData(await fetchFoldersData());
-    } catch (err) {
-      setError(getErrorMessage(err, '刷新文件夹列表失败'));
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [applyFoldersData]);
+    await query.refetch();
+  }, [query]);
 
   /**
    * 创建新文件夹
@@ -113,52 +65,43 @@ export function useFolders(): UseFoldersReturn {
    */
   const createNewFolder = useCallback(async (name: string) => {
     setIsCreating(true);
-    setError(null);
     try {
       const deviceId = await getOrCreateDeviceId();
-      const newFolder = await createLocalFolder(name, deviceId);
-      setFolders((prev) => [newFolder, ...prev]);
-      setTotal((prev) => prev + 1);
+      await createLocalFolder(name, deviceId);
+      await query.refetch();
     } catch (err) {
-      const errorMessage = getErrorMessage(err, '创建文件夹失败');
-      setError(errorMessage);
       throw err; // 向上抛出错误以便调用方处理
     } finally {
       setIsCreating(false);
     }
-  }, []);
+  }, [query]);
 
   const renameFolder = useCallback(async (id: string, name: string) => {
     try {
       const deviceId = await getOrCreateDeviceId();
-      const updated = await updateLocalFolder(id, { name }, deviceId);
-      if (updated) {
-        setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)));
-      }
+      await updateLocalFolder(id, { name }, deviceId);
+      await query.refetch();
     } catch (err) {
-      setError(getErrorMessage(err, '重命名文件夹失败'));
       throw err;
     }
-  }, []);
+  }, [query]);
 
   const removeFolder = useCallback(async (id: string) => {
     try {
       const deviceId = await getOrCreateDeviceId();
       await deleteLocalFolder(id, deviceId);
-      setFolders((prev) => prev.filter((f) => f.id !== id));
-      setTotal((prev) => prev - 1);
+      await query.refetch();
     } catch (err) {
-      setError(getErrorMessage(err, '删除文件夹失败'));
       throw err;
     }
-  }, []);
+  }, [query]);
 
   return {
     folders,
-    isLoading,
-    isRefreshing,
+    isLoading: query.isPending,
+    isRefreshing: query.isRefetching,
     isCreating,
-    error,
+    error: query.error ? getErrorMessage(query.error, '获取文件夹列表失败') : null,
     total,
     allFragmentsCount,
     allScriptsCount,

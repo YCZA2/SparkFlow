@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, SectionList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Pressable, RefreshControl, SectionList, StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { SymbolView } from 'expo-symbols';
@@ -19,7 +19,6 @@ import {
 import { NotesScreenStateView } from '@/components/layout/NotesScreenStateView';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { AnimatedFragmentListItem } from '@/features/fragments/components/AnimatedFragmentListItem';
-import { Text } from '@/components/Themed';
 import { useFolderFragments } from '@/features/folders/hooks';
 import { useQuickActionBar } from '@/providers/QuickActionBarProvider';
 import { useAppTheme } from '@/theme/useAppTheme';

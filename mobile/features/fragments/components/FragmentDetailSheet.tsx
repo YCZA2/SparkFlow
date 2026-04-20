@@ -1,16 +1,9 @@
 import React from 'react';
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Modal, Pressable, ScrollView, TouchableOpacity, View, Text } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Text } from '@/components/Themed';
 import { FragmentDetailSheetSections } from '@/features/fragments/components/detailSheet/FragmentDetailSheetSections';
 import type { FragmentDetailSheetProps } from '@/features/fragments/components/detailSheet/types';
 import { useAppTheme } from '@/theme/useAppTheme';

@@ -1,6 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, TouchableOpacity, View } from 'react-native';
-import { Text } from '@/components/Themed';
+import { ActivityIndicator, TouchableOpacity, View, Text } from 'react-native';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 interface ScreenStateProps {

@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 
 import { captureRequiredTaskExecutionScope } from '@/features/auth/taskScope';
 import { flushBackupQueue } from '@/features/backups/queue';
@@ -9,13 +8,12 @@ import {
   generateScript,
   triggerDailyPush,
 } from '@/features/scripts/api';
-import { consumeScriptsStale } from '@/features/scripts/refreshSignal';
 import { rememberPendingScriptTask, type PendingScriptTaskKind } from '@/features/scripts/pendingScriptTasks';
-import { listLocalScriptEntities, upsertLocalScriptEntity } from '@/features/scripts/store';
-import { useScriptList, useScriptStore } from '@/features/scripts/store/scriptStore';
+import { upsertLocalScriptEntity } from '@/features/scripts/store';
 import { resolveScriptFromTask } from '@/features/scripts/scriptTask';
 import type { Script } from '@/types/script';
 import { getErrorMessage } from '@/utils/error';
+import { useLocalScriptListQuery } from './queries';
 
 export function useGenerateScript() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -63,86 +61,21 @@ export function useGenerateScript() {
 }
 
 export function useScripts(options?: { sourceFragmentId?: string | null }) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const cacheKey = useMemo(
-    () => (options?.sourceFragmentId ? `source:${options.sourceFragmentId}` : null),
-    [options?.sourceFragmentId]
-  );
-  const items = useScriptList(cacheKey) ?? [];
-
-  const loadScripts = useCallback(
-    async (mode: 'load' | 'refresh' | 'silent' = 'load') => {
-      const isSilent = mode === 'silent';
-      if (mode === 'refresh') {
-        setIsRefreshing(true);
-      } else if (!isSilent) {
-        setIsLoading(true);
-      }
-
-      try {
-        const nextItems = await listLocalScriptEntities({ sourceFragmentId: options?.sourceFragmentId });
-        useScriptStore.getState().setList(cacheKey, nextItems);
-        setError(null);
-      } catch (err) {
-        setError(getErrorMessage(err, '加载口播稿失败'));
-      } finally {
-        if (mode === 'refresh') {
-          setIsRefreshing(false);
-        }
-        if (!isSilent) {
-          setIsLoading(false);
-        }
-      }
-    },
-    [cacheKey, options?.sourceFragmentId]
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const nextItems = await listLocalScriptEntities({ sourceFragmentId: options?.sourceFragmentId });
-        if (cancelled) return;
-        useScriptStore.getState().setList(cacheKey, nextItems);
-        setError(null);
-        setIsLoading(false);
-        if (nextItems.length === 0) {
-          await loadScripts('silent');
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(getErrorMessage(err, '加载口播稿失败'));
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [cacheKey, loadScripts, options?.sourceFragmentId]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (consumeScriptsStale()) {
-        void loadScripts('load');
-      }
-    }, [loadScripts])
-  );
+  /*脚本列表统一通过 React Query 读取本地真值，不再额外维护列表缓存。 */
+  const query = useLocalScriptListQuery({ sourceFragmentId: options?.sourceFragmentId });
+  const items = query.data ?? [];
 
   return {
     items,
-    isLoading,
-    isRefreshing,
-    error,
-    reload: useCallback(async () => {
-      await loadScripts('load');
-    }, [loadScripts]),
-    refresh: useCallback(async () => {
-      await loadScripts('refresh');
-    }, [loadScripts]),
+    isLoading: query.isPending,
+    isRefreshing: query.isRefetching,
+    error: query.error ? getErrorMessage(query.error, '加载口播稿失败') : null,
+    reload: async () => {
+      await query.refetch();
+    },
+    refresh: async () => {
+      await query.refetch();
+    },
   };
 }
 

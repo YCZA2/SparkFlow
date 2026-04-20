@@ -9,6 +9,7 @@ import json
 import pytest
 
 from domains.backups import repository as backup_repository
+from models.database import SessionLocal
 from modules.auth.application import TEST_USER_ID
 from modules.backups.application import BackupUseCase
 from modules.backups.schemas import BackupBatchRequest, BackupMutationItem
@@ -274,6 +275,39 @@ async def test_export_fragment_reads_snapshot(async_client, auth_headers_factory
     assert response.status_code == 200
     assert "导出正文" in response.text
     assert 'type: "fragment"' in response.text
+
+
+@pytest.mark.asyncio
+async def test_export_fragment_supports_unicode_download_filename(async_client, auth_headers_factory) -> None:
+    """导出接口应对中文和 emoji 文件名使用兼容浏览器的下载头。"""
+    await _push_fragment_snapshot(
+        async_client,
+        auth_headers_factory,
+        fragment_id="frag-export-unicode",
+        body_html="<p>Unicode 导出正文</p>",
+        plain_text_snapshot="Unicode 导出正文",
+    )
+
+    reader = FragmentSnapshotReader()
+    with SessionLocal() as db:
+        reader.merge_server_fields(
+            db=db,
+            user_id=TEST_USER_ID,
+            fragment_id="frag-export-unicode",
+            source="manual",
+            server_patch={"summary": "🤖 Assistant 清江坡创始人采访"},
+        )
+        db.commit()
+
+    response = await async_client.get(
+        "/api/exports/markdown/fragment/frag-export-unicode",
+        headers=await _auth_headers(async_client, auth_headers_factory),
+    )
+    assert response.status_code == 200
+    assert "Unicode 导出正文" in response.text
+    content_disposition = response.headers["content-disposition"]
+    assert 'filename="' in content_disposition
+    assert "filename*=UTF-8''" in content_disposition
 
 
 @pytest.mark.asyncio

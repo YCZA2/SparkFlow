@@ -1,10 +1,9 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, TouchableOpacity, View, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ScreenHeader } from '@/components/layout/ScreenHeader';
-import { Text } from '@/components/Themed';
 import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { useAuth } from '@/features/auth/hooks';
 import { captureTaskExecutionScope } from '@/features/auth/taskScope';

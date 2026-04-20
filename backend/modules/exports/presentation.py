@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import re
+from pathlib import PurePosixPath
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -11,6 +15,16 @@ from .application import MarkdownExportUseCase
 from .schemas import MarkdownBatchExportRequest
 
 router = APIRouter(prefix="/api/exports", tags=["exports"], responses={401: {"description": "未认证"}})
+
+
+def build_download_content_disposition(filename: str) -> str:
+    """为导出文件构造兼容 Unicode 的下载头。"""
+    path = PurePosixPath(filename or "download")
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", path.stem.encode("ascii", "ignore").decode()).strip(" .-_")
+    suffix = path.suffix or ""
+    ascii_filename = f"{stem or 'download'}{suffix}"
+    quoted_filename = quote(path.name, safe="")
+    return f"""attachment; filename="{ascii_filename}"; filename*=UTF-8''{quoted_filename}"""
 
 
 def get_export_use_case(container: ServiceContainer = Depends(get_container)) -> MarkdownExportUseCase:
@@ -45,7 +59,7 @@ async def export_markdown(
     return Response(
         content=markdown_file.content,
         media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{markdown_file.filename}"'},
+        headers={"Content-Disposition": build_download_content_disposition(markdown_file.filename)},
     )
 
 

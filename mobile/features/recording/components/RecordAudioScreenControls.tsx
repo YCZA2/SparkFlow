@@ -1,8 +1,7 @@
 import React from 'react';
-import { Pressable, TouchableOpacity } from 'react-native';
+import { Pressable, TouchableOpacity, Text } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
-import { Text } from '@/components/Themed';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 import { recordAudioStyles as styles } from './recordAudioStyles';

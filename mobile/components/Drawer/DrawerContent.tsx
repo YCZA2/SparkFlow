@@ -3,11 +3,10 @@
  * 从 profile.tsx 提取的用户信息和菜单项
  */
 import React from 'react';
-import { ScrollView, TouchableOpacity, View } from 'react-native';
+import { ScrollView, TouchableOpacity, View, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 
-import { Text } from '@/components/Themed';
 import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { useAuth } from '@/features/auth/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';

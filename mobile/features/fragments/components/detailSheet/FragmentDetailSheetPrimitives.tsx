@@ -1,8 +1,7 @@
 import React from 'react';
-import { TouchableOpacity, View } from 'react-native';
+import { TouchableOpacity, View, Text } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
-import { Text } from '@/components/Themed';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 import type { FragmentDetailSheetProps } from './types';

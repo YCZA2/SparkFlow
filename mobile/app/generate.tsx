@@ -1,12 +1,11 @@
 import React from 'react';
-import { ActivityIndicator, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, TextInput, TouchableOpacity, View, Text } from 'react-native';
 import { Stack } from 'expo-router';
 
 import { BottomActionBar } from '@/components/layout/BottomActionBar';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
-import { Text } from '@/components/Themed';
 import { useGenerateScreen } from '@/features/scripts/useGenerateScreen';
 import { useAppTheme } from '@/theme/useAppTheme';
 

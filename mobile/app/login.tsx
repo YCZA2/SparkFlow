@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Alert, Keyboard, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Keyboard, TextInput, TouchableOpacity, View, Text } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { Text } from '@/components/Themed';
 import { useAuth } from '@/features/auth/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { getErrorMessage } from '@/utils/error';

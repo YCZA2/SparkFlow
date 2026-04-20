@@ -1,8 +1,7 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
-import { Text } from '@/components/Themed';
 
 /*统一列表页 hero 标题区，让首页和子列表页共享同一套排版壳层。 */
 export function NotesListHero({

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View, Text } from 'react-native';
 
-import { Text } from '@/components/Themed';
 import { presentSpeakerSegments } from '@/features/fragments/presenters/speakerSegments';
 import { useAppTheme } from '@/theme/useAppTheme';
 import type { SpeakerSegment } from '@/types/fragment';

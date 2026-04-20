@@ -1,7 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, View } from 'react-native';
+import { TouchableOpacity, View, Text } from 'react-native';
 
-import { Text } from '@/components/Themed';
 import { FragmentAudioPlayerControls } from '@/features/fragments/components/FragmentAudioPlayerControls';
 import { TranscriptSection } from '@/features/fragments/components/TranscriptSection';
 import { normalizeFragmentTags } from '@/features/fragments/utils';

@@ -1,16 +1,8 @@
 import React from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, TextInput, TouchableOpacity, View, Text } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 
 import { ScreenState } from '@/components/ScreenState';
-import { Text } from '@/components/Themed';
 import { getDefaultApiBaseUrl, isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { useNetworkSettings } from '@/features/network/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';

@@ -14,9 +14,9 @@ export { ensureScriptStoreReady, resetScriptStoreRuntime } from './runtime';
 export { markScriptsStale } from '../refreshSignal';
 export { deserializeSourceFragmentIds } from './shared';
 
-import { useScriptStore } from './scriptStore';
+import { clearScriptQueryCache } from '../queries';
 
 export function clearScriptStoreCache(): void {
-  /*恢复或退出登录后清空 script 内存缓存，避免过期数据残留。 */
-  useScriptStore.getState().clearCache();
+  /*恢复或退出登录后清空 script 查询缓存，避免过期数据残留。 */
+  clearScriptQueryCache();
 }

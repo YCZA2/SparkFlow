@@ -10,6 +10,7 @@ import { useEditorSession } from '@/features/editor/useEditorSession';
 import type { EditorDocumentSnapshot, EditorSourceDocument } from '@/features/editor/types';
 import { markScriptsStale } from '@/features/scripts/refreshSignal';
 import { updateLocalScriptEntity } from '@/features/scripts/store';
+import { setScriptDetailQueryData } from '@/features/scripts/queries';
 import type { Script } from '@/types/script';
 
 // ============================================================================
@@ -54,6 +55,7 @@ export function useScriptBodySession({
         plain_text_snapshot: snapshot.plain_text,
       });
       if (updatedScript) {
+        setScriptDetailQueryData(updatedScript);
         await commitOptimisticScript(updatedScript);
       }
       markScriptsStale();

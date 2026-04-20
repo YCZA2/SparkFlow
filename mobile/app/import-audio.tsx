@@ -1,18 +1,9 @@
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View, Text } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import * as DocumentPicker from 'expo-document-picker';
 
-import { Text } from '@/components/Themed';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { useAudioUpload } from '@/features/recording/hooks';
 import { useAppTheme } from '@/theme/useAppTheme';

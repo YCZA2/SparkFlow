@@ -1,16 +1,9 @@
 import React, { useCallback } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Text } from '@/components/Themed';
 import { TeleprompterOverlay } from '@/components/TeleprompterOverlay';
 import { useVideoRecorder } from '@/features/recording/hooks';
 import { extractPlainTextFromHtml } from '@/features/editor/html';

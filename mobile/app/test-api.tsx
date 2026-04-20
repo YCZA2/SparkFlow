@@ -1,9 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, TouchableOpacity, View, Text } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 
 import { ScreenState } from '@/components/ScreenState';
-import { Text } from '@/components/Themed';
 import { isDeveloperToolsEnabled } from '@/constants/appConfig';
 import { TestResultCard } from '@/components/TestResultCard';
 import { useApiTestSuite } from '@/hooks/useApiTestSuite';

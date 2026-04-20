@@ -11,9 +11,9 @@ export { ensureFragmentStoreReady, resetFragmentStoreRuntime } from './runtime';
 export { persistBodyHtml, deserializeSpeakerSegments, deserializeTags } from './shared';
 export { markFragmentsStale } from '../refreshSignal';
 
-import { useFragmentStore } from './fragmentStore';
+import { clearFragmentQueryCache } from '../queries';
 
 export function clearFragmentStoreCache(): void {
-  /*恢复或退出登录后清空 fragment 内存缓存，避免过期数据残留。 */
-  useFragmentStore.getState().clearCache();
+  /*恢复或退出登录后清空 fragment 查询缓存，避免过期数据残留。 */
+  clearFragmentQueryCache();
 }

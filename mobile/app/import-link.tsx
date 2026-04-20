@@ -1,18 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View, Text } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
-import { Text } from '@/components/Themed';
 import { getOrCreateDeviceId } from '@/features/auth/device';
 import { assertTaskScopeActive, captureRequiredTaskExecutionScope, TaskScopeMismatchError } from '@/features/auth/taskScope';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';

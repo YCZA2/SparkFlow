@@ -22,45 +22,38 @@ def _build_docx_bytes(text: str) -> bytes:
 
 
 def _build_simple_pdf_bytes(text: str) -> bytes:
-    """构造包含单段文本的简单 PDF 字节流，供回退解析测试使用。"""
-    encoded = text.encode("utf-8").decode("latin-1", errors="ignore")
-    pdf = f"""%PDF-1.4
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << >> >>
-endobj
-4 0 obj
-<< /Length 44 >>
-stream
-BT
-/F1 12 Tf
-72 72 Td
-({encoded}) Tj
-ET
-endstream
-endobj
-xref
-0 5
-0000000000 65535 f 
-0000000010 00000 n 
-0000000060 00000 n 
-0000000117 00000 n 
-0000000220 00000 n 
-trailer
-<< /Root 1 0 R /Size 5 >>
-startxref
-310
-%%EOF"""
-    return pdf.encode("latin-1")
+    """构造可被 pypdf 提取文本的最小 PDF 字节流。"""
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream = f"BT\n/F1 12 Tf\n72 72 Td\n({escaped}) Tj\nET\n".encode("latin-1")
+    objects = [
+        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+        b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+        b"4 0 obj\n<< /Length %d >>\nstream\n%s endstream\nendobj\n"
+        % (len(stream), stream),
+        b"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    ]
+    pdf = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for obj in objects:
+        offsets.append(len(pdf))
+        pdf.extend(obj)
+    startxref = len(pdf)
+    pdf.extend(f"xref\n0 {len(offsets)}\n".encode("latin-1"))
+    pdf.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode("latin-1"))
+    pdf.extend(
+        (
+            f"trailer\n<< /Root 1 0 R /Size {len(offsets)} >>\n"
+            f"startxref\n{startxref}\n%%EOF"
+        ).encode("latin-1")
+    )
+    return bytes(pdf)
 
 
 def _build_simple_xlsx_bytes(sheet_name: str, rows: list[list[str]]) -> bytes:
-    """构造最小可解析的 xlsx 字节流，避免测试依赖 openpyxl。"""
+    """构造可被 openpyxl 读取的最小 xlsx 字节流。"""
     shared_strings = [value for row in rows for value in row]
     workbook_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
     <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
@@ -125,7 +118,7 @@ def _build_simple_xlsx_bytes(sheet_name: str, rows: list[list[str]]) -> bytes:
 
 
 def test_parse_uploaded_text_supports_txt_docx_pdf_and_xlsx() -> None:
-    """知识库解析器应支持文本型上传格式。"""
+    """知识库解析器应通过主库解析常见文本型上传格式。"""
     txt = parse_uploaded_text(
         file_content="方法论拆解".encode("utf-8"), filename="sample.txt"
     )
@@ -161,3 +154,18 @@ def test_parse_uploaded_text_rejects_unknown_or_empty_payloads() -> None:
 
     with pytest.raises(ValidationError):
         parse_uploaded_text(file_content=b"   ", filename="empty.txt")
+
+
+def test_parse_uploaded_text_rejects_invalid_pdf_and_xlsx_payloads() -> None:
+    """损坏的 PDF/XLSX 文件应返回稳定的解析错误。"""
+    with pytest.raises(ValidationError) as pdf_error:
+        parse_uploaded_text(file_content=b"%PDF-broken", filename="broken.pdf")
+
+    assert pdf_error.value.message == "PDF 文件解析失败"
+    assert pdf_error.value.details == {"file": "请确认上传的是有效的 .pdf 文件"}
+
+    with pytest.raises(ValidationError) as xlsx_error:
+        parse_uploaded_text(file_content=b"not-a-zip", filename="broken.xlsx")
+
+    assert xlsx_error.value.message == "Excel 文件解析失败"
+    assert xlsx_error.value.details == {"file": "请确认上传的是有效的 .xlsx 文件"}

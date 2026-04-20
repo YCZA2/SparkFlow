@@ -1,8 +1,7 @@
 import React from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { Alert, ScrollView, View, Text } from 'react-native';
 import { Stack } from 'expo-router';
 
-import { Text } from '@/components/Themed';
 import { LoadingState, ScreenState } from '@/components/ScreenState';
 import { CloudCanvas } from '@/features/fragments/components/CloudCanvas';
 import { ClusterFilter } from '@/features/fragments/components/ClusterFilter';
