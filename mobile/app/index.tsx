@@ -15,7 +15,7 @@ import {
   NotesListScreenShell,
 } from '@/components/layout/NotesListScreenShell';
 import { NotesScreenStateView } from '@/components/layout/NotesScreenStateView';
-import { consumePendingFragmentCleanupDirectly } from '@/features/fragments/cleanup/runtime';
+import { consumePendingFragmentCleanup } from '@/features/fragments/cleanup/runtime';
 import { FolderListRow } from '@/features/folders/components/FolderListRow';
 import {
   HomeHeaderCircleButton,
@@ -62,7 +62,7 @@ export default function FoldersScreen() {
     useCallback(() => {
       void (async () => {
         try {
-          await consumePendingFragmentCleanupDirectly();
+          await consumePendingFragmentCleanup();
         } catch {
           /*兜底清理失败时静默保留 ticket，避免影响首页继续刷新。 */
         } finally {

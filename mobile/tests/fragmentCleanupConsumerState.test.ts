@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  resolveFragmentCleanupDirect,
-  resolveFragmentCleanupForList,
-} from '../features/fragments/cleanup/consumerState';
+import { resolveFragmentCleanup } from '../features/fragments/cleanup/consumerState';
 import type { Fragment } from '../types/fragment';
 
 function buildFragment(overrides: Partial<Fragment> = {}): Fragment {
@@ -46,37 +43,35 @@ const emptyManualPlaceholderTicket = {
   created_at_ms: 1_000,
 };
 
-test('resolveFragmentCleanupForList returns animated delete when empty placeholder is visible', () => {
-  const resolution = resolveFragmentCleanupForList(
+test('resolveFragmentCleanup returns animated delete when empty placeholder is visible', () => {
+  const resolution = resolveFragmentCleanup(
     emptyManualPlaceholderTicket,
-    [{ id: 'fragment-1' }],
     buildFragment(),
-    { nowMs: 1_500 }
+    { nowMs: 1_500, visibleFragments: [{ id: 'fragment-1' }] }
   );
 
   assert.deepEqual(resolution, {
-    action: 'delete_with_animation',
+    action: 'delete',
     fragmentId: 'fragment-1',
+    shouldAnimate: true,
   });
 });
 
-test('resolveFragmentCleanupForList skips when ticket target is not in current list', () => {
-  const resolution = resolveFragmentCleanupForList(
+test('resolveFragmentCleanup skips when ticket target is not in current list', () => {
+  const resolution = resolveFragmentCleanup(
     emptyManualPlaceholderTicket,
-    [{ id: 'fragment-2' }],
     buildFragment(),
-    { nowMs: 1_500 }
+    { nowMs: 1_500, visibleFragments: [{ id: 'fragment-2' }] }
   );
 
   assert.deepEqual(resolution, { action: 'skip' });
 });
 
-test('resolveFragmentCleanupForList defers recent manual fragment before save settles', () => {
-  const resolution = resolveFragmentCleanupForList(
+test('resolveFragmentCleanup defers recent manual fragment before save settles in list', () => {
+  const resolution = resolveFragmentCleanup(
     emptyManualPlaceholderTicket,
-    [{ id: 'fragment-1' }],
     buildFragment({ body_html: '<p>已有正文</p>' }),
-    { nowMs: 1_100 }
+    { nowMs: 1_100, visibleFragments: [{ id: 'fragment-1' }] }
   );
 
   assert.deepEqual(resolution, {
@@ -86,12 +81,11 @@ test('resolveFragmentCleanupForList defers recent manual fragment before save se
   });
 });
 
-test('resolveFragmentCleanupForList clears ticket when manual fragment still has content after settle', () => {
-  const resolution = resolveFragmentCleanupForList(
+test('resolveFragmentCleanup clears ticket when manual fragment still has content after settle', () => {
+  const resolution = resolveFragmentCleanup(
     emptyManualPlaceholderTicket,
-    [{ id: 'fragment-1' }],
     buildFragment({ body_html: '<p>已有正文</p>' }),
-    { nowMs: 1_500 }
+    { nowMs: 1_500, visibleFragments: [{ id: 'fragment-1' }] }
   );
 
   assert.deepEqual(resolution, {
@@ -100,12 +94,11 @@ test('resolveFragmentCleanupForList clears ticket when manual fragment still has
   });
 });
 
-test('resolveFragmentCleanupForList clears ticket for empty non-manual fragment', () => {
-  const resolution = resolveFragmentCleanupForList(
+test('resolveFragmentCleanup clears ticket for empty non-manual fragment', () => {
+  const resolution = resolveFragmentCleanup(
     emptyManualPlaceholderTicket,
-    [{ id: 'fragment-1' }],
     buildFragment({ source: 'voice' }),
-    { nowMs: 1_100 }
+    { nowMs: 1_100, visibleFragments: [{ id: 'fragment-1' }] }
   );
 
   assert.deepEqual(resolution, {
@@ -114,12 +107,11 @@ test('resolveFragmentCleanupForList clears ticket for empty non-manual fragment'
   });
 });
 
-test('resolveFragmentCleanupForList clears ticket when manual fragment keeps metadata after settle', () => {
-  const resolution = resolveFragmentCleanupForList(
+test('resolveFragmentCleanup clears ticket when manual fragment keeps metadata after settle', () => {
+  const resolution = resolveFragmentCleanup(
     emptyManualPlaceholderTicket,
-    [{ id: 'fragment-1' }],
     buildFragment({ summary: '保留摘要' }),
-    { nowMs: 1_500 }
+    { nowMs: 1_500, visibleFragments: [{ id: 'fragment-1' }] }
   );
 
   assert.deepEqual(resolution, {
@@ -128,8 +120,8 @@ test('resolveFragmentCleanupForList clears ticket when manual fragment keeps met
   });
 });
 
-test('resolveFragmentCleanupDirect deletes empty placeholder even outside fragment list', () => {
-  const resolution = resolveFragmentCleanupDirect(
+test('resolveFragmentCleanup deletes empty placeholder outside fragment list without animation', () => {
+  const resolution = resolveFragmentCleanup(
     emptyManualPlaceholderTicket,
     buildFragment(),
     { nowMs: 1_500 }
@@ -138,11 +130,12 @@ test('resolveFragmentCleanupDirect deletes empty placeholder even outside fragme
   assert.deepEqual(resolution, {
     action: 'delete',
     fragmentId: 'fragment-1',
+    shouldAnimate: false,
   });
 });
 
-test('resolveFragmentCleanupDirect defers recent manual fragment before save settles', () => {
-  const resolution = resolveFragmentCleanupDirect(
+test('resolveFragmentCleanup defers recent manual fragment before save settles outside list', () => {
+  const resolution = resolveFragmentCleanup(
     emptyManualPlaceholderTicket,
     buildFragment({ body_html: '<p>已有正文</p>' }),
     { nowMs: 1_100 }
@@ -155,8 +148,8 @@ test('resolveFragmentCleanupDirect defers recent manual fragment before save set
   });
 });
 
-test('resolveFragmentCleanupDirect clears ticket for empty non-manual fragment', () => {
-  const resolution = resolveFragmentCleanupDirect(
+test('resolveFragmentCleanup clears ticket for empty non-manual fragment outside list', () => {
+  const resolution = resolveFragmentCleanup(
     emptyManualPlaceholderTicket,
     buildFragment({ source: 'video_parse' }),
     { nowMs: 1_100 }
@@ -168,8 +161,8 @@ test('resolveFragmentCleanupDirect clears ticket for empty non-manual fragment',
   });
 });
 
-test('resolveFragmentCleanupDirect clears ticket when manual fragment keeps audio after settle', () => {
-  const resolution = resolveFragmentCleanupDirect(
+test('resolveFragmentCleanup clears ticket when manual fragment keeps audio after settle', () => {
+  const resolution = resolveFragmentCleanup(
     emptyManualPlaceholderTicket,
     buildFragment({ audio_object_key: 'audio/manual/demo.m4a' }),
     { nowMs: 1_500 }
@@ -181,8 +174,8 @@ test('resolveFragmentCleanupDirect clears ticket when manual fragment keeps audi
   });
 });
 
-test('resolveFragmentCleanupDirect clears ticket when fragment no longer exists', () => {
-  const resolution = resolveFragmentCleanupDirect(emptyManualPlaceholderTicket, null, {
+test('resolveFragmentCleanup clears ticket when fragment no longer exists', () => {
+  const resolution = resolveFragmentCleanup(emptyManualPlaceholderTicket, null, {
     nowMs: 1_500,
   });
 

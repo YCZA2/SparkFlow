@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { consumePendingFragmentCleanupDirectly } from '@/features/fragments/cleanup/runtime';
+import { consumePendingFragmentCleanup } from '@/features/fragments/cleanup/runtime';
 import { useAudioCaptureSession } from '@/features/recording/AudioCaptureProvider';
 import { useAppTheme } from '@/theme/useAppTheme';
 
@@ -40,7 +40,7 @@ export function RecordAudioScreen({ folderId }: { folderId?: string }) {
 
   useFocusEffect(
     useCallback(() => {
-      void consumePendingFragmentCleanupDirectly().catch(() => {
+      void consumePendingFragmentCleanup().catch(() => {
         /*录音页兜底清理失败时保留 ticket，等待下次返回重试。 */
       });
     }, [])
