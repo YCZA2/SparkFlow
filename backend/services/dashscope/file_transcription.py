@@ -5,6 +5,16 @@ from http import HTTPStatus
 from typing import Any, Optional
 
 import httpx
+from tenacity import (
+    RetryCallState,
+    Retrying,
+    retry_if_exception_type,
+    retry_if_result,
+    stop_after_attempt,
+    wait_exponential,
+    wait_fixed,
+    wait_random,
+)
 
 from core.logging_config import get_logger
 from services.base import STTRecognitionError, TranscriptionResult
@@ -13,6 +23,29 @@ from .payload_parser import DashScopePayloadParser
 
 
 logger = get_logger(__name__)
+
+DASHSCOPE_TRANSIENT_STATUS_CODES = {
+    HTTPStatus.TOO_MANY_REQUESTS,
+    HTTPStatus.INTERNAL_SERVER_ERROR,
+    HTTPStatus.BAD_GATEWAY,
+    HTTPStatus.SERVICE_UNAVAILABLE,
+    HTTPStatus.GATEWAY_TIMEOUT,
+}
+DASHSCOPE_REQUEST_RETRY_ATTEMPTS = 3
+DASHSCOPE_REQUEST_RETRY_INITIAL_SECONDS = 0.5
+DASHSCOPE_REQUEST_RETRY_MAX_SECONDS = 4.0
+DASHSCOPE_REQUEST_RETRY_JITTER_SECONDS = 0.25
+DASHSCOPE_TASK_POLL_TIMEOUT_SECONDS = 180
+DASHSCOPE_TASK_POLL_INTERVAL_SECONDS = 1.0
+
+
+class DashScopeTransientRequestError(Exception):
+    """标记 DashScope REST 临时失败，供 Tenacity 执行请求级重试。"""
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        """保留 HTTP 状态码，便于最终错误和日志定位。"""
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class DashScopeFileTranscriber:
@@ -96,6 +129,58 @@ class DashScopeFileTranscriber:
             return str(payload.get("message") or payload.get("code") or payload)
         return str(payload)
 
+    @staticmethod
+    def _is_transient_status(status_code: int) -> bool:
+        """判断 HTTP 状态码是否属于可重试的临时失败。"""
+        return status_code in DASHSCOPE_TRANSIENT_STATUS_CODES
+
+    @staticmethod
+    def _is_pending_task_payload(payload: dict[str, Any]) -> bool:
+        """让 Tenacity 根据任务状态判断是否继续轮询。"""
+        output = payload.get("output") if isinstance(payload, dict) else None
+        task_status = str((output or {}).get("task_status") or "UNKNOWN").upper()
+        return task_status != "SUCCEEDED"
+
+    def _build_request_retryer(self, *, method: str, url: str) -> Retrying:
+        """构造 DashScope REST 请求重试器，仅处理临时网络和限流错误。"""
+
+        def log_retry(retry_state: RetryCallState) -> None:
+            """记录下一次请求重试，保留方法、地址、次数和等待时长。"""
+            exception = retry_state.outcome.exception() if retry_state.outcome else None
+            sleep_seconds = retry_state.next_action.sleep if retry_state.next_action else 0
+            logger.warning(
+                "dashscope_request_retrying",
+                method=method,
+                url=url,
+                attempt=retry_state.attempt_number,
+                sleep=round(float(sleep_seconds), 3),
+                error=str(exception) if exception else "",
+            )
+
+        return Retrying(
+            retry=retry_if_exception_type(DashScopeTransientRequestError),
+            stop=stop_after_attempt(DASHSCOPE_REQUEST_RETRY_ATTEMPTS),
+            wait=wait_exponential(
+                multiplier=DASHSCOPE_REQUEST_RETRY_INITIAL_SECONDS,
+                min=DASHSCOPE_REQUEST_RETRY_INITIAL_SECONDS,
+                max=DASHSCOPE_REQUEST_RETRY_MAX_SECONDS,
+            )
+            + wait_random(0, DASHSCOPE_REQUEST_RETRY_JITTER_SECONDS),
+            sleep=time.sleep,
+            before_sleep=log_retry,
+            reraise=True,
+        )
+
+    @staticmethod
+    def _build_task_poll_retryer() -> Retrying:
+        """构造任务状态轮询器，等待间隔由本模块 time.sleep 控制。"""
+        return Retrying(
+            retry=retry_if_result(DashScopeFileTranscriber._is_pending_task_payload),
+            wait=wait_fixed(DASHSCOPE_TASK_POLL_INTERVAL_SECONDS),
+            sleep=time.sleep,
+            reraise=True,
+        )
+
     def _request_dashscope_json(
         self,
         client: httpx.Client,
@@ -105,7 +190,41 @@ class DashScopeFileTranscriber:
         headers: dict[str, str],
         json_body: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        response = client.request(method, url, headers=headers, json=json_body)
+        try:
+            retryer = self._build_request_retryer(method=method, url=url)
+            return retryer(
+                self._request_dashscope_json_once,
+                client,
+                method,
+                url,
+                headers=headers,
+                json_body=json_body,
+            )
+        except DashScopeTransientRequestError as exc:
+            raise STTRecognitionError(f"DashScope request failed after retries: {exc}") from exc
+
+    def _request_dashscope_json_once(
+        self,
+        client: httpx.Client,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json_body: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """执行一次 DashScope REST 请求，并把临时失败映射为可重试异常。"""
+        try:
+            response = client.request(method, url, headers=headers, json=json_body)
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            raise DashScopeTransientRequestError(f"DashScope transport error: {exc}") from exc
+
+        if self._is_transient_status(response.status_code):
+            message = self._parse_rest_error(response)
+            raise DashScopeTransientRequestError(
+                f"DashScope request failed temporarily ({response.status_code}): {message}",
+                status_code=response.status_code,
+            )
+
         try:
             payload = response.json()
         except ValueError as exc:
@@ -148,15 +267,12 @@ class DashScopeFileTranscriber:
     def _download_transcription_result(self, client: httpx.Client, result_url: str) -> dict[str, Any]:
         """下载最终转写结果并记录下载耗时，便于区分慢在回包还是任务排队。"""
         download_started_at = time.monotonic()
-        response = client.get(result_url, headers={"Authorization": f"Bearer {self.api_key}"})
-        if response.status_code != HTTPStatus.OK:
-            message = self._parse_rest_error(response)
-            raise STTRecognitionError(f"download transcription result failed ({response.status_code}): {message}")
-
-        try:
-            payload = response.json()
-        except ValueError as exc:
-            raise STTRecognitionError(f"transcription result is not JSON: {response.text[:200]}") from exc
+        payload = self._request_dashscope_json(
+            client,
+            "GET",
+            result_url,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+        )
 
         if not isinstance(payload, dict):
             raise STTRecognitionError(f"transcription result payload invalid: {payload!r}")
@@ -198,48 +314,70 @@ class DashScopeFileTranscriber:
                 task_status=task_status,
                 submit_elapsed_ms=self._elapsed_ms(submit_started_at),
             )
-            deadline = time.monotonic() + 180
+            deadline = time.monotonic() + DASHSCOPE_TASK_POLL_TIMEOUT_SECONDS
             poll_started_at = time.monotonic()
-            poll_count = 0
+            poll_state = {"count": 0}
             poll_headers = {"Authorization": f"Bearer {self.api_key}"}
             if isinstance(file_url, str) and file_url.startswith("oss://"):
                 poll_headers["X-DashScope-OssResourceResolve"] = "enable"
 
-            while True:
-                poll_count += 1
-                task_payload = self._request_dashscope_json(
-                    client,
-                    "GET",
-                    f"{self.TASK_URL_PREFIX}/{task_id}",
-                    headers=poll_headers,
-                )
-                output = task_payload.get("output") or {}
-                task_status = str(output.get("task_status") or "UNKNOWN").upper()
-                if task_status == "SUCCEEDED":
-                    result_url = self._extract_transcription_result_url(task_payload)
-                    logger.info(
-                        "dashscope_file_transcription_task_succeeded",
-                        task_id=task_id,
-                        poll_count=poll_count,
-                        poll_elapsed_ms=self._elapsed_ms(poll_started_at),
-                        total_elapsed_ms=self._elapsed_ms(run_started_at),
-                    )
-                    return self._download_transcription_result(client, result_url)
-                if task_status in {"FAILED", "CANCELED", "UNKNOWN"}:
-                    message = task_payload.get("message") or output.get("message") or task_status
-                    raise STTRecognitionError(
-                        f"file transcription failed: task_id={task_id}, status={task_status}, message={message}"
-                    )
-                if time.monotonic() >= deadline:
-                    raise STTRecognitionError(f"file transcription timeout: task_id={task_id}, status={task_status}")
+            poll_retryer = self._build_task_poll_retryer()
+            task_payload = poll_retryer(
+                self._poll_task_once,
+                client,
+                task_id,
+                poll_headers,
+                poll_started_at,
+                deadline,
+                poll_state,
+            )
+            result_url = self._extract_transcription_result_url(task_payload)
+            logger.info(
+                "dashscope_file_transcription_task_succeeded",
+                task_id=task_id,
+                poll_count=poll_state["count"],
+                poll_elapsed_ms=self._elapsed_ms(poll_started_at),
+                total_elapsed_ms=self._elapsed_ms(run_started_at),
+            )
+            return self._download_transcription_result(client, result_url)
 
-                logger.info(
-                    "dashscope_file_transcription_task_polling",
-                    task_id=task_id,
-                    task_status=task_status,
-                    poll_count=poll_count,
-                )
-                time.sleep(1)
+    def _poll_task_once(
+        self,
+        client: httpx.Client,
+        task_id: str,
+        poll_headers: dict[str, str],
+        poll_started_at: float,
+        deadline: float,
+        poll_state: dict[str, int],
+    ) -> dict[str, Any]:
+        """查询一次 DashScope 任务状态，终态直接返回或抛错，非终态交给 Tenacity 继续轮询。"""
+        poll_state["count"] += 1
+        poll_count = poll_state["count"]
+        task_payload = self._request_dashscope_json(
+            client,
+            "GET",
+            f"{self.TASK_URL_PREFIX}/{task_id}",
+            headers=poll_headers,
+        )
+        output = task_payload.get("output") or {}
+        task_status = str(output.get("task_status") or "UNKNOWN").upper()
+        if task_status == "SUCCEEDED":
+            return task_payload
+        if task_status in {"FAILED", "CANCELED", "UNKNOWN"}:
+            message = task_payload.get("message") or output.get("message") or task_status
+            raise STTRecognitionError(
+                f"file transcription failed: task_id={task_id}, status={task_status}, message={message}"
+            )
+        if time.monotonic() >= deadline:
+            raise STTRecognitionError(f"file transcription timeout: task_id={task_id}, status={task_status}")
+
+        logger.info(
+            "dashscope_file_transcription_task_polling",
+            task_id=task_id,
+            task_status=task_status,
+            poll_count=poll_count,
+        )
+        return task_payload
 
     def transcribe_recorded_file(self, audio_path: str, language: str) -> TranscriptionResult:
         """执行完整录音文件识别，并输出端到端总耗时日志。"""
