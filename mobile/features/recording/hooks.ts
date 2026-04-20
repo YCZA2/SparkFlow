@@ -20,8 +20,8 @@ import {
   updateLocalFragmentEntity,
 } from '@/features/fragments/store';
 import { markFragmentsStale } from '@/features/fragments/refreshSignal';
-import { waitForTaskTerminal } from '@/features/tasks/api';
 import { syncMediaIngestionTaskState } from '@/features/tasks/mediaIngestionTaskRecovery';
+import { observeTaskRunUntilTerminal } from '@/features/tasks/taskQuery';
 import { uploadAudio } from '@/features/recording/api';
 import { updateScriptStatus } from '@/features/scripts/api';
 import { markScriptsStale } from '@/features/scripts/refreshSignal';
@@ -257,8 +257,10 @@ export function useAudioUpload() {
       markFragmentsStale();
       setResult(nextResult);
       setStatus('success');
-      void waitForTaskTerminal(taskId, { timeoutMs: 180_000, scope })
-        .then(async (task) => {
+      observeTaskRunUntilTerminal(taskId, {
+        timeoutMs: 180_000,
+        scope,
+        onTerminal: async (task) => {
           const restoredFragment = await syncMediaIngestionTaskState(localFragment.id, task, { scope });
           if (!restoredFragment || !isMountedRef.current || task.status !== 'succeeded') {
             return;
@@ -272,12 +274,13 @@ export function useAudioUpload() {
                 }
               : current
           );
-        })
-        .catch((taskError) => {
+        },
+        onError: async (taskError) => {
           if (!(taskError instanceof TaskScopeMismatchError)) {
             console.warn('录音转写后台回写失败:', taskError);
           }
-        });
+        },
+      });
       return nextResult;
     } catch (err) {
       if (err instanceof TaskScopeMismatchError) {

@@ -6,7 +6,7 @@ from typing import Any
 
 from core.logging_config import get_logger
 from modules.shared.content.document_parsers import parse_uploaded_text
-from modules.shared.content.content_html import (
+from modules.shared.content.body_service import (
     convert_markdown_to_basic_html,
     extract_plain_text_from_html,
 )

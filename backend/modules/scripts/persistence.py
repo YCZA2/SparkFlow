@@ -9,7 +9,7 @@ from core.exceptions import ValidationError
 from domains.tasks import repository as task_repository
 from domains.scripts import repository as script_repository
 from models import TaskRun
-from modules.shared.content.content_html import convert_markdown_to_basic_html
+from modules.shared.content.body_service import convert_markdown_to_basic_html
 
 
 class ScriptGenerationPersistenceService:

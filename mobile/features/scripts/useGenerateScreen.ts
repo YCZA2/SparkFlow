@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
+import { captureRequiredTaskExecutionScope, TaskScopeMismatchError } from '@/features/auth/taskScope';
+import { flushBackupQueue } from '@/features/backups/queue';
 import { useSelectedFragments } from '@/features/fragments/hooks';
-import { useGenerateScript } from '@/features/scripts/hooks';
+import { generateScript } from '@/features/scripts/api';
+import { rememberPendingScriptTask } from '@/features/scripts/pendingScriptTasks';
+import { resolveScriptFromTerminalTask } from '@/features/scripts/scriptTask';
+import { trackPendingScriptTask } from '@/features/tasks/scriptRecovery';
+import { useTaskRunQuery, useTaskRunTerminalConsumer } from '@/features/tasks/taskQuery';
 import type { Fragment } from '@/types/fragment';
 import { getErrorMessage } from '@/utils/error';
 
@@ -33,7 +40,10 @@ export interface GenerateScreenState {
   isLoading: boolean;
   error: string | null;
   topic: string;
-  generator: ReturnType<typeof useGenerateScript>;
+  generator: {
+    status: 'idle' | 'loading' | 'success' | 'error';
+    error: string | null;
+  };
   canGenerate: boolean;
   selectedSummary: string;
   getFragmentDisplayText: (fragment: Fragment) => string;
@@ -47,7 +57,82 @@ export function useGenerateScreen(): GenerateScreenState {
   const { fragmentIds } = useLocalSearchParams<{ fragmentIds?: string | string[] }>();
   const { ids, fragments, isLoading, error } = useSelectedFragments(fragmentIds);
   const [topic, setTopic] = useState('');
-  const generator = useGenerateScript();
+  const [generatorError, setGeneratorError] = useState<string | null>(null);
+  const [pendingTask, setPendingTask] = useState<{
+    taskRunId: string;
+    scope: ReturnType<typeof captureRequiredTaskExecutionScope>;
+  } | null>(null);
+
+  const generateMutation = useMutation({
+    mutationFn: async (input: { fragmentIds: string[]; topic: string }) => {
+      const scope = captureRequiredTaskExecutionScope();
+      await flushBackupQueue({ scope }).catch((flushError) => {
+        throw new Error(getErrorMessage(flushError, '本地内容尚未同步，无法保证生成基于最新正文'));
+      });
+      const task = await generateScript({
+        topic: input.topic,
+        fragment_ids: input.fragmentIds,
+      });
+      await rememberPendingScriptTask(scope.userId, {
+        taskRunId: task.task_id,
+        kind: 'manual',
+        createdAt: new Date().toISOString(),
+      });
+      void trackPendingScriptTask(task.task_id, scope).catch((error) => {
+        if (!(error instanceof TaskScopeMismatchError)) {
+          console.warn('脚本任务后台恢复托管失败:', error);
+        }
+      });
+      return {
+        taskRunId: task.task_id,
+        scope,
+      };
+    },
+    onMutate: async () => {
+      setGeneratorError(null);
+    },
+    onSuccess: (result) => {
+      setPendingTask(result);
+    },
+    onError: (mutationError) => {
+      if (mutationError instanceof TaskScopeMismatchError) {
+        return;
+      }
+      setGeneratorError(getErrorMessage(mutationError, '生成失败'));
+    },
+  });
+
+  const taskQuery = useTaskRunQuery(pendingTask?.taskRunId, {
+    enabled: Boolean(pendingTask),
+    scope: pendingTask?.scope ?? null,
+  });
+
+  useTaskRunTerminalConsumer({
+    pending: pendingTask,
+    taskRunId: pendingTask?.taskRunId,
+    taskQuery,
+    onTerminal: async (currentPendingTask, taskRun, context) => {
+      const script = await resolveScriptFromTerminalTask(taskRun, '生成失败', {
+        scope: currentPendingTask.scope,
+        taskRunId: currentPendingTask.taskRunId,
+      });
+      if (context.isCancelled()) {
+        return;
+      }
+      router.replace(`/script/${script.id}`);
+    },
+    onError: async (_currentPendingTask, error, context) => {
+      if (error instanceof TaskScopeMismatchError || context.isCancelled()) {
+        return;
+      }
+      const message = getErrorMessage(error, '生成失败');
+      setGeneratorError(message);
+      Alert.alert('生成失败', message);
+    },
+    onSettled: async () => {
+      setPendingTask(null);
+    },
+  });
 
   useEffect(() => {
     /*仅在首次拿到碎片时填入推荐主题，避免覆盖用户手动输入。 */
@@ -74,13 +159,32 @@ export function useGenerateScreen(): GenerateScreenState {
     }
 
     try {
-      const scriptId = await generator.run(ids, topic.trim());
-      router.replace(`/script/${scriptId}`);
+      await generateMutation.mutateAsync({
+        fragmentIds: ids,
+        topic: topic.trim(),
+      });
     } catch (err) {
+      if (err instanceof TaskScopeMismatchError) {
+        return;
+      }
       const message = getErrorMessage(err, '生成失败');
       Alert.alert('生成失败', message);
     }
-  }, [generator, ids, router, topic]);
+  }, [generateMutation, ids, topic]);
+
+  const generator = useMemo(() => {
+    const status =
+      generateMutation.isPending || taskQuery.phase === 'loading' || taskQuery.phase === 'polling'
+        ? 'loading'
+        : generatorError
+          ? 'error'
+          : 'idle';
+
+    return {
+      status,
+      error: generatorError,
+    } as GenerateScreenState['generator'];
+  }, [generateMutation.isPending, generatorError, taskQuery.phase]);
 
   return {
     ids,
@@ -89,7 +193,11 @@ export function useGenerateScreen(): GenerateScreenState {
     error,
     topic,
     generator,
-    canGenerate: ids.length > 0 && topic.trim().length > 0 && generator.status !== 'loading',
+    canGenerate:
+      ids.length > 0 &&
+      topic.trim().length > 0 &&
+      generator.status !== 'loading' &&
+      !pendingTask,
     selectedSummary: `已选碎片（${ids.length}）`,
     getFragmentDisplayText: displayFragmentText,
     setTopic,

@@ -100,10 +100,11 @@ flowchart LR
 flowchart TD
     subgraph Mobile["mobile"]
         R["Routes<br/>app/*"]
-        P["Providers<br/>AppSessionProvider<br/>AudioCaptureProvider<br/>ImportActionSheetProvider"]
+        P["Providers<br/>AppQueryProvider<br/>AppSessionProvider<br/>AudioCaptureProvider<br/>ImportActionSheetProvider"]
         SM["Screen composition<br/>useFragmentsScreen / useGenerateScreen / useFragmentCloudScreen"]
         H["Feature hooks<br/>auth / recording / scripts / fragments"]
         C["HTTP client<br/>features/core/api/client.ts"]
+        Q["Task query layer<br/>React Query + QueryObserver"]
         CFG["config + networkConfig"]
         AS["AsyncStorage"]
         LDB["Local mirror DB<br/>expo-sqlite + drizzle"]
@@ -115,6 +116,7 @@ flowchart TD
     R --> SM
     SM --> H
     H --> C
+    H --> Q
     H --> LDB
     H --> LFS
     H --> NATIVE
@@ -126,11 +128,15 @@ flowchart TD
 ### 3.3 Mobile Responsibilities
 
 - `AppSessionProvider` 在应用启动时完成后端地址初始化、token 恢复与正式登录态校验；未登录时只进入认证页，不再自动补测试用户。
+- `AppQueryProvider` 在根布局挂载 React Query，并把原生 `AppState` 映射到 query focus，统一承接任务态轮询的前后台暂停/恢复。
+- `AppSessionProvider` 现在会在工作区挂载、前后台切换和定时保活时同时补跑 backup queue 与任务恢复；页面发起的导入 / 脚本任务也会立刻 handoff 给工作区恢复层，避免离开当前页面后丢失本地回写。
 - `AudioCaptureProvider` 承载录音状态、上传状态与录音文件回放能力。
 - `ImportActionSheetProvider` 承载底部 `+` 导入抽屉开关与当前文件夹上下文。
 - `features/core/api/client.ts` 统一处理 token 注入、错误解析与基础请求方法。
+- `features/tasks/taskQuery.ts` 统一提供 `useTaskRunQuery`、`useTaskRunTerminalConsumer`、QueryObserver 轮询和任务 UI phase 映射；task query key 现在绑定 `user_id + session_version + workspace_epoch + task_id`，避免不同会话复用旧缓存。
+- `features/tasks/taskRecoveryRegistry.ts` 负责后台任务恢复 observer 的作用域键与去重注册表，供工作区恢复和页面 handoff 共用。
 - `utils/networkConfig.ts` 负责后端地址持久化与真机局域网地址切换。
-- `features/editor/*` 提供共享正文编辑底座：HTML helper、session reducer、富文本桥接、toolbar 和页面 scaffold；fragment 与 script 详情统一复用这套协议，但不合并成统一业务实体。
+- `features/editor/*` 提供共享正文编辑底座：`contentBodyService` 负责 DOM 级 HTML 解析、标题/预览提取和 asset 引用收集，`html.ts` 保留格式化与桥接 helper，fragment 与 script 详情统一复用这套协议，但不合并成统一业务实体。
 - `features/recording/components/*` 负责录音页的 UI 壳层、按钮组与样式，路由文件只保留参数接入与页面装配。
 - `features/editor/useEditorSession.ts` 当前只负责组装共享正文会话协议；hydration、保存生命周期、图片插入和运行时 ref 同步已经拆到内部 helper / 子 hook，避免 fragment 与 script 两端继续往主 hook 堆副作用。
 - `features/fragments/*` 负责碎片列表、多选、云图和详情相关状态；首页与文件夹页现在共用同一套 list screen model、日期分组规则和选择/生成跳转逻辑。
@@ -167,7 +173,7 @@ flowchart TD
 - `script.source_fragment_ids` 只表示首次生成来源，script 不会重新进入 fragment 检索、聚类、每日推盘选材或下一轮脚本生成输入
 - 移动端在收到“设备会话已失效”后会停止自动补 token，转入本地只读态，并要求用户在 `profile.tsx` 显式重新连接当前设备
 - 录音上传、外链导入、脚本生成、备份队列冲刷和显式恢复现在都绑定统一 `TaskExecutionScope(user_id + session_version + workspace_epoch)`；一旦账号切换、登出或会话失效，飞行中的旧任务会停止回写当前工作区，并留在原工作区等待下次恢复
-- `scripts` 额外维护了按工作区隔离的 pending task 注册表；App 启动并挂载工作区后，会先恢复本地 `pending|failed` 备份，再根据保存的 `task_id` 重查媒体任务和脚本生成终态；fragment 媒体导入任务当前统一使用 `media_task_*` 本地字段承接 run_id、状态与错误信息
+- `scripts` 额外维护了按工作区隔离的 pending task 注册表；App 启动并挂载工作区后，以及后续前后台切换 / 定时保活时，都会重查本地待完成任务并按 `task_id` 继续恢复；fragment 媒体导入任务当前统一使用 `media_task_*` 本地字段承接 run_id、状态与错误信息
 
 ### 3.5 Backup Snapshot And File Sync
 
@@ -188,9 +194,9 @@ flowchart TD
 
 当前上传触发机制位于 `AppSessionProvider` 与 backup queue：
 
-- 应用启动完成后会主动执行一次 `flushBackupQueue()`
-- AppState 切到 `active` 或 `background` 时会再触发一次，避免正文和媒体长期只停留在本地
-- 前台运行期间每 5 分钟会定时重试一次，补充前后台切换未覆盖到的场景
+- 应用启动完成后会主动执行一次工作区 maintenance，同时补跑 `flushBackupQueue()` 与 `recoverWorkspaceTaskState()`
+- AppState 切到 `active` 或 `background` 时会再次执行同一套 maintenance，避免正文、媒体和待完成任务长期只停留在本地
+- 前台运行期间每 5 分钟会定时重试一次 maintenance，补充前后台切换未覆盖到的场景
 - 当前编辑成功后默认只是把实体留在 `pending`，不会在每次输入后立刻发起网络请求；上传仍以队列批量冲刷为主
 - 唯一的主路径例外是手动脚本生成：客户端会在调用 `POST /api/scripts/generation` 前先主动执行一次 `flushBackupQueue()`，用来建立“生成基于最新已同步正文”的 freshness barrier
 
@@ -276,7 +282,7 @@ flowchart TD
 - `backend/modules/shared/tasks/runtime.py`：Celery 任务运行时，负责步骤定义、首步入队、自动重试与恢复。
 - `backend/modules/shared/celery/*`：Celery app、步骤投递、队列路由与 beat 任务装配。
 - `backend/modules/fragments/derivative_task.py`: fragment 摘要、标签和向量异步回填任务。
-- `backend/modules/shared/content/`: 正文处理子目录，包含 `content_html.py`、`content_markdown.py`、`content_schemas.py`、`editor_document.py`、`fragment_body_markdown.py`、`document_parsers.py`（共享文档解析器，支持 txt/md/docx/pdf/xlsx）。
+- `backend/modules/shared/content/`: 正文处理子目录，包含 `body_service.py`、`content_markdown.py`、`content_schemas.py`、`editor_document.py`、`fragment_body_markdown.py`、`document_parsers.py`（共享文档解析器，支持 txt/md/docx/pdf/xlsx）。
 - `backend/services/*`: 当前主要保留外部 provider 实现与工厂；新增业务逻辑应优先进入 `modules/*` 或 `modules/shared/*`，不要继续扩散到早期 service 层。
 
 当前 `fragments` 模块内部进一步拆分为：

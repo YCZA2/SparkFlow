@@ -1,5 +1,6 @@
 import { assertTaskScopeActive, type TaskExecutionScope } from '@/features/auth/taskScope';
-import { retryTaskRun, waitForTaskTerminal } from '@/features/tasks/api';
+import { retryTaskRun } from '@/features/tasks/api';
+import { awaitTaskRunTerminal } from '@/features/tasks/taskQuery';
 import {
   extractMediaIngestionOutput,
   resolveMediaIngestionFragmentPatch,
@@ -79,6 +80,6 @@ export async function retryFailedMediaIngestionFragment(fragment: Pick<Fragment,
     media_task_error_message: retriedRun.error_message ?? null,
   });
 
-  const terminalRun = await waitForTaskTerminal(retriedRun.id, { timeoutMs: 180_000 });
+  const terminalRun = await awaitTaskRunTerminal(retriedRun.id, { timeoutMs: 180_000 });
   return await syncMediaIngestionTaskState(fragment.id, terminalRun);
 }

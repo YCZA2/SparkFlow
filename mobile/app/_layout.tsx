@@ -16,6 +16,7 @@ import { DrawerBackdrop } from '@/components/Drawer/DrawerBackdrop';
 import { createDebugLogEntry, emitDebugLog } from '@/features/debug-log/store';
 import { AudioCaptureProvider } from '@/features/recording/AudioCaptureProvider';
 import { AppSessionProvider, useAppSession } from '@/providers/AppSessionProvider';
+import { AppQueryProvider } from '@/providers/AppQueryProvider';
 import { DebugLogProvider } from '@/providers/DebugLogProvider';
 import { DrawerProvider, useDrawer } from '@/providers/DrawerProvider';
 import { ImportActionSheetProvider } from '@/providers/ImportActionSheetProvider';
@@ -67,17 +68,19 @@ export default function RootLayout() {
 
   return (
     <DebugLogProvider>
-      <AppSessionProvider>
-        <DrawerProvider>
-          <ImportActionSheetProvider>
-            <QuickActionBarProvider>
-              <AudioCaptureProvider>
-                <RootLayoutNav />
-              </AudioCaptureProvider>
-            </QuickActionBarProvider>
-          </ImportActionSheetProvider>
-        </DrawerProvider>
-      </AppSessionProvider>
+      <AppQueryProvider>
+        <AppSessionProvider>
+          <DrawerProvider>
+            <ImportActionSheetProvider>
+              <QuickActionBarProvider>
+                <AudioCaptureProvider>
+                  <RootLayoutNav />
+                </AudioCaptureProvider>
+              </QuickActionBarProvider>
+            </ImportActionSheetProvider>
+          </DrawerProvider>
+        </AppSessionProvider>
+      </AppQueryProvider>
     </DebugLogProvider>
   );
 }

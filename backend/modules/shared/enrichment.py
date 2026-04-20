@@ -97,7 +97,7 @@ async def _generate_summary(
     body_html: str | None = None,
 ) -> str:
     """从正文第一行提取摘要，不再使用 LLM。"""
-    from modules.shared.content.content_html import extract_plain_text_from_html
+    from modules.shared.content.body_service import extract_plain_text_from_html
 
     # 优先从正文提取纯文本
     if body_html:

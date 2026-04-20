@@ -16,7 +16,7 @@ from domains.knowledge import repository as knowledge_repository
 from domains.scripts import repository as script_repository
 from domains.writing_context import repository as writing_context_repository
 from models import User
-from modules.shared.content.content_html import extract_plain_text_from_html
+from modules.shared.content.body_service import extract_plain_text_from_html
 from modules.shared.fragment_snapshots import FragmentSnapshotReader, read_fragment_snapshot_text
 from modules.shared.ports import KnowledgeIndexStore, TextGenerationProvider, VectorStore
 from modules.shared.prompt_loader import load_prompt_text

@@ -1,5 +1,4 @@
 import { API_ENDPOINTS } from '@/constants/config';
-import { assertTaskScopeActive, type TaskExecutionScope } from '@/features/auth/taskScope';
 import { get, post } from '@/features/core/api/client';
 import type {
   RetryTaskRequest,
@@ -38,32 +37,4 @@ export async function retryTaskRun(
  */
 export function isTaskTerminal(status: string): boolean {
   return TERMINAL_TASK_STATUSES.has(status);
-}
-
-/**
- 轮询 task 直到成功、失败或超时，统一给脚本生成等任务态入口复用。
- */
-export async function waitForTaskTerminal(
-  taskId: string,
-  options: { intervalMs?: number; timeoutMs?: number; scope?: TaskExecutionScope | null } = {}
-): Promise<TaskRun> {
-  const intervalMs = options.intervalMs ?? 800;
-  const timeoutMs = options.timeoutMs ?? 120_000;
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt <= timeoutMs) {
-    if (options.scope) {
-      assertTaskScopeActive(options.scope);
-    }
-    const run = await fetchTaskRun(taskId);
-    if (options.scope) {
-      assertTaskScopeActive(options.scope);
-    }
-    if (isTaskTerminal(run.status)) {
-      return run;
-    }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-
-  throw new Error('任务执行超时，请稍后在任务页重试');
 }

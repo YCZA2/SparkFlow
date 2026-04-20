@@ -6,7 +6,7 @@ import { getOrCreateDeviceId } from '@/features/auth/device';
 import { clearDeviceSessionInvalid } from '@/features/auth/deviceSession';
 import { emitAuthSessionLost, subscribeAuthSessionLost } from '@/features/auth/sessionEvents';
 import { clearPersistedAuthState } from '@/features/auth/sessionPersistence';
-import { captureTaskExecutionScope } from '@/features/auth/taskScope';
+import { captureTaskExecutionScope, type TaskExecutionScope } from '@/features/auth/taskScope';
 import { useAuthStore } from '@/features/auth/authStore';
 import { initApiClientAuth } from '@/features/core/api/client';
 import { flushBackupQueue } from '@/features/backups/queue';
@@ -24,6 +24,14 @@ import { recoverWorkspaceTaskState } from '@/features/tasks/workspaceRecovery';
  *
  * 认证状态由 useAuthStore 管理，无需 Context
  */
+async function runWorkspaceMaintenance(scope: TaskExecutionScope): Promise<void> {
+  /*统一补跑备份冲刷和任务恢复，让页面卸载后未完成任务仍能继续在工作区里收尾。 */
+  await Promise.allSettled([
+    flushBackupQueue({ scope }),
+    recoverWorkspaceTaskState(scope),
+  ]);
+}
+
 export function AppSessionProvider({ children }: { children: React.ReactNode }) {
   const bootstrap = useAuthStore((state) => state.bootstrap);
   const isReady = useAuthStore((state) => state.isReady);
@@ -76,8 +84,7 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
       }
       await ensureFragmentStoreReady();
       await ensureScriptStoreReady();
-      await flushBackupQueue({ scope }).catch(() => undefined);
-      await recoverWorkspaceTaskState(scope).catch(() => undefined);
+      await runWorkspaceMaintenance(scope).catch(() => undefined);
     };
     void prepareWorkspace();
   }, [isAuthenticated, user?.user_id]);
@@ -89,7 +96,7 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
       if (isAuthenticated && (nextState === 'background' || nextState === 'active')) {
         const scope = captureTaskExecutionScope();
         if (scope) {
-          void flushBackupQueue({ scope }).catch(() => undefined);
+          void runWorkspaceMaintenance(scope).catch(() => undefined);
         }
       }
     });
@@ -104,7 +111,7 @@ export function AppSessionProvider({ children }: { children: React.ReactNode }) 
       if (isAuthenticated) {
         const scope = captureTaskExecutionScope();
         if (scope) {
-          void flushBackupQueue({ scope }).catch(() => undefined);
+          void runWorkspaceMaintenance(scope).catch(() => undefined);
         }
       }
     }, 5 * 60 * 1000);

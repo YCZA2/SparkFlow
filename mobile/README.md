@@ -39,6 +39,8 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - fragments / folders 主链路当前采用**local-first 架构**：列表、详情、编辑、删除统一读取本地 SQLite / 文件系统，远端只做自动备份与显式恢复
 - 远端快照、待同步正文、待上传图片不再混放在 `AsyncStorage`；`AsyncStorage` 仅保留 token、用户信息、后端地址和少量轻量配置
 - 当前不再自动使用测试用户进入主流程；正式登录采用邮箱密码认证，`/api/auth/token` 仅用于本地开发联调
+- `AppQueryProvider` 已接入根布局：移动端远端 task 状态统一通过 React Query / QueryObserver 轮询，页面与恢复流程不再各自手写 `while + setTimeout`
+- `AppSessionProvider` 现在会在工作区挂载、前后台切换和定时保活时同时补跑 `flushBackupQueue()` 与 `recoverWorkspaceTaskState()`；页面发起的导入 / 脚本任务也会立即交给工作区恢复层托管，离开当前页后仍能继续落本地真值
 - “写下灵感”文本链路当前直接创建本地 fragment 实体；编辑完成后只标记待备份，不再先建远端 fragment 空壳。
 - 录音与外链导入同样遵循这条约束：必须先有本地 fragment 实体，再调用 `/api/transcriptions` 或 `/api/external-media/audio-imports`。
 - 首页和文件夹页只展示当前本地 SQLite 真值，不再聚合历史草稿缓存或远端投影卡片。
@@ -46,6 +48,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
 - 碎片详情页默认进入轻量正文编辑视图，正文改动会优先写本地 HTML 草稿；`transcript`、音频、摘要、标签收口到右上角“更多”底部抽屉，AI patch 本期已下线。
 - 移动端编辑器已抽出 `features/editor/*` 共享底座：统一承载 HTML helper、editor session reducer、`react-native-enriched` 富文本桥接、toolbar 和页面 scaffold，fragment 与 script 详情共用同一套正文编辑协议。
+- `features/editor/contentBodyService.ts` 现在负责 DOM 级正文解析、首行标题/预览提取和 `asset://` 图片引用收集；`features/editor/html.ts` 只保留桥接协议、格式化和少量 HTML 拼装 helper。
 - 录音页当前也已把 route 与 UI 壳层拆开：`app/record-audio.tsx` 只保留参数接入，界面与按钮组收口到 `features/recording/components/*`。
 - `useEditorSession` 当前已经按 `hydration / persistence / image insertion / runtime refs` 拆成内部子模块；页面侧继续只消费同一套 `EditorSessionResult`，不会感知拆分细节。
 - 碎片详情内部仍保留 `detail resource / editor session / sheet / screen actions` 四层，但 resource 已经切换为只读本地实体；后台由 backup queue 负责把改动推到远端备份。
@@ -70,6 +73,8 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - `mobile/features/fragments/store/`：fragments 本地数据入口，当前按 `localEntityStore / runtime / shared update helpers` 拆分职责；主链路统一从 `store/index.ts` 读取本地实体能力
 - `mobile/features/scripts/store/`：scripts 本地数据入口，负责成稿真值、lineage、回收站、冲突副本和恢复合并
 - `mobile/features/editor/html.ts`：唯一 HTML / 纯文本快照 helper 真值源，fragment 与 script 共用
+- `mobile/features/tasks/taskQuery.ts`：统一任务查询 hook、终态消费 hook、QueryObserver 轮询和 UI phase 映射；脚本生成、抖音导入、录音转写回写和工作区恢复共用这套语义
+- `mobile/features/tasks/taskRecoveryRegistry.ts`：统一约束后台任务恢复的作用域键和 observer 去重，避免页面 handoff、工作区恢复和前后台补跑重复追踪同一 task
 
 补充约定：
 - SQLite 迁移当前采用开发期基线重建策略；`user_version` 低于当前版本时会重建本地表，不迁移历史开发数据。

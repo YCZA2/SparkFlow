@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from domains.backups import repository as backup_repository
 from modules.auth.application import TEST_USER_ID
-from modules.shared.content.content_html import convert_markdown_to_basic_html, extract_plain_text_from_html
+from modules.shared.content.body_service import convert_markdown_to_basic_html, extract_plain_text_from_html
 from modules.shared.content.fragment_body_markdown import convert_editor_document_to_body_markdown
 from modules.shared.fragment_snapshots import FragmentSnapshotReader
 

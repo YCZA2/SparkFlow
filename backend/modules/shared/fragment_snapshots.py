@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from domains.backups import repository as backup_repository
-from modules.shared.content.content_html import extract_plain_text_from_html
+from modules.shared.content.body_service import extract_plain_text_from_html
 from utils.time import ensure_aware_utc
 
 

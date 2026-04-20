@@ -2,8 +2,12 @@ import { assertTaskScopeActive, isTaskScopeActive, type TaskExecutionScope } fro
 import { forgetPendingScriptTask, listPendingScriptTasks } from '@/features/scripts/pendingScriptTasks';
 import { hydrateGeneratedScriptToLocal } from '@/features/scripts/sync';
 import { markScriptsStale } from '@/features/scripts/store';
-import { fetchTaskRun, waitForTaskTerminal } from '@/features/tasks/api';
+import { fetchTaskRun, isTaskTerminal } from '@/features/tasks/api';
+import { buildTaskRecoveryKey, createTaskRecoveryRegistry } from '@/features/tasks/taskRecoveryRegistry';
+import { observeTaskRunUntilTerminal } from '@/features/tasks/taskQuery';
 import type { TaskRun } from '@/types/task';
+
+const scriptTaskRecoveryRegistry = createTaskRecoveryRegistry();
 
 function resolveScriptIdFromTask(task: Pick<TaskRun, 'status' | 'resource'>): string | null {
   /*脚本类 task 成功后统一从 resource 中取最终 script_id。 */
@@ -29,24 +33,58 @@ async function syncRecoveredScriptTask(
 
 async function recoverSingleScriptTask(task: { taskRunId: string }, scope: TaskExecutionScope): Promise<void> {
   /*脚本恢复先查一次当前状态，未终态则继续后台轮询直到收敛。 */
-  assertTaskScopeActive(scope);
-  const currentTask = await fetchTaskRun(task.taskRunId);
-  if (currentTask.status === 'succeeded' || currentTask.status === 'failed' || currentTask.status === 'cancelled') {
-    await syncRecoveredScriptTask(currentTask, scope);
+  const recoveryKey = buildTaskRecoveryKey('script', task.taskRunId, scope);
+  if (!scriptTaskRecoveryRegistry.begin(recoveryKey)) {
     return;
   }
-  void waitForTaskTerminal(task.taskRunId, { timeoutMs: 180_000, scope })
-    .then(async (terminalRun) => {
-      if (!isTaskScopeActive(scope)) {
-        return;
-      }
-      await syncRecoveredScriptTask(terminalRun, scope);
-    })
-    .catch((error) => {
-      if (isTaskScopeActive(scope)) {
-        console.warn('恢复脚本任务状态失败:', task.taskRunId, error);
-      }
+
+  let handedOffToObserver = false;
+
+  assertTaskScopeActive(scope);
+  try {
+    const currentTask = await fetchTaskRun(task.taskRunId);
+    if (isTaskTerminal(currentTask.status)) {
+      await syncRecoveredScriptTask(currentTask, scope);
+      return;
+    }
+
+    handedOffToObserver = true;
+    observeTaskRunUntilTerminal(task.taskRunId, {
+      timeoutMs: 180_000,
+      scope,
+      onTerminal: async (terminalRun) => {
+        try {
+          if (!isTaskScopeActive(scope)) {
+            return;
+          }
+          await syncRecoveredScriptTask(terminalRun, scope);
+        } finally {
+          scriptTaskRecoveryRegistry.finish(recoveryKey);
+        }
+      },
+      onError: async (error) => {
+        try {
+          if (isTaskScopeActive(scope)) {
+            console.warn('恢复脚本任务状态失败:', task.taskRunId, error);
+          }
+        } finally {
+          scriptTaskRecoveryRegistry.finish(recoveryKey);
+        }
+      },
     });
+  } finally {
+    if (!handedOffToObserver) {
+      scriptTaskRecoveryRegistry.finish(recoveryKey);
+    }
+  }
+}
+
+export async function trackPendingScriptTask(
+  taskRunId: string,
+  scope: TaskExecutionScope
+): Promise<void> {
+  /*页面发起脚本生成后立即接入恢复层，保证离开生成页后仍会继续落本地真值。 */
+  await recoverSingleScriptTask({ taskRunId }, scope);
 }
 
 export async function recoverPendingScriptTasks(scope: TaskExecutionScope): Promise<void> {

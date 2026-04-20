@@ -15,7 +15,7 @@ from domains.scripts import repository as script_repository
 from models import TaskRun
 from modules.shared.tasks.task_types import TaskExecutionContext, TaskExecutionError, TaskStepDefinition
 from modules.shared.ports import VectorStore
-from modules.shared.content.content_html import convert_markdown_to_basic_html
+from modules.shared.content.body_service import convert_markdown_to_basic_html
 from modules.shared.fragment_snapshots import hydrate_fragment_snapshot
 from modules.shared.prompt_loader import load_prompt_text, render_prompt_template
 from utils.time import ensure_aware_utc, get_app_timezone, get_local_day_bounds

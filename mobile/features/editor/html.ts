@@ -1,9 +1,9 @@
+import { contentBodyService } from '@/features/editor/contentBodyService';
+
 export interface HtmlPatch {
   op: 'replace_selection' | 'insert_after_selection' | 'prepend_document';
   html_snippet: string;
 }
-
-const ASSET_REF_PATTERN = /<img[^>]+src=["']asset:\/\/([^"']+)["'][^>]*>/gi;
 
 export function normalizeBodyHtml(html: string | null | undefined): string {
   /*规整正文 HTML，统一换行并去掉首尾空白。 */
@@ -27,16 +27,16 @@ export function wrapHtmlForNativeEditor(html: string | null | undefined): string
 }
 
 export function ensureFirstLineIsTitle(html: string): string {
-  /* 把正文首个 <p> 块升格为 <h1>，实现"首行即标题"的编辑体验。
-   * 若首块已是 <h1>（或其他非 <p> 块元素）则保持不变；空内容直接返回。
-   * 调用时机：编辑器 seed HTML 管道，不影响持久化存储路径。 */
+  /*把正文首个段落升格为 h1，实现“首行即标题”的编辑体验。 */
   const normalized = normalizeBodyHtml(html);
   if (!normalized) return normalized;
-
-  // 首块已经是非 <p> 元素（h1-h6、ul、ol、blockquote 等），无需转换
-  if (!/^<p[\s>]/i.test(normalized)) return normalized;
-
-  // 把首个 <p>...</p> 替换为 <h1>...</h1>，保留原有属性
+  if (contentBodyService.extractTitle(normalized) && normalized.startsWith('<h1')) {
+    return normalized;
+  }
+  const leadingParagraph = normalized.match(/^<p([^>]*)>([\s\S]*?)<\/p>/i);
+  if (!leadingParagraph) {
+    return normalized;
+  }
   return normalized.replace(/^<p([^>]*)>([\s\S]*?)<\/p>/i, '<h1$1>$2</h1>');
 }
 
@@ -52,31 +52,7 @@ export function unwrapHtmlFromNativeEditor(html: string | null | undefined): str
 
 export function extractPlainTextFromHtml(html: string | null | undefined): string {
   /*从 HTML 中提取纯文本快照，供列表预览和分享复用。 */
-  const normalized = normalizeBodyHtml(html);
-  if (!normalized) return '';
-  return normalized
-    .replace(/<img[^>]*>/gi, ' ')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|section|article|blockquote|li|ul|ol|h[1-6])>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function matchLeadingBlock(html: string, tagName: 'h1' | 'p'): RegExpMatchArray | null {
-  /*仅匹配正文开头的首个块元素，避免跨段正则误命中中间节点。 */
-  const pattern = new RegExp(`^\\s*<${tagName}\\b([^>]*)>([\\s\\S]*?)<\\/${tagName}>`, 'i');
-  return html.match(pattern);
-}
-
-function stripLeadingBlock(html: string, tagName: 'h1' | 'p'): string {
-  /*移除正文开头块，用于生成"去标题"预览文本。 */
-  const pattern = new RegExp(`^\\s*<${tagName}\\b[^>]*>[\\s\\S]*?<\\/${tagName}>\\s*`, 'i');
-  return html.replace(pattern, '');
+  return contentBodyService.extractPlainText(html);
 }
 
 /**
@@ -85,29 +61,7 @@ function stripLeadingBlock(html: string, tagName: 'h1' | 'p'): string {
  * 用于列表卡片显示标题，实现"首行即标题"的产品体验。
  */
 export function extractTitleFromFirstLine(html: string | null | undefined, maxTitleLength = 50): string {
-  const normalized = normalizeBodyHtml(html);
-  if (!normalized) return '';
-
-  // 仅识别正文开头的 h1
-  const leadingH1 = matchLeadingBlock(normalized, 'h1');
-  if (leadingH1 && leadingH1[2]) {
-    const title = extractPlainTextFromHtml(leadingH1[2]).trim();
-    if (title) return title.slice(0, maxTitleLength);
-  }
-
-  // h1 不存在时回退到正文开头段落
-  const leadingParagraph = matchLeadingBlock(normalized, 'p');
-  if (leadingParagraph && leadingParagraph[2]) {
-    const title = extractPlainTextFromHtml(leadingParagraph[2]).trim();
-    if (title) return title.slice(0, maxTitleLength);
-  }
-
-  // 兜底：从纯文本首行提取
-  const plainText = extractPlainTextFromHtml(normalized);
-  const firstLine = plainText.split('\n')[0]?.trim();
-  if (firstLine) return firstLine.slice(0, maxTitleLength);
-
-  return '';
+  return contentBodyService.extractTitle(html, maxTitleLength);
 }
 
 /**
@@ -115,33 +69,12 @@ export function extractTitleFromFirstLine(html: string | null | undefined, maxTi
  * 用于列表卡片的预览文本显示，避免标题和预览重复。
  */
 export function extractPreviewSkippingTitle(html: string | null | undefined, maxPreviewLength = 100): string {
-  const normalized = normalizeBodyHtml(html);
-  if (!normalized) return '';
-
-  // 移除首行 h1 或 p 元素
-  let previewHtml = normalized;
-
-  // 如果首行是 h1，移除它
-  if (matchLeadingBlock(previewHtml, 'h1')) {
-    previewHtml = stripLeadingBlock(previewHtml, 'h1');
-  } else if (matchLeadingBlock(previewHtml, 'p')) {
-    // 否则移除首段正文
-    previewHtml = stripLeadingBlock(previewHtml, 'p');
-  }
-
-  const previewText = extractPlainTextFromHtml(previewHtml).trim();
-  return previewText.slice(0, maxPreviewLength);
+  return contentBodyService.extractPreview(html, maxPreviewLength);
 }
 
 export function extractAssetIdsFromHtml(html: string | null | undefined): string[] {
   /*从 HTML 中提取 asset:// 图片引用，保持顺序并去重。 */
-  const normalized = normalizeBodyHtml(html);
-  const assetIds: string[] = [];
-  for (const match of normalized.matchAll(ASSET_REF_PATTERN)) {
-    const assetId = String(match[1] ?? '').trim();
-    if (assetId && !assetIds.includes(assetId)) assetIds.push(assetId);
-  }
-  return assetIds;
+  return contentBodyService.collectAssetIds(html);
 }
 
 export function createImageHtml(assetId: string, alt = ''): string {
