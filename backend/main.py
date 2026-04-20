@@ -7,13 +7,15 @@ from typing import Any, Awaitable, Callable
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import structlog
 
-from core import settings, AppException, success_response
+from core import settings, AppException, error_response, success_response
 from core.auth import decode_token
 from core.exceptions import (
     AuthenticationError,
@@ -115,6 +117,34 @@ def _build_request_log_fields(
     if user_id:
         payload["user_id"] = user_id
     return payload
+
+
+def _build_request_validation_details(exc: RequestValidationError) -> dict[str, str]:
+    """将 FastAPI/Pydantic 校验错误整理为字段级错误字典。"""
+    field_errors: dict[str, str] = {}
+    for error in exc.errors():
+        raw_location = error.get("loc") or ()
+        location_parts = [
+            str(part)
+            for part in raw_location
+            if str(part) not in {"body", "query", "path", "header", "cookie"}
+        ]
+        field_name = ".".join(location_parts) if location_parts else "request"
+        field_errors[field_name] = str(error.get("msg") or "请求参数无效")
+    return field_errors or {"request": "请求参数无效"}
+
+
+def _build_http_exception_error(exc: StarletteHTTPException) -> tuple[str, str, dict[str, Any] | None]:
+    """从 Starlette/FastAPI HTTPException 中提取统一错误体字段。"""
+    detail = exc.detail
+    fallback_code = "NOT_FOUND" if exc.status_code == 404 else f"HTTP_{exc.status_code}"
+    fallback_message = "请求的资源未找到" if exc.status_code == 404 else str(detail or "请求处理失败")
+    if isinstance(detail, dict):
+        code = str(detail.get("code") or fallback_code)
+        message = str(detail.get("message") or fallback_message)
+        details = detail.get("details")
+        return code, message, details if isinstance(details, dict) else None
+    return fallback_code, fallback_message, None
 
 
 def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
@@ -226,6 +256,17 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
 def register_exception_handlers(app: FastAPI) -> None:
     """注册统一异常处理器。"""
 
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_exception_handler(request: Request, exc: RequestValidationError):
+        return JSONResponse(
+            status_code=422,
+            content=error_response(
+                code="VALIDATION",
+                message="请求参数校验失败",
+                details=_build_request_validation_details(exc),
+            ),
+        )
+
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):
         return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
@@ -248,6 +289,16 @@ def register_exception_handlers(app: FastAPI) -> None:
                     "details": {"path": str(request.url)},
                 },
             },
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        code, message, details = _build_http_exception_error(exc)
+        if exc.status_code == 404 and details is None:
+            details = {"path": str(request.url)}
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=error_response(code=code, message=message, details=details),
         )
 
     @app.exception_handler(Exception)

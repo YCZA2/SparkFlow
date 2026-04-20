@@ -269,6 +269,7 @@ flowchart TD
 - 模块内 `schemas.py` 是后端 API contract 的单一事实源。
 - `presentation.py` 应显式声明 `response_model=ResponseModel[...]`，让 OpenAPI 可直接作为前后端并行开发的契约。
 - 删除接口统一返回 `200 + ResponseModel[None]`，成功时 `data` 为 `null`。
+- 错误响应统一返回 `success / data / message / error` envelope；业务异常、框架级请求校验错误、显式 `HTTPException`、404 和未捕获异常都由 `main.py` 统一处理，路由层不要直接返回空 4xx。
 - `backend/modules/shared/ports.py`: LLM、STT、Embedding、Vector DB、音频存储、外挂工作流等端口抽象。
 - `backend/modules/shared/enrichment.py`: 摘要与标签增强逻辑。
 - `backend/modules/shared/warning_throttle.py`: 告警限流工具。

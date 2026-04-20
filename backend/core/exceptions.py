@@ -34,6 +34,7 @@ class AppException(Exception):
         return {
             "success": False,
             "data": None,
+            "message": None,
             "error": {
                 "code": self.code,
                 "message": self.message,

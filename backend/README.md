@@ -244,12 +244,15 @@ cd backend
 8. `core/logging_config.py`
    - 结构化日志装配层。
    - 负责 `structlog` 配置、request-id 绑定、访问日志分流、第三方 logger 降噪，以及控制台与按天轮转文件输出。
+9. `core/exceptions.py` + `main.py`
+   - 统一错误响应入口。
+   - 业务异常、FastAPI 请求校验错误、显式 `HTTPException`、404 与未捕获异常都应返回 `success / data / message / error` envelope；路由层不要直接返回空 4xx 响应。
 
 ## Folder Guide
 
 ### Core entry and infra
 
-- `main.py`: FastAPI 应用入口，负责装配 request-id 中间件、异常处理、路由和 lifespan。
+- `main.py`: FastAPI 应用入口，负责装配 request-id 中间件、统一异常处理、路由和 lifespan。
 - `core/`: 通用基础设施，包括配置、认证、标准响应、异常定义和结构化日志。
 - `constants/`: 共享常量。
 - `utils/`: 序列化、时间处理等通用工具函数。

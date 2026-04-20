@@ -6,6 +6,7 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundError, ValidationError
+from core.logging_config import get_logger
 from domains.tasks import repository as task_repository
 from models import KnowledgeDoc, TaskRun
 from modules.shared.content.content_markdown import extract_plain_text
@@ -29,6 +30,7 @@ from .schemas import (
 )
 
 VALID_DOC_TYPES = {"high_likes", "language_habit", "reference_script"}
+logger = get_logger(__name__)
 
 
 def map_knowledge_doc(doc: KnowledgeDoc) -> KnowledgeDocItem:
@@ -127,6 +129,13 @@ class KnowledgeUseCase:
             )
             return updated
         except Exception as exc:
+            logger.warning(
+                "knowledge_indexing_failed",
+                user_id=user_id,
+                doc_id=doc.id,
+                doc_type=doc_type,
+                exc_info=True,
+            )
             return knowledge_repository.update(
                 db=db,
                 doc=doc,
@@ -237,6 +246,13 @@ class KnowledgeUseCase:
                 processing_error=None,
             )
         except Exception as exc:
+            logger.warning(
+                "knowledge_reindexing_failed",
+                user_id=user_id,
+                doc_id=updated.id,
+                doc_type=updated.doc_type,
+                exc_info=True,
+            )
             return knowledge_repository.update(
                 db=db,
                 doc=updated,

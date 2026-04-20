@@ -9,6 +9,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from core.auth import get_current_user
+from core.exceptions import ValidationError
 from modules.shared.infrastructure.container import ServiceContainer, get_container, get_db_session
 
 from .application import MarkdownExportUseCase
@@ -55,7 +56,10 @@ async def export_markdown(
     elif content_type == "knowledge":
         markdown_file, _ = use_case.export_knowledge_doc(db=db, user_id=current_user["user_id"], doc_id=content_id)
     else:
-        return Response(status_code=404)
+        raise ValidationError(
+            message="不支持的导出类型",
+            field_errors={"content_type": "必须是 fragment、script 或 knowledge 之一"},
+        )
     return Response(
         content=markdown_file.content,
         media_type="text/markdown; charset=utf-8",

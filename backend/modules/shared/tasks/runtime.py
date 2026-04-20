@@ -6,6 +6,7 @@ from typing import Any
 from celery import Celery
 from sqlalchemy.orm import Session, sessionmaker
 
+from core.exceptions import NotFoundError
 from domains.tasks import repository as task_repository
 from models import TaskRun
 
@@ -146,7 +147,28 @@ class TaskRecoveryService:
     async def retry_run(self, *, user_id: str, run_id: str, strategy: str) -> TaskRun:
         """重置失败任务并重新投递起始步骤。"""
         with self.session_factory() as db:
-            run = task_repository.retry_run(db=db, user_id=user_id, run_id=run_id, strategy=strategy)
+            existing = task_repository.get_by_id(db=db, user_id=user_id, run_id=run_id)
+            if existing is None:
+                raise NotFoundError(
+                    message="任务不存在或无权访问",
+                    resource_type="task_run",
+                    resource_id=run_id,
+                )
+            try:
+                run = task_repository.retry_run(
+                    db=db,
+                    user_id=user_id,
+                    run_id=run_id,
+                    strategy=strategy,
+                )
+            except RuntimeError as exc:
+                if str(exc).startswith("task run not found:"):
+                    raise NotFoundError(
+                        message="任务不存在或无权访问",
+                        resource_type="task_run",
+                        resource_id=run_id,
+                    ) from exc
+                raise
         definitions = self.definition_registry.get(run.task_type)
         dispatcher_enabled = self.dispatcher is None or self.dispatcher.enabled
         if definitions and run.current_step and dispatcher_enabled:
