@@ -16,6 +16,8 @@ from modules.scripts.daily_push_task import build_daily_push_task_service
 from modules.scripts.writing_context_builder import refresh_fragment_methodology_entries_for_all_users
 from modules.shared.tasks.state import ensure_task_runtime
 from modules.shared.tasks.task_types import TaskExecutionContext, TaskExecutionError
+from tenacity import RetryError
+from utils.polling import build_async_poll_retryer
 
 logger = get_logger(__name__)
 
@@ -77,17 +79,22 @@ async def _run_external_step(*, context: TaskExecutionContext, definition) -> di
         inputs=context.input_payload,
         user_id=context.run.user_id,
     )
-    poll_interval = 1.0
-    deadline = asyncio.get_running_loop().time() + 30
-    while run_result.status in ("queued", "running"):
-        if asyncio.get_running_loop().time() >= deadline:
-            raise TaskExecutionError(
-                f"外部工作流轮询超时: {workflow_id}",
-                retryable=True,
-            )
-        await asyncio.sleep(poll_interval)
-        run_result = await provider.get_run(run_id=run_result.run_id)
-        poll_interval = min(poll_interval * 1.5, 10.0)
+
+    retryer = build_async_poll_retryer(
+        is_pending=lambda r: r.status in ("queued", "running"),
+        interval_seconds=1.0,
+        max_wait_seconds=30.0,
+        backoff_multiplier=1.5,
+        max_interval_seconds=10.0,
+    )
+    try:
+        run_result = await retryer(provider.get_run, run_id=run_result.run_id)
+    except RetryError as exc:
+        raise TaskExecutionError(
+            f"外部工作流轮询超时: {workflow_id}",
+            retryable=True,
+        ) from exc
+
     if run_result.status == "failed":
         raise TaskExecutionError(f"外部工作流执行失败: {workflow_id}", retryable=True)
     return run_result.outputs

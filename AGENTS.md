@@ -107,6 +107,7 @@ This starts:
 - local PostgreSQL on `5432`
 - local RabbitMQ on `5672`
 - Celery worker for async task queues
+- Celery beat for periodic daily push / writing-context jobs
 - FastAPI backend on `8000`
 - Expo / Metro on `8081`
 
@@ -143,6 +144,7 @@ Manual RabbitMQ / worker operations:
 npm run dev:queue
 npm run dev:queue:status
 npm run dev:worker
+npm run dev:beat
 ```
 
 ### When native mobile changes are involved

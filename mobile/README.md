@@ -572,11 +572,12 @@ brew install postgresql@16
 brew services start postgresql@16
 ```
 
-后台任务还依赖本机 RabbitMQ；整套联调推荐直接运行 `npm run dev:mobile`，脚本会自动启动 RabbitMQ 和 Celery worker。若需要单独检查：
+后台任务还依赖本机 RabbitMQ；整套联调推荐直接运行 `npm run dev:mobile`，脚本会自动启动 RabbitMQ、Celery worker 和 Celery beat。若需要单独检查：
 
 ```bash
 npm run dev:queue:status
 npm run dev:worker
+npm run dev:beat
 ```
 
 当后端有 Alembic 新迁移（例如新增字段）时，先执行：

@@ -137,7 +137,6 @@ async def app(
     configure_task_runtime(test_app.state.container)
     test_app.state.celery_app = test_app.state.container.celery_app
     yield test_app
-    test_app.state.scheduler_service.stop()
     if test_app.state.container.task_dispatcher:
         await test_app.state.container.task_dispatcher.stop()
 
@@ -147,7 +146,6 @@ async def stateless_app():
     """创建关闭启动副作用的 FastAPI 应用。"""
     test_app = create_app(enable_runtime_side_effects=False)
     yield test_app
-    test_app.state.scheduler_service.stop()
     if test_app.state.container.task_dispatcher:
         await test_app.state.container.task_dispatcher.stop()
 

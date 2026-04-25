@@ -38,10 +38,8 @@ from modules.fragments.derivative_task import (
 from modules.knowledge.presentation import router as knowledge_router
 from modules.media_assets.presentation import router as media_assets_router
 from modules.tasks.presentation import router as tasks_router
-from modules.scripts.application import DailyPushUseCase
 from modules.scripts.daily_push_task import (
     TASK_TYPE_DAILY_PUSH_GENERATION,
-    build_daily_push_task_service,
 )
 from modules.knowledge.reference_script_task import (
     build_reference_script_processing_task_service,
@@ -52,9 +50,6 @@ from modules.scripts.rag_task import (
     TASK_TYPE_RAG_SCRIPT_GENERATION,
 )
 from modules.scripts.presentation import router as scripts_router
-from modules.scripts.writing_context_builder import (
-    refresh_fragment_methodology_entries_for_all_users,
-)
 from modules.document_import.task_steps import (
     DocumentImportStepExecutor,
     TASK_TYPE_DOCUMENT_IMPORT,
@@ -67,8 +62,6 @@ from modules.shared.media.audio_ingestion import (
 from modules.shared.infrastructure.container import ServiceContainer, build_container
 from modules.shared.tasks.bootstrap import configure_task_runtime
 from modules.transcriptions.presentation import router as transcriptions_router
-from modules.scheduler.application import SchedulerService, create_scheduler
-
 configure_logging()
 logger = get_logger(__name__)
 access_logger = get_access_logger()
@@ -151,7 +144,6 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
     """创建并装配 FastAPI 应用实例。"""
     container = build_container()
     runtime = configure_task_runtime(container)
-    scheduler_service = _build_scheduler_service(container)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -161,14 +153,12 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
         logger.info(
             "app_startup",
             runtime_side_effects_enabled=enable_runtime_side_effects,
-            scheduler_enabled=False,
             celery_enabled=bool(container.celery_app),
         )
         try:
             yield
         finally:
             logger.info("app_shutdown")
-            scheduler_service.stop()
 
     app = FastAPI(
         title=settings.APP_NAME,
@@ -180,7 +170,6 @@ def create_app(*, enable_runtime_side_effects: bool = True) -> FastAPI:
     )
 
     app.state.container = container
-    app.state.scheduler_service = scheduler_service
     app.state.celery_app = runtime.celery_app
 
     @app.middleware("http")
@@ -399,30 +388,6 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(knowledge_router)
     app.include_router(tasks_router)
 
-
-def _build_scheduler_service(container: ServiceContainer) -> SchedulerService:
-    """构建带每日推盘和写作上下文维护任务的调度服务。"""
-    scheduler = create_scheduler()
-
-    async def run_daily_push_job() -> None:
-        with container.session_factory() as db:
-            use_case = DailyPushUseCase(
-                task_service=build_daily_push_task_service(container),
-            )
-            return await use_case.run_daily_job(db=db)
-
-    async def run_writing_context_job() -> None:
-        with container.session_factory() as db:
-            return await refresh_fragment_methodology_entries_for_all_users(
-                db=db,
-                llm_provider=container.llm_provider,
-            )
-
-    return SchedulerService(
-        scheduler=scheduler,
-        run_job=run_daily_push_job,
-        run_writing_context_job=run_writing_context_job,
-    )
 
 def build_root_health_payload() -> dict:
     """构建根路径健康检查载荷。"""

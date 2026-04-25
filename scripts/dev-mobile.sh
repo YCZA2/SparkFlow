@@ -8,6 +8,7 @@ MOBILE_DIR="${ROOT_DIR}/mobile"
 POSTGRES_SCRIPT="${ROOT_DIR}/scripts/postgres-local.sh"
 RABBITMQ_SCRIPT="${ROOT_DIR}/scripts/rabbitmq-local.sh"
 CELERY_WORKER_SCRIPT="${ROOT_DIR}/scripts/celery-worker.sh"
+CELERY_BEAT_SCRIPT="${ROOT_DIR}/scripts/celery-beat.sh"
 
 BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
@@ -16,6 +17,7 @@ IOS_PLATFORM="${IOS_PLATFORM:-ios}"
 APP_ENV="${APP_ENV:-development}"
 CELERY_BROKER_URL="${CELERY_BROKER_URL:-amqp://guest:guest@127.0.0.1:5672//}"
 CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND:-rpc://}"
+CELERY_BEAT_SCHEDULE_FILE="${CELERY_BEAT_SCHEDULE_FILE:-${ROOT_DIR}/backend/runtime/celerybeat-schedule-dev}"
 IOS_DEV_BUNDLE_ID="${IOS_DEV_BUNDLE_ID:-com.sparkflow.mobile.dev}"
 IOS_DEV_SCHEME="${IOS_DEV_SCHEME:-sparkflowmobiledev}"
 
@@ -23,6 +25,7 @@ MODE="${1:-start}"
 BUILD_TARGET_INPUT="${2:-${BUILD_TARGET:-}}"
 BACKEND_PID=""
 CELERY_WORKER_PID=""
+CELERY_BEAT_PID=""
 EXPO_PID=""
 BACKEND_PYTHON=""
 
@@ -78,13 +81,16 @@ get_local_ip() {
 cleanup() {
   trap - EXIT INT TERM
 
-  if [[ -n "${EXPO_PID}" || -n "${BACKEND_PID}" || -n "${CELERY_WORKER_PID}" ]]; then
+  if [[ -n "${EXPO_PID}" || -n "${BACKEND_PID}" || -n "${CELERY_WORKER_PID}" || -n "${CELERY_BEAT_PID}" ]]; then
     echo
     echo "[dev-mobile] stopping processes..."
   fi
 
   if [[ -n "${EXPO_PID}" ]]; then
     kill "${EXPO_PID}" 2>/dev/null || true
+  fi
+  if [[ -n "${CELERY_BEAT_PID}" ]]; then
+    kill "${CELERY_BEAT_PID}" 2>/dev/null || true
   fi
   if [[ -n "${CELERY_WORKER_PID}" ]]; then
     kill "${CELERY_WORKER_PID}" 2>/dev/null || true
@@ -170,6 +176,24 @@ start_celery_worker() {
       bash "${CELERY_WORKER_SCRIPT}"
   ) &
   CELERY_WORKER_PID=$!
+}
+
+start_celery_beat() {
+  if [[ ! -f "${CELERY_BEAT_SCRIPT}" ]]; then
+    echo "[dev-mobile] Celery beat helper not found: ${CELERY_BEAT_SCRIPT}"
+    exit 1
+  fi
+  echo "[dev-mobile] starting celery beat..."
+  (
+    cd "${ROOT_DIR}"
+    exec env \
+      APP_ENV="${APP_ENV}" \
+      CELERY_BROKER_URL="${CELERY_BROKER_URL}" \
+      CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND}" \
+      CELERY_BEAT_SCHEDULE_FILE="${CELERY_BEAT_SCHEDULE_FILE}" \
+      bash "${CELERY_BEAT_SCRIPT}"
+  ) &
+  CELERY_BEAT_PID=$!
 }
 
 find_first_available_simulator() {
@@ -454,6 +478,7 @@ run_start_mode() {
   ensure_local_rabbitmq
   run_backend_migrations
   start_celery_worker
+  start_celery_beat
 
   echo "[dev-mobile] starting backend..."
   (
@@ -523,6 +548,7 @@ run_simulator_mode() {
   ensure_local_rabbitmq
   run_backend_migrations
   start_celery_worker
+  start_celery_beat
 
   echo "[dev-mobile] starting backend..."
   (

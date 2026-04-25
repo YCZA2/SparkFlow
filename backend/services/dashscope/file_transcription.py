@@ -8,9 +8,11 @@ import httpx
 from tenacity import (
     RetryCallState,
     Retrying,
+    RetryError,
     retry_if_exception_type,
     retry_if_result,
     stop_after_attempt,
+    stop_after_delay,
     wait_exponential,
     wait_fixed,
     wait_random,
@@ -173,10 +175,11 @@ class DashScopeFileTranscriber:
 
     @staticmethod
     def _build_task_poll_retryer() -> Retrying:
-        """构造任务状态轮询器，等待间隔由本模块 time.sleep 控制。"""
+        """构造任务状态轮询器，超时由 tenacity stop 条件控制。"""
         return Retrying(
             retry=retry_if_result(DashScopeFileTranscriber._is_pending_task_payload),
             wait=wait_fixed(DASHSCOPE_TASK_POLL_INTERVAL_SECONDS),
+            stop=stop_after_delay(DASHSCOPE_TASK_POLL_TIMEOUT_SECONDS),
             sleep=time.sleep,
             reraise=True,
         )
@@ -322,15 +325,19 @@ class DashScopeFileTranscriber:
                 poll_headers["X-DashScope-OssResourceResolve"] = "enable"
 
             poll_retryer = self._build_task_poll_retryer()
-            task_payload = poll_retryer(
-                self._poll_task_once,
-                client,
-                task_id,
-                poll_headers,
-                poll_started_at,
-                deadline,
-                poll_state,
-            )
+            try:
+                task_payload = poll_retryer(
+                    self._poll_task_once,
+                    client,
+                    task_id,
+                    poll_headers,
+                    deadline,
+                    poll_state,
+                )
+            except RetryError as exc:
+                raise STTRecognitionError(
+                    f"file transcription timeout: task_id={task_id}"
+                ) from exc
             result_url = self._extract_transcription_result_url(task_payload)
             logger.info(
                 "dashscope_file_transcription_task_succeeded",
@@ -346,7 +353,6 @@ class DashScopeFileTranscriber:
         client: httpx.Client,
         task_id: str,
         poll_headers: dict[str, str],
-        poll_started_at: float,
         deadline: float,
         poll_state: dict[str, int],
     ) -> dict[str, Any]:

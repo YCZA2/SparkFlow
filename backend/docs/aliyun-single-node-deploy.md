@@ -5,10 +5,10 @@
 ## 适用口径
 
 - 单台 Ubuntu ECS
-- `systemd + nginx + PostgreSQL + FastAPI`
+- `systemd + nginx + PostgreSQL + RabbitMQ + FastAPI`
 - 文件存储先使用 `FILE_STORAGE_PROVIDER=local`
 - Chroma 与 uploads 保存在应用目录下
-- 仅启动 `1` 个 `uvicorn` worker，避免 scheduler 重复执行；异步任务由独立 Celery worker 承载
+- 仅启动 `1` 个 `uvicorn` worker；异步任务由独立 Celery worker 承载，周期任务由单独 Celery beat 发布
 - 默认通过本机 `ssh aliyun` + `rsync` 发布，不依赖服务器额外配置 GitHub 凭据
 
 ## 服务器准备
@@ -23,8 +23,9 @@ sudo swapon /swapfile
 grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
 
 sudo apt-get update
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv postgresql ffmpeg git rsync curl
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv postgresql rabbitmq-server ffmpeg git rsync curl
 sudo systemctl enable --now postgresql
+sudo systemctl enable --now rabbitmq-server
 ```
 
 ## 代码同步
@@ -32,13 +33,14 @@ sudo systemctl enable --now postgresql
 推荐直接从本机同步 `backend/`，避免服务器额外配置 GitHub 凭据：
 
 ```bash
-ssh aliyun 'mkdir -p /home/ycza/apps/sparkflow/backend'
+ssh aliyun 'mkdir -p /home/ycza/apps/sparkflow/backend /home/ycza/apps/sparkflow/backend/runtime'
 rsync -az --delete \
   --exclude '.venv' \
   --exclude '__pycache__' \
   --exclude '.pytest_cache' \
   --exclude '.hypothesis' \
   --exclude 'runtime_logs' \
+  --exclude 'runtime' \
   --exclude 'uploads' \
   --exclude 'chroma_data' \
   backend/ aliyun:/home/ycza/apps/sparkflow/backend/
@@ -82,6 +84,9 @@ CHROMADB_PATH=./chroma_data
 FILE_STORAGE_PROVIDER=local
 UPLOAD_DIR=./uploads
 MAX_UPLOAD_SIZE=52428800
+CELERY_BROKER_URL=amqp://guest:guest@127.0.0.1:5672//
+CELERY_RESULT_BACKEND=rpc://
+CELERY_TASK_ALWAYS_EAGER=false
 ENABLE_DAILY_PUSH_SCHEDULER=false
 ENABLE_WRITING_CONTEXT_SCHEDULER=true
 ```
@@ -123,6 +128,7 @@ EOF
 
 ```bash
 cd /home/ycza/apps/sparkflow/backend
+mkdir -p uploads chroma_data runtime
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
@@ -156,13 +162,61 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
+`/etc/systemd/system/sparkflow-celery-worker.service`：
+
+```ini
+[Unit]
+Description=SparkFlow Celery Worker
+After=network.target postgresql.service rabbitmq-server.service
+Wants=postgresql.service rabbitmq-server.service
+
+[Service]
+Type=simple
+User=ycza
+WorkingDirectory=/home/ycza/apps/sparkflow/backend
+Environment=APP_ENV=production
+EnvironmentFile=/home/ycza/.config/sparkflow/backend.env
+ExecStart=/home/ycza/apps/sparkflow/backend/.venv/bin/celery -A celery_app:celery_app worker -Q transcription,fragment-derivative,document-import,script-generation,knowledge-processing,daily-push,default --pool=solo --concurrency=1 --loglevel=INFO
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`/etc/systemd/system/sparkflow-celery-beat.service`：
+
+```ini
+[Unit]
+Description=SparkFlow Celery Beat
+After=network.target rabbitmq-server.service
+Wants=rabbitmq-server.service
+
+[Service]
+Type=simple
+User=ycza
+WorkingDirectory=/home/ycza/apps/sparkflow/backend
+Environment=APP_ENV=production
+EnvironmentFile=/home/ycza/.config/sparkflow/backend.env
+ExecStart=/home/ycza/apps/sparkflow/backend/.venv/bin/celery -A celery_app:celery_app beat --schedule=/home/ycza/apps/sparkflow/backend/runtime/celerybeat-schedule --loglevel=INFO
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
 启用：
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now sparkflow-backend
+sudo systemctl enable --now sparkflow-backend sparkflow-celery-worker sparkflow-celery-beat
 sudo systemctl status sparkflow-backend --no-pager -l
+sudo systemctl status sparkflow-celery-worker --no-pager -l
+sudo systemctl status sparkflow-celery-beat --no-pager -l
 sudo journalctl -u sparkflow-backend -n 200 --no-pager
+sudo journalctl -u sparkflow-celery-worker -n 200 --no-pager
+sudo journalctl -u sparkflow-celery-beat -n 200 --no-pager
 ```
 
 仓库内也提供了一个发布脚本，默认会按同样口径执行同步、装依赖、迁移、重启和健康检查：
@@ -178,7 +232,7 @@ sparkflow-backend-restart
 sfrestart
 ```
 
-它们都会执行 `systemctl restart sparkflow-backend`，然后直接打印最近的服务状态。
+它们应与仓库发布脚本保持一致，重启 `sparkflow-backend`、`sparkflow-celery-worker` 和 `sparkflow-celery-beat`，然后直接打印最近的服务状态。
 
 ## nginx 反代
 
@@ -228,6 +282,8 @@ sudo systemctl reload nginx
 curl http://127.0.0.1:8000/health
 curl -k --resolve www.onepercent.ltd:443:127.0.0.1 https://www.onepercent.ltd/api/health
 sudo journalctl -u sparkflow-backend -n 200 --no-pager
+sudo journalctl -u sparkflow-celery-worker -n 200 --no-pager
+sudo journalctl -u sparkflow-celery-beat -n 200 --no-pager
 ```
 
 如需验证邮件注册链路，注意当前依赖里已经显式补齐了 `email-validator`；新环境必须重新 `pip install -r requirements.txt` 才能避免 `EmailStr` 导致的启动失败。

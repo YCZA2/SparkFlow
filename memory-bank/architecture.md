@@ -6,7 +6,7 @@
 
 ## 0. 今日进展（2026-04-01）
 
-- 后端现已补齐一套阿里云单机部署口径：Ubuntu ECS 上通过 `systemd + nginx` 启动 FastAPI，同机承载 PostgreSQL、Chroma 和本地 uploads，并把 `/api/*`、`/uploads/*` 挂到同域名下；发布默认走 `ssh aliyun + rsync + 外置 backend.env`。
+- 后端现已补齐一套阿里云单机部署口径：Ubuntu ECS 上通过 `systemd + nginx` 启动 FastAPI、Celery worker 与 Celery beat，同机承载 PostgreSQL、RabbitMQ、Chroma 和本地 uploads，并把 `/api/*`、`/uploads/*` 挂到同域名下；发布默认走 `ssh aliyun + rsync + 外置 backend.env`。
 - 仓库本轮补齐了 `development / production` 双层配置入口：后端通过 `APP_ENV + .env/.env.<env>` 装配，移动端通过 Expo runtime config 下发 `appEnv / defaultApiBaseUrl / enableDeveloperTools`。
 - 正式移动包现在默认移除 `网络设置 / API 测试 / 错误日志` 等开发入口；即使深链直达调试页，也只会显示拒绝态而不会暴露调试动作。
 - `fragments / folders` 的 phase 1 local-first 主链路已经落地：移动端本地 SQLite + `body.html` 为真值，远端只承担自动备份与显式恢复。

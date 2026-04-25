@@ -77,11 +77,11 @@ class Settings(BaseSettings):
     LOG_JSON: bool = Field(default=False, description="是否输出 JSON 结构化日志")
     ENABLE_DAILY_PUSH_SCHEDULER: bool = Field(
         default=False,
-        description="是否启用服务端 daily push 定时任务；local-first 第一阶段默认关闭",
+        description="是否启用每日推盘定时任务（Celery beat）",
     )
     ENABLE_WRITING_CONTEXT_SCHEDULER: bool = Field(
         default=True,
-        description="是否启用每日写作上下文维护任务；用于静默刷新碎片方法论",
+        description="是否启用每日写作上下文维护任务（Celery beat）",
     )
     WRITING_CONTEXT_SCHEDULER_HOUR: int = Field(
         default=4,

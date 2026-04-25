@@ -9,6 +9,8 @@ REMOTE_HOST_ALIAS="${SPARKFLOW_REMOTE_HOST:-aliyun}"
 REMOTE_APP_DIR="${SPARKFLOW_REMOTE_APP_DIR:-/home/ycza/apps/sparkflow/backend}"
 REMOTE_ENV_FILE="${SPARKFLOW_REMOTE_ENV_FILE:-/home/ycza/.config/sparkflow/backend.env}"
 REMOTE_SERVICE_NAME="${SPARKFLOW_REMOTE_SERVICE_NAME:-sparkflow-backend}"
+REMOTE_CELERY_WORKER_SERVICE_NAME="${SPARKFLOW_REMOTE_CELERY_WORKER_SERVICE_NAME:-sparkflow-celery-worker}"
+REMOTE_CELERY_BEAT_SERVICE_NAME="${SPARKFLOW_REMOTE_CELERY_BEAT_SERVICE_NAME:-sparkflow-celery-beat}"
 REMOTE_DOMAIN="${SPARKFLOW_REMOTE_DOMAIN:-www.onepercent.ltd}"
 ACTION="${1:-deploy}"
 
@@ -34,6 +36,8 @@ print_usage() {
   SPARKFLOW_REMOTE_APP_DIR
   SPARKFLOW_REMOTE_ENV_FILE
   SPARKFLOW_REMOTE_SERVICE_NAME
+  SPARKFLOW_REMOTE_CELERY_WORKER_SERVICE_NAME
+  SPARKFLOW_REMOTE_CELERY_BEAT_SERVICE_NAME
   SPARKFLOW_REMOTE_DOMAIN
 USAGE
 }
@@ -64,7 +68,7 @@ run_remote() {
 
 prepare_remote_dirs() {
   # 预先创建远端目录，避免首次 rsync 或日志目录缺失。
-  run_remote "mkdir -p '${REMOTE_APP_DIR}' '${REMOTE_APP_DIR}/uploads' '${REMOTE_APP_DIR}/chroma_data' \"\$(dirname '${REMOTE_ENV_FILE}')\""
+  run_remote "mkdir -p '${REMOTE_APP_DIR}' '${REMOTE_APP_DIR}/uploads' '${REMOTE_APP_DIR}/chroma_data' '${REMOTE_APP_DIR}/runtime' \"\$(dirname '${REMOTE_ENV_FILE}')\""
 }
 
 assert_remote_env_file() {
@@ -95,6 +99,7 @@ sync_backend() {
     --exclude '.pytest_cache' \
     --exclude '.hypothesis' \
     --exclude 'runtime_logs' \
+    --exclude 'runtime' \
     --exclude 'uploads' \
     --exclude 'chroma_data' \
     "${BACKEND_DIR}/" "${REMOTE_HOST_ALIAS}:${REMOTE_APP_DIR}/"
@@ -126,14 +131,22 @@ run_migrations() {
 }
 
 restart_service() {
-  # 通过 systemd 重启单 worker FastAPI 进程，并输出当前服务状态。
+  # 通过 systemd 重启 FastAPI、Celery worker 与 Celery beat，并输出当前服务状态。
   run_remote "
     set -euo pipefail
     sudo systemctl daemon-reload
     sudo systemctl reset-failed '${REMOTE_SERVICE_NAME}' || true
+    sudo systemctl reset-failed '${REMOTE_CELERY_WORKER_SERVICE_NAME}' || true
+    sudo systemctl reset-failed '${REMOTE_CELERY_BEAT_SERVICE_NAME}' || true
     sudo systemctl restart '${REMOTE_SERVICE_NAME}'
+    sudo systemctl restart '${REMOTE_CELERY_WORKER_SERVICE_NAME}'
+    sudo systemctl restart '${REMOTE_CELERY_BEAT_SERVICE_NAME}'
     sleep 3
     sudo systemctl status '${REMOTE_SERVICE_NAME}' --no-pager -l | sed -n '1,60p'
+    echo
+    sudo systemctl status '${REMOTE_CELERY_WORKER_SERVICE_NAME}' --no-pager -l | sed -n '1,60p'
+    echo
+    sudo systemctl status '${REMOTE_CELERY_BEAT_SERVICE_NAME}' --no-pager -l | sed -n '1,60p'
   "
 }
 
@@ -154,7 +167,15 @@ show_status() {
     set -euo pipefail
     sudo systemctl status '${REMOTE_SERVICE_NAME}' --no-pager -l | sed -n '1,80p'
     echo
+    sudo systemctl status '${REMOTE_CELERY_WORKER_SERVICE_NAME}' --no-pager -l | sed -n '1,80p'
+    echo
+    sudo systemctl status '${REMOTE_CELERY_BEAT_SERVICE_NAME}' --no-pager -l | sed -n '1,80p'
+    echo
     sudo journalctl -u '${REMOTE_SERVICE_NAME}' -n 80 --no-pager
+    echo
+    sudo journalctl -u '${REMOTE_CELERY_WORKER_SERVICE_NAME}' -n 80 --no-pager
+    echo
+    sudo journalctl -u '${REMOTE_CELERY_BEAT_SERVICE_NAME}' -n 80 --no-pager
   "
 }
 

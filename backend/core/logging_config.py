@@ -19,7 +19,6 @@ MOBILE_DEBUG_LOGGER_NAME = "sparkflow.mobile_debug"
 _NOISY_LOGGER_LEVELS = {
     "httpx": logging.WARNING,
     "httpcore": logging.WARNING,
-    "apscheduler": logging.WARNING,
     "sqlalchemy.engine": logging.WARNING,
 }
 

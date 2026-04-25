@@ -54,7 +54,7 @@ bash ../scripts/rabbitmq-local.sh start
 - If you only need to boot the backend, open the app shell, or debug non-AI pages locally, you may temporarily set `DASHSCOPE_API_KEY=test-dashscope-key`.
 - AI generation, transcription, embeddings, and other DashScope-backed flows still require a real key.
 
-4. Run migrations, then start worker and server in two terminals:
+4. Run migrations, then start worker, beat, and server in three terminals:
 
 ```bash
 APP_ENV=development .venv/bin/alembic upgrade heads
@@ -69,13 +69,20 @@ APP_ENV=development CELERY_RESULT_BACKEND=rpc:// ../scripts/celery-worker.sh
 Terminal B:
 
 ```bash
+APP_ENV=development CELERY_RESULT_BACKEND=rpc:// ../scripts/celery-beat.sh
+```
+
+Terminal C:
+
+```bash
 APP_ENV=development CELERY_RESULT_BACKEND=rpc:// .venv/bin/uvicorn main:app --reload --no-access-log
 ```
 
-也可以不使用 helper，手动执行 worker：
+也可以不使用 helper，手动执行 worker / beat：
 
 ```bash
 APP_ENV=development CELERY_RESULT_BACKEND=rpc:// CELERY_TASK_ALWAYS_EAGER=false .venv/bin/celery -A celery_app:celery_app worker -Q transcription,fragment-derivative,document-import,script-generation,knowledge-processing,daily-push,default --pool=solo --concurrency=1 --loglevel=INFO
+APP_ENV=development CELERY_RESULT_BACKEND=rpc:// CELERY_TASK_ALWAYS_EAGER=false .venv/bin/celery -A celery_app:celery_app beat --schedule=runtime/celerybeat-schedule --loglevel=INFO
 ```
 
 如果你是从仓库根目录首次拉起整套移动端联调环境，建议先完成以下依赖引导，再运行 `bash scripts/dev-mobile.sh`：
@@ -126,11 +133,12 @@ Default local address: `http://127.0.0.1:8000`
 - 通过 `bash scripts/deploy-backend-aliyun.sh deploy` 复用 `ssh aliyun` + `rsync` 发布后端
 - 以 `systemd` 启动单个 `uvicorn` 进程：`--workers 1`
 - 异步任务由独立 Celery worker 消费 RabbitMQ，不在 API 进程内执行
+- 每日推盘与写作上下文维护由独立 Celery beat 发布周期任务，再交给 worker 消费
 - 远端环境变量默认放在 `/home/ycza/.config/sparkflow/backend.env`
 - 远端用户可直接执行 `sparkflow-backend-restart` 或 `sfrestart` 重启服务并查看状态
 - `nginx` 在同域名下转发 `/api/*` 与 `/uploads/*`
 - PostgreSQL、Chroma 和本地上传目录都与应用同机部署
-- 因为 API 进程仍负责 APScheduler，当前不允许额外再开第二个 API worker；如需扩展后台吞吐，扩容 Celery worker
+- API 进程不再负责周期调度；如需扩展后台吞吐，扩容 Celery worker，但 Celery beat 仍保持单实例
 
 移动端出包约定：
 
@@ -369,7 +377,7 @@ bash scripts/postgres-local.sh logs
 bash scripts/postgres-local.sh stop
 ```
 
-本地 RabbitMQ / Celery worker 相关命令：
+本地 RabbitMQ / Celery worker / Celery beat 相关命令：
 
 ```bash
 bash scripts/rabbitmq-local.sh start
@@ -377,12 +385,13 @@ bash scripts/rabbitmq-local.sh status
 bash scripts/rabbitmq-local.sh logs
 bash scripts/rabbitmq-local.sh stop
 bash scripts/celery-worker.sh
+bash scripts/celery-beat.sh
 ```
 
 脚本行为约定：
 
 - `bash scripts/dev-mobile.sh` 会在 Alembic 之前自动确保本机 PostgreSQL 可用并补齐默认开发库
-- `bash scripts/dev-mobile.sh` 会自动确保本机 RabbitMQ 可用，并启动独立 Celery worker；本地默认使用 `CELERY_RESULT_BACKEND=rpc://`，避免额外依赖 Redis
+- `bash scripts/dev-mobile.sh` 会自动确保本机 RabbitMQ 可用，并启动独立 Celery worker 与 Celery beat；本地默认使用 `CELERY_RESULT_BACKEND=rpc://`，避免额外依赖 Redis
 - `bash scripts/test-all.sh` 会在 pytest 之前自动确保 `sparkflow_test` 可用
 - 开发库是否跳过本机默认库初始化由 `DATABASE_URL` 控制；测试库是否跳过本机默认库初始化只由 `TEST_DATABASE_URL` 控制
 

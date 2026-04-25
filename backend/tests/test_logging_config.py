@@ -133,7 +133,7 @@ def test_third_party_info_logs_are_quiet_on_console(tmp_path, monkeypatch, capsy
 
     configure_logging()
     logging.getLogger("httpx").info("httpx_noise")
-    logging.getLogger("apscheduler.scheduler").info("apscheduler_noise")
+    logging.getLogger("celery.worker").info("celery_noise")
     app_logger = get_logger("tests.console")
     app_logger.warning("app_warning_visible")
     app_logger.error("app_error_visible")
@@ -141,7 +141,7 @@ def test_third_party_info_logs_are_quiet_on_console(tmp_path, monkeypatch, capsy
 
     captured = capsys.readouterr()
     assert "httpx_noise" not in captured.out + captured.err
-    assert "apscheduler_noise" not in captured.out + captured.err
+    assert "celery_noise" not in captured.out + captured.err
     assert "app_warning_visible" in captured.out
     assert "app_error_visible" in captured.err
 

@@ -6,6 +6,9 @@ import asyncio
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 
+from modules.scripts.application import DailyPushUseCase
+from modules.scripts.daily_push_task import build_daily_push_task_service
+
 import pytest
 pytestmark = pytest.mark.integration
 
@@ -207,7 +210,11 @@ async def test_scheduler_daily_push_job_enqueues_task(async_client, auth_headers
             "tags": [],
         }
 
-    result = await app.state.scheduler_service.run_job()
+    use_case = DailyPushUseCase(
+        task_service=build_daily_push_task_service(app.state.container),
+    )
+    with app.state.container.session_factory() as db:
+        result = await use_case.run_daily_job(db=db)
     assert result["queued_runs"]
 
     task = await _wait_task(async_client, auth_headers_factory, result["run_ids"][0])
@@ -255,5 +262,9 @@ async def test_scheduler_daily_push_ignores_fragment_rows_without_backups(
             }
         ],
     )
-    result = await app.state.scheduler_service.run_job()
+    use_case = DailyPushUseCase(
+        task_service=build_daily_push_task_service(app.state.container),
+    )
+    with app.state.container.session_factory() as db:
+        result = await use_case.run_daily_job(db=db)
     assert result["queued_runs"] == 0

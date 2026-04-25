@@ -24,6 +24,7 @@
     "dev:queue:status": "bash scripts/rabbitmq-local.sh status",
     "dev:queue:logs": "bash scripts/rabbitmq-local.sh logs",
     "dev:worker": "bash scripts/celery-worker.sh",
+    "dev:beat": "bash scripts/celery-beat.sh",
     "dev:dify": "bash scripts/dify-local.sh start",
     "dev:dify:install": "bash scripts/dify-local.sh install",
     "dev:dify:stop": "bash scripts/dify-local.sh stop",
