@@ -39,11 +39,11 @@ If the change also updates repository conventions, development workflow, or agen
 - `backend/`: FastAPI backend
 - `mobile/`: Expo mobile app
 - `scripts/dev-mobile.sh`: recommended local development entrypoint
-- `scripts/mobile-release.sh`: recommended mobile EAS build / submit entrypoint
 - `scripts/postgres-local.sh`: local PostgreSQL bootstrap, status, and logs helper
-- `scripts/test-all.sh`: full repository test entrypoint
-- `scripts/dify-local.sh`: local self-hosted Dify helper kept for experimental workflow debugging
-- `scripts/deploy-backend-aliyun.sh`: backend deployment helper for the current Aliyun production path
+- `scripts/rabbitmq-local.sh`: local RabbitMQ bootstrap, status, and logs helper
+- `scripts/celery-worker.sh`: local Celery worker entrypoint used by `dev-mobile.sh`
+- `scripts/celery-beat.sh`: local Celery beat entrypoint used by `dev-mobile.sh`
+- `scripts/guard-root-install.mjs`: root npm install guard
 - `memory-bank/`: product and architecture context
 - `CLAUDE.md`: existing Claude-oriented project instructions
 
@@ -114,20 +114,22 @@ This starts:
 Equivalent npm aliases:
 
 ```bash
-npm run dev:mobile
-npm run dev:mobile:start
+npm run dev
+npm run simulator
+npm run ios:build
+npm run ios:install
 ```
 
 Important install guard:
 
-- Do not run `npm install` or `npm ci` at the repository root. Root `package.json` only exists to expose helper scripts.
+- Do not run `npm install` or `npm ci` at the repository root. Root `package.json` only exposes the four daily npm aliases above plus the install guard.
 - Install mobile dependencies only inside `mobile/`: `cd mobile && npm install`
 - The repository root now has a `preinstall` guard and will fail fast unless `ALLOW_ROOT_NPM_INSTALL=1` is explicitly set.
 
 Additional local modes:
 
 ```bash
-npm run dev:mobile:simulator
+npm run simulator
 ```
 
 Manual database operations:
@@ -141,10 +143,10 @@ bash scripts/postgres-local.sh logs
 Manual RabbitMQ / worker operations:
 
 ```bash
-npm run dev:queue
-npm run dev:queue:status
-npm run dev:worker
-npm run dev:beat
+bash scripts/rabbitmq-local.sh start
+bash scripts/rabbitmq-local.sh status
+bash scripts/celery-worker.sh
+bash scripts/celery-beat.sh
 ```
 
 ### When native mobile changes are involved
@@ -220,13 +222,17 @@ Run migrations with:
 .venv/bin/alembic upgrade heads
 ```
 
-Run full repository tests from root with:
+Run backend and mobile state tests separately:
 
 ```bash
-bash scripts/test-all.sh
+bash scripts/postgres-local.sh start test
+cd backend
+.venv/bin/pytest
+cd ../mobile
+npm run test:state
 ```
 
-This script automatically ensures the local PostgreSQL test database is ready unless `TEST_DATABASE_URL` has been explicitly overridden.
+Start the local PostgreSQL test database first unless `TEST_DATABASE_URL` has been explicitly overridden.
 
 ## Mobile/Backend Networking Notes
 
@@ -255,7 +261,7 @@ http://<your-lan-ip>:8000
 - When adding new mobile entities that need remote persistence, integrate with `/api/backups/*` and local `entity_version` / `backup_status` first; do not default to “create a backend business row first”
 - Reuse existing scripts and utilities before adding new entrypoints
 - Before implementing new logic, first check whether the repository already has an equivalent service, hook, helper, abstraction, or workflow that should be reused; for non-trivial domain logic, also evaluate mature open-source libraries before writing a custom implementation
-- Reuse `scripts/mobile-release.sh` and the existing npm aliases for mobile build / submission flows instead of duplicating EAS profile names, platform flags, or `APP_ENV` mappings in new docs or scripts
+- Keep root scripts minimal: `dev-mobile.sh` is the only user-facing workflow script, and the remaining root scripts are service helpers used by local development. Do not add new wrapper scripts unless the workflow is used often enough to justify another maintained entrypoint.
 - Environment configuration is intentionally limited to `development` and `production`: the backend uses `APP_ENV + .env/.env.<env>`, and the mobile app uses Expo runtime config; do not leak fixed LAN addresses, debug-only entrypoints, or manual network overrides into production behavior
 - The mobile app only targets iOS and Android native builds. Do not add Expo Web-specific scripts, dependencies, or browser-only compatibility work unless the product scope changes explicitly.
 - If a change alters product behavior, user-facing flows, API contracts, operational steps, or development workflow, you must update the corresponding documentation in the same pass. Before editing docs, scan the existing Markdown files in the relevant area such as root docs, `memory-bank/`, and feature-level `README.md` files so the change lands in the right source of truth instead of creating drift or duplicate guidance

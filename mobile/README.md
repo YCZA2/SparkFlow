@@ -142,7 +142,7 @@ bash scripts/dev-mobile.sh start
 也可以用 npm 别名：
 
 ```bash
-npm run dev:mobile
+npm run dev
 ```
 
 首次在新机器启动前，建议先完成依赖引导：
@@ -157,7 +157,7 @@ cd mobile && npm install
 
 补充约定：
 
-- 不要在仓库根目录执行 `npm install` 或 `npm ci`；根目录只保留联调 / 发布脚本入口。
+- 不要在仓库根目录执行 `npm install` 或 `npm ci`；根目录 npm scripts 只保留 `dev`、`simulator`、`ios:build`、`ios:install` 四个常用入口。
 - 需要安装移动端依赖时，请进入 `mobile/` 执行：`cd mobile && npm install`
 - 仓库根目录现在带有安装保护；如误在根目录执行安装，会直接失败并提示正确路径。
 - `mobile/app.config.ts` 和 Expo config plugins 是移动端原生配置真值；本地 `mobile/ios`、`mobile/android` 只是按需重建的生成目录，并且已被 `mobile/.gitignore` 忽略。
@@ -167,7 +167,7 @@ cd mobile && npm install
 如果你要用 iOS 模拟器而不是真机，请执行：
 
 ```bash
-npm run dev:mobile:simulator
+npm run simulator
 ```
 
 这个模式会先启动 Metro，再由脚本手动唤起已安装的 iOS dev client，
@@ -177,8 +177,8 @@ npm run dev:mobile:simulator
 如需单独管理本地数据库：
 
 ```bash
-npm run dev:db
-npm run dev:db:status
+bash scripts/postgres-local.sh start all
+bash scripts/postgres-local.sh status
 ```
 
 ### 模式2：需要 Build 的修改
@@ -212,7 +212,7 @@ bash scripts/dev-mobile.sh build device
 也可以用 npm 别名：
 
 ```bash
-npm run dev:mobile:build
+npm run ios:build
 ```
 
 这个模式只做重建相关步骤，不会启动前后端。
@@ -248,7 +248,7 @@ bash scripts/dev-mobile.sh install
 也可以用 npm 别名：
 
 ```bash
-npm run dev:mobile:install
+npm run ios:install
 ```
 
 这个模式会自动复用 DerivedData 里最近一次构建的 `SparkFlowDev.app`，
@@ -277,23 +277,25 @@ npx expo run:ios --device      # 选择 device 时
 
 ## 发布命令
 
-现在推荐统一走根目录发布脚本，不再手动记忆 EAS profile：
+移动端发布从 `mobile/` 目录直接走现有 EAS npm scripts：
 
 ```bash
-npm run release:mobile:dev:ios
-npm run release:mobile:dev:android
-npm run release:mobile:prod:ios
-npm run release:mobile:prod:android
-npm run release:mobile:submit:ios
-npm run release:mobile:submit:android
+cd mobile
+npm run build:dev:ios
+npm run build:dev:android
+npm run build:prod:ios
+npm run build:prod:android
+npm run submit:prod:ios
+npm run submit:prod:android
 ```
 
-等价底层脚本：
+常用非交互示例：
 
 ```bash
-bash scripts/mobile-release.sh build dev ios
-bash scripts/mobile-release.sh build prod android --non-interactive
-bash scripts/mobile-release.sh submit prod ios --latest
+cd mobile
+APP_ENV=development npx eas build --platform ios --profile development:device
+APP_ENV=production npx eas build --platform android --profile production --non-interactive
+APP_ENV=production npx eas submit --platform ios --profile production --latest
 ```
 
 约定：
@@ -543,7 +545,8 @@ npx tsc --noEmit
 全仓测试：
 
 ```bash
-bash scripts/test-all.sh
+cd backend && .venv/bin/pytest
+cd ../mobile && npm run test:state
 ```
 
 这样以后真机红屏或接口报错，不需要再手动复制大段报错文本。
@@ -572,12 +575,12 @@ brew install postgresql@16
 brew services start postgresql@16
 ```
 
-后台任务还依赖本机 RabbitMQ；整套联调推荐直接运行 `npm run dev:mobile`，脚本会自动启动 RabbitMQ、Celery worker 和 Celery beat。若需要单独检查：
+后台任务还依赖本机 RabbitMQ；整套联调推荐直接运行 `npm run dev`，脚本会自动启动 RabbitMQ、Celery worker 和 Celery beat。若需要单独检查：
 
 ```bash
-npm run dev:queue:status
-npm run dev:worker
-npm run dev:beat
+bash scripts/rabbitmq-local.sh status
+bash scripts/celery-worker.sh
+bash scripts/celery-beat.sh
 ```
 
 当后端有 Alembic 新迁移（例如新增字段）时，先执行：

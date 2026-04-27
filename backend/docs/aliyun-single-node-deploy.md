@@ -46,12 +46,6 @@ rsync -az --delete \
   backend/ aliyun:/home/ycza/apps/sparkflow/backend/
 ```
 
-如果希望复用仓库脚本，也可以直接执行：
-
-```bash
-bash scripts/deploy-backend-aliyun.sh sync
-```
-
 ## 生产环境变量
 
 推荐把生产环境变量放在远端外置文件 `/home/ycza/.config/sparkflow/backend.env`，避免 `rsync --delete` 覆盖，也避免项目目录残留 `.env` 干扰生产配置。
@@ -219,12 +213,6 @@ sudo journalctl -u sparkflow-celery-worker -n 200 --no-pager
 sudo journalctl -u sparkflow-celery-beat -n 200 --no-pager
 ```
 
-仓库内也提供了一个发布脚本，默认会按同样口径执行同步、装依赖、迁移、重启和健康检查：
-
-```bash
-bash scripts/deploy-backend-aliyun.sh deploy
-```
-
 如果只是在服务器上改了配置或想手动拉起服务，当前远端已经放了两个重启命令：
 
 ```bash
@@ -232,7 +220,7 @@ sparkflow-backend-restart
 sfrestart
 ```
 
-它们应与仓库发布脚本保持一致，重启 `sparkflow-backend`、`sparkflow-celery-worker` 和 `sparkflow-celery-beat`，然后直接打印最近的服务状态。
+它们应重启 `sparkflow-backend`、`sparkflow-celery-worker` 和 `sparkflow-celery-beat`，然后直接打印最近的服务状态。
 
 ## nginx 反代
 

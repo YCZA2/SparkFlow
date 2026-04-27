@@ -182,13 +182,15 @@ bash scripts/dev-mobile.sh
 可用 npm 别名：
 
 ```bash
-npm run dev:mobile
-npm run dev:mobile:start
+npm run dev
+npm run simulator
+npm run ios:build
+npm run ios:install
 ```
 
 安装约束：
 
-- 根目录 `package.json` 只承载仓库级脚本，不承载 Expo 依赖。
+- 根目录 `package.json` 只承载 `dev`、`simulator`、`ios:build`、`ios:install` 四个常用入口和安装保护，不承载 Expo 依赖。
 - 不要在仓库根目录执行 `npm install` 或 `npm ci`。
 - 需要安装移动端依赖时，只在 `mobile/` 下执行：`cd mobile && npm install`
 - 仓库根目录现已添加 `preinstall` 保护；误执行时会直接失败并提示正确路径。
@@ -234,7 +236,8 @@ npm run test:state
 全仓：
 
 ```bash
-bash scripts/test-all.sh
+cd backend && .venv/bin/pytest
+cd ../mobile && npm run test:state
 ```
 
 ## 7. Networking Conventions

@@ -130,7 +130,7 @@ Default local address: `http://127.0.0.1:8000`
 
 当前生产口径：
 
-- 通过 `bash scripts/deploy-backend-aliyun.sh deploy` 复用 `ssh aliyun` + `rsync` 发布后端
+- 通过 `ssh aliyun` + `rsync` 同步后端，并在远端执行依赖安装、迁移、服务重启与健康检查
 - 以 `systemd` 启动单个 `uvicorn` 进程：`--workers 1`
 - 异步任务由独立 Celery worker 消费 RabbitMQ，不在 API 进程内执行
 - 每日推盘与写作上下文维护由独立 Celery beat 发布周期任务，再交给 worker 消费
@@ -142,9 +142,8 @@ Default local address: `http://127.0.0.1:8000`
 
 移动端出包约定：
 
-- 根目录使用 `bash scripts/mobile-release.sh build dev|prod ios|android`
-- App Store / Play 提交使用 `bash scripts/mobile-release.sh submit prod ios|android`
-- 上述脚本会和 `mobile/eas.json` 保持同一套 `APP_ENV` 映射，避免 profile 与运行时环境不一致
+- 从 `mobile/` 目录使用现有 EAS npm scripts，例如 `npm run build:prod:ios` / `npm run submit:prod:ios`
+- `mobile/package.json` 中的脚本会和 `mobile/eas.json` 保持同一套 `APP_ENV` 映射，避免 profile 与运行时环境不一致
 
 默认数据库：
 
@@ -152,11 +151,10 @@ Default local address: `http://127.0.0.1:8000`
 - 测试库：`sparkflow_test`
 - 默认连接串仍是 `postgresql+psycopg://sparkflow:sparkflow@127.0.0.1:5432/...`
 
-也可以直接使用根目录脚本让数据库随联调 / 测试自动启动：
+也可以直接使用根目录联调脚本让数据库随服务自动启动：
 
 ```bash
 bash scripts/dev-mobile.sh
-bash scripts/test-all.sh
 ```
 
 正式产品登录当前走：
@@ -392,7 +390,6 @@ bash scripts/celery-beat.sh
 
 - `bash scripts/dev-mobile.sh` 会在 Alembic 之前自动确保本机 PostgreSQL 可用并补齐默认开发库
 - `bash scripts/dev-mobile.sh` 会自动确保本机 RabbitMQ 可用，并启动独立 Celery worker 与 Celery beat；本地默认使用 `CELERY_RESULT_BACKEND=rpc://`，避免额外依赖 Redis
-- `bash scripts/test-all.sh` 会在 pytest 之前自动确保 `sparkflow_test` 可用
 - 开发库是否跳过本机默认库初始化由 `DATABASE_URL` 控制；测试库是否跳过本机默认库初始化只由 `TEST_DATABASE_URL` 控制
 
 任务与工作流相关接口：
@@ -519,10 +516,13 @@ cd backend
 .venv/bin/pytest
 ```
 
-Run the full repository test suite from root with:
+Run backend and mobile state tests separately:
 
 ```bash
-bash scripts/test-all.sh
+cd backend
+.venv/bin/pytest
+cd ../mobile
+npm run test:state
 ```
 
 OpenAPI contract smoke tests are driven by `Schemathesis`:

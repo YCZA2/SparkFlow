@@ -71,7 +71,7 @@ flowchart LR
 - `backend/`: FastAPI 后端，业务入口已经收敛到 `modules/*`。
 - `scripts/dev-mobile.sh`: 推荐本地联调入口，同时启动后端与 Expo。
 - `scripts/postgres-local.sh`: 本机 PostgreSQL 服务检查与默认库初始化脚本，默认负责补齐 `sparkflow` / `sparkflow_test`。
-- `scripts/dify-local.sh`: 本地自托管 Dify 启停脚本，当前主要保留给实验性外挂工作流联调。
+- `scripts/rabbitmq-local.sh`、`scripts/celery-worker.sh`、`scripts/celery-beat.sh`: 本地异步任务运行依赖，由 `dev-mobile.sh` 统一编排。
 - `memory-bank/`: 产品、架构、进度与实施记录。
 
 ## 3. Mobile Architecture

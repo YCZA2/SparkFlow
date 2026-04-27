@@ -45,7 +45,7 @@ bash scripts/dev-mobile.sh build     # Rebuild iOS native (after native config c
 bash scripts/dev-mobile.sh install   # Retry device install with existing .app only
 ```
 
-Equivalent npm aliases: `npm run dev:mobile`, `npm run dev:mobile:simulator`, `npm run dev:mobile:install`.
+Equivalent npm aliases: `npm run dev`, `npm run simulator`, `npm run ios:build`, `npm run ios:install`.
 
 ### Backend Only
 
@@ -67,8 +67,9 @@ bash ../scripts/postgres-local.sh start dev   # start local PostgreSQL (Homebrew
 
 ```bash
 # Full suite (backend + mobile)
-bash scripts/test-all.sh       # auto-starts local PostgreSQL test DB unless TEST_DATABASE_URL is set
-npm run test:all
+bash scripts/postgres-local.sh start test
+cd backend && .venv/bin/pytest
+cd ../mobile && npm run test:state
 
 # Backend only
 cd backend
@@ -159,7 +160,5 @@ Full schema in `memory-bank/tech-stack.md`.
 - **`+` button semantics**: opens the import drawer; extend the drawer for new import sources rather than changing the button to a direct navigation
 
 ## Environment Constraints
-
-**Check environment**: \`bash scripts/check-env.sh\`
 
 - **vps**: 1GB RAM lightweight environment — no installs/servers
