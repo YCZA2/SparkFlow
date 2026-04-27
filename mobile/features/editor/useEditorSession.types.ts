@@ -56,6 +56,7 @@ export interface EditorSessionResult<TDocument = any> {
   statusLabel: string | null;
   isUploadingImage: boolean;
   saveNow: (options?: { force?: boolean }) => Promise<void>;
+  finishEditing: () => Promise<void>;
   onEditorFocus: () => void;
   onEditorBlur: () => void;
   onEditorReady: () => void;

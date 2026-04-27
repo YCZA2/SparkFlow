@@ -25,8 +25,7 @@ export function useScriptDetailScreen(scriptId?: string | null) {
   const exitScreen = useCallback(async () => {
     /*离开脚本详情前先把本地真值固化，再标记列表需要刷新。 */
     try {
-      editor.editorRef.current?.blur?.();
-      await editor.saveNow({ force: true });
+      await editor.finishEditing();
       markScriptsStale();
       router.back();
     } catch (error) {
@@ -49,8 +48,7 @@ export function useScriptDetailScreen(scriptId?: string | null) {
   const done = useCallback(async () => {
     /*右上角对勾只负责显式保存并收起键盘，保留当前成稿页继续编辑。 */
     try {
-      editor.editorRef.current?.blur?.();
-      await editor.saveNow({ force: true });
+      await editor.finishEditing();
       markScriptsStale();
     } catch (error) {
       Alert.alert('保存失败', error instanceof Error ? error.message : '保存失败，请重试');

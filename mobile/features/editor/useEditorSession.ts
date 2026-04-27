@@ -68,6 +68,7 @@ export function useEditorSession<TDocument>(
   const [formattingState, setFormattingState] = useState<EditorFormattingState | null>(null);
   // 选区文本存 ref 供未来 AI 功能使用，不写入 reducer 避免光标移动触发 state 更新
   const selectionRef = useRef<string>('');
+  const skipNextBlurSaveRef = useRef(false);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const refs = useEditorSessionRuntimeRefs({
     state,
@@ -130,15 +131,30 @@ export function useEditorSession<TDocument>(
 
   const onEditorFocus = useCallback(() => {
     /*编辑器聚焦时上报编辑态，供页面按 iOS 备忘录语义切换顶部操作按钮。 */
+    skipNextBlurSaveRef.current = false;
     setIsEditorFocused(true);
   }, []);
 
   const onEditorBlur = useCallback(() => {
     setIsEditorFocused(false);
+    if (skipNextBlurSaveRef.current) {
+      skipNextBlurSaveRef.current = false;
+      return;
+    }
     if (shouldSaveOnBlur) {
       void saveNow().catch(() => undefined);
     }
   }, [saveNow, shouldSaveOnBlur]);
+
+  const finishEditing = useCallback(async () => {
+    /*显式完成编辑时先保存聚焦态快照，再收起键盘，避免 blur 改写段落样式后被二次保存。 */
+    await saveNow({ force: true });
+    const blur = refs.editorRef.current?.blur;
+    if (typeof blur === 'function') {
+      skipNextBlurSaveRef.current = true;
+      blur();
+    }
+  }, [refs.editorRef, saveNow]);
 
   const shouldAutoFocus = determineAutoFocus
     ? determineAutoFocus(state.snapshot, document)
@@ -154,7 +170,7 @@ export function useEditorSession<TDocument>(
     return null;
   })();
 
-  /*给原生富文本桥接一个稳定初始值，只在 hydrate / 保存落盘后再更新，避免输入中回灌正文。 */
+  /*给原生富文本桥接当前基线；原生层按 editorKey 固定初始值，避免保存后重灌正文。 */
   const initialBodyHtml = state.baseline?.snapshot.body_html ?? state.snapshot.body_html;
 
   return {
@@ -169,6 +185,7 @@ export function useEditorSession<TDocument>(
     statusLabel,
     isUploadingImage,
     saveNow,
+    finishEditing,
     onEditorFocus,
     onEditorBlur,
     onEditorReady,

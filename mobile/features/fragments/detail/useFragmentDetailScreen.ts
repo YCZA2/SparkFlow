@@ -154,8 +154,7 @@ export function useFragmentDetailScreen(
   const done = async () => {
     /*右上角对勾只负责显式保存并收起键盘，保留当前详情页继续编辑。 */
     try {
-      editor.editorRef.current?.blur?.();
-      await editor.saveNow({ force: true });
+      await editor.finishEditing();
       markFragmentsStale();
     } catch {
       Alert.alert('本地保存失败', '请稍后重试，当前页会继续保留输入内容。');

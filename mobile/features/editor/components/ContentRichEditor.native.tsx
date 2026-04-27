@@ -78,9 +78,11 @@ function replaceDisplayUrlsWithAssetIds(html: string, mediaAssets: EditorMediaAs
 
 function buildSnapshotFromHtml(html: string, mediaAssets: EditorMediaAsset[]): EditorDocumentSnapshot {
   /*把编辑器输出规整成 HTML-first 快照，供会话层和同步链路消费。 */
-  const persistedHtml = replaceDisplayUrlsWithAssetIds(
-    unwrapHtmlFromNativeEditor(html),
-    mediaAssets
+  const persistedHtml = ensureFirstLineIsTitle(
+    replaceDisplayUrlsWithAssetIds(
+      unwrapHtmlFromNativeEditor(html),
+      mediaAssets
+    )
   );
   return {
     body_html: persistedHtml,
@@ -157,9 +159,7 @@ export function ContentRichEditor({
   const theme = useAppTheme();
   const nativeRef = React.useRef<EnrichedTextInputInstance | null>(null);
   const editorBackground = theme.name === 'dark' ? '#111113' : '#F2F2F7';
-  // useMemo 保证切换会话时新 EnrichedTextInput 挂载时能同步拿到正确 defaultValue，
-  // 同时避免 useState+effect 的异步更新产生的额外 re-render。
-  const seededEditorHtml = React.useMemo(
+  const computedSeededEditorHtml = React.useMemo(
     () =>
       wrapHtmlForNativeEditor(
         ensureFirstLineIsTitle(
@@ -168,6 +168,15 @@ export function ContentRichEditor({
       ),
     [initialBodyHtml, mediaAssets]
   );
+  const seededEditorHtmlRef = React.useRef<{ editorKey: string; html: string } | null>(null);
+  if (!seededEditorHtmlRef.current || seededEditorHtmlRef.current.editorKey !== editorKey) {
+    /*原生输入框是 uncontrolled，同一文档保存后不重灌 defaultValue，避免标题段落被原生桥重新解析漂移。 */
+    seededEditorHtmlRef.current = {
+      editorKey,
+      html: computedSeededEditorHtml,
+    };
+  }
+  const seededEditorHtml = seededEditorHtmlRef.current.html;
   const htmlStyle = React.useMemo(
     () => ({
       h1: {
@@ -178,7 +187,7 @@ export function ContentRichEditor({
     []
   );
   const latestSnapshotRef = React.useRef<EditorDocumentSnapshot>({
-    body_html: normalizeBodyHtml(initialBodyHtml),
+    body_html: ensureFirstLineIsTitle(initialBodyHtml),
     plain_text: extractPlainTextFromHtml(initialBodyHtml),
     asset_ids: extractAssetIdsFromHtml(initialBodyHtml),
   });
@@ -263,9 +272,9 @@ export function ContentRichEditor({
   );
 
   React.useEffect(() => {
-    /*会话或初始内容变化时同步更新 latestSnapshotRef，保证显式保存前 getSnapshot 返回正确基准值。 */
+    /*切换编辑会话时同步 latestSnapshotRef，保证显式保存前 getSnapshot 返回正确基准值。 */
     latestSnapshotRef.current = buildSnapshotFromHtml(seededEditorHtml, mediaAssets);
-  }, [seededEditorHtml, mediaAssets]);
+  }, [editorKey, seededEditorHtml]);
 
   React.useEffect(() => {
     /*桥接挂载后立即通知会话层进入可交互态。
@@ -273,11 +282,11 @@ export function ContentRichEditor({
     onEditorReady();
 
     // 初始内容为空时自动进入 H1 输入模式，实现"首行即标题"
-    if (!normalizeBodyHtml(initialBodyHtml)) {
+    if (!normalizeBodyHtml(unwrapHtmlFromNativeEditor(seededEditorHtml))) {
       // 延迟调用确保原生层已完全初始化
       setTimeout(() => nativeRef.current?.toggleH1(), 50);
     }
-  }, [editorKey, onEditorReady, initialBodyHtml]);
+  }, [editorKey, onEditorReady, seededEditorHtml]);
 
   React.useEffect(() => {
     return () => {
