@@ -1,6 +1,6 @@
 import { setDatabaseWorkspace } from '@/features/core/db/database';
 import { setFileRuntimeWorkspace } from '@/features/core/files/runtime';
-import { clearWorkspaceQueryCache } from '@/features/core/query/workspace';
+import { clearWorkspaceQueryCache } from '@/features/core/query/cache';
 import { resetFragmentStoreRuntime } from '@/features/fragments/store';
 import { resetScriptStoreRuntime } from '@/features/scripts/store';
 

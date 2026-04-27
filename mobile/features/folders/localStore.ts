@@ -1,6 +1,6 @@
 import { and, count, desc, eq, isNull } from 'drizzle-orm';
 
-import { invalidateFolderQueries } from '@/features/folders/queries';
+import { invalidateFolderQueries } from '@/features/folders/queryCache';
 import { getLocalDatabase } from '@/features/core/db/database';
 import { fragmentFoldersTable, fragmentsTable } from '@/features/core/db/schema';
 import type { FragmentFolder } from '@/types/folder';

@@ -16,7 +16,7 @@ import {
   stagePendingImage,
 } from './shared';
 import { resolveFragmentEntityUpdate, type FragmentEntityPatch } from './updateState';
-import { invalidateFragmentQueries } from '../queries';
+import { invalidateFragmentQueries } from '../queryCache';
 
 export async function createLocalFragmentEntity(input: {
   folderId?: string | null;

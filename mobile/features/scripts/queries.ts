@@ -5,9 +5,13 @@ import {
   getCurrentWorkspaceQueryScope,
   useWorkspaceQueryScope,
 } from '@/features/core/query/workspace';
-import { appQueryClient } from '@/features/tasks/queryClient';
 import type { Script } from '@/types/script';
 
+import {
+  clearScriptQueryCache,
+  invalidateScriptQueries,
+  setScriptDetailQueryData as setScriptDetailQueryCacheData,
+} from './queryCache';
 import { ensureScriptStoreReady, listLocalScriptEntities, readLocalScriptEntity } from './store';
 
 function resolveScriptListCacheKey(sourceFragmentId?: string | null, includeTrashed?: boolean): string {
@@ -39,19 +43,11 @@ export function buildScriptDetailQueryKey(scriptId: string) {
   return [...buildScriptQueryPrefix(), 'detail', scriptId] as const;
 }
 
-export function clearScriptQueryCache(): void {
-  /*删除 script 相关缓存，让恢复与切号后重新按本地真值读取。 */
-  appQueryClient.removeQueries({ queryKey: buildScriptQueryPrefix() });
-}
-
-export async function invalidateScriptQueries(): Promise<void> {
-  /*script 真值变化后统一失效列表、详情和下游统计查询。 */
-  await appQueryClient.invalidateQueries({ queryKey: buildScriptQueryPrefix() });
-}
+export { clearScriptQueryCache, invalidateScriptQueries };
 
 export function setScriptDetailQueryData(script: Script): void {
   /*编辑器乐观提交时直接覆盖当前成稿详情 query，避免保存后正文回跳。 */
-  appQueryClient.setQueryData(buildScriptDetailQueryKey(script.id), script);
+  setScriptDetailQueryCacheData(buildScriptDetailQueryKey(script.id), script);
 }
 
 export function useLocalScriptListQuery(options?: {

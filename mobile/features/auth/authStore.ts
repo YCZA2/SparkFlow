@@ -17,7 +17,7 @@ import {
 } from '@/features/auth/api';
 import { getDeviceSessionInvalidReason } from '@/features/auth/deviceSession';
 import { activateUserWorkspace } from '@/features/auth/workspace';
-import { getToken } from '@/features/core/api/client';
+import { ApiError, getToken } from '@/features/core/api/client';
 import { getErrorMessage } from '@/utils/error';
 
 export interface AuthState {
@@ -40,6 +40,19 @@ export interface AuthActions {
 }
 
 export type AuthStore = AuthState & AuthActions;
+
+function isTerminalAuthBootstrapError(error: unknown): boolean {
+  /*识别明确的认证失效错误，避免 401 后又用旧缓存把用户拉回工作区。 */
+  return (
+    error instanceof ApiError &&
+    [
+      'AUTH_REQUIRED',
+      'AUTH_REFRESH_FAILED',
+      'AUTHENTICATION',
+      'DEVICE_SESSION_INVALID',
+    ].includes(error.code)
+  );
+}
 
 export const useAuthStore = create<AuthStore>()((set, get) => ({
   /*初始状态*/
@@ -120,7 +133,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         try {
           user = (await hydrateAuthenticatedWorkspace()) ?? storedUser;
         } catch (err) {
-          if (!storedUser) {
+          if (!storedUser || isTerminalAuthBootstrapError(err)) {
             throw err;
           }
           await activateUserWorkspace(storedUser.user_id);

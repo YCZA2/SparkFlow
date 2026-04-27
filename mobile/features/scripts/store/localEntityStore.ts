@@ -6,7 +6,7 @@ import { extractPlainTextFromHtml, normalizeBodyHtml } from '@/features/editor/h
 import { scriptsTable } from '@/features/core/db/schema';
 import type { Script, ScriptCopyReason } from '@/types/script';
 
-import { invalidateScriptQueries } from '../queries';
+import { invalidateScriptQueries } from '../queryCache';
 import {
   buildLocalScriptInsertRow,
   buildScriptCopyTitle,

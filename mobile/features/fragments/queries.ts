@@ -5,13 +5,17 @@ import {
   getCurrentWorkspaceQueryScope,
   useWorkspaceQueryScope,
 } from '@/features/core/query/workspace';
-import { appQueryClient } from '@/features/tasks/queryClient';
 import type {
   Fragment,
   FragmentVisualizationResponse,
 } from '@/types/fragment';
 
 import { fetchFragmentVisualization } from './api';
+import {
+  clearFragmentQueryCache,
+  invalidateFragmentQueries,
+  setFragmentDetailQueryData as setFragmentDetailQueryCacheData,
+} from './queryCache';
 import { ensureFragmentStoreReady, listLocalFragmentEntities, readLocalFragmentEntity } from './store';
 
 export function buildFragmentQueryPrefix() {
@@ -39,19 +43,11 @@ export function buildFragmentVisualizationQueryKey() {
   return [...buildFragmentQueryPrefix(), 'visualization'] as const;
 }
 
-export function clearFragmentQueryCache(): void {
-  /*删除 fragment 相关缓存，让恢复或切号后重新按本地真值读取。 */
-  appQueryClient.removeQueries({ queryKey: buildFragmentQueryPrefix() });
-}
-
-export async function invalidateFragmentQueries(): Promise<void> {
-  /*fragment 真值变化后统一失效详情、列表和选中集合查询。 */
-  await appQueryClient.invalidateQueries({ queryKey: buildFragmentQueryPrefix() });
-}
+export { clearFragmentQueryCache, invalidateFragmentQueries };
 
 export function setFragmentDetailQueryData(fragment: Fragment): void {
   /*编辑器乐观提交时直接覆盖当前详情 query，避免首屏闪回旧正文。 */
-  appQueryClient.setQueryData(buildFragmentDetailQueryKey(fragment.id), fragment);
+  setFragmentDetailQueryCacheData(buildFragmentDetailQueryKey(fragment.id), fragment);
 }
 
 export function useLocalFragmentListQuery(folderId?: string | null) {

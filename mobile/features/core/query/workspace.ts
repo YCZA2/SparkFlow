@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 
 import { useAuthStore } from '@/features/auth/authStore';
 import { getWorkspaceEpoch } from '@/features/auth/workspace';
-import { appQueryClient } from '@/features/tasks/queryClient';
 
 export interface WorkspaceQueryScope {
   userId: string | null;
@@ -60,9 +59,4 @@ export function buildWorkspaceQueryKey(
     entity,
     ...parts,
   ] as const;
-}
-
-export function clearWorkspaceQueryCache(): void {
-  /*切换账号工作区时直接清空查询缓存，避免旧账号本地快照残留。 */
-  appQueryClient.clear();
 }
