@@ -1,9 +1,13 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 
 import { consumePendingFragmentCleanup } from '@/features/fragments/cleanup/runtime';
-import { getFragmentRemovalAnimationDuration } from '@/features/fragments/components/AnimatedFragmentListItem';
+import {
+  getFragmentAdditionAnimationDuration,
+  getFragmentRemovalAnimationDuration,
+} from '@/features/fragments/components/AnimatedFragmentListItem';
 import { buildFragmentSections, type FragmentSection } from '@/features/fragments/fragmentListState';
 import { useFragmentSelection } from '@/features/fragments/hooks';
 import { useFragments } from '@/features/fragments/hooks/useFragments';
@@ -26,6 +30,7 @@ export interface FragmentListScreenState {
   total: number;
   totalLabel: string;
   selection: ReturnType<typeof useFragmentSelection>;
+  appearingFragmentIds: Set<string>;
   removingFragmentIds: Set<string>;
   refresh: () => Promise<void>;
   reload: () => Promise<void>;
@@ -40,14 +45,114 @@ export function useFragmentListScreenState({
 }: UseFragmentListScreenStateOptions = {}): FragmentListScreenState {
   /*统一首页与文件夹页的碎片列表 view-model，避免页面各写一套选择与跳转逻辑。 */
   const router = useRouter();
+  const isFocused = useIsFocused();
   const pushOnce = useSingleFlightRouterPush();
   const params = useLocalSearchParams<{ refresh?: string }>();
   const { fragments, isLoading, isRefreshing, error, refreshFragments, fetchFragments } =
     useFragments({ folderId });
   const selection = useFragmentSelection(20);
+  const animationScopeKey = folderId?.trim() || '__all__';
+  const animationScopeRef = useRef<string | null>(null);
+  const knownFragmentIdsRef = useRef<Set<string> | null>(null);
+  const pendingAppearingFragmentIdsRef = useRef<Set<string>>(new Set());
+  const additionTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [appearingFragmentIds, setAppearingFragmentIds] = useState<Set<string>>(new Set());
   const [removingFragmentIds, setRemovingFragmentIds] = useState<Set<string>>(new Set());
 
   const sections = useMemo(() => buildFragmentSections(fragments), [fragments]);
+
+  const scheduleAppearingFragments = useCallback((fragmentIds: string[]) => {
+    /*新增卡片动画只标记对应 id，动画完成后及时清理临时状态。 */
+    if (fragmentIds.length === 0) {
+      return;
+    }
+    setAppearingFragmentIds((prev) => {
+      const next = new Set(prev);
+      for (const fragmentId of fragmentIds) {
+        next.add(fragmentId);
+      }
+      return next;
+    });
+
+    for (const fragmentId of fragmentIds) {
+      const existingTimer = additionTimersRef.current.get(fragmentId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+      const timer = setTimeout(() => {
+        additionTimersRef.current.delete(fragmentId);
+        setAppearingFragmentIds((prev) => {
+          if (!prev.has(fragmentId)) {
+            return prev;
+          }
+          const next = new Set(prev);
+          next.delete(fragmentId);
+          return next;
+        });
+      }, getFragmentAdditionAnimationDuration());
+      additionTimersRef.current.set(fragmentId, timer);
+    }
+  }, []);
+
+  useEffect(() => {
+    /*只给已有列表之后新增出现的卡片做入场，初次加载不批量播放动画。 */
+    const nextIds = new Set(fragments.map((fragment) => fragment.id));
+    if (animationScopeRef.current !== animationScopeKey) {
+      animationScopeRef.current = animationScopeKey;
+      knownFragmentIdsRef.current = nextIds;
+      for (const timer of additionTimersRef.current.values()) {
+        clearTimeout(timer);
+      }
+      additionTimersRef.current.clear();
+      pendingAppearingFragmentIdsRef.current.clear();
+      setAppearingFragmentIds(new Set());
+      return;
+    }
+
+    const previousIds = knownFragmentIdsRef.current;
+    knownFragmentIdsRef.current = nextIds;
+
+    if (previousIds === null) {
+      return;
+    }
+
+    const addedIds = fragments
+      .map((fragment) => fragment.id)
+      .filter((fragmentId) => !previousIds.has(fragmentId));
+    if (addedIds.length === 0) {
+      return;
+    }
+
+    if (!isFocused) {
+      for (const fragmentId of addedIds) {
+        pendingAppearingFragmentIdsRef.current.add(fragmentId);
+      }
+      return;
+    }
+
+    scheduleAppearingFragments(addedIds);
+  }, [animationScopeKey, fragments, isFocused, scheduleAppearingFragments]);
+
+  useEffect(() => {
+    if (!isFocused || pendingAppearingFragmentIdsRef.current.size === 0) {
+      return;
+    }
+    const visibleIds = new Set(fragments.map((fragment) => fragment.id));
+    const addedIds = Array.from(pendingAppearingFragmentIdsRef.current).filter((fragmentId) =>
+      visibleIds.has(fragmentId)
+    );
+    pendingAppearingFragmentIdsRef.current.clear();
+    scheduleAppearingFragments(addedIds);
+  }, [fragments, isFocused, scheduleAppearingFragments]);
+
+  useEffect(() => {
+    return () => {
+      for (const timer of additionTimersRef.current.values()) {
+        clearTimeout(timer);
+      }
+      additionTimersRef.current.clear();
+    };
+  }, []);
 
   const markFragmentRemoving = useCallback((fragmentId: string) => {
     /*列表退场动画期间单独记录正在移除的 item，避免把展示态耦合进 store。 */
@@ -178,6 +283,7 @@ export function useFragmentListScreenState({
     total: fragments.length,
     totalLabel: `${fragments.length} 条灵感`,
     selection,
+    appearingFragmentIds,
     removingFragmentIds,
     refresh: refreshFragments,
     reload: fetchFragments,

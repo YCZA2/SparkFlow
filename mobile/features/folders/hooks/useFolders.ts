@@ -45,19 +45,26 @@ export interface UseFoldersReturn {
  */
 export function useFolders(): UseFoldersReturn {
   const query = useFolderListQuery();
+  const { refetch } = query;
   const [isCreating, setIsCreating] = useState(false);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const folders = useMemo(() => query.data?.folders ?? [], [query.data?.folders]);
   const allFragmentsCount = query.data?.allFragmentsCount ?? 0;
   const allScriptsCount = query.data?.allScriptsCount ?? 0;
   const total = folders.length;
 
   const fetchFolders = useCallback(async () => {
-    await query.refetch();
-  }, [query]);
+    await refetch();
+  }, [refetch]);
 
   const refreshFolders = useCallback(async () => {
-    await query.refetch();
-  }, [query]);
+    setIsManualRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsManualRefreshing(false);
+    }
+  }, [refetch]);
 
   /**
    * 创建新文件夹
@@ -86,7 +93,7 @@ export function useFolders(): UseFoldersReturn {
   return {
     folders,
     isLoading: query.isPending,
-    isRefreshing: query.isRefetching,
+    isRefreshing: isManualRefreshing,
     isCreating,
     error: query.error ? getErrorMessage(query.error, '获取文件夹列表失败') : null,
     total,

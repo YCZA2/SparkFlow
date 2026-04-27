@@ -22,6 +22,7 @@ interface UseFragmentDetailResourceResult {
 export function useFragmentDetailResource(fragmentId?: string | null): UseFragmentDetailResourceResult {
   /*封装碎片详情的 query 读取和局部乐观提交，供页面层纯消费。 */
   const query = useLocalFragmentDetailQuery(fragmentId);
+  const { refetch } = query;
   const fragment = query.data ?? null;
 
   const commitVisibleFragment = useCallback(async (nextFragment: Fragment) => {
@@ -41,14 +42,15 @@ export function useFragmentDetailResource(fragmentId?: string | null): UseFragme
         : query.isFetched && !fragment
           ? '碎片不存在'
           : null;
+  const reload = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   return {
     fragment,
     isLoading: Boolean(fragmentId) && query.isPending,
     error,
-    reload: async () => {
-      await query.refetch();
-    },
+    reload,
     commitPersistedFragment,
     commitOptimisticFragment: commitVisibleFragment,
   };

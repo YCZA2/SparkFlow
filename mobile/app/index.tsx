@@ -172,7 +172,10 @@ export default function FoldersScreen() {
           ListEmptyComponent={
             <ScreenState icon="📁" title="还没有文件夹" message="系统会自动创建文件夹，或从后端同步" />
           }
-          contentContainerStyle={{ paddingBottom: insets.bottom + NOTES_LIST_QUICK_ACTION_PADDING_EXTRA }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingBottom: insets.bottom + NOTES_LIST_QUICK_ACTION_PADDING_EXTRA,
+          }}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}

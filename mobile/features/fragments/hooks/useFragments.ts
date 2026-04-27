@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import {
   deleteLocalFragmentEntity,
@@ -29,18 +29,15 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
       ? folderId
       : undefined;
   const query = useLocalFragmentListQuery(resolvedFolderId);
+  const { refetch } = query;
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const fragments = useMemo(() => query.data ?? [], [query.data]);
-
-  return {
-    fragments,
-    isLoading: query.isPending,
-    isRefreshing: query.isRefetching,
-    error: query.error ? getErrorMessage(query.error, '加载失败') : null,
-    total: fragments.length,
-    fetchFragments: async () => {
-      await query.refetch();
-    },
-    refreshFragments: async () => {
+  const fetchFragments = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
+  const refreshFragments = useCallback(async () => {
+    setIsManualRefreshing(true);
+    try {
       if (fragments.some(isFailedMediaIngestionFragment)) {
         await Promise.allSettled(
           fragments
@@ -50,8 +47,20 @@ export function useFragments({ folderId }: UseFragmentsOptions = {}) {
             })
         );
       }
-      await query.refetch();
-    },
+      await refetch();
+    } finally {
+      setIsManualRefreshing(false);
+    }
+  }, [fragments, refetch]);
+
+  return {
+    fragments,
+    isLoading: query.isPending,
+    isRefreshing: isManualRefreshing,
+    error: query.error ? getErrorMessage(query.error, '加载失败') : null,
+    total: fragments.length,
+    fetchFragments,
+    refreshFragments,
   };
 }
 
@@ -83,14 +92,16 @@ export function useSelectedFragments(fragmentIds?: string | string[]) {
 export function useFragmentVisualization() {
   /*灵感云图查询改为 React Query 语义，统一 loading/error/refetch 行为。 */
   const query = useFragmentVisualizationQuery();
+  const { refetch } = query;
+  const reloadVisualization = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   return {
     visualization: query.data ?? null,
     isLoading: query.isPending,
     error: query.error ? getErrorMessage(query.error, '读取灵感云图失败') : null,
-    reloadVisualization: async () => {
-      await query.refetch();
-    },
+    reloadVisualization,
   };
 }
 

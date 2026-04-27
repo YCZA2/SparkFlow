@@ -216,7 +216,10 @@ export default function FolderDetailScreen() {
         sections={screen.sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item, index, section }) => (
-          <AnimatedFragmentListItem isRemoving={screen.removingFragmentIds.has(item.id)}>
+          <AnimatedFragmentListItem
+            isAppearing={screen.appearingFragmentIds.has(item.id)}
+            isRemoving={screen.removingFragmentIds.has(item.id)}
+          >
             <SwipeableFragmentCard
               fragment={item}
               onPress={handleFragmentPress}

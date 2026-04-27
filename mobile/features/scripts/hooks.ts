@@ -63,19 +63,22 @@ export function useGenerateScript() {
 export function useScripts(options?: { sourceFragmentId?: string | null }) {
   /*脚本列表统一通过 React Query 读取本地真值，不再额外维护列表缓存。 */
   const query = useLocalScriptListQuery({ sourceFragmentId: options?.sourceFragmentId });
+  const { refetch } = query;
   const items = query.data ?? [];
+  const reload = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
+  const refresh = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   return {
     items,
     isLoading: query.isPending,
     isRefreshing: query.isRefetching,
     error: query.error ? getErrorMessage(query.error, '加载口播稿失败') : null,
-    reload: async () => {
-      await query.refetch();
-    },
-    refresh: async () => {
-      await query.refetch();
-    },
+    reload,
+    refresh,
   };
 }
 
