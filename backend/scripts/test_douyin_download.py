@@ -50,6 +50,15 @@ def clip(value: str | None, length: int = 500) -> str:
     return f"{text[:length]}..."
 
 
+def format_env_files(value: Any) -> str:
+    """中文注释：兼容 pydantic env_file 的字符串或元组配置，避免调试脚本在打印环境文件时中断。"""
+    if isinstance(value, (list, tuple)):
+        return ", ".join(str(Path(str(item)).resolve()) for item in value if item)
+    if value:
+        return str(Path(str(value)).resolve())
+    return "(not configured)"
+
+
 def summarize_detail_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
     if not payload:
         return {"has_payload": False}
@@ -178,10 +187,11 @@ def main() -> int:
     args = build_parser().parse_args()
     share_url = args.share_url.strip()
     parser = DouyinVideoParser()
+    env_file = settings.model_config.get("env_file")
 
     print("=== Douyin Download Debug ===")
     print(f"Share URL: {share_url}")
-    print(f"Backend env: {Path(settings.model_config.get('env_file') or '').resolve()}")
+    print(f"Backend env: {format_env_files(env_file)}")
     print(f"Cookie loaded: {'yes' if parser.cookie else 'no'}")
     if parser.cookie:
         print(f"Cookie preview: {clip(parser.cookie, 120)}")

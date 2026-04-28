@@ -4,10 +4,11 @@ Input: share URL, Output: watermark-free video URL
 """
 
 import re
+import os
 import requests
 from urllib.parse import quote
 
-from core.config import settings
+from core.config import BACKEND_ENV_FILES, _read_env_value_from_file, settings
 from core.logging_config import get_logger
 
 try:
@@ -21,6 +22,7 @@ except Exception:
     XBogus = None
 
 logger = get_logger(__name__)
+_SETTINGS_COOKIE_AT_IMPORT = settings.DOUYIN_COOKIE
 
 
 class DouyinVideoParser:
@@ -34,7 +36,23 @@ class DouyinVideoParser:
 
     @staticmethod
     def _load_cookie():
-        return (settings.DOUYIN_COOKIE or "").lstrip("\ufeff").strip()
+        # 中文注释：Celery worker 是长跑进程，优先读实时环境/.env，避免 Cookie 更新后仍使用启动时旧配置。
+        raw_cookie = os.environ.get("DOUYIN_COOKIE")
+        if raw_cookie is None and settings.DOUYIN_COOKIE != _SETTINGS_COOKIE_AT_IMPORT:
+            raw_cookie = settings.DOUYIN_COOKIE
+        if raw_cookie is None:
+            for env_file in BACKEND_ENV_FILES:
+                file_cookie = _read_env_value_from_file(env_file, "DOUYIN_COOKIE")
+                if file_cookie is not None:
+                    raw_cookie = file_cookie
+        return (raw_cookie or settings.DOUYIN_COOKIE or "").lstrip("\ufeff").strip()
+
+    def refresh_cookie(self) -> None:
+        """刷新抖音 Cookie，支持本地调试时更新 .env 后不重启长跑进程。"""
+        cookie = self._load_cookie()
+        if cookie != self.cookie:
+            self.cookie = cookie
+            logger.info("douyin_cookie_refreshed", has_cookie=bool(cookie))
 
     def set_cookie(self, cookie: str):
         self.cookie = (cookie or "").lstrip("\ufeff").strip()
@@ -127,6 +145,7 @@ class DouyinVideoParser:
             return None
 
     def get_aweme_detail(self, video_id: str, original_url: str = None) -> dict | None:
+        self.refresh_cookie()
         if ABogus is None:
             logger.warning("douyin_abogus_missing", video_id=video_id)
             return None

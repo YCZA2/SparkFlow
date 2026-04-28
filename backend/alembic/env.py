@@ -114,6 +114,7 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         # 中文注释：显式固定到 public，避免空库或本机数据库自定义 search_path 时找不到默认 schema。
         connection.execute(text("SET search_path TO public"))
+        connection.commit()
         if bootstrap_single_baseline(connection):
             return
         context.configure(
