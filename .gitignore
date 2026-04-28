@@ -68,3 +68,6 @@ chroma_data/
 
 # 日志
 runtime_logs/
+
+# 后端本地运行态
+backend/runtime/
