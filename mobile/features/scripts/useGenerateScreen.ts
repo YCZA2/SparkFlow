@@ -23,7 +23,7 @@ function displayFragmentText(fragment: Fragment): string {
 }
 
 function buildSuggestedTopic(fragments: Fragment[]): string {
-  /*从已选碎片里提炼一个可编辑的默认主题，避免生成页首开为空。 */
+  /*从可选碎片里提炼一个可编辑的默认主题；无碎片时保留用户手动输入主题。 */
   const candidate = fragments
     .map((fragment) => fragment.summary || fragment.plain_text_snapshot || fragment.transcript || '')
     .map((text) => text.trim())
@@ -149,12 +149,8 @@ export function useGenerateScreen(): GenerateScreenState {
    提交脚本生成任务，并在任务成功后跳转详情页。
    */
   const generate = useCallback(async () => {
-    if (ids.length === 0) {
-      Alert.alert('无法生成', '未接收到选中的碎片');
-      return;
-    }
     if (!topic.trim()) {
-      Alert.alert('无法生成', '先补充一个主题，AI 才能按 SOP 整理这组素材。');
+      Alert.alert('无法生成', '先补充一个主题，AI 才能按 SOP 整理成稿。');
       return;
     }
 
@@ -194,11 +190,10 @@ export function useGenerateScreen(): GenerateScreenState {
     topic,
     generator,
     canGenerate:
-      ids.length > 0 &&
       topic.trim().length > 0 &&
       generator.status !== 'loading' &&
       !pendingTask,
-    selectedSummary: `已选碎片（${ids.length}）`,
+    selectedSummary: `补充素材（可选，已选 ${ids.length}）`,
     getFragmentDisplayText: displayFragmentText,
     setTopic,
     generate,

@@ -57,7 +57,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - `FragmentDetailSheet` 当前已改成“modal 壳层 + section 组合 + sheet state helper”结构：抽屉 UI 细节已经进一步拆到 `components/detailSheet/*` 下的 primitives / section blocks / styles 子模块，不再和详情页数据组装写在同一个文件里。
 - 首页与文件夹页的碎片列表现在共用同一套 list screen model：日期分组、多选上限、跳详情预热缓存、进入 AI 编导的选择态逻辑都从统一 hook 输出。
 - 首页、文件夹页、成稿页现在共享一层 `NotesListScreenShell / NotesListHero / NotesScreenStateView` 页面壳层；各页面仍各自保留列表数据源、导航和选择态逻辑。
-- 生成页现在采用统一主题输入：用户补一个主题后，后端按 `topic + SOP + 三层写作上下文` 创建脚本任务。
+- 生成页现在采用统一主题输入：用户只需补一个主题即可生成脚本，已选碎片作为可选补充素材；后端按 `topic + SOP + 三层写作上下文` 创建脚本任务。
 - 碎片正文详情和列表已接入本地真值：详情优先读本地 HTML 与实体缓存，正文与媒体改动统一留在本地真值并由 backup queue 异步备份。
 - 脚本详情页现在也采用 local-first：先读本地 script 真值；生成任务成功后才按 `script_id` 读取后端生成详情并落本地，编辑成功后正文只写本地并进入 backup queue。
 - 首页系统区当前包含“全部”和按需出现的“成稿”；只有用户真的存在 script 时才会显示“成稿”入口，成稿列表与碎片列表继续分开，不做混排。

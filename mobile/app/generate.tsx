@@ -79,7 +79,7 @@ export default function GenerateScreen() {
       <ScreenHeader
         eyebrow="生成"
         title="AI 编导"
-        subtitle="先给这组素材一个主题，AI 会按 SOP 和 few-shot 参考整理成可直接拍摄的口播稿。"
+        subtitle="只需要一个主题就能生成口播稿；选中的碎片会作为可选背景，帮助 AI 写得更贴近你的素材。"
       />
 
       <View className="mb-sf-section gap-sf-md">
@@ -110,7 +110,7 @@ export default function GenerateScreen() {
         </Text>
 
         {screen.fragments.length === 0 ? (
-          <ScreenState title="未选择碎片" message="请返回碎片库至少选择 1 条碎片。" />
+          <ScreenState title="未选择碎片" message="将仅根据主题、SOP 和写作上下文生成口播稿。" />
         ) : (
           screen.fragments.map((fragment) => (
             <View

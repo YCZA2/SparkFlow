@@ -365,7 +365,7 @@ flowchart TD
 - Vector DB: 默认 `ChromaDB`。
 - Workflow Provider: 当前保留通用 `workflow_provider` 端口与 `DifyWorkflowProvider` 实现，供未来外挂工作流或实验性链路复用；当前主脚本生成链路已经收口到后端 `RagScriptTaskService`。
 - Knowledge Index Store: 当前知识库索引通过独立 `knowledge_index_store` 抽象接入；默认实现仍由 `AppVectorStore` 适配 Chroma，未来若切换 LightRAG，目标是只替换这一层。
-- 当前脚本生成输入收敛为 `topic` + `fragment_ids`：后端先构建三层写作上下文，再生成 SOP 大纲并拼装草稿。其中：
+- 当前脚本生成输入收敛为必填 `topic` + 可选 `fragment_ids`：后端先构建三层写作上下文，再生成 SOP 大纲并拼装草稿；若没有传入碎片，则仅基于主题、写作上下文和召回素材生成。其中：
 - `稳定内核层` 当前使用系统预置文案，不再在生成链路里按用户历史碎片或知识库动态生成。
 - `方法论层` 由“已缓存的碎片提炼结果 + 上传资料映射条目 + 预置方法模板”组成；碎片提炼改由每日后台维护任务按阈值静默刷新。
 - `相关素材层` 负责召回与当前主题相关的历史脚本、碎片和知识文档。
@@ -539,7 +539,7 @@ sequenceDiagram
     participant LLM as LLM Provider
     participant SCRIPT as scripts repository
 
-    App->>API: POST topic + fragment_ids
+    App->>API: POST topic + optional fragment_ids
     API->>DB: create task_runs + task_step_runs
     API-->>App: task_id + status
     TASK->>VDB: query_knowledge_docs(...)

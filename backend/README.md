@@ -177,7 +177,7 @@ bash scripts/dev-mobile.sh
 
 - `LLM_PROVIDER` 对应的文本生成能力，用于碎片方法论离线提炼、大纲和草稿生成
 - `Embedding + VectorStore`，用于检索相关知识与相关碎片
-- `POST /api/scripts/generation` 的输入收敛为 `topic` + `fragment_ids`
+- `POST /api/scripts/generation` 的输入收敛为必填 `topic` + 可选 `fragment_ids`
 
 如果你想验证“真实后端 + 当前脚本生成任务”的整条链路，可以运行：
 

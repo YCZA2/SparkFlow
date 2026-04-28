@@ -74,12 +74,9 @@ export function useFragmentCloudScreen() {
   };
 
   const goGenerate = () => {
-    if (selectedIds.length === 0) {
-      return false;
-    }
     router.push({
       pathname: '/generate',
-      params: { fragmentIds: selectedIds.join(',') },
+      params: selectedIds.length > 0 ? { fragmentIds: selectedIds.join(',') } : {},
     });
     return true;
   };

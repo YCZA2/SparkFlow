@@ -78,7 +78,7 @@ export function FragmentDetailCard({
           onPress={onGenerate}
           activeOpacity={0.85}
         >
-          <Text className="text-sm font-bold text-white">用已选碎片生成</Text>
+          <Text className="text-sm font-bold text-white">生成口播稿</Text>
         </TouchableOpacity>
         <TouchableOpacity
           className="flex-1 items-center justify-center rounded-sf-md bg-app-surface-muted py-[14px] dark:bg-app-surface-muted-dark"

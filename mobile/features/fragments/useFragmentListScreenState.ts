@@ -252,27 +252,17 @@ export function useFragmentListScreenState({
   );
 
   const onGenerate = useCallback(async () => {
-    if (selection.selectedCount === 0) {
-      Alert.alert('请选择碎片', '请至少选择 1 条碎片');
-      return;
-    }
-
     // 使用 Set 优化查找性能
     const selectedIdSet = new Set(selection.selectedIds);
     const selectedFragments = fragments.filter((item) => selectedIdSet.has(item.id));
 
     const fragmentIds = selectedFragments.map((item) => item.id).filter(Boolean);
 
-    if (fragmentIds.length === 0) {
-      Alert.alert('准备失败', '无法获取碎片 ID，请重试');
-      return;
-    }
-
     router.push({
       pathname: '/generate',
-      params: { fragmentIds: fragmentIds.join(',') },
+      params: fragmentIds.length > 0 ? { fragmentIds: fragmentIds.join(',') } : {},
     });
-  }, [fragments, router, selection.selectedCount, selection.selectedIds]);
+  }, [fragments, router, selection.selectedIds]);
 
   return {
     fragments,

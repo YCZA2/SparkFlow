@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, ScrollView, View, Text } from 'react-native';
+import { ScrollView, View, Text } from 'react-native';
 import { Stack } from 'expo-router';
 
 import { LoadingState, ScreenState } from '@/components/ScreenState';
@@ -73,7 +73,7 @@ export default function FragmentCloudScreen() {
             把零散灵感看成一片主题云
           </Text>
           <Text className="mt-[10px] text-sm leading-5 text-app-text-muted dark:text-app-text-muted-dark">
-            点击点位看详情，按主题筛选，再带着选中的碎片继续生成口播稿。
+            点击点位看详情，按主题筛选；生成口播稿只需要主题，选中的碎片会作为补充素材。
           </Text>
 
           <View className="mt-4 flex-row gap-2.5">
@@ -125,11 +125,7 @@ export default function FragmentCloudScreen() {
             point={screen.focusedPoint}
             isSelected={screen.selectedIds.includes(screen.focusedPoint.id)}
             onToggleSelected={() => screen.toggleSelected(screen.focusedPoint!.id)}
-            onGenerate={() => {
-              if (!screen.goGenerate()) {
-                Alert.alert('还没选碎片', '先点几个点位加入待生成列表。');
-              }
-            }}
+            onGenerate={screen.goGenerate}
             onViewDetail={() => screen.goFragmentDetail(screen.focusedPoint!.id)}
           />
         ) : null}

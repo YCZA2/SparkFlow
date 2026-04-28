@@ -192,8 +192,7 @@ export default function FolderDetailScreen() {
                 className="rounded-[20px] px-sf-lg py-[14px]"
                 style={[
                   {
-                    backgroundColor:
-                      screen.selection.selectedCount > 0 ? theme.colors.warning : theme.colors.textSubtle,
+                    backgroundColor: theme.colors.warning,
                   },
                 ]}
                 onPress={screen.onGenerate}
@@ -204,7 +203,7 @@ export default function FolderDetailScreen() {
                   <Text className="text-base font-bold leading-5 text-white">交给 AI 编导</Text>
                 </View>
                 <Text className="mt-[6px] text-xs leading-4 text-white/90">
-                  已选 {screen.selection.selectedCount}/{screen.selection.maxSelection}
+                  素材可选，已选 {screen.selection.selectedCount}/{screen.selection.maxSelection}
                 </Text>
               </TouchableOpacity>
             </Animated.View>
