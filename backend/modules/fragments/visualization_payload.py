@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from core.logging_config import get_logger
 from modules.fragments.content import read_fragment_plain_text
+from modules.shared.fragment_snapshots import effective_fragment_purpose, effective_fragment_tags
 from utils.serialization import format_iso_datetime
 
 from .visualization_math import cluster_embeddings, project_embeddings_to_coordinates
@@ -212,6 +213,8 @@ def build_visualization_payload(items: list[tuple[Any, list[float]]], used_vecto
                 "transcript": read_fragment_plain_text(fragment) or fragment.transcript,
                 "summary": fragment.summary,
                 "tags": _read_tags(fragment),
+                "effective_purpose": effective_fragment_purpose(fragment),
+                "effective_tags": effective_fragment_tags(fragment),
                 "source": fragment.source,
                 "created_at": format_iso_datetime(fragment.created_at),
                 "cluster_id": cluster_id,

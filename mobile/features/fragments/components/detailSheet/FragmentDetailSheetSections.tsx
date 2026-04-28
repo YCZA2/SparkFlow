@@ -5,6 +5,7 @@ import {
   AudioTranscriptSection,
   DangerSection,
   MetadataSection,
+  SemanticSection,
   ToolsSection,
 } from './FragmentDetailSheetSectionBlocks';
 import type { FragmentDetailSheetProps } from './types';
@@ -20,6 +21,7 @@ export function FragmentDetailSheetSections(props: Omit<FragmentDetailSheetProps
       />
       <ToolsSection tools={props.tools} />
       <ActionsSection metadata={props.metadata} actions={props.actions} />
+      <SemanticSection content={props.content} actions={props.actions} />
       <MetadataSection content={props.content} metadata={props.metadata} />
       <DangerSection actions={props.actions} />
     </>

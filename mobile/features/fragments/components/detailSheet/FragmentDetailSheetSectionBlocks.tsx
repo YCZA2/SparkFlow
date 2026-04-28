@@ -1,9 +1,10 @@
 import React from 'react';
-import { TouchableOpacity, View, Text } from 'react-native';
+import { TouchableOpacity, View, Text, TextInput } from 'react-native';
 
 import { FragmentAudioPlayerControls } from '@/features/fragments/components/FragmentAudioPlayerControls';
 import { TranscriptSection } from '@/features/fragments/components/TranscriptSection';
 import { normalizeFragmentTags } from '@/features/fragments/utils';
+import { FRAGMENT_PURPOSE_LABELS, FRAGMENT_PURPOSES, normalizeSemanticTags } from '@/features/fragments/semantics';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { formatDate } from '@/utils/date';
 
@@ -121,7 +122,7 @@ export function MetadataSection({
   metadata,
 }: Pick<FragmentDetailSheetProps, 'content' | 'metadata'>) {
   const theme = useAppTheme();
-  const tags = normalizeFragmentTags(content.tags);
+  const tags = normalizeFragmentTags(content.effectiveTags?.length ? content.effectiveTags : content.tags);
   const sourceLabel = getSourceLabel(metadata.source);
   const audioSourceLabel = getAudioSourceLabel(metadata.audioSource);
 
@@ -149,6 +150,108 @@ export function MetadataSection({
             {tags.map((tag) => (
               <View key={tag} className="rounded-sf-pill bg-app-surface-muted px-[10px] py-[6px] dark:bg-app-surface-muted-dark">
                 <Text className="text-xs font-semibold leading-4 text-app-text dark:text-app-text-dark">{tag}</Text>
+              </View>
+            ))}
+          </View>
+        </InfoCard>
+      ) : null}
+    </Section>
+  );
+}
+
+/*展示并编辑系统对碎片的用途与标签理解，让用户能轻量纠正。 */
+export function SemanticSection({
+  content,
+  actions,
+}: Pick<FragmentDetailSheetProps, 'content' | 'actions'>) {
+  const [draftTag, setDraftTag] = React.useState('');
+  const theme = useAppTheme();
+  const userTags = normalizeSemanticTags(content.userTags);
+  const dismissed = new Set(normalizeSemanticTags(content.dismissedSystemTags));
+  const systemTags = normalizeSemanticTags(content.systemTags).filter((tag) => !dismissed.has(tag) && !userTags.includes(tag));
+
+  const submitTag = () => {
+    /*新增用户标签后清空输入，避免重复提交。 */
+    const tag = draftTag.trim();
+    if (!tag) {
+      return;
+    }
+    setDraftTag('');
+    void actions.onAddUserTag(tag);
+  };
+
+  return (
+    <Section title="系统理解">
+      <InfoCard>
+        <Text className="text-xs font-semibold leading-4 text-app-text-subtle dark:text-app-text-subtle-dark">主要用途</Text>
+        <View className="mt-sf-sm flex-row flex-wrap gap-sf-sm">
+          {FRAGMENT_PURPOSES.map((purpose) => {
+            const selected = content.effectivePurpose === purpose;
+            return (
+              <TouchableOpacity
+                key={purpose}
+                className="rounded-sf-pill px-[10px] py-[6px]"
+                style={{ backgroundColor: selected ? theme.colors.text : theme.colors.surfaceMuted }}
+                activeOpacity={0.82}
+                onPress={() => {
+                  void actions.onSetPurpose(purpose);
+                }}
+              >
+                <Text className="text-xs font-semibold leading-4" style={{ color: selected ? theme.colors.surface : theme.colors.text }}>
+                  {FRAGMENT_PURPOSE_LABELS[purpose]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </InfoCard>
+
+      <InfoCard>
+        <Text className="text-xs font-semibold leading-4 text-app-text-subtle dark:text-app-text-subtle-dark">用户标签</Text>
+        <View className="mt-sf-sm flex-row flex-wrap gap-sf-sm">
+          {userTags.map((tag) => (
+            <TouchableOpacity
+              key={tag}
+              className="rounded-sf-pill bg-app-surface-muted px-[10px] py-[6px] dark:bg-app-surface-muted-dark"
+              activeOpacity={0.82}
+              onPress={() => {
+                void actions.onRemoveUserTag(tag);
+              }}
+            >
+              <Text className="text-xs font-semibold leading-4 text-app-text dark:text-app-text-dark">{tag} ×</Text>
+            </TouchableOpacity>
+          ))}
+          {userTags.length === 0 ? (
+            <Text className="text-sm leading-[22px] text-app-text-subtle dark:text-app-text-subtle-dark">还没有用户标签。</Text>
+          ) : null}
+        </View>
+        <View className="mt-sf-sm flex-row items-center gap-sf-sm">
+          <TextInput
+            value={draftTag}
+            onChangeText={setDraftTag}
+            placeholder="添加标签"
+            placeholderTextColor={theme.colors.textSubtle}
+            className="min-h-9 flex-1 rounded-sf-sm bg-app-surface-muted px-[10px] py-[6px] text-sm text-app-text dark:bg-app-surface-muted-dark dark:text-app-text-dark"
+            onSubmitEditing={submitTag}
+          />
+          <TouchableOpacity className="rounded-sf-sm bg-app-text px-[12px] py-[8px] dark:bg-app-text-dark" onPress={submitTag} activeOpacity={0.82}>
+            <Text className="text-xs font-bold text-app-surface dark:text-app-surface-dark">添加</Text>
+          </TouchableOpacity>
+        </View>
+      </InfoCard>
+
+      {systemTags.length > 0 ? (
+        <InfoCard>
+          <Text className="text-xs font-semibold leading-4 text-app-text-subtle dark:text-app-text-subtle-dark">系统建议标签</Text>
+          <View className="mt-sf-sm flex-row flex-wrap gap-sf-sm">
+            {systemTags.map((tag) => (
+              <View key={tag} className="flex-row items-center overflow-hidden rounded-sf-pill bg-app-surface-muted dark:bg-app-surface-muted-dark">
+                <TouchableOpacity className="px-[10px] py-[6px]" activeOpacity={0.82} onPress={() => void actions.onAcceptSystemTag(tag)}>
+                  <Text className="text-xs font-semibold leading-4 text-app-text dark:text-app-text-dark">{tag}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity className="border-l px-[8px] py-[6px] border-app-border dark:border-app-border-dark" activeOpacity={0.82} onPress={() => void actions.onDismissSystemTag(tag)}>
+                  <Text className="text-xs font-bold leading-4 text-app-text-subtle dark:text-app-text-subtle-dark">×</Text>
+                </TouchableOpacity>
               </View>
             ))}
           </View>

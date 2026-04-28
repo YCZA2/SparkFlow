@@ -7,6 +7,13 @@ export interface FragmentDetailSheetContent {
   speakerSegments: Fragment['speaker_segments'];
   summary: string | null;
   tags: string[] | null;
+  systemPurpose: Fragment['system_purpose'];
+  userPurpose: Fragment['user_purpose'];
+  effectivePurpose: Fragment['effective_purpose'];
+  systemTags: string[] | null;
+  userTags: string[] | null;
+  dismissedSystemTags: string[] | null;
+  effectiveTags: string[];
 }
 
 /*统一描述碎片详情抽屉展示的只读元信息。 */
@@ -49,6 +56,11 @@ export interface FragmentDetailSheetActions {
   onShoot: () => void;
   onOpenRelatedScripts: () => void;
   onDelete: () => void;
+  onSetPurpose: (purpose: NonNullable<Fragment['effective_purpose']>) => Promise<void>;
+  onAddUserTag: (tag: string) => Promise<void>;
+  onRemoveUserTag: (tag: string) => Promise<void>;
+  onAcceptSystemTag: (tag: string) => Promise<void>;
+  onDismissSystemTag: (tag: string) => Promise<void>;
 }
 
 /*描述碎片详情抽屉完整 props，供壳层和 section 组件共用。 */

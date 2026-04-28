@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 
 from modules.shared.content.content_schemas import MediaAssetItem
 
+FragmentPurpose = Literal["content_material", "style_reference", "methodology", "case_study", "product_info", "other"]
+
 
 class FragmentFolderInfo(BaseModel):
     id: str
@@ -31,6 +33,13 @@ class FragmentItem(BaseModel):
     speaker_segments: list[SpeakerSegmentItem] | None = None
     summary: str | None = None
     tags: list[str] | None = None
+    system_purpose: FragmentPurpose | None = None
+    user_purpose: FragmentPurpose | None = None
+    effective_purpose: FragmentPurpose = "other"
+    system_tags: list[str] | None = None
+    user_tags: list[str] | None = None
+    dismissed_system_tags: list[str] | None = None
+    effective_tags: list[str] = Field(default_factory=list)
     source: str
     audio_source: str | None = None
     created_at: str | None = None
@@ -83,6 +92,8 @@ class FragmentVisualizationPoint(BaseModel):
     transcript: str | None = None
     summary: str | None = None
     tags: list[str] | None = None
+    effective_purpose: FragmentPurpose = "other"
+    effective_tags: list[str] = Field(default_factory=list)
     source: str
     created_at: str | None = None
     cluster_id: int | None = None

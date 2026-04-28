@@ -21,6 +21,8 @@
 - 服务端生成字段现在直接补写回 fragment snapshot：`transcript`、`speaker_segments`、`summary`、`tags`、`audio_object_key` 及音频访问地址都会写入 `backup_records`，但不会覆盖客户端拥有的 `body_html / plain_text_snapshot / folder_id / content_state / is_filmed`。
 - `knowledge` 后端本轮补齐了文本型知识 ingestion：`txt/docx/pdf/xlsx` 统一走 `parsers -> chunking -> indexing -> application` 四层，默认仍写入 Chroma，但对上已通过独立知识索引接口解耦，后续可替换为 LightRAG 等底层引擎。
 - `document_import` 后端新增文档导入碎片能力：`txt/md/docx/pdf/xlsx` 文件上传后通过 `document_import` 任务异步解析为纯文本，转为 HTML 写入 fragment snapshot 的 `body_html`，随后自动触发 `fragment_derivative_backfill` 补齐摘要、标签和向量。文档解析逻辑已从知识库 `parsers.py` 提升为共享模块 `modules/shared/content/document_parsers.py`，供知识库与文档导入复用。
+- `fragment_derivative_backfill` 现已升级为碎片语义回填：服务端生成 `summary / system_tags / system_purpose / vector`，用户修正字段 `user_tags / user_purpose / dismissed_system_tags` 仍由客户端本地真值和备份快照拥有。
+- 碎片主要用途固定为 `content_material / style_reference / methodology / case_study / product_info / other`，不保存模型置信度；生成时使用 `user_purpose ?? system_purpose ?? other`。
 - 脚本生成三层上下文本轮调整为“预置稳定内核 + 缓存方法论 + 实时相关素材召回”：稳定内核当前不再按用户素材动态生成，碎片方法论改由每日后台维护任务在阈值达标后静默刷新。
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
 - 仓库本轮也完成了一次大规模命名清理：项目仍处于开发期且没有老用户，移动端旧本地库、旧备份 payload 和旧 remote-first 投影不再保留升级路径，字段直接使用当前领域语义。
@@ -365,10 +367,11 @@ flowchart TD
 - Vector DB: 默认 `ChromaDB`。
 - Workflow Provider: 当前保留通用 `workflow_provider` 端口与 `DifyWorkflowProvider` 实现，供未来外挂工作流或实验性链路复用；当前主脚本生成链路已经收口到后端 `RagScriptTaskService`。
 - Knowledge Index Store: 当前知识库索引通过独立 `knowledge_index_store` 抽象接入；默认实现仍由 `AppVectorStore` 适配 Chroma，未来若切换 LightRAG，目标是只替换这一层。
-- 当前脚本生成输入收敛为必填 `topic` + 可选 `fragment_ids`：后端先构建三层写作上下文，再生成 SOP 大纲并拼装草稿；若没有传入碎片，则仅基于主题、写作上下文和召回素材生成。其中：
+- 当前脚本生成输入收敛为必填 `topic` + 可选 `fragment_ids / folder_id / tag_filters`：后端先构建三层写作上下文，再生成 SOP 大纲并拼装草稿；若没有传入碎片，则仅基于主题、写作上下文和召回素材生成。其中：
 - `稳定内核层` 当前使用系统预置文案，不再在生成链路里按用户历史碎片或知识库动态生成。
 - `方法论层` 由“已缓存的碎片提炼结果 + 上传资料映射条目 + 预置方法模板”组成；碎片提炼改由每日后台维护任务按阈值静默刷新。
-- `相关素材层` 负责召回与当前主题相关的历史脚本、碎片和知识文档。
+- `相关素材层` 负责召回与当前主题相关的历史脚本和碎片语义资产；普通移动端生成链路不再默认消费独立 knowledge docs。
+- `碎片语义层` 按用途分组消费 fragment：内容素材 / 案例 / 产品资料进入“写什么”，风格参考只影响结构、节奏和语气，方法论影响组织方式，`other` 仅在用户显式选择时作为补充背景。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 统一 `FileStorage` 端口；本地开发默认 `local` provider，线上默认私有阿里云 OSS，通过签名 URL 暴露文件访问。
 - Database: PostgreSQL（本地开发默认使用本机服务，默认库为 `sparkflow` / `sparkflow_test`）。
@@ -377,7 +380,8 @@ flowchart TD
 
 - 碎片文件夹表：`fragment_folders`
 - fragment 服务端真值快照：`backup_records(entity_type='fragment')`
-- fragment 标签不再落独立 `fragment_tags` 表，而是保存在 fragment snapshot 的 `tags` 字段中。
+- fragment 标签不再落独立 `fragment_tags` 表；旧 `tags` 字段继续兼容，当前语义字段为 `system_tags / user_tags / dismissed_system_tags`，有效标签由用户标签、旧标签和未删除系统建议合并得到。
+- fragment 主要用途保存在 snapshot 的 `system_purpose / user_purpose` 字段中，用户修正优先。
 - fragment snapshot 内的 `folder_id` 指向真实文件夹；“全部”只是前端系统视图，不落库。
 - fragment snapshot 的 `audio_source` 用于区分音频来源；当前取值为 `upload` / `external_link` / `null`
 - fragment snapshot 的 `source` 用于区分碎片来源；当前取值为 `voice` / `manual` / `video_parse` / `document_import`

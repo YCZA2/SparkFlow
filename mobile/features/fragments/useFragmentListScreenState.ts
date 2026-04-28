@@ -12,6 +12,7 @@ import { buildFragmentSections, type FragmentSection } from '@/features/fragment
 import { useFragmentSelection } from '@/features/fragments/hooks';
 import { useFragments } from '@/features/fragments/hooks/useFragments';
 import { listLocalFragmentEntities } from '@/features/fragments/store';
+import { getEffectiveFragmentTags } from '@/features/fragments/semantics';
 import { useSingleFlightRouterPush } from '@/hooks/useSingleFlightRouterPush';
 import type { Fragment } from '@/types/fragment';
 
@@ -29,6 +30,8 @@ export interface FragmentListScreenState {
   error: string | null;
   total: number;
   totalLabel: string;
+  availableTags: string[];
+  activeTag: string | null;
   selection: ReturnType<typeof useFragmentSelection>;
   appearingFragmentIds: Set<string>;
   removingFragmentIds: Set<string>;
@@ -36,6 +39,7 @@ export interface FragmentListScreenState {
   reload: () => Promise<void>;
   onFragmentPress: (fragment: Fragment) => void;
   onGenerate: () => Promise<void>;
+  setActiveTag: (tag: string | null) => void;
 }
 
 export function useFragmentListScreenState({
@@ -51,6 +55,7 @@ export function useFragmentListScreenState({
   const { fragments, isLoading, isRefreshing, error, refreshFragments, fetchFragments } =
     useFragments({ folderId });
   const selection = useFragmentSelection(20);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const animationScopeKey = folderId?.trim() || '__all__';
   const animationScopeRef = useRef<string | null>(null);
   const knownFragmentIdsRef = useRef<Set<string> | null>(null);
@@ -59,7 +64,26 @@ export function useFragmentListScreenState({
   const [appearingFragmentIds, setAppearingFragmentIds] = useState<Set<string>>(new Set());
   const [removingFragmentIds, setRemovingFragmentIds] = useState<Set<string>>(new Set());
 
-  const sections = useMemo(() => buildFragmentSections(fragments), [fragments]);
+  const availableTags = useMemo(() => {
+    /*从当前列表里的有效标签生成筛选项，用户标签和未删除系统标签都可命中。 */
+    const tags: string[] = [];
+    for (const fragment of fragments) {
+      for (const tag of getEffectiveFragmentTags(fragment)) {
+        if (!tags.includes(tag)) {
+          tags.push(tag);
+        }
+      }
+    }
+    return tags.slice(0, 12);
+  }, [fragments]);
+  const visibleFragments = useMemo(() => {
+    /*标签筛选只影响当前页面展示和生成入口上下文，不修改碎片本身。 */
+    if (!activeTag) {
+      return fragments;
+    }
+    return fragments.filter((fragment) => getEffectiveFragmentTags(fragment).includes(activeTag));
+  }, [activeTag, fragments]);
+  const sections = useMemo(() => buildFragmentSections(visibleFragments), [visibleFragments]);
 
   const scheduleAppearingFragments = useCallback((fragmentIds: string[]) => {
     /*新增卡片动画只标记对应 id，动画完成后及时清理临时状态。 */
@@ -96,7 +120,7 @@ export function useFragmentListScreenState({
 
   useEffect(() => {
     /*只给已有列表之后新增出现的卡片做入场，初次加载不批量播放动画。 */
-    const nextIds = new Set(fragments.map((fragment) => fragment.id));
+    const nextIds = new Set(visibleFragments.map((fragment) => fragment.id));
     if (animationScopeRef.current !== animationScopeKey) {
       animationScopeRef.current = animationScopeKey;
       knownFragmentIdsRef.current = nextIds;
@@ -116,7 +140,7 @@ export function useFragmentListScreenState({
       return;
     }
 
-    const addedIds = fragments
+    const addedIds = visibleFragments
       .map((fragment) => fragment.id)
       .filter((fragmentId) => !previousIds.has(fragmentId));
     if (addedIds.length === 0) {
@@ -131,19 +155,19 @@ export function useFragmentListScreenState({
     }
 
     scheduleAppearingFragments(addedIds);
-  }, [animationScopeKey, fragments, isFocused, scheduleAppearingFragments]);
+  }, [animationScopeKey, visibleFragments, isFocused, scheduleAppearingFragments]);
 
   useEffect(() => {
     if (!isFocused || pendingAppearingFragmentIdsRef.current.size === 0) {
       return;
     }
-    const visibleIds = new Set(fragments.map((fragment) => fragment.id));
+    const visibleIds = new Set(visibleFragments.map((fragment) => fragment.id));
     const addedIds = Array.from(pendingAppearingFragmentIdsRef.current).filter((fragmentId) =>
       visibleIds.has(fragmentId)
     );
     pendingAppearingFragmentIdsRef.current.clear();
     scheduleAppearingFragments(addedIds);
-  }, [fragments, isFocused, scheduleAppearingFragments]);
+  }, [visibleFragments, isFocused, scheduleAppearingFragments]);
 
   useEffect(() => {
     return () => {
@@ -254,24 +278,30 @@ export function useFragmentListScreenState({
   const onGenerate = useCallback(async () => {
     // 使用 Set 优化查找性能
     const selectedIdSet = new Set(selection.selectedIds);
-    const selectedFragments = fragments.filter((item) => selectedIdSet.has(item.id));
+    const selectedFragments = visibleFragments.filter((item) => selectedIdSet.has(item.id));
 
     const fragmentIds = selectedFragments.map((item) => item.id).filter(Boolean);
 
     router.push({
       pathname: '/generate',
-      params: fragmentIds.length > 0 ? { fragmentIds: fragmentIds.join(',') } : {},
+      params: {
+        ...(fragmentIds.length > 0 ? { fragmentIds: fragmentIds.join(',') } : {}),
+        ...(folderId ? { folderId } : {}),
+        ...(activeTag ? { tagFilters: activeTag } : {}),
+      },
     });
-  }, [fragments, router, selection.selectedIds]);
+  }, [activeTag, folderId, router, selection.selectedIds, visibleFragments]);
 
   return {
-    fragments,
+    fragments: visibleFragments,
     sections,
     isLoading,
     isRefreshing,
     error,
-    total: fragments.length,
-    totalLabel: `${fragments.length} 条灵感`,
+    total: visibleFragments.length,
+    totalLabel: activeTag ? `${visibleFragments.length} 条灵感 · ${activeTag}` : `${visibleFragments.length} 条灵感`,
+    availableTags,
+    activeTag,
     selection,
     appearingFragmentIds,
     removingFragmentIds,
@@ -279,5 +309,6 @@ export function useFragmentListScreenState({
     reload: fetchFragments,
     onFragmentPress,
     onGenerate,
+    setActiveTag,
   };
 }

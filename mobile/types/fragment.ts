@@ -7,6 +7,13 @@ import type { TaskStatus } from './task';
 
 export type FragmentSource = 'voice' | 'manual' | 'video_parse';
 export type FragmentAudioSource = 'upload' | 'external_link';
+export type FragmentPurpose =
+  | 'content_material'
+  | 'style_reference'
+  | 'methodology'
+  | 'case_study'
+  | 'product_info'
+  | 'other';
 
 export interface SpeakerSegment {
   speaker_id: string;
@@ -58,6 +65,13 @@ export interface Fragment {
   speaker_segments: SpeakerSegment[] | null;
   summary: string | null;
   tags: string[] | null;
+  system_purpose?: FragmentPurpose | null;
+  user_purpose?: FragmentPurpose | null;
+  effective_purpose?: FragmentPurpose;
+  system_tags?: string[] | null;
+  user_tags?: string[] | null;
+  dismissed_system_tags?: string[] | null;
+  effective_tags?: string[];
   source: FragmentSource;
   audio_source?: FragmentAudioSource | null;
   created_at: string;
@@ -92,6 +106,11 @@ export interface CreateFragmentRequest {
   body_html?: string;
   summary?: string;
   tags?: string[];
+  system_purpose?: FragmentPurpose | null;
+  user_purpose?: FragmentPurpose | null;
+  system_tags?: string[] | null;
+  user_tags?: string[] | null;
+  dismissed_system_tags?: string[] | null;
   source?: FragmentSource;
   folder_id?: string;
   media_asset_ids?: string[];

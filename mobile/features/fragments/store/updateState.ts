@@ -28,6 +28,11 @@ interface ResolveFragmentEntityUpdateResult {
     updatedAt: string;
     summary: string | null;
     tagsJson: string;
+    systemPurpose: string | null;
+    userPurpose: string | null;
+    systemTagsJson: string;
+    userTagsJson: string;
+    dismissedSystemTagsJson: string;
     plainTextSnapshot: string;
     transcript: string | null;
     mediaTaskRunId: string | null;
@@ -80,6 +85,17 @@ export function resolveFragmentEntityUpdate(input: ResolveFragmentEntityUpdateIn
     createdAt: patch.created_at === undefined ? current.createdAt : patch.created_at,
     summary: patch.summary === undefined ? current.summary : patch.summary,
     tagsJson: patch.tags === undefined ? current.tagsJson : serializeFragmentTags(patch.tags),
+    systemPurpose:
+      patch.system_purpose === undefined ? current.systemPurpose : patch.system_purpose,
+    userPurpose: patch.user_purpose === undefined ? current.userPurpose : patch.user_purpose,
+    systemTagsJson:
+      patch.system_tags === undefined ? current.systemTagsJson : serializeFragmentTags(patch.system_tags),
+    userTagsJson:
+      patch.user_tags === undefined ? current.userTagsJson : serializeFragmentTags(patch.user_tags),
+    dismissedSystemTagsJson:
+      patch.dismissed_system_tags === undefined
+        ? current.dismissedSystemTagsJson
+        : serializeFragmentTags(patch.dismissed_system_tags),
     plainTextSnapshot,
     transcript: patch.transcript === undefined ? current.transcript : patch.transcript,
     mediaTaskRunId:
@@ -121,6 +137,11 @@ export function resolveFragmentEntityUpdate(input: ResolveFragmentEntityUpdateIn
     hasValueChanged(current.createdAt, nextRowBase.createdAt) ||
     hasValueChanged(current.summary, nextRowBase.summary) ||
     hasValueChanged(current.tagsJson, nextRowBase.tagsJson) ||
+    hasValueChanged(current.systemPurpose, nextRowBase.systemPurpose) ||
+    hasValueChanged(current.userPurpose, nextRowBase.userPurpose) ||
+    hasValueChanged(current.systemTagsJson, nextRowBase.systemTagsJson) ||
+    hasValueChanged(current.userTagsJson, nextRowBase.userTagsJson) ||
+    hasValueChanged(current.dismissedSystemTagsJson, nextRowBase.dismissedSystemTagsJson) ||
     hasValueChanged(current.plainTextSnapshot, nextRowBase.plainTextSnapshot) ||
     hasValueChanged(current.transcript, nextRowBase.transcript) ||
     hasValueChanged(current.speakerSegmentsJson, nextRowBase.speakerSegmentsJson) ||

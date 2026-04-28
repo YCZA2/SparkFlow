@@ -342,7 +342,7 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
     final_prompt = captured_user_messages[-1]
     assert "[稳定内核]" in final_prompt
     assert "[方法论与 SOP]" in final_prompt
-    assert "[相关素材]" in final_prompt
+    assert "[写什么：内容素材 / 案例 / 产品资料]" in final_prompt
     assert "[风格描述]" in final_prompt
     assert "[参考示例]" in final_prompt
 

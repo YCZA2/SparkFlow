@@ -62,6 +62,7 @@ class MediaIngestionPersistenceService:
                 "transcript": transcript,
                 "summary": summary,
                 "tags": list(tags),
+                "system_tags": list(tags),
                 "speaker_segments": list(speaker_segments),
             },
         )
@@ -97,6 +98,8 @@ class MediaIngestionPersistenceService:
                 "speaker_segments": transcript_payload.get("speaker_segments") or [],
                 "summary": enrichment_payload.get("summary"),
                 "tags": enrichment_payload.get("tags") or [],
+                "system_tags": enrichment_payload.get("system_tags") or enrichment_payload.get("tags") or [],
+                "system_purpose": enrichment_payload.get("system_purpose") or "other",
                 "platform": audio_payload.get("platform") or source_context.get("platform"),
                 "share_url": audio_payload.get("share_url") or source_context.get("share_url"),
                 "media_id": audio_payload.get("media_id") or source_context.get("media_id"),

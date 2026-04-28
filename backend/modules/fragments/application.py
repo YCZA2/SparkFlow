@@ -113,8 +113,14 @@ class FragmentQueryService:
         normalized_query = str(query_text or "").strip() or None
         counter: Counter[str] = Counter()
         for payload in _FRAGMENT_SNAPSHOT_READER.list_raw_payloads(db=db, user_id=user_id):
-            unique_tags = _normalize_fragment_tags(payload.get("tags") if isinstance(payload.get("tags"), list) else [])
+            legacy_tags = payload.get("tags") if isinstance(payload.get("tags"), list) else []
+            system_tags = payload.get("system_tags") if isinstance(payload.get("system_tags"), list) else []
+            user_tags = payload.get("user_tags") if isinstance(payload.get("user_tags"), list) else []
+            dismissed_tags = set(_normalize_fragment_tags(payload.get("dismissed_system_tags") if isinstance(payload.get("dismissed_system_tags"), list) else []))
+            unique_tags = _normalize_fragment_tags([*legacy_tags, *user_tags, *system_tags])
             for tag in unique_tags:
+                if tag in dismissed_tags and tag in system_tags and tag not in user_tags and tag not in legacy_tags:
+                    continue
                 if normalized_query and normalized_query.lower() not in tag.lower():
                     continue
                 counter[tag] += 1

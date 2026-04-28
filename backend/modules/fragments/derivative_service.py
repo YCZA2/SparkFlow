@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 
 from core.logging_config import get_logger
-from modules.shared.enrichment import build_fallback_summary_and_tags, generate_summary_and_tags
+from modules.shared.enrichment import build_fallback_fragment_semantics, generate_fragment_semantics
 from modules.shared.fragment_snapshots import FragmentSnapshotReader
 from modules.shared.warning_throttle import WarningThrottle
 
@@ -31,8 +31,8 @@ class FragmentDerivativeService:
         source: str,
         effective_text: str | None = None,
         body_html: str | None = None,
-    ) -> tuple[str | None, list[str]]:
-        """在无 projection 行时，基于 snapshot 或任务文本补齐摘要标签并同步向量。"""
+    ) -> tuple[str | None, list[str], str]:
+        """在无 projection 行时，基于 snapshot 或任务文本补齐语义字段并同步向量。"""
         from modules.shared.content.body_service import extract_plain_text_from_html
 
         normalized_text = (effective_text or extract_plain_text_from_html(body_html or "")).strip()
@@ -44,6 +44,7 @@ class FragmentDerivativeService:
                 source=source,
                 summary=None,
                 tags=[],
+                system_purpose="other",
             )
             await self._sync_fragment_vector_by_fields(
                 action="delete",
@@ -51,9 +52,9 @@ class FragmentDerivativeService:
                 fragment_id=fragment_id,
                 source=source,
             )
-            return (None, [])
+            return (None, [], "other")
 
-        summary, tags = await self.generate_fragment_enrichment(
+        summary, tags, system_purpose = await self.generate_fragment_enrichment(
             normalized_text,
             body_html=body_html,
         )
@@ -64,6 +65,7 @@ class FragmentDerivativeService:
             source=source,
             summary=summary,
             tags=tags,
+            system_purpose=system_purpose,
         )
         await self._sync_fragment_vector_by_fields(
             action="upsert",
@@ -73,8 +75,9 @@ class FragmentDerivativeService:
             text=normalized_text,
             summary=summary,
             tags=tags,
+            purpose=system_purpose,
         )
-        return (summary, tags)
+        return (summary, tags, system_purpose)
 
     def _patch_snapshot_if_possible(
         self,
@@ -85,6 +88,7 @@ class FragmentDerivativeService:
         source: str,
         summary: str | None,
         tags: list[str],
+        system_purpose: str,
     ) -> None:
         """仅在真实 DB session 场景下回写 snapshot，避免单测 stub 误触发。"""
         if not hasattr(db, "query"):
@@ -96,7 +100,8 @@ class FragmentDerivativeService:
             source=source,
             server_patch={
                 "summary": summary,
-                "tags": list(tags),
+                "system_tags": list(tags),
+                "system_purpose": system_purpose,
             },
         )
 
@@ -110,6 +115,7 @@ class FragmentDerivativeService:
         text: str | None = None,
         summary: str | None = None,
         tags: list[str] | None = None,
+        purpose: str | None = None,
     ) -> None:
         """执行向量同步，并在外部 embedding/向量库故障时降级为仅记录日志。"""
         try:
@@ -123,6 +129,7 @@ class FragmentDerivativeService:
                 source=source,
                 summary=summary,
                 tags=tags,
+                purpose=purpose,
             )
         except Exception as exc:
             error_type = type(exc).__name__
@@ -152,18 +159,20 @@ class FragmentDerivativeService:
         self,
         effective_text: str,
         body_html: str | None = None,
-    ) -> tuple[str | None, list[str]]:
-        """基于正文生成或清空摘要与标签。"""
+    ) -> tuple[str | None, list[str], str]:
+        """基于正文生成或清空摘要、系统标签与主要用途。"""
         normalized_text = effective_text.strip()
         if not normalized_text:
-            return (None, [])
+            return (None, [], "other")
         try:
-            return await generate_summary_and_tags(
+            enrichment = await generate_fragment_semantics(
                 normalized_text,
                 llm_provider=self.llm_provider,
                 timeout_seconds=45.0,
                 body_html=body_html,
             )
+            return (enrichment.summary, enrichment.system_tags, enrichment.system_purpose)
         except Exception:
-            logger.warning("summary_and_tags_generation_failed", exc_info=True)
-            return build_fallback_summary_and_tags(normalized_text)
+            logger.warning("fragment_semantics_generation_failed", exc_info=True)
+            enrichment = build_fallback_fragment_semantics(normalized_text)
+            return (enrichment.summary, enrichment.system_tags, enrichment.system_purpose)

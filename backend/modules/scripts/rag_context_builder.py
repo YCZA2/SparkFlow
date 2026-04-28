@@ -58,6 +58,24 @@ def _build_related_materials_section(
     return "[相关素材]\n" + "\n\n".join(items)
 
 
+def _build_semantic_fragment_section(semantic_fragments: dict) -> str | None:
+    """把按用途分区后的碎片上下文拼成提示词段落。"""
+    content_materials = [str(item).strip() for item in semantic_fragments.get("content_materials", []) if str(item).strip()]
+    style_references = [str(item).strip() for item in semantic_fragments.get("style_references", []) if str(item).strip()]
+    methodology_fragments = [str(item).strip() for item in semantic_fragments.get("methodology_fragments", []) if str(item).strip()]
+    supplemental_background = [str(item).strip() for item in semantic_fragments.get("supplemental_background", []) if str(item).strip()]
+    parts: list[str] = []
+    if content_materials:
+        parts.append("[写什么：内容素材 / 案例 / 产品资料]\n" + "\n\n".join(content_materials))
+    if methodology_fragments:
+        parts.append("[怎么组织：方法论碎片]\n" + "\n\n".join(methodology_fragments))
+    if style_references:
+        parts.append("[怎么写：风格参考]\n这些碎片只用于学习结构、节奏、语气，不要照搬其中事实内容。\n" + "\n\n".join(style_references))
+    if supplemental_background:
+        parts.append("[用户显式选择的其他补充]\n" + "\n\n".join(supplemental_background))
+    return "\n\n".join(parts) if parts else None
+
+
 def build_generation_prompt(
     *,
     topic: str,
@@ -67,6 +85,7 @@ def build_generation_prompt(
     related_scripts: list[str],
     related_fragments: list[str],
     related_knowledge: list[str],
+    semantic_fragments: dict | None,
     style_description: str,
     reference_examples: list[str],
     fragment_texts: list[str],
@@ -82,6 +101,7 @@ def build_generation_prompt(
             related_fragments=related_fragments,
             related_knowledge=related_knowledge,
         ),
+        _build_semantic_fragment_section(semantic_fragments or {}),
     ]:
         if section:
             parts.append(section)

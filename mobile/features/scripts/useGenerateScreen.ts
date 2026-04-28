@@ -54,7 +54,11 @@ export interface GenerateScreenState {
 
 export function useGenerateScreen(): GenerateScreenState {
   const router = useRouter();
-  const { fragmentIds } = useLocalSearchParams<{ fragmentIds?: string | string[] }>();
+  const { fragmentIds, folderId, tagFilters } = useLocalSearchParams<{
+    fragmentIds?: string | string[];
+    folderId?: string | string[];
+    tagFilters?: string | string[];
+  }>();
   const { ids, fragments, isLoading, error } = useSelectedFragments(fragmentIds);
   const [topic, setTopic] = useState('');
   const [generatorError, setGeneratorError] = useState<string | null>(null);
@@ -72,6 +76,13 @@ export function useGenerateScreen(): GenerateScreenState {
       const task = await generateScript({
         topic: input.topic,
         fragment_ids: input.fragmentIds,
+        folder_id: typeof folderId === 'string' ? folderId : Array.isArray(folderId) ? folderId[0] : null,
+        tag_filters:
+          typeof tagFilters === 'string'
+            ? tagFilters.split(',').map((tag) => tag.trim()).filter(Boolean)
+            : Array.isArray(tagFilters)
+              ? tagFilters.flatMap((value) => value.split(',')).map((tag) => tag.trim()).filter(Boolean)
+              : [],
       });
       await rememberPendingScriptTask(scope.userId, {
         taskRunId: task.task_id,

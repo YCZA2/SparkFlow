@@ -15,8 +15,14 @@ import {
   stripEdgeEmptyParagraphs,
 } from '@/features/editor/html';
 import { normalizeFragmentTags } from '@/features/fragments/utils';
+import {
+  getEffectiveFragmentPurpose,
+  getEffectiveFragmentTags,
+  normalizeFragmentPurpose,
+} from '@/features/fragments/semantics';
 import type {
   Fragment,
+  FragmentPurpose,
   MediaAsset,
 } from '@/types/fragment';
 
@@ -55,6 +61,11 @@ export function deserializeTags(raw: string | null | undefined): string[] {
   } catch {
     return [];
   }
+}
+
+/*把数据库中的主要用途恢复为当前支持的枚举。 */
+export function deserializeFragmentPurpose(raw: string | null | undefined): FragmentPurpose | null {
+  return normalizeFragmentPurpose(raw);
 }
 
 /*把 speaker segments 收敛成 JSON，保证本地镜像结构稳定。 */
@@ -107,15 +118,16 @@ export async function mapLocalEntityRowToFragment(
   mediaRows: MediaAssetRow[]
 ): Promise<Fragment> {
   const bodyHtml = normalizeBodyHtml(await readFragmentBodyFile(row.id));
-  return {
+  const backupStatus: Fragment['backup_status'] =
+    row.backupStatus === 'synced'
+      ? 'synced'
+      : row.backupStatus === 'failed'
+        ? 'failed'
+        : 'pending';
+  const fragment: Fragment = {
     id: row.id,
     audio_object_key: row.audioObjectKey ?? null,
-    backup_status:
-      row.backupStatus === 'synced'
-        ? 'synced'
-        : row.backupStatus === 'failed'
-          ? 'failed'
-          : 'pending',
+    backup_status: backupStatus,
     entity_version: row.entityVersion,
     last_backup_at: row.lastBackupAt ?? null,
     deleted_at: row.deletedAt ?? null,
@@ -130,6 +142,11 @@ export async function mapLocalEntityRowToFragment(
     speaker_segments: deserializeSpeakerSegments(row.speakerSegmentsJson),
     summary: row.summary,
     tags: deserializeTags(row.tagsJson),
+    system_purpose: deserializeFragmentPurpose(row.systemPurpose),
+    user_purpose: deserializeFragmentPurpose(row.userPurpose),
+    system_tags: deserializeTags(row.systemTagsJson),
+    user_tags: deserializeTags(row.userTagsJson),
+    dismissed_system_tags: deserializeTags(row.dismissedSystemTagsJson),
     source: row.source as Fragment['source'],
     audio_source: (row.audioSource as Fragment['audio_source']) ?? null,
     created_at: row.createdAt,
@@ -141,6 +158,11 @@ export async function mapLocalEntityRowToFragment(
     content_state:
       (row.contentState as Fragment['content_state']) ?? (bodyHtml ? 'body_present' : 'empty'),
     media_assets: mediaRows.map(mapMediaAssetRow),
+  };
+  return {
+    ...fragment,
+    effective_purpose: getEffectiveFragmentPurpose(fragment),
+    effective_tags: getEffectiveFragmentTags(fragment),
   };
 }
 

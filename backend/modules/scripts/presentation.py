@@ -47,6 +47,8 @@ async def generate_script(
         user_id=current_user["user_id"],
         topic=data.topic,
         fragment_ids=data.fragment_ids,
+        folder_id=data.folder_id,
+        tag_filters=data.tag_filters,
     )
     return success_response(data=payload, message="口播稿生成任务已创建")
 

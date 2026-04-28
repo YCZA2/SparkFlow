@@ -2,11 +2,14 @@ import { convertPlainTextToHtml } from '@/features/editor/html';
 import type { Fragment } from '@/types/fragment';
 import type { SpeakerSegment } from '@/types/fragment';
 import type { TaskRun } from '@/types/task';
+import { normalizeFragmentPurpose } from '@/features/fragments/semantics';
 
 export interface MediaIngestionOutput {
   transcript: string | null;
   summary: string | null;
   tags: string[] | null;
+  system_purpose?: Fragment['system_purpose'];
+  system_tags?: string[] | null;
   speaker_segments: SpeakerSegment[] | null;
   audio_object_key: string | null;
   audio_file_url: string | null;
@@ -19,6 +22,7 @@ export function extractMediaIngestionOutput(
 ): MediaIngestionOutput {
   const output = (task.output ?? {}) as Record<string, unknown>;
   const rawTags = output.tags;
+  const rawSystemTags = output.system_tags;
   const rawSegments = output.speaker_segments;
   const rawAudioFile =
     typeof output.audio_file === 'object' && output.audio_file !== null
@@ -31,6 +35,11 @@ export function extractMediaIngestionOutput(
     tags:
       Array.isArray(rawTags) && rawTags.every((item) => typeof item === 'string')
         ? rawTags
+        : null,
+    system_purpose: normalizeFragmentPurpose(output.system_purpose),
+    system_tags:
+      Array.isArray(rawSystemTags) && rawSystemTags.every((item) => typeof item === 'string')
+        ? rawSystemTags
         : null,
     speaker_segments:
       Array.isArray(rawSegments) &&
@@ -90,6 +99,8 @@ export function resolveMediaIngestionFragmentPatch(input: {
     transcript: input.output.transcript ?? undefined,
     summary: input.output.summary ?? undefined,
     tags: input.output.tags ?? undefined,
+    system_purpose: input.output.system_purpose ?? undefined,
+    system_tags: input.output.system_tags ?? undefined,
     speaker_segments: input.output.speaker_segments ?? undefined,
     audio_object_key: input.output.audio_object_key ?? undefined,
     audio_file_url: input.output.audio_file_url ?? undefined,

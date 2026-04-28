@@ -6,6 +6,7 @@ import type {
   BackupSnapshotResponse,
 } from '@/features/backups/api';
 import type { FragmentAudioSource, FragmentSource } from '@/types/fragment';
+import { normalizeFragmentPurpose } from '@/features/fragments/semantics';
 import type { ScriptMode } from '@/types/script';
 
 export interface RestoredFolderRow {
@@ -30,6 +31,11 @@ export interface RestoredFragmentRow {
   updatedAt: string;
   summary: string | null;
   tagsJson: string;
+  systemPurpose: string | null;
+  userPurpose: string | null;
+  systemTagsJson: string;
+  userTagsJson: string;
+  dismissedSystemTagsJson: string;
   plainTextSnapshot: string;
   bodyHtml: string;
   transcript: string | null;
@@ -120,6 +126,12 @@ function readSpeakerSegments(value: unknown): string | null {
   return Array.isArray(value) ? JSON.stringify(value) : null;
 }
 
+function readSemanticTags(value: unknown, fallback: unknown): string[] {
+  /*恢复语义标签时兼容旧 tags 字段，确保历史快照仍可筛选。 */
+  const primary = readStringArray(value);
+  return primary.length > 0 ? primary : readStringArray(fallback);
+}
+
 function resolveFragmentSource(value: unknown): FragmentSource {
   /*恢复时只允许受支持的 source 枚举，异常值回退为 manual。 */
   return value === 'voice' || value === 'manual' || value === 'video_parse' ? value : 'manual';
@@ -206,6 +218,11 @@ export function buildBackupRestorePlan(snapshot: BackupSnapshotResponse): Backup
         updatedAt: baseTimestamp,
         summary: readString(fragmentPayload.summary),
         tagsJson: JSON.stringify(readStringArray(fragmentPayload.tags)),
+        systemPurpose: normalizeFragmentPurpose(fragmentPayload.system_purpose),
+        userPurpose: normalizeFragmentPurpose(fragmentPayload.user_purpose),
+        systemTagsJson: JSON.stringify(readSemanticTags(fragmentPayload.system_tags, fragmentPayload.tags)),
+        userTagsJson: JSON.stringify(readStringArray(fragmentPayload.user_tags)),
+        dismissedSystemTagsJson: JSON.stringify(readStringArray(fragmentPayload.dismissed_system_tags)),
         plainTextSnapshot: readString(fragmentPayload.plain_text_snapshot) ?? transcript ?? '',
         bodyHtml,
         transcript,

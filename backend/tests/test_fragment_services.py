@@ -58,7 +58,7 @@ async def test_derivative_service_backfills_snapshot_summary_tags_and_vector() -
     llm_provider.queue_text('["产品", "增长"]')
     service = FragmentDerivativeService(vector_store=vector_store, llm_provider=llm_provider)
 
-    summary, tags = await service.backfill_snapshot_derivatives(
+    summary, tags, purpose = await service.backfill_snapshot_derivatives(
         db=db,
         user_id="test-user-001",
         fragment_id="frag-2",
@@ -66,10 +66,11 @@ async def test_derivative_service_backfills_snapshot_summary_tags_and_vector() -
         effective_text="这是一次足够长的内容重写，用来触发摘要与标签刷新逻辑，并同步向量结果。",
     )
 
-    assert len(llm_provider.calls) == 1
+    assert len(llm_provider.calls) == 2
     assert db.commit_calls == 0
     assert summary
     assert tags == ["产品", "增长"]
+    assert purpose == "content_material"
     assert vector_store.fragment_docs["frag-2"]["text"].startswith("这是一次足够长的内容重写")
 
 
@@ -81,7 +82,7 @@ async def test_derivative_service_degrades_when_vector_sync_fails() -> None:
     llm_provider.queue_text('["编辑", "整理"]')
     service = FragmentDerivativeService(vector_store=ExplodingVectorStore(), llm_provider=llm_provider)
 
-    summary, tags = await service.backfill_snapshot_derivatives(
+    summary, tags, purpose = await service.backfill_snapshot_derivatives(
         db=db,
         user_id="test-user-001",
         fragment_id="frag-3",
@@ -91,6 +92,7 @@ async def test_derivative_service_degrades_when_vector_sync_fails() -> None:
 
     assert summary
     assert tags == ["编辑", "整理"]
+    assert purpose == "content_material"
 
 
 @pytest.mark.asyncio

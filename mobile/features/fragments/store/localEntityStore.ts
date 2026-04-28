@@ -26,6 +26,11 @@ export async function createLocalFragmentEntity(input: {
   transcript?: string | null;
   summary?: string | null;
   tags?: string[] | null;
+  systemPurpose?: Fragment['system_purpose'];
+  userPurpose?: Fragment['user_purpose'];
+  systemTags?: string[] | null;
+  userTags?: string[] | null;
+  dismissedSystemTags?: string[] | null;
   contentState?: Fragment['content_state'];
   deviceId?: string | null;
 }): Promise<Fragment> {
@@ -42,6 +47,11 @@ export async function createLocalFragmentEntity(input: {
     updatedAt: now,
     summary: input.summary ?? null,
     tagsJson: JSON.stringify(input.tags ?? []),
+    systemPurpose: input.systemPurpose ?? null,
+    userPurpose: input.userPurpose ?? null,
+    systemTagsJson: JSON.stringify(input.systemTags ?? input.tags ?? []),
+    userTagsJson: JSON.stringify(input.userTags ?? []),
+    dismissedSystemTagsJson: JSON.stringify(input.dismissedSystemTags ?? []),
     plainTextSnapshot: extractPlainTextFromHtml(normalizedBody),
     bodyFileUri: getFragmentBodyFile(id).uri,
     transcript: input.transcript ?? null,

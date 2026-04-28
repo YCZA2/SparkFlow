@@ -49,6 +49,8 @@ class RagScriptGenerationUseCase:
         user_id: str,
         topic: str,
         fragment_ids: list[str],
+        folder_id: str | None = None,
+        tag_filters: list[str] | None = None,
     ) -> ScriptGenerationResponse:
         """创建基于主题和参考脚本 RAG 的异步脚本生成任务。"""
         run = await self.task_service.create_run(
@@ -56,6 +58,8 @@ class RagScriptGenerationUseCase:
             user_id=user_id,
             topic=topic,
             fragment_ids=fragment_ids,
+            folder_id=folder_id,
+            tag_filters=tag_filters or [],
         )
         return ScriptGenerationResponse(
             task_id=run.id,

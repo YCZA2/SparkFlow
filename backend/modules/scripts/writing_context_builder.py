@@ -17,12 +17,18 @@ from domains.scripts import repository as script_repository
 from domains.writing_context import repository as writing_context_repository
 from models import User
 from modules.shared.content.body_service import extract_plain_text_from_html
-from modules.shared.fragment_snapshots import FragmentSnapshotReader, read_fragment_snapshot_text
+from modules.shared.fragment_snapshots import (
+    FragmentSnapshot,
+    FragmentSnapshotReader,
+    effective_fragment_purpose,
+    effective_fragment_tags,
+    read_fragment_snapshot_text,
+)
 from modules.shared.ports import KnowledgeIndexStore, TextGenerationProvider, VectorStore
 from modules.shared.prompt_loader import load_prompt_text
 from utils.serialization import parse_json_object_list
 
-from .writing_context import MethodologyPayload, StableCorePayload, WritingContextBundle
+from .writing_context import MethodologyPayload, SemanticFragmentContext, StableCorePayload, WritingContextBundle
 
 logger = get_logger(__name__)
 
@@ -336,6 +342,77 @@ async def _build_related_fragments(
     return items
 
 
+def _format_semantic_fragment(fragment: FragmentSnapshot, *, limit: int = 320) -> str | None:
+    """把带语义标签的碎片规整成生成上下文行。"""
+    content = read_fragment_snapshot_text(fragment)
+    if not content:
+        return None
+    tags = effective_fragment_tags(fragment)
+    tag_text = f" 标签：{', '.join(tags)}。" if tags else ""
+    return f"[碎片:{fragment.id}]{tag_text} {_normalize_text(content, limit=limit)}"
+
+
+def _matches_tag_filters(fragment: FragmentSnapshot, tag_filters: list[str]) -> bool:
+    """判断碎片是否命中当前生成入口的标签筛选上下文。"""
+    if not tag_filters:
+        return True
+    tags = set(effective_fragment_tags(fragment))
+    return any(tag in tags for tag in tag_filters)
+
+
+async def _build_semantic_fragment_context(
+    *,
+    db: Session,
+    user_id: str,
+    query_text: str,
+    vector_store: VectorStore,
+    selected_fragment_ids: list[str],
+    folder_id: str | None,
+    tag_filters: list[str],
+) -> SemanticFragmentContext:
+    """按用途分组构建碎片上下文，区分写什么和怎么写。"""
+    selected = _FRAGMENT_SNAPSHOT_READER.get_by_ids(db=db, user_id=user_id, fragment_ids=selected_fragment_ids)
+    selected_ids = {fragment.id for fragment in selected}
+    related_ids: list[str] = []
+    hits = await vector_store.query_fragments(
+        user_id=user_id,
+        query_text=query_text,
+        top_k=_MAX_RELATED_FRAGMENT_HITS * 2,
+        exclude_ids=selected_fragment_ids,
+    )
+    for item in hits:
+        fragment_id = str(item.get("fragment_id") or "").strip()
+        if fragment_id and fragment_id not in related_ids:
+            related_ids.append(fragment_id)
+    related = _FRAGMENT_SNAPSHOT_READER.get_by_ids(db=db, user_id=user_id, fragment_ids=related_ids)
+    fragments = [*selected, *[fragment for fragment in related if fragment.id not in selected_ids]]
+    context = SemanticFragmentContext()
+    for fragment in fragments:
+        if folder_id and fragment.id not in selected_ids and fragment.folder_id != folder_id:
+            continue
+        if fragment.id not in selected_ids and not _matches_tag_filters(fragment, tag_filters):
+            continue
+        formatted = _format_semantic_fragment(fragment)
+        if not formatted:
+            continue
+        purpose = effective_fragment_purpose(fragment)
+        if purpose in {"content_material", "case_study", "product_info"} or (
+            purpose == "other" and fragment.system_purpose is None and fragment.user_purpose is None
+        ):
+            context.content_materials.append(formatted)
+        elif purpose == "style_reference":
+            context.style_references.append(formatted)
+        elif purpose == "methodology":
+            context.methodology_fragments.append(formatted)
+        elif fragment.id in selected_ids:
+            context.supplemental_background.append(formatted)
+    context.content_materials = context.content_materials[:5]
+    context.style_references = context.style_references[:3]
+    context.methodology_fragments = context.methodology_fragments[:3]
+    context.supplemental_background = context.supplemental_background[:3]
+    return context
+
+
 async def _build_related_knowledge(
     *,
     user_id: str,
@@ -366,6 +443,9 @@ async def build_writing_context_bundle(
     vector_store: VectorStore,
     knowledge_index_store: KnowledgeIndexStore,
     exclude_fragment_ids: list[str] | None = None,
+    selected_fragment_ids: list[str] | None = None,
+    folder_id: str | None = None,
+    tag_filters: list[str] | None = None,
 ) -> WritingContextBundle:
     """构建脚本生成所需的三层写作上下文。"""
     stable_core = _build_preset_stable_core()
@@ -390,10 +470,14 @@ async def build_writing_context_bundle(
         vector_store=vector_store,
         exclude_fragment_ids=exclude_fragment_ids or [],
     )
-    related_knowledge = await _build_related_knowledge(
+    semantic_fragments = await _build_semantic_fragment_context(
+        db=db,
         user_id=user_id,
         query_text=query_text,
-        knowledge_index_store=knowledge_index_store,
+        vector_store=vector_store,
+        selected_fragment_ids=selected_fragment_ids or [],
+        folder_id=folder_id,
+        tag_filters=[tag.strip() for tag in tag_filters or [] if tag.strip()],
     )
 
     return WritingContextBundle(
@@ -401,5 +485,6 @@ async def build_writing_context_bundle(
         methodologies=unique_methodologies,
         related_scripts=related_scripts,
         related_fragments=related_fragments,
-        related_knowledge=related_knowledge,
+        related_knowledge=[],
+        semantic_fragments=semantic_fragments,
     )

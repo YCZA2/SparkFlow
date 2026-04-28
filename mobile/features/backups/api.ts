@@ -13,6 +13,11 @@ export type BackupFragmentContractPayload = Record<string, unknown> & {
   updated_at: string;
   summary: string | null;
   tags: string[];
+  system_purpose: string | null;
+  user_purpose: string | null;
+  system_tags: string[];
+  user_tags: string[];
+  dismissed_system_tags: string[];
   transcript: string | null;
   speaker_segments: unknown[] | null;
   audio_object_key: string | null;

@@ -17,7 +17,12 @@ from typing import Any
 from core.exceptions import ValidationError
 from core.logging_config import get_logger
 from models import TaskRun
-from modules.shared.fragment_snapshots import FragmentSnapshotReader, read_fragment_snapshot_text
+from modules.shared.fragment_snapshots import (
+    FragmentSnapshotReader,
+    effective_fragment_purpose,
+    effective_fragment_tags,
+    read_fragment_snapshot_text,
+)
 from modules.shared.tasks.task_types import (
     TaskExecutionContext,
     TaskExecutionError,
@@ -65,6 +70,8 @@ class RagScriptTaskService:
         user_id: str,
         topic: str,
         fragment_ids: list[str],
+        folder_id: str | None = None,
+        tag_filters: list[str] | None = None,
     ) -> TaskRun:
         """创建 RAG 脚本生成任务。"""
         if not topic.strip():
@@ -89,6 +96,8 @@ class RagScriptTaskService:
             input_payload={
                 "topic": topic.strip(),
                 "fragment_ids": fragment_ids,
+                "folder_id": folder_id,
+                "tag_filters": [tag.strip() for tag in tag_filters or [] if tag.strip()],
                 "mode": "mode_rag",
             },
             resource_type=None,
@@ -138,6 +147,9 @@ class RagScriptTaskService:
             vector_store=context.container.vector_store,
             knowledge_index_store=context.container.knowledge_index_store,
             exclude_fragment_ids=context.input_payload.get("fragment_ids") or [],
+            selected_fragment_ids=context.input_payload.get("fragment_ids") or [],
+            folder_id=context.input_payload.get("folder_id"),
+            tag_filters=context.input_payload.get("tag_filters") or [],
         )
         reference_hits = await context.container.knowledge_index_store.search_reference_examples(
             user_id=user_id,
@@ -185,6 +197,12 @@ class RagScriptTaskService:
             "related_scripts": writing_context.related_scripts,
             "related_fragments": writing_context.related_fragments,
             "related_knowledge": writing_context.related_knowledge,
+            "semantic_fragments": {
+                "content_materials": writing_context.semantic_fragments.content_materials,
+                "style_references": writing_context.semantic_fragments.style_references,
+                "methodology_fragments": writing_context.semantic_fragments.methodology_fragments,
+                "supplemental_background": writing_context.semantic_fragments.supplemental_background,
+            },
             "reference_examples": reference_examples,
             "style_description": style_description,
         }
@@ -217,9 +235,16 @@ class RagScriptTaskService:
         related_knowledge = examples_output.get("related_knowledge") or []
         reference_examples = examples_output.get("reference_examples") or []
         style_description = examples_output.get("style_description", "")
+        semantic_fragments = examples_output.get("semantic_fragments") or {}
 
         # 如有可选碎片 ID，从数据库读取其纯文本内容作为补充背景
         fragment_texts: list[str] = []
+        selected_semantic_fragments = {
+            "content_materials": [],
+            "style_references": [],
+            "methodology_fragments": [],
+            "supplemental_background": [],
+        }
         if fragment_ids:
             fragments = self.snapshot_reader.get_by_ids(
                 db=context.db,
@@ -237,6 +262,22 @@ class RagScriptTaskService:
                 text = read_fragment_snapshot_text(fragment)
                 if text:
                     fragment_texts.append(text)
+                    tags = effective_fragment_tags(fragment)
+                    tag_text = f" 标签：{', '.join(tags)}。" if tags else ""
+                    formatted = f"[碎片:{fragment.id}]{tag_text} {text[:360]}"
+                    purpose = effective_fragment_purpose(fragment)
+                    if purpose in {"content_material", "case_study", "product_info"} or (
+                        purpose == "other" and fragment.system_purpose is None and fragment.user_purpose is None
+                    ):
+                        selected_semantic_fragments["content_materials"].append(formatted)
+                    elif purpose == "style_reference":
+                        selected_semantic_fragments["style_references"].append(formatted)
+                    elif purpose == "methodology":
+                        selected_semantic_fragments["methodology_fragments"].append(formatted)
+                    else:
+                        selected_semantic_fragments["supplemental_background"].append(formatted)
+        for key, items in selected_semantic_fragments.items():
+            semantic_fragments[key] = [*items, *(semantic_fragments.get(key) or [])]
 
         user_message = build_generation_prompt(
             topic=topic,
@@ -246,6 +287,7 @@ class RagScriptTaskService:
             related_scripts=related_scripts,
             related_fragments=related_fragments,
             related_knowledge=related_knowledge,
+            semantic_fragments=semantic_fragments,
             style_description=style_description,
             reference_examples=reference_examples,
             fragment_texts=fragment_texts,

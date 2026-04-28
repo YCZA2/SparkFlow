@@ -46,6 +46,7 @@ class AppVectorStore(VectorStore, KnowledgeIndexStore):
         source: str,
         summary: str | None,
         tags: list[str] | None,
+        purpose: str | None = None,
     ) -> bool:
         """把碎片文本写入向量库。"""
         normalized_text = text.strip()
@@ -57,6 +58,8 @@ class AppVectorStore(VectorStore, KnowledgeIndexStore):
             metadata["summary"] = summary
         if tags:
             metadata["tags_json"] = json.dumps(tags, ensure_ascii=False)
+        if purpose:
+            metadata["purpose"] = purpose
         return await self.vector_db_provider.upsert(
             namespace=_fragment_namespace(user_id),
             documents=[VectorDocument(id=fragment_id, text=normalized_text, embedding=embedding_result.embedding, metadata=metadata)],

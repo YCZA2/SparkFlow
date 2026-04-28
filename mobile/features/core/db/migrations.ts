@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const LATEST_SCHEMA_VERSION = 11;
+const LATEST_SCHEMA_VERSION = 12;
 
 /*创建当前开发阶段的本地 SQLite 基线；旧开发库直接重建，不保留历史升级链。 */
 export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Promise<void> {
@@ -27,6 +27,11 @@ export async function runLocalDatabaseMigrations(database: SQLiteDatabase): Prom
       updated_at TEXT NOT NULL,
       summary TEXT,
       tags_json TEXT NOT NULL DEFAULT '[]',
+      system_purpose TEXT,
+      user_purpose TEXT,
+      system_tags_json TEXT NOT NULL DEFAULT '[]',
+      user_tags_json TEXT NOT NULL DEFAULT '[]',
+      dismissed_system_tags_json TEXT NOT NULL DEFAULT '[]',
       plain_text_snapshot TEXT NOT NULL DEFAULT '',
       body_file_uri TEXT,
       transcript TEXT,

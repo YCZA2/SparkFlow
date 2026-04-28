@@ -17,7 +17,7 @@ class FakeVectorStore:
         self.knowledge_docs: dict[str, dict] = {}
         self.knowledge_results: list[dict] = []
 
-    async def upsert_fragment(self, *, user_id: str, fragment_id: str, text: str, source: str, summary, tags):
+    async def upsert_fragment(self, *, user_id: str, fragment_id: str, text: str, source: str, summary, tags, purpose=None):
         self.fragment_docs[fragment_id] = {
             "user_id": user_id,
             "fragment_id": fragment_id,
@@ -25,6 +25,7 @@ class FakeVectorStore:
             "source": source,
             "summary": summary,
             "tags": tags or [],
+            "purpose": purpose,
         }
         return True
 

@@ -113,7 +113,8 @@ async def test_fragment_derivative_task_backfills_summary_tags_and_vector(
     snapshot = _read_fragment_snapshot(db_session_factory, fragment_id)
     assert snapshot is not None
     assert snapshot.summary
-    assert snapshot.tags
+    assert snapshot.system_tags
+    assert snapshot.system_purpose
     assert vector_store.fragment_docs[fragment_id]["text"] == "定位方法论测试文本"
 
 
@@ -153,7 +154,8 @@ async def test_fragment_derivative_task_uses_fallback_when_llm_fails(
         snapshot = _read_fragment_snapshot(db_session_factory, fragment_id)
         assert snapshot is not None
         assert snapshot.summary
-        assert snapshot.tags
+        assert snapshot.system_tags
+        assert snapshot.system_purpose
     finally:
         app.state.container.llm_provider = original_llm_provider
 
@@ -188,7 +190,8 @@ async def test_fragment_derivative_task_logs_vector_failure_without_failing_task
         snapshot = _read_fragment_snapshot(db_session_factory, fragment_id)
         assert snapshot is not None
         assert snapshot.summary
-        assert snapshot.tags
+        assert snapshot.system_tags
+        assert snapshot.system_purpose
     finally:
         app.state.container.vector_store.upsert_fragment = original_upsert
 

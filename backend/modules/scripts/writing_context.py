@@ -23,6 +23,16 @@ class MethodologyPayload:
 
 
 @dataclass
+class SemanticFragmentContext:
+    """描述按用途分区后的碎片生成上下文。"""
+
+    content_materials: list[str] = field(default_factory=list)
+    style_references: list[str] = field(default_factory=list)
+    methodology_fragments: list[str] = field(default_factory=list)
+    supplemental_background: list[str] = field(default_factory=list)
+
+
+@dataclass
 class WritingContextBundle:
     """描述脚本生成前可消费的三层写作上下文。"""
 
@@ -31,3 +41,4 @@ class WritingContextBundle:
     related_scripts: list[str] = field(default_factory=list)
     related_fragments: list[str] = field(default_factory=list)
     related_knowledge: list[str] = field(default_factory=list)
+    semantic_fragments: SemanticFragmentContext = field(default_factory=SemanticFragmentContext)

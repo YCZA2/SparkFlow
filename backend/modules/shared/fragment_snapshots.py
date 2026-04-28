@@ -11,6 +11,15 @@ from domains.backups import repository as backup_repository
 from modules.shared.content.body_service import extract_plain_text_from_html
 from utils.time import ensure_aware_utc
 
+FRAGMENT_PURPOSES = {
+    "content_material",
+    "style_reference",
+    "methodology",
+    "case_study",
+    "product_info",
+    "other",
+}
+
 
 def _read_string(value: Any) -> str | None:
     """把快照字段规整为非空字符串。"""
@@ -25,6 +34,28 @@ def _read_string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def normalize_fragment_purpose(value: Any) -> str | None:
+    """把任意输入规整为当前支持的 fragment 主要用途。"""
+    normalized = _read_string(value)
+    return normalized if normalized in FRAGMENT_PURPOSES else None
+
+
+def effective_fragment_purpose(snapshot: "FragmentSnapshot") -> str:
+    """读取生成时真正采用的用途，用户修正优先。"""
+    return snapshot.user_purpose or snapshot.system_purpose or "other"
+
+
+def effective_fragment_tags(snapshot: "FragmentSnapshot") -> list[str]:
+    """合并用户标签和未删除系统建议标签，兼容旧 tags 字段。"""
+    dismissed = set(snapshot.dismissed_system_tags)
+    tags: list[str] = []
+    for tag in [*snapshot.tags, *snapshot.user_tags, *snapshot.system_tags]:
+        if tag in dismissed or tag in tags:
+            continue
+        tags.append(tag)
+    return tags
 
 
 def _parse_snapshot_datetime(value: Any) -> datetime | None:
@@ -54,6 +85,11 @@ class FragmentSnapshot:
     speaker_segments: list[dict[str, Any]] | None
     summary: str | None
     tags: list[str]
+    system_purpose: str | None
+    user_purpose: str | None
+    system_tags: list[str]
+    user_tags: list[str]
+    dismissed_system_tags: list[str]
     audio_object_key: str | None
     audio_file_url: str | None
     audio_file_expires_at: str | None
@@ -105,6 +141,11 @@ def hydrate_fragment_snapshot(item: dict[str, Any], *, user_id: str) -> Fragment
         speaker_segments=_read_speaker_segments(item.get("speaker_segments")),
         summary=_read_string(item.get("summary")),
         tags=_read_string_list(item.get("tags")),
+        system_purpose=normalize_fragment_purpose(item.get("system_purpose")),
+        user_purpose=normalize_fragment_purpose(item.get("user_purpose")),
+        system_tags=_read_string_list(item.get("system_tags")) or _read_string_list(item.get("tags")),
+        user_tags=_read_string_list(item.get("user_tags")),
+        dismissed_system_tags=_read_string_list(item.get("dismissed_system_tags")),
         audio_object_key=_read_string(item.get("audio_object_key")),
         audio_file_url=_read_string(item.get("audio_file_url")),
         audio_file_expires_at=_read_string(item.get("audio_file_expires_at")),
@@ -123,6 +164,8 @@ SERVER_MANAGED_FRAGMENT_FIELDS = {
     "speaker_segments",
     "summary",
     "tags",
+    "system_purpose",
+    "system_tags",
     "audio_object_key",
     "audio_file_url",
     "audio_file_expires_at",
@@ -476,6 +519,11 @@ class FragmentSnapshotReader:
             speaker_segments=_read_speaker_segments(payload.get("speaker_segments")),
             summary=_read_string(payload.get("summary")),
             tags=_read_string_list(payload.get("tags")),
+            system_purpose=normalize_fragment_purpose(payload.get("system_purpose")),
+            user_purpose=normalize_fragment_purpose(payload.get("user_purpose")),
+            system_tags=_read_string_list(payload.get("system_tags")) or _read_string_list(payload.get("tags")),
+            user_tags=_read_string_list(payload.get("user_tags")),
+            dismissed_system_tags=_read_string_list(payload.get("dismissed_system_tags")),
             audio_object_key=_read_string(payload.get("audio_object_key")),
             audio_file_url=_read_string(payload.get("audio_file_url")),
             audio_file_expires_at=_read_string(payload.get("audio_file_expires_at")),

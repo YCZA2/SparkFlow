@@ -5,7 +5,7 @@ from typing import Optional
 
 from models import MediaAsset
 from modules.shared.content.content_schemas import MediaAssetItem
-from modules.shared.fragment_snapshots import FragmentSnapshot
+from modules.shared.fragment_snapshots import FragmentSnapshot, effective_fragment_purpose, effective_fragment_tags
 from modules.shared.ports import FileStorage, StoredFile
 from utils.serialization import format_iso_datetime
 
@@ -82,6 +82,13 @@ def map_fragment_snapshot(
         speaker_segments=_map_snapshot_speaker_segments(snapshot.speaker_segments),
         summary=snapshot.summary,
         tags=snapshot.tags,
+        system_purpose=snapshot.system_purpose,
+        user_purpose=snapshot.user_purpose,
+        effective_purpose=effective_fragment_purpose(snapshot),
+        system_tags=snapshot.system_tags,
+        user_tags=snapshot.user_tags,
+        dismissed_system_tags=snapshot.dismissed_system_tags,
+        effective_tags=effective_fragment_tags(snapshot),
         source=snapshot.source,
         audio_source=snapshot.audio_source,
         created_at=format_iso_datetime(snapshot.created_at),

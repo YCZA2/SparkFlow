@@ -8,6 +8,8 @@ from modules.tasks.schemas import TaskSubmissionHandle
 class ScriptGenerationRequest(BaseModel):
     topic: str = Field(..., description="脚本主题（必填），作为大纲生成和向量检索的核心输入", min_length=1, max_length=200)
     fragment_ids: list[str] = Field(default_factory=list, description="可选碎片 ID 列表，内容作为补充背景注入脚本", max_length=20)
+    folder_id: str | None = Field(None, description="当前发起生成的文件夹上下文")
+    tag_filters: list[str] = Field(default_factory=list, description="当前筛选标签上下文", max_length=20)
 
 
 class ScriptGenerationResponse(TaskSubmissionHandle):

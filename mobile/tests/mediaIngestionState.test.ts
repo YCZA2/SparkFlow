@@ -26,6 +26,8 @@ test('extractMediaIngestionOutput keeps transcript, summary and tags from task o
       transcript: '这是一段转写',
       summary: '摘要',
       tags: ['灵感', '选题'],
+      system_purpose: null,
+      system_tags: null,
       speaker_segments: null,
       audio_object_key: null,
       audio_file_url: 'https://example.com/audio.m4a',

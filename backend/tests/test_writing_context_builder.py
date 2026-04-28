@@ -167,7 +167,8 @@ async def test_writing_context_bundle_uses_preset_stable_core_and_cached_methodo
     assert any(item.source_type == "knowledge_upload" for item in bundle.methodologies)
     assert bundle.related_scripts
     assert bundle.related_fragments
-    assert bundle.related_knowledge
+    assert bundle.related_knowledge == []
+    assert bundle.semantic_fragments.content_materials
     assert llm_provider.calls == []
 
 

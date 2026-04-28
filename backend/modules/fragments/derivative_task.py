@@ -54,7 +54,7 @@ class FragmentDerivativeTaskService:
             str(payload.get("effective_text") or "").strip()
             or (read_fragment_snapshot_text(snapshot) if snapshot is not None else "")
         )
-        summary, tags = await derivative_service.backfill_snapshot_derivatives(
+        summary, tags, system_purpose = await derivative_service.backfill_snapshot_derivatives(
             db=context.db,
             user_id=context.run.user_id,
             fragment_id=logical_fragment_id,
@@ -68,6 +68,8 @@ class FragmentDerivativeTaskService:
             "logical_fragment_id": logical_fragment_id,
             "summary": summary,
             "tags": tags,
+            "system_tags": tags,
+            "system_purpose": system_purpose,
             "effective_text": effective_text,
         }
 
@@ -84,6 +86,8 @@ class FragmentDerivativeTaskService:
                 "local_fragment_id": local_fragment_id,
                 "summary": payload.get("summary"),
                 "tags": payload.get("tags") or [],
+                "system_tags": payload.get("system_tags") or payload.get("tags") or [],
+                "system_purpose": payload.get("system_purpose") or "other",
             },
         }
 

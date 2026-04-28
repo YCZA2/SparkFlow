@@ -38,6 +38,8 @@ export interface Script {
 export interface GenerateScriptRequest {
   topic: string;
   fragment_ids: string[];
+  folder_id?: string | null;
+  tag_filters?: string[];
 }
 
 export interface ScriptGenerationTask extends TaskSubmissionHandle {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, SectionList, StyleSheet, TouchableOpacity, View, Text } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { SymbolView } from 'expo-symbols';
@@ -39,6 +39,50 @@ function SelectButton({
         {isSelectionMode ? '完成' : '编辑'}
       </Text>
     </TouchableOpacity>
+  );
+}
+
+function TagFilterStrip({
+  tags,
+  activeTag,
+  onChange,
+}: {
+  tags: string[];
+  activeTag: string | null;
+  onChange: (tag: string | null) => void;
+}) {
+  /*把当前文件夹内有效标签做成轻量筛选条，避免用户进入独立知识库视图。 */
+  const theme = useAppTheme();
+  if (tags.length === 0) {
+    return null;
+  }
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-sf-md">
+      <View className="flex-row gap-sf-sm">
+        <TouchableOpacity
+          className="rounded-sf-pill px-[12px] py-[7px]"
+          style={{ backgroundColor: activeTag === null ? theme.colors.text : theme.colors.surfaceMuted }}
+          onPress={() => onChange(null)}
+          activeOpacity={0.82}
+        >
+          <Text className="text-xs font-semibold" style={{ color: activeTag === null ? theme.colors.surface : theme.colors.text }}>全部</Text>
+        </TouchableOpacity>
+        {tags.map((tag) => {
+          const selected = activeTag === tag;
+          return (
+            <TouchableOpacity
+              key={tag}
+              className="rounded-sf-pill px-[12px] py-[7px]"
+              style={{ backgroundColor: selected ? theme.colors.text : theme.colors.surfaceMuted }}
+              onPress={() => onChange(selected ? null : tag)}
+              activeOpacity={0.82}
+            >
+              <Text className="text-xs font-semibold" style={{ color: selected ? theme.colors.surface : theme.colors.text }}>{tag}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </ScrollView>
   );
 }
 
@@ -251,6 +295,11 @@ export default function FolderDetailScreen() {
               title={name || '文件夹'}
               subtitle={screen.totalLabel}
               titleLines={2}
+            />
+            <TagFilterStrip
+              tags={screen.availableTags}
+              activeTag={screen.activeTag}
+              onChange={screen.setActiveTag}
             />
           </Pressable>
         }

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from core.exceptions import ValidationError
 from domains.backups import repository as backup_repository
 from modules.shared.fragment_snapshots import _read_payload_dict, merge_fragment_snapshot_server_fields
+from modules.fragments.derivative_task import TASK_TYPE_FRAGMENT_DERIVATIVE_BACKFILL
 from modules.shared.ports import FileStorage, StoredFile
 from modules.shared.infrastructure.storage import LocalFileStorage, OssFileStorage, normalize_object_key, sanitize_filename
 from utils.time import ensure_aware_utc
@@ -45,6 +46,10 @@ def _isoformat(value: datetime | None) -> str | None:
 
 class BackupUseCase:
     """封装备份批量写入、快照拉取与恢复审计。"""
+
+    def __init__(self, *, task_runner=None) -> None:
+        """装配可选任务运行器，用于备份后触发碎片语义回填。"""
+        self.task_runner = task_runner
 
     def push_batch(
         self,
@@ -106,6 +111,37 @@ class BackupUseCase:
             ignored_count=ignored_count,
             server_generated_at=_isoformat(now) or "",
         )
+
+    async def enqueue_fragment_derivatives(
+        self,
+        *,
+        user_id: str,
+        payload: BackupBatchRequest,
+    ) -> None:
+        """把 fragment 正文快照变化交给后台语义回填任务。"""
+        if self.task_runner is None:
+            return
+        seen_fragment_ids: set[str] = set()
+        for item in payload.items:
+            if item.entity_type != "fragment" or item.operation != "upsert" or not item.payload:
+                continue
+            fragment_id = item.entity_id.strip()
+            if not fragment_id or fragment_id in seen_fragment_ids:
+                continue
+            seen_fragment_ids.add(fragment_id)
+            await self.task_runner.create_run(
+                run_id=None,
+                user_id=user_id,
+                task_type=TASK_TYPE_FRAGMENT_DERIVATIVE_BACKFILL,
+                input_payload={
+                    "fragment_id": fragment_id,
+                    "local_fragment_id": fragment_id,
+                    "source": item.payload.get("source") or "manual",
+                },
+                resource_type="local_fragment",
+                resource_id=fragment_id,
+                auto_wake=True,
+            )
 
     def get_snapshot(
         self,

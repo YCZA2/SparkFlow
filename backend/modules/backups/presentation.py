@@ -36,13 +36,20 @@ async def push_backup_batch(
     data: BackupBatchRequest,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db_session),
+    container: ServiceContainer = Depends(get_container),
 ):
+    use_case = BackupUseCase(task_runner=container.task_runner)
+    response = use_case.push_batch(
+        db=db,
+        user_id=current_user["user_id"],
+        payload=data,
+    )
+    await use_case.enqueue_fragment_derivatives(
+        user_id=current_user["user_id"],
+        payload=data,
+    )
     return success_response(
-        data=BackupUseCase().push_batch(
-            db=db,
-            user_id=current_user["user_id"],
-            payload=data,
-        ),
+        data=response,
         message="备份批次写入成功",
     )
 
