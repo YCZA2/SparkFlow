@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"refresh_fragment_methodology\\\\|methodology\" /Users/liangxiangyu/Desktop/VibeCode/SparkFlow/backend/ -path \"*/tasks/*\" -n)"
+    ]
+  }
+}
