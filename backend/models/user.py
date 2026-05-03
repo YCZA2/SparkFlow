@@ -34,6 +34,7 @@ class User(Base):
     knowledge_docs = relationship("KnowledgeDoc", back_populates="user", cascade="all, delete-orphan")
     stable_core_profile = relationship("StableCoreProfile", back_populates="user", cascade="all, delete-orphan", uselist=False)
     methodology_entries = relationship("MethodologyEntry", back_populates="user", cascade="all, delete-orphan")
+    writing_style = relationship("UserWritingStyle", back_populates="user", cascade="all, delete-orphan", uselist=False)
     media_assets = relationship("MediaAsset", back_populates="user", cascade="all, delete-orphan")
     device_sessions = relationship("DeviceSession", back_populates="user", cascade="all, delete-orphan")
     backup_records = relationship("BackupRecord", back_populates="user", cascade="all, delete-orphan")

@@ -164,7 +164,6 @@ async def test_writing_context_bundle_uses_preset_stable_core_and_cached_methodo
     assert bundle.stable_core.content
     assert "把零散灵感整理成可执行" in bundle.stable_core.content
     assert any(item.source_type == "fragment_distilled" for item in bundle.methodologies)
-    assert any(item.source_type == "knowledge_upload" for item in bundle.methodologies)
     assert bundle.related_scripts
     assert bundle.related_fragments
     assert bundle.related_knowledge == []

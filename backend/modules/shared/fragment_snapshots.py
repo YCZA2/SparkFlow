@@ -43,8 +43,8 @@ def normalize_fragment_purpose(value: Any) -> str | None:
 
 
 def effective_fragment_purpose(snapshot: "FragmentSnapshot") -> str:
-    """读取生成时真正采用的用途，用户修正优先。"""
-    return snapshot.user_purpose or snapshot.system_purpose or "other"
+    """读取生成时真正采用的用途，仅依赖系统自动判断，不再读取用户修正。"""
+    return snapshot.system_purpose or "other"
 
 
 def effective_fragment_tags(snapshot: "FragmentSnapshot") -> list[str]:

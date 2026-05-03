@@ -14,7 +14,6 @@ export interface FragmentsScreenState {
   openCloud: () => void;
   openRecorder: () => void;
   openTextNote: () => void;
-  openKnowledgePlaceholder: () => void;
   openNetworkSettings: () => void;
   refresh: () => Promise<void>;
   reload: () => Promise<void>;
@@ -39,7 +38,6 @@ export function useFragmentsScreen(): FragmentsScreenState {
     openCloud: () => router.push('/fragment-cloud'),
     openRecorder: () => router.push('/record-audio'),
     openTextNote: () => router.push('/text-note'),
-    openKnowledgePlaceholder: () => router.push('/knowledge'),
     openNetworkSettings: () => {
       if (developerToolsEnabled) {
         router.push('/network-settings');

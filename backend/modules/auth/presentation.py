@@ -8,6 +8,7 @@ from core.auth import get_current_user
 from core.exceptions import PermissionDeniedError
 from modules.shared.infrastructure.container import get_db_session
 
+from domains.writing_context import repository as writing_context_repository
 from .application import AuthUseCase
 from .schemas import (
     CurrentUserResponse,
@@ -16,6 +17,8 @@ from .schemas import (
     LoginResponse,
     TokenPayload,
     TokenRequest,
+    WritingStyleResponse,
+    WritingStyleUpdateRequest,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -130,3 +133,47 @@ async def logout(current_user: dict = Depends(get_current_user), db: Session = D
         device_id=current_user.get("device_id"),
     )
     return success_response(data=None, message="已退出登录")
+
+
+@router.get(
+    "/writing-style",
+    response_model=ResponseModel[WritingStyleResponse],
+    summary="获取当前用户写作风格",
+    description="读取用户设置的写作风格描述，未设置时返回空字符串。",
+)
+async def get_writing_style(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    """获取当前用户的写作风格描述。"""
+    style = writing_context_repository.get_user_writing_style(
+        db=db,
+        user_id=current_user["user_id"],
+    )
+    return success_response(
+        data=WritingStyleResponse(content=style.content if style else ""),
+        message="写作风格获取成功",
+    )
+
+
+@router.patch(
+    "/writing-style",
+    response_model=ResponseModel[WritingStyleResponse],
+    summary="更新当前用户写作风格",
+    description="更新或创建用户的写作风格描述。",
+)
+async def update_writing_style(
+    payload: WritingStyleUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    """更新当前用户的写作风格描述。"""
+    style = writing_context_repository.upsert_user_writing_style(
+        db=db,
+        user_id=current_user["user_id"],
+        content=payload.content,
+    )
+    return success_response(
+        data=WritingStyleResponse(content=style.content),
+        message="写作风格更新成功",
+    )

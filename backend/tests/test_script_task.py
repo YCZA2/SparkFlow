@@ -288,6 +288,11 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
                 }
             ],
         )
+        writing_context_repository.upsert_user_writing_style(
+            db=db,
+            user_id=TEST_USER_ID,
+            content="快节奏、强钩子、结论前置",
+        )
         db.commit()
         db.refresh(reference_doc)
         db.refresh(high_like_doc)
@@ -344,7 +349,6 @@ async def test_rag_script_generation_includes_knowledge_context_sections(
     assert "[方法论与 SOP]" in final_prompt
     assert "[写什么：内容素材 / 案例 / 产品资料]" in final_prompt
     assert "[风格描述]" in final_prompt
-    assert "[参考示例]" in final_prompt
 
     llm_provider.generate = original_generate
 

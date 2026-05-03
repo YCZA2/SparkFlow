@@ -42,3 +42,4 @@ class WritingContextBundle:
     related_fragments: list[str] = field(default_factory=list)
     related_knowledge: list[str] = field(default_factory=list)
     semantic_fragments: SemanticFragmentContext = field(default_factory=SemanticFragmentContext)
+    style_description: str = ""

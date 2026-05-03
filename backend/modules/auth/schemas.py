@@ -43,3 +43,11 @@ class EmailLoginRequest(BaseModel):
 
 class LoginResponse(TokenPayload):
     user: AuthenticatedUserPayload
+
+
+class WritingStyleResponse(BaseModel):
+    content: str = Field("", description="用户写作风格描述")
+
+
+class WritingStyleUpdateRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000, description="用户写作风格描述")

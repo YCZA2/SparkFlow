@@ -34,6 +34,7 @@ export const API_ENDPOINTS = {
     ME: '/api/auth/me',
     REFRESH: '/api/auth/refresh',
     LOGOUT: '/api/auth/logout',
+    WRITING_STYLE: '/api/auth/writing-style',
   },
   BACKUPS: {
     BATCH: '/api/backups/batch',

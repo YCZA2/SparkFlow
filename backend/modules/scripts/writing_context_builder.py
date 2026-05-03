@@ -275,8 +275,16 @@ async def refresh_fragment_methodology_entries_for_all_users(
     }
 
 
+def _build_user_writing_style(*, db: Session, user_id: str) -> str:
+    """读取用户设置的写作风格描述。"""
+    style = writing_context_repository.get_user_writing_style(db=db, user_id=user_id)
+    if style is None:
+        return ""
+    return _normalize_text(style.content, limit=400)
+
+
 def _build_uploaded_methodology_entries(*, db: Session, user_id: str) -> list[MethodologyPayload]:
-    """把上传知识资料映射成方法论条目。"""
+    """把上传知识资料映射成方法论条目（保留兼容，不再在主线生成链路中调用）。"""
     docs = knowledge_repository.list_by_user(db=db, user_id=user_id, doc_type=None, limit=200, offset=0)
     items: list[MethodologyPayload] = []
     for doc in docs:
@@ -397,7 +405,7 @@ async def _build_semantic_fragment_context(
             continue
         purpose = effective_fragment_purpose(fragment)
         if purpose in {"content_material", "case_study", "product_info"} or (
-            purpose == "other" and fragment.system_purpose is None and fragment.user_purpose is None
+            purpose == "other" and fragment.system_purpose is None
         ):
             context.content_materials.append(formatted)
         elif purpose == "style_reference":
@@ -450,7 +458,6 @@ async def build_writing_context_bundle(
     """构建脚本生成所需的三层写作上下文。"""
     stable_core = _build_preset_stable_core()
     methodologies = _list_cached_fragment_methodology_entries(db=db, user_id=user_id)
-    methodologies.extend(_build_uploaded_methodology_entries(db=db, user_id=user_id))
     methodologies.extend(_preset_methodology_entries())
 
     unique_methodologies: list[MethodologyPayload] = []
@@ -479,6 +486,7 @@ async def build_writing_context_bundle(
         folder_id=folder_id,
         tag_filters=[tag.strip() for tag in tag_filters or [] if tag.strip()],
     )
+    style_description = _build_user_writing_style(db=db, user_id=user_id)
 
     return WritingContextBundle(
         stable_core=stable_core,
@@ -487,4 +495,5 @@ async def build_writing_context_bundle(
         related_fragments=related_fragments,
         related_knowledge=[],
         semantic_fragments=semantic_fragments,
+        style_description=style_description,
     )

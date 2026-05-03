@@ -94,15 +94,6 @@ export function DrawerContent({ closeDrawer }: DrawerContentProps) {
       {/* 菜单区块 1 */}
       <View className="mb-sf-md overflow-hidden rounded-sf-lg bg-black/[0.02] dark:bg-white/[0.04]">
         <MenuItem
-          icon="📚"
-          title="我的方法论"
-          subtitle="知识库入口预留"
-          onPress={() => {
-            closeDrawer();
-          }}
-          tone={theme}
-        />
-        <MenuItem
           icon="📝"
           title="我的口播稿"
           subtitle="查看生成的口播稿"

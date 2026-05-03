@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from models import MethodologyEntry, StableCoreProfile
+from models import MethodologyEntry, StableCoreProfile, UserWritingStyle
 
 
 def get_stable_core_profile(db: Session, *, user_id: str) -> StableCoreProfile | None:
@@ -97,3 +97,33 @@ def replace_methodology_entries_for_source(
     for entry in created:
         db.refresh(entry)
     return created
+
+
+def get_user_writing_style(db: Session, *, user_id: str) -> UserWritingStyle | None:
+    """读取用户的写作风格描述。"""
+    return (
+        db.query(UserWritingStyle)
+        .filter(UserWritingStyle.user_id == user_id)
+        .first()
+    )
+
+
+def upsert_user_writing_style(
+    db: Session,
+    *,
+    user_id: str,
+    content: str,
+) -> UserWritingStyle:
+    """创建或更新用户的写作风格描述。"""
+    style = get_user_writing_style(db=db, user_id=user_id)
+    if style is None:
+        style = UserWritingStyle(
+            user_id=user_id,
+            content=content,
+        )
+        db.add(style)
+    else:
+        style.content = content
+    db.commit()
+    db.refresh(style)
+    return style

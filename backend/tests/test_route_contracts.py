@@ -27,6 +27,8 @@ def test_public_api_routes_are_stable() -> None:
         ("/api/auth/me", frozenset({"GET"})),
         ("/api/auth/refresh", frozenset({"POST"})),
         ("/api/auth/logout", frozenset({"POST"})),
+        ("/api/auth/writing-style", frozenset({"GET"})),
+        ("/api/auth/writing-style", frozenset({"PATCH"})),
         ("/api/backups/batch", frozenset({"POST"})),
         ("/api/backups/snapshot", frozenset({"GET"})),
         ("/api/backups/restore", frozenset({"POST"})),

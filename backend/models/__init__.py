@@ -12,7 +12,7 @@ from models.fragment import FragmentFolder
 from models.script import Script
 from models.media import ContentMediaLink, KnowledgeDoc, MediaAsset
 from models.task import TaskRun, TaskStepRun
-from models.writing_context import MethodologyEntry, StableCoreProfile
+from models.writing_context import MethodologyEntry, StableCoreProfile, UserWritingStyle
 
 __all__ = [
     # 数据库工具
@@ -39,6 +39,7 @@ __all__ = [
     "MediaAsset",
     "StableCoreProfile",
     "MethodologyEntry",
+    "UserWritingStyle",
     # 任务
     "TaskRun",
     "TaskStepRun",

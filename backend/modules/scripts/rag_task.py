@@ -151,34 +151,14 @@ class RagScriptTaskService:
             folder_id=context.input_payload.get("folder_id"),
             tag_filters=context.input_payload.get("tag_filters") or [],
         )
-        reference_hits = await context.container.knowledge_index_store.search_reference_examples(
-            user_id=user_id,
-            query_text=topic,
-            top_k=3,
-        )
-        style_description = ""
+        style_description = writing_context.style_description
         reference_examples: list[str] = []
-        if reference_hits:
-            from domains.knowledge import repository as knowledge_repository
-
-            top_doc = knowledge_repository.get_by_id(
-                db=context.db,
-                user_id=user_id,
-                doc_id=reference_hits[0].doc_id,
-            )
-            if top_doc and top_doc.style_description:
-                style_description = top_doc.style_description
-            for hit in reference_hits:
-                for chunk in hit.matched_chunks or []:
-                    if chunk and chunk not in reference_examples:
-                        reference_examples.append(chunk)
         if (
             not writing_context.stable_core.content
             and not writing_context.methodologies
             and not writing_context.related_scripts
             and not writing_context.related_fragments
             and not writing_context.related_knowledge
-            and not reference_examples
         ):
             logger.info("retrieve_examples_empty", topic=topic, user_id=user_id)
         return {
@@ -267,7 +247,7 @@ class RagScriptTaskService:
                     formatted = f"[碎片:{fragment.id}]{tag_text} {text[:360]}"
                     purpose = effective_fragment_purpose(fragment)
                     if purpose in {"content_material", "case_study", "product_info"} or (
-                        purpose == "other" and fragment.system_purpose is None and fragment.user_purpose is None
+                        purpose == "other" and fragment.system_purpose is None
                     ):
                         selected_semantic_fragments["content_materials"].append(formatted)
                     elif purpose == "style_reference":

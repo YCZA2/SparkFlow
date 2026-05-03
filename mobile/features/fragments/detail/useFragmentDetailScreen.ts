@@ -11,7 +11,6 @@ import { markFragmentsStale } from '@/features/fragments/refreshSignal';
 import { deleteLocalFragmentEntity } from '@/features/fragments/store';
 import { updateLocalFragmentEntity } from '@/features/fragments/store';
 import { normalizeSemanticTags } from '@/features/fragments/semantics';
-import type { FragmentPurpose } from '@/types/fragment';
 import { getErrorMessage } from '@/utils/error';
 
 import {
@@ -206,13 +205,6 @@ export function useFragmentDetailScreen(
     [fragment?.id]
   );
 
-  const setPurpose = useCallback(
-    async (purpose: FragmentPurpose) => {
-      await updateSemanticFields({ user_purpose: purpose });
-    },
-    [updateSemanticFields]
-  );
-
   const addUserTag = useCallback(
     async (tag: string) => {
       const nextTags = normalizeSemanticTags([...(fragment?.user_tags ?? []), tag]);
@@ -227,23 +219,6 @@ export function useFragmentDetailScreen(
       await updateSemanticFields({ user_tags: nextTags });
     },
     [fragment?.user_tags, updateSemanticFields]
-  );
-
-  const acceptSystemTag = useCallback(
-    async (tag: string) => {
-      const nextTags = normalizeSemanticTags([...(fragment?.user_tags ?? []), tag]);
-      const dismissed = normalizeSemanticTags((fragment?.dismissed_system_tags ?? []).filter((item) => item !== tag));
-      await updateSemanticFields({ user_tags: nextTags, dismissed_system_tags: dismissed });
-    },
-    [fragment?.dismissed_system_tags, fragment?.user_tags, updateSemanticFields]
-  );
-
-  const dismissSystemTag = useCallback(
-    async (tag: string) => {
-      const dismissed = normalizeSemanticTags([...(fragment?.dismissed_system_tags ?? []), tag]);
-      await updateSemanticFields({ dismissed_system_tags: dismissed });
-    },
-    [fragment?.dismissed_system_tags, updateSemanticFields]
   );
 
   return {
@@ -273,11 +248,8 @@ export function useFragmentDetailScreen(
         onShoot: openShoot,
         onOpenRelatedScripts: openRelatedScripts,
         onDelete: requestDelete,
-        onSetPurpose: setPurpose,
         onAddUserTag: addUserTag,
         onRemoveUserTag: removeUserTag,
-        onAcceptSystemTag: acceptSystemTag,
-        onDismissSystemTag: dismissSystemTag,
       },
     },
     actions: {

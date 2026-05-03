@@ -169,7 +169,6 @@ function RootLayoutNav() {
           />
           <Stack.Screen name="import-link" options={{ title: '导入链接', headerShown: true }} />
           <Stack.Screen name="import-audio" options={{ title: '导入音频', headerShown: true }} />
-          <Stack.Screen name="knowledge" options={{ title: '知识库', headerShown: true }} />
           {developerToolsEnabled ? (
             <Stack.Screen
               name="debug-logs"

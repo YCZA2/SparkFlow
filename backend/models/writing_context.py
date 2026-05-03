@@ -55,3 +55,24 @@ class MethodologyEntry(Base):
 
     def __repr__(self) -> str:
         return f"<MethodologyEntry(id={self.id}, user_id={self.user_id}, source_type={self.source_type})>"
+
+
+class UserWritingStyle(Base):
+    """用户写作风格描述表。"""
+
+    __tablename__ = "user_writing_styles"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_user_writing_styles_user_id"),
+        Index("ix_user_writing_styles_user_id_updated_at", "user_id", "updated_at"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="writing_style")
+
+    def __repr__(self) -> str:
+        return f"<UserWritingStyle(id={self.id}, user_id={self.user_id})>"

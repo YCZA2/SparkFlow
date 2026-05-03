@@ -116,6 +116,22 @@ export async function fetchCurrentUser(): Promise<UserInfo> {
   return await fetchApi<UserInfo>(API_ENDPOINTS.AUTH.ME, 'GET');
 }
 
+export interface WritingStyleResponse {
+  content: string;
+}
+
+export interface WritingStyleUpdateRequest {
+  content: string;
+}
+
+export async function fetchWritingStyle(): Promise<WritingStyleResponse> {
+  return await fetchApi<WritingStyleResponse>(API_ENDPOINTS.AUTH.WRITING_STYLE, 'GET');
+}
+
+export async function updateWritingStyle(payload: WritingStyleUpdateRequest): Promise<WritingStyleResponse> {
+  return await fetchApi<WritingStyleResponse>(API_ENDPOINTS.AUTH.WRITING_STYLE, 'PATCH', payload);
+}
+
 export async function hydrateAuthenticatedWorkspace(): Promise<UserInfo | null> {
   const token = await getToken();
   if (!token) {

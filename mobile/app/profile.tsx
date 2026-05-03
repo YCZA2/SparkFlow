@@ -149,17 +149,17 @@ export default function ProfileScreen() {
             ]}
           >
             <MenuItem
-              icon="📚"
-              title="我的方法论"
-              subtitle="知识库入口预留，后续接入管理能力"
-              onPress={() => {}}
-              tone={theme}
-            />
-            <MenuItem
               icon="📝"
               title="我的口播稿"
               subtitle="查看生成的口播稿"
               onPress={() => router.push('/scripts')}
+              tone={theme}
+            />
+            <MenuItem
+              icon="✍️"
+              title="写作风格"
+              subtitle="定义你的表达习惯，AI 生成时优先遵循"
+              onPress={() => router.push('/writing-style')}
               hideBorder
               tone={theme}
             />

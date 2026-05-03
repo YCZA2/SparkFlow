@@ -28,12 +28,7 @@ export function buildFragmentDetailSheetContent(fragment: Fragment | null) {
     speakerSegments: fragment.speaker_segments,
     summary: fragment.summary,
     tags: fragment.tags,
-    systemPurpose: fragment.system_purpose ?? null,
-    userPurpose: fragment.user_purpose ?? null,
-    effectivePurpose: fragment.effective_purpose ?? 'other',
-    systemTags: fragment.system_tags ?? fragment.tags ?? [],
     userTags: fragment.user_tags ?? [],
-    dismissedSystemTags: fragment.dismissed_system_tags ?? [],
     effectiveTags: fragment.effective_tags ?? fragment.tags ?? [],
   };
 }
