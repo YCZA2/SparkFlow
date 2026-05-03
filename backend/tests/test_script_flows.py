@@ -131,7 +131,7 @@ async def test_upload_audio_transitions_to_synced_with_folder_and_tags(async_cli
     enriched = await _wait_fragment_derivatives(db_session_factory, "upload-local-001")
     assert enriched.audio_source == "upload"
     assert enriched.summary
-    assert enriched.tags
+    assert enriched.system_tags
 
     snapshot_payload = _read_fragment_payload(db_session_factory, "upload-local-001")
     assert snapshot_payload["audio_source"] == "upload"
@@ -285,11 +285,11 @@ async def test_upload_audio_uses_fallback_enrichment_when_llm_is_too_slow(async_
 
     enriched = await _wait_fragment_derivatives(db_session_factory, "upload-local-llm-timeout")
     assert enriched.summary
-    assert enriched.tags
+    assert enriched.system_tags
 
     snapshot_payload = _read_fragment_payload(db_session_factory, "upload-local-llm-timeout")
     assert snapshot_payload["summary"]
-    assert snapshot_payload["tags"]
+    assert snapshot_payload["system_tags"]
 
 
 @pytest.mark.asyncio

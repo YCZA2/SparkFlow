@@ -217,7 +217,7 @@ async def test_import_external_audio_runs_full_async_task(
 
     enriched = await _wait_fragment_derivatives(db_session_factory, "external-local-001")
     assert enriched.summary
-    assert enriched.tags
+    assert enriched.system_tags
 
     snapshot_payload = _read_fragment_payload(db_session_factory, "external-local-001")
     assert snapshot_payload["source"] == "voice"

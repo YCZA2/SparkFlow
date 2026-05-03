@@ -164,7 +164,7 @@ async def _wait_fragment_derivatives(db_session_factory, fragment_id: str, *, at
                 user_id=TEST_USER_ID,
                 fragment_id=fragment_id,
             )
-            if snapshot is not None and (snapshot.summary or snapshot.tags):
+            if snapshot is not None and (snapshot.summary or snapshot.tags or snapshot.system_tags):
                 return snapshot
         await asyncio.sleep(0.05)
     raise AssertionError(f"fragment derivatives were not backfilled: {fragment_id}")
