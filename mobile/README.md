@@ -16,7 +16,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 录音转写、抖音链接导入、脚本生成都已经切到“客户端上传本地快照或本地媒体”驱动，不再默认依赖服务端 fragment 业务表作为输入真值。
 - 录音上传与抖音链接导入现在都要求客户端**先创建本地 fragment placeholder**，并把 `local_fragment_id` 显式传给后端；服务端不再兜底创建远端 fragment 记录。
 - 服务端返回的 `transcript / summary / tags / audio_object_key` 会直接补写进 fragment backup snapshot；客户端后续 backup flush 不会把这些服务器字段冲掉。
-- 碎片现在有后台语义层：服务端生成 `system_tags / system_purpose`，用户在本地修改 `user_tags / user_purpose / dismissed_system_tags`，有效标签和用途优先采用用户修正。
+- 碎片现在有后台语义层：服务端生成 `system_tags / system_purpose`（仅内部使用），用户在本地维护 `user_tags`；标签简化为备忘录式体验，不再暴露系统建议标签的接受/删除交互；用途由 LLM 自动判断，不再允许用户修正。
 - “创作工作台”已接入显式恢复；恢复时会重建本地 SQLite、`body.html` 与媒体缓存，并在需要时按 `object_key` 向后端刷新最新访问地址。
 - `script` 本轮已接入 local-first：生成成功后立即落本地 SQLite + `body.html` 文件，后续编辑、回收站、冲突恢复副本和拍摄状态都先写本地，再异步备份；后端 `scripts` 表只保存生成初稿和任务完成后的详情读取，不再反向覆盖本地已编辑正文。
 - `fragment` 与 `script` 继续是两个独立领域对象：碎片负责素材沉淀与生成输入，成稿负责派生正文与拍摄消费；两者共享 editor / `body_html` / 导出与媒体能力，但不共享生命周期语义。
@@ -49,7 +49,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 首页和文件夹页只展示当前本地 SQLite 真值，不再聚合历史草稿缓存或远端投影卡片。
 - 首页与文件夹页底部 `+` 当前会打开导入抽屉，而不是直接跳转到其他页面。
 - 导入抽屉当前提供 `导入链接` 与 `导入文件` 两个入口，其中 `导入链接` 已接入抖音分享链接导入，`导入文件` 仍为占位入口。
-- 碎片详情页默认进入轻量正文编辑视图，正文改动会优先写本地 HTML 草稿；`transcript`、音频、摘要、标签、主要用途和系统建议收口到右上角“更多”底部抽屉，AI patch 本期已下线。
+- 碎片详情页默认进入轻量正文编辑视图，正文改动会优先写本地 HTML 草稿；`transcript`、音频、摘要、标签和系统建议收口到右上角“更多”底部抽屉，AI patch 本期已下线；主要用途不再暴露给用户，由 LLM 自动判断。
 - 移动端编辑器已抽出 `features/editor/*` 共享底座：统一承载 HTML helper、editor session reducer、`react-native-enriched` 富文本桥接、toolbar 和页面 scaffold，fragment 与 script 详情共用同一套正文编辑协议。
 - `features/editor/contentBodyService.ts` 现在负责 DOM 级正文解析、首行标题/预览提取和 `asset://` 图片引用收集；`features/editor/html.ts` 只保留桥接协议、格式化和少量 HTML 拼装 helper。
 - 录音页当前也已把 route 与 UI 壳层拆开：`app/record-audio.tsx` 只保留参数接入，界面与按钮组收口到 `features/recording/components/*`。
@@ -67,7 +67,7 @@ SparkFlow 的 Expo / React Native 移动端工程。
 - 移动端正文输入统一使用 `react-native-enriched` 原生富文本；fragment 支持标题、列表、引用、粗体、斜体和图片，script 支持相同文本格式但不支持图片和“更多”抽屉；Android 与 iOS 16+ 默认通过系统原生编辑菜单触发格式操作。
 - 碎片详情里的正文基线解析、自动保存队列、AI fallback patch、图片 fallback 插入和素材去重都已下沉为独立 session helper / reducer，纯状态回归统一由 `mobile/tests/*.test.ts` 覆盖。
 - fragments / folders / scripts 列表与详情现在统一从 React Query + SQLite 本地真值读取；页面刷新和任务完成后的回流统一依赖 query invalidation，而不是自管 `isLoading / isRefreshing / stale flag` 模板代码。
-- 移动端不再把知识库作为用户必须维护的独立主流程；文件、录音、外链和手动文本都统一成为碎片，知识库后端能力暂作为兼容和内部能力保留。
+- 移动端已移除知识库入口；文件、录音、外链和手动文本都统一成为碎片，文档导入直接走碎片链路，不再维护独立知识库概念。
 
 ## 本地数据层说明
 
@@ -422,12 +422,12 @@ http://192.168.31.157:8000
 
 - 碎片详情正文读取 `body_html`，列表摘要和生成页预览读取 `plain_text_snapshot`
 - `transcript` 表示机器转写原文；语音碎片在转写成功后，客户端会把它作为初始正文种子写入 `body_html`，后续编辑只围绕正文进行
-- 碎片详情默认只把正文编辑器作为主界面；原文时间线、音频播放、摘要、标签、主要用途、系统建议、来源和删除操作都从右上角“更多”抽屉进入
+- 碎片详情默认只把正文编辑器作为主界面；原文时间线、音频播放、摘要、标签、系统建议、来源和删除操作都从右上角“更多”抽屉进入；主要用途由 LLM 自动判断，不再暴露给用户修正
 - 当语音碎片的转写已经种入正文后，抽屉不再重复显示 transcript 文本，只保留音频播放器
 - 碎片正文详情采用**local-first + backup/recovery**：优先读取本地 SQLite / `body.html`，编辑中不再自动远端刷新当前会话；本地保存和图片上传失败时会保留待备份状态，重新进入详情仍可继续编辑
 - AI 编辑接口本期停用，不再参与正文链路
 - 脚本详情直接编辑 `body_html`，并保留“一键去拍摄”入口消费当前最新正文
-- 知识库后端已经支持 `body_markdown`，但移动端入口仍未完整接入
+- 知识库后端仍保留兼容能力，但移动端已移除知识库入口；文档导入统一走碎片链路
 - 文件访问统一读取后端返回的 `audio_file_url` / `file_url`，不再拼接 `audio_path` / `storage_path`
 - 录音上传和外链导入都会先创建本地 placeholder fragment，再在任务成功后把 `transcript` 种成可编辑正文，并将 `summary / tags / 音频元数据` 一并 patch 回写到本地实体
 - 手动脚本生成前会先显式执行一次 `flushBackupQueue()`；如果本地正文还没成功同步，客户端会阻断生成，避免后端基于旧 snapshot 出稿。生成请求会携带当前文件夹和标签筛选上下文，后端按碎片用途区分“写什么”和“怎么写”。

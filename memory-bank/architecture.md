@@ -1,6 +1,6 @@
 # SparkFlow Architecture
 
-> 最后更新：2026-04-20
+> 最后更新：2026-05-03
 
 本文档描述当前仓库已经落地的实际架构，而不是早期规划版本。SparkFlow 目前是一个 Expo / React Native 移动端应用，配合 FastAPI 模块化单体后端运行，后端本地开发默认数据库已切换为本机 PostgreSQL 服务。
 
@@ -19,10 +19,10 @@
 - 后端本轮已经正式下线 `fragments / fragment_tags / fragment_blocks` 旧投影表：标签聚合、导出、文件夹计数、录音导入和外链导入全部改为直接读写 `backup_records` 中的 fragment snapshot。
 - `transcriptions` 与 `external_media` 现在都要求客户端先创建本地 placeholder，并显式传入 `local_fragment_id`；后端不再兜底创建远端 fragment 业务记录。
 - 服务端生成字段现在直接补写回 fragment snapshot：`transcript`、`speaker_segments`、`summary`、`tags`、`audio_object_key` 及音频访问地址都会写入 `backup_records`，但不会覆盖客户端拥有的 `body_html / plain_text_snapshot / folder_id / content_state / is_filmed`。
-- `knowledge` 后端本轮补齐了文本型知识 ingestion：`txt/docx/pdf/xlsx` 统一走 `parsers -> chunking -> indexing -> application` 四层，默认仍写入 Chroma，但对上已通过独立知识索引接口解耦，后续可替换为 LightRAG 等底层引擎。
-- `document_import` 后端新增文档导入碎片能力：`txt/md/docx/pdf/xlsx` 文件上传后通过 `document_import` 任务异步解析为纯文本，转为 HTML 写入 fragment snapshot 的 `body_html`，随后自动触发 `fragment_derivative_backfill` 补齐摘要、标签和向量。文档解析逻辑已从知识库 `parsers.py` 提升为共享模块 `modules/shared/content/document_parsers.py`，供知识库与文档导入复用。
-- `fragment_derivative_backfill` 现已升级为碎片语义回填：服务端生成 `summary / system_tags / system_purpose / vector`，用户修正字段 `user_tags / user_purpose / dismissed_system_tags` 仍由客户端本地真值和备份快照拥有。
-- 碎片主要用途固定为 `content_material / style_reference / methodology / case_study / product_info / other`，不保存模型置信度；生成时使用 `user_purpose ?? system_purpose ?? other`。
+- `knowledge` 后端仍保留文本型知识 ingestion 能力，但移动端已移除知识库入口；文档统一走 `document_import` 碎片链路，不再要求用户维护独立知识库。
+- `document_import` 后端已支持文档导入碎片能力：`txt/md/docx/pdf/xlsx` 文件上传后通过 `document_import` 任务异步解析为纯文本，转为 HTML 写入 fragment snapshot 的 `body_html`，随后自动触发 `fragment_derivative_backfill` 补齐摘要、标签和向量。文档解析逻辑位于共享模块 `modules/shared/content/document_parsers.py`。
+- `fragment_derivative_backfill` 现已升级为碎片语义回填：服务端生成 `summary / system_tags / system_purpose / vector`；标签简化为备忘录式体验，只保留 `user_tags`，不再向用户暴露 `dismissed_system_tags` 交互。
+- 碎片主要用途固定为 `content_material / style_reference / methodology / case_study / product_info / other`，不保存模型置信度；生成时仅使用 `system_purpose`，不再读取用户修正的 `user_purpose`。
 - 脚本生成三层上下文本轮调整为“预置稳定内核 + 缓存方法论 + 实时相关素材召回”：稳定内核当前不再按用户素材动态生成，碎片方法论改由每日后台维护任务在阈值达标后静默刷新。
 - `fragment` 与 `script` 继续保持独立领域边界：前者是素材池，后者是派生成稿；两者只共享正文协议、编辑器底座、媒体/导出/校验能力，不共享生命周期语义。
 - 仓库本轮也完成了一次大规模命名清理：项目仍处于开发期且没有老用户，移动端旧本地库、旧备份 payload 和旧 remote-first 投影不再保留升级路径，字段直接使用当前领域语义。
@@ -95,7 +95,7 @@ flowchart LR
 - `scripts.tsx`: 口播稿列表。
 - `shoot.tsx`: 提词器 + 相机拍摄。
 - `profile.tsx`: 创作工作台。
-- `knowledge.tsx`: 知识库占位页，当前还不是完整管理入口。
+- `writing-style.tsx`: 写作风格编辑页，用户可维护一份固定的风格描述文本，供脚本生成时引用。
 - `network-settings.tsx`: 后端地址配置页。
 
 ### 3.2 Runtime Layers
@@ -369,9 +369,10 @@ flowchart TD
 - Knowledge Index Store: 当前知识库索引通过独立 `knowledge_index_store` 抽象接入；默认实现仍由 `AppVectorStore` 适配 Chroma，未来若切换 LightRAG，目标是只替换这一层。
 - 当前脚本生成输入收敛为必填 `topic` + 可选 `fragment_ids / folder_id / tag_filters`：后端先构建三层写作上下文，再生成 SOP 大纲并拼装草稿；若没有传入碎片，则仅基于主题、写作上下文和召回素材生成。其中：
 - `稳定内核层` 当前使用系统预置文案，不再在生成链路里按用户历史碎片或知识库动态生成。
-- `方法论层` 由“已缓存的碎片提炼结果 + 上传资料映射条目 + 预置方法模板”组成；碎片提炼改由每日后台维护任务按阈值静默刷新。
+- `方法论层` 由“已缓存的碎片提炼结果 + 预置方法模板”组成；碎片提炼改由每日后台维护任务按阈值静默刷新。
 - `相关素材层` 负责召回与当前主题相关的历史脚本和碎片语义资产；普通移动端生成链路不再默认消费独立 knowledge docs。
-- `碎片语义层` 按用途分组消费 fragment：内容素材 / 案例 / 产品资料进入“写什么”，风格参考只影响结构、节奏和语气，方法论影响组织方式，`other` 仅在用户显式选择时作为补充背景。
+- `写作风格层` 由用户独立维护的一份固定风格描述文本（`UserWritingStyle`）提供，描述用户的表达习惯，供生成时引用。
+- `碎片语义层` 按用途分组消费 fragment：内容素材 / 案例 / 产品资料进入“写什么”，风格参考只影响结构、节奏和语气，方法论影响组织方式，`other` 仅在用户显式选择时作为补充背景；用途仅由 `system_purpose` 自动判断，不再读取用户修正。
 - Dify Local Runtime: 若采用仓库内置脚本自托管，默认通过 `Docker Compose + PostgreSQL profile` 运行，并映射到 `127.0.0.1:18080`。
 - Storage: 统一 `FileStorage` 端口；本地开发默认 `local` provider，线上默认私有阿里云 OSS，通过签名 URL 暴露文件访问。
 - Database: PostgreSQL（本地开发默认使用本机服务，默认库为 `sparkflow` / `sparkflow_test`）。
@@ -380,8 +381,8 @@ flowchart TD
 
 - 碎片文件夹表：`fragment_folders`
 - fragment 服务端真值快照：`backup_records(entity_type='fragment')`
-- fragment 标签不再落独立 `fragment_tags` 表；旧 `tags` 字段继续兼容，当前语义字段为 `system_tags / user_tags / dismissed_system_tags`，有效标签由用户标签、旧标签和未删除系统建议合并得到。
-- fragment 主要用途保存在 snapshot 的 `system_purpose / user_purpose` 字段中，用户修正优先。
+- fragment 标签不再落独立 `fragment_tags` 表；当前对外只保留 `tags`（用户标签），后端生成时仍使用 `system_tags` 做内部召回合并，但不再向用户暴露 `dismissed_system_tags` 交互。
+- fragment 主要用途由后端 LLM 自动判断，保存在 snapshot 的 `system_purpose` 字段中，生成时直接使用；不再保留 `user_purpose` 用户修正字段。
 - fragment snapshot 内的 `folder_id` 指向真实文件夹；“全部”只是前端系统视图，不落库。
 - fragment snapshot 的 `audio_source` 用于区分音频来源；当前取值为 `upload` / `external_link` / `null`
 - fragment snapshot 的 `source` 用于区分碎片来源；当前取值为 `voice` / `manual` / `video_parse` / `document_import`
@@ -546,7 +547,8 @@ sequenceDiagram
     App->>API: POST topic + optional fragment_ids
     API->>DB: create task_runs + task_step_runs
     API-->>App: task_id + status
-    TASK->>VDB: query_knowledge_docs(...)
+    TASK->>DB: load writing style + cached methodologies
+    TASK->>VDB: query_related_fragments(...)
     TASK->>WEB: optional search(...)
     TASK->>LLM: generate outline + draft
     LLM-->>TASK: outputs(title/outline/draft/...)
@@ -559,8 +561,8 @@ sequenceDiagram
 关键点：
 
 - 外挂工作流 provider 只负责远程执行步骤，不直接访问 PostgreSQL、ChromaDB 或业务表。
-- fragments、knowledge hits 和可选 web hits 都由 SparkFlow 后端先收集。
-- SparkFlow 后端向内部 task runtime 传递稳定内核、方法论、相关素材、SOP 大纲和可选碎片背景；客户端主路径统一消费 `task_id` 和 `/api/tasks/*`。
+- fragments、相关素材和可选 web hits 都由 SparkFlow 后端先收集；知识库独立检索已降级，相关素材统一从碎片向量库召回。
+- SparkFlow 后端向内部 task runtime 传递稳定内核、方法论、写作风格、相关素材、SOP 大纲和可选碎片背景；客户端主路径统一消费 `task_id` 和 `/api/tasks/*`。
 - `task_runs` / `task_step_runs` 是后台状态唯一事实源；`agent_runs` 与 `/api/agent/*` 已移除。
 
 ### 5.5 Script Generation Notes
