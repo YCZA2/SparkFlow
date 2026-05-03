@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View, Text } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 
 import { getOrCreateDeviceId } from '@/features/auth/device';
 import { assertTaskScopeActive, captureRequiredTaskExecutionScope, TaskScopeMismatchError } from '@/features/auth/taskScope';
@@ -102,6 +103,21 @@ export default function ImportLinkScreen() {
     },
   });
 
+  /*长按输入框时从系统剪贴板粘贴文本，弥补 multiline TextInput 在 ScrollView 中无法弹出系统粘贴菜单的问题。*/
+  const handleLongPressPaste = async () => {
+    if (isSubmitting) return;
+    const text = await Clipboard.getStringAsync();
+    if (text) {
+      setShareUrl(text);
+    }
+  };
+
+  /*点击输入区域时聚焦 TextInput，保证包裹 Pressable 后仍可正常输入。*/
+  const inputRef = useRef<TextInput>(null);
+  const handlePressFocus = () => {
+    inputRef.current?.focus();
+  };
+
   const isSubmitting =
     importMutation.isPending || taskQuery.phase === 'loading' || taskQuery.phase === 'polling';
   const canSubmit = isImportLinkReady(trimmedShareUrl) && !isSubmitting;
@@ -147,18 +163,22 @@ export default function ImportLinkScreen() {
           ]}
         >
           <Text className="mb-[10px] text-[15px] font-bold text-app-text dark:text-app-text-dark">抖音分享链接</Text>
-          <TextInput
-            value={shareUrl}
-            onChangeText={setShareUrl}
-            placeholder="粘贴抖音分享链接，例如 https://v.douyin.com/xxxx/"
-            placeholderTextColor={theme.colors.textSubtle}
-            autoCapitalize="none"
-            autoCorrect={false}
-            multiline
-            editable={!isSubmitting}
-            textAlignVertical="top"
-            className="min-h-[140px] text-base leading-6 text-app-text dark:text-app-text-dark"
-          />
+          <Pressable onPress={handlePressFocus} onLongPress={handleLongPressPaste} delayLongPress={300}>
+            <TextInput
+              ref={inputRef}
+              value={shareUrl}
+              onChangeText={setShareUrl}
+              placeholder="长按粘贴抖音分享链接，例如 https://v.douyin.com/xxxx/"
+              placeholderTextColor={theme.colors.textSubtle}
+              autoCapitalize="none"
+              autoCorrect={false}
+              multiline
+              editable={!isSubmitting}
+              textAlignVertical="top"
+              className="min-h-[140px] text-base leading-6 text-app-text dark:text-app-text-dark"
+              pointerEvents="none"
+            />
+          </Pressable>
 
           <View className="mt-sf-lg border-t border-slate-400/30 pt-sf-lg">
             <Text className="text-sm font-bold text-app-text dark:text-app-text-dark">如何复制链接</Text>
